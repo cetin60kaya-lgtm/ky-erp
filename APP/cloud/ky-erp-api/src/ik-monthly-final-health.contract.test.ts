@@ -66,7 +66,7 @@ test("monthly filters are real controls and filter personnel and finance movemen
   assert.match(page, /Sadece Kayıt/);
 });
 
-test("employment period safety stays enforced while old PAID snapshots do not lock an open month", () => {
+test("permanent cards, monthly overrides and paid historical snapshots retain separate write rules", () => {
   const relational = cloud("ik-relational-cloud.ts");
   const personnel = cloud("ik-personnel-control.ts");
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
@@ -76,10 +76,13 @@ test("employment period safety stays enforced while old PAID snapshots do not lo
   assert.match(relational, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(personnel, /effectiveExitDate/);
   assert.match(personnel, /EXIT_BEFORE_HIRE/);
-  assert.match(page, /Eski PAID\/snapshot kayıtları yalnız tarihsel kanıttır/);
-  assert.match(page, /paidLocked: false/);
+  assert.match(page, /updatePersonnelCard/);
+  assert.match(page, /paidLocked: Boolean\(saved\.frozen\)/);
   assert.match(page, /sourceChangedSinceSave/);
-  assert.doesNotMatch(relational, /PAYROLL_PAID_LOCKED/);
+  assert.match(relational, /PAYROLL_PAID_LOCKED/);
+  assert.match(relational, /const monthlyOverride = Boolean/);
+  assert.match(relational, /const frozen = Boolean/);
+  assert.match(relational, /if \(updatePersonnelCard\) statements\.push/);
 });
 
 test("monthly live sync is owned by the single canonical personnel and finance workspace", () => {
@@ -117,4 +120,79 @@ test("PDKS card-import compatibility stays outside the monthly HR screens", () =
   assert.doesNotMatch(monthly, /previewIkAdvancedCard|confirmIkAdvancedCard/);
   assert.match(pdks, /previewIkAdvancedCard/);
   assert.match(pdks, /confirmIkAdvancedCard/);
+});
+
+
+test("month-only payroll does not write the permanent card, while the explicit action does", () => {
+  const api = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(api, /const updatePersonnelCard = body\.updatePersonnelCard === true/);
+  assert.match(api, /if \(updatePersonnelCard\) statements\.push\([\s\S]*?UPDATE hr_monthly_employees/);
+  assert.match(api, /if \(updatePersonnelCard\) statements\.push\([\s\S]*?INSERT INTO ik_person_card_settings/);
+  assert.match(api, /if \(updatePersonnelCard\) for \(const \[field, before, after\] of financialChanges\)/);
+  assert.match(api, /const permanentEarnings =/);
+  assert.match(api, /const permanentBankPlan =/);
+  assert.match(api, /personnelEffectiveDate/);
+  assert.match(page, /onClick=\{\(\) => saveFinalPayrollControl\(false\)\}/);
+  assert.match(page, /onClick=\{\(\) => saveFinalPayrollControl\(true\)\}/);
+  assert.match(page, /Personel Kartını Güncelle/);
+  assert.match(page, /Yalnız Bu Ayı Kaydet/);
+});
+
+test("current monthly movement source recalculates period override, but paid and closed months stay historical", () => {
+  const api = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(api, /const monthPlanByEmployee = new Map/);
+  assert.match(api, /const currentNet = calculatePayrollAmounts/);
+  assert.match(api, /const currentFinal =/);
+  assert.match(api, /const frozen = Boolean\(hasSavedFinal && \(closedPeriod \|\| savedStatus === "PAID"\)\)/);
+  assert.match(api, /const final = frozen \? savedFinal! : currentFinal/);
+  assert.match(api, /savedStatus === "CALCULATED" && latestMonthPlan/);
+  assert.match(api, /PAYROLL_VERSION_CONFLICT/);
+  assert.match(page, /expectedPayrollVersion: modalDraft\.payrollVersion/);
+  assert.match(page, /sourceChangedSinceSave: Boolean\(saved\.sourceChangedSinceSave\)/);
+});
+
+test("monthly employee and modal scroll selections restore without changing canonical employee data", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const css = frontend("pages/modules/ik/monthly/ik.monthly.pro.css");
+  assert.match(page, /ikSelectedPersonKey/);
+  assert.match(page, /readIkSelectedPerson\(companyId, period\)/);
+  assert.match(page, /ik\.payroll-scroll\.v1/);
+  assert.match(page, /ik\.person-scroll\.v1/);
+  assert.match(page, /size="wide personnel-card-dialog"/);
+  assert.match(css, /\.modal-bg \.modal\.personnel-card-dialog/);
+  assert.match(css, /\.ik-permanent-card-action/);
+});
+
+test("every authorized company account reads one canonical personnel and monthly payroll implementation", () => {
+  const app = frontend("AppV3.jsx");
+  const route = frontend("pages/modules/ik/monthly/IkFinancePage.jsx");
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const api = cloud("ik-relational-cloud.ts");
+
+  assert.match(app, /return <IkFinancePage activeTab=\{activeTab\}/);
+  assert.match(route, /import IkAdvancedMonthly from "\.\/IkAdvancedMonthly"/);
+  assert.match(route, /activeMainCompany=\{activeMainCompany\}/);
+  assert.match(monthly, /getIkAdvancedMonth\(params\(\{ mainCompanyId: companyId, year, month \}\)\)/);
+  assert.match(monthly, /getIkAdvancedPeriodState\(params\(\{ mainCompanyId: companyId, year, month \}\)\)/);
+  assert.match(monthly, /getIkAdvancedPayroll\(params\(\{ mainCompanyId: companyId, year, month \}\)\)/);
+  assert.doesNotMatch(monthly, /readPreparedPeriods|ikPreparedStorageKey|preparedForView/);
+  assert.match(monthly, /const includePayroll = authoritativePrepared/);
+  assert.match(monthly, /const payrollRows = useMemo\(\(\) => payrollReady \?/);
+  assert.match(monthly, /const balanced = payrollReady &&/);
+  assert.match(monthly, /currentDataScopeRef\.current !== requestKey/);
+  assert.match(monthly, /canonicalCompanySlug\(result\.mainCompanyId\)/);
+  assert.match(monthly, /canonicalCompanySlug\(payroll\.mainCompanyId\)/);
+  assert.match(api, /mainCompanyId: companyId, year, month, policy:/);
+  assert.match(api, /mainCompanyId: companyId,\s*year,\s*month,\s*employees: employeesWithSgk/);
+});
+
+test("when another user changes HR data, a modal never silently overwrites a pending draft", () => {
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(monthly, /const refreshed = await load\(\{ force: true, silent: true \}\)/);
+  assert.match(monthly, /if \(modal\) setNotice\("Başka oturumda İK verileri güncellendi/);
+  assert.doesNotMatch(monthly, /if \(busy \|\| modal\) return/);
+  assert.match(monthly, /expectedVersion: modalDraft\.version/);
+  assert.match(monthly, /expectedPayrollVersion: modalDraft\.payrollVersion/);
 });

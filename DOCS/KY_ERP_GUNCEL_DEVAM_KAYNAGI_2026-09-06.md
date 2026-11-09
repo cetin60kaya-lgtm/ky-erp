@@ -1,5 +1,18 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 09.11.2026 — İK Aylık iki hesapta aynı duyarlı bordro penceresi (PR #547 ek kapsam)
+
+- Yönetici ve muhasebe örnek ekranları farklı çözünürlük/Chrome zoom, ayrıca Eylül 2026/Ekim 2026 farklı dönem gösteriyor. Tek React bordro modalında sabit maksimum 1480px genişlik ve 10–11px etiketler kullanılıyordu; ayrı rol arayüzü bulunmadı.
+- Yeni ekran düzeni: 96vw × 94dvh bordro modalı, yüzde/esnek personel sütunu, container ölçüsüne göre yan yana/alt alta form ve sonuç, ölçekli başlık/alan/yazı, mobil erişilebilir tek kaydırma düzeni, responsive personel kartı. Yeni ikinci ekran veya CSS override yaması oluşturulmaz; var olan kurallar yerinde güncellenir.
+- Alt uyarı artık yalnız seçilen aya ait maaş/yol/EK/banka-elden ile kalıcı personel kartı ayrımını doğru anlatır. Oturum/gerçek D1 verileri değiştirilmedi; CI/merge/yayın/canlı kullanıcı kontrolü ayrı kanıttır.
+
+## 09.11.2026 — İK Aylık tek kalıcı kart, ayrı aylık bordro (PR #547)
+
+- Kullanıcı kararı: Personel Kartı kalıcı çalışanın tek ana kaydı; Son Bordro Kontrolü sadece seçilen ayın ücret/ödeme ve tarihli hareket sonucudur. Bir ekrandaki her kayıt diğer ekranlarda aynı canonical kaynaktan yeniden okunur, fakat aylık bordro düzeltmesi kalıcı ana kartı izinsiz değiştirmez.
+- Ay son kontrolüne `Yalnız Bu Ayı Kaydet` ve `Personel Kartını Güncelle` (etkili tarih + kullanıcı onayı) işlemleri ayrıştırıldı. Worker normal aylık kayıtta master employee, person-card-settings, salary-contract ve ücret geçmişini değiştirmez; kalıcı işlemde bu kayıtlar kontrollü güncellenir. Kalıcı banka planı o ayın mesaisi/avansı/kesintisi olmadan hesaplanır.
+- Açık dönemde aylık özel maaş ve mevcut hareketlerin birleşiminden canlı sonuç üretilir; eski sonuç güncelmiş gibi gösterilmez. CALCULATED statüsüne geçiş aylık özel planı düşürmez; PAID ve kilitli ay geçmişini korur. Optimistic version kontrolü çakışmada 409 döner.
+- İK modalı geniş uyarlanabilir; son personel seçimi, dönem ve kaydırma konumu kalır. PR #547 `feature/ik-aylik-kalici-kart-aylik-bordro-20261109` dalındadır. GitHub frontend/Worker canonical CI PASS; production merge/deploy ve canlı kullanıcı testi ayrı kanıt bekler.
+
 ## 09.11.2026 — KY ERP tek kayıt penceresi + canonical model kimliği (PR #546)
 
 - Kullanıcı ekranlarında DESEN model/kanaI penceresi sekmelerde değişken boyutlu, firma listesi boş; İmalat/Boyahane/Muhasebe farklı yeni kayıt formları kullanıyordu. Ortak `KyRecordDialog`: 840×600 başlangıç, sağ-alt sürükleme/klavye, kullanıcı ölçüsü, sabit dış çerçeve, iç scroll, mobil tam ekran. Desen, İmalat, Boyahane ve Muhasebe yeni kart formları aynı bileşeni kullanır.

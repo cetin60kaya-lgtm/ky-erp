@@ -26,16 +26,21 @@ test("IK monthly preparation is persisted server-side and survives reopen", () =
   assert.match(page, /getIkAdvancedPeriodState/);
   assert.match(page, /authoritativePrepared/);
   assert.match(page, /prepareIkAdvancedPeriod\(\{ mainCompanyId: companyId, year, month \}\)/);
-  assert.match(page, /Eski tarayıcı hafızasında bu ay daha önce hazırlanmışsa/);
+  assert.match(page, /The D1 period-state endpoint is the single source of truth/);
+  assert.doesNotMatch(page, /readPreparedPeriods|ikPreparedStorageKey|preparedForView/);
+  assert.doesNotMatch(page, /if \(authoritativePrepared === false && periodPrepared\)/);
   assert.match(page, /firma bazında sunucuya kaydedilir ve tekrar hazırlanmaz/);
 });
 
-test("IK main data remains fail-soft while period-state is auxiliary", () => {
+test("IK main data remains visible while unverified period state never creates a local payroll", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   assert.match(page, /Promise\.allSettled/);
   assert.match(page, /if \(resultState\.status !== "fulfilled"\) throw resultState\.reason/);
   assert.match(page, /periodStateFailed/);
-  assert.match(page, /preparedForView/);
+  assert.match(page, /const includePayroll = authoritativePrepared/);
+  assert.match(page, /periodCheckFailed/);
+  assert.match(page, /const payrollReady = periodPrepared/);
+  assert.match(page, /const payrollRows = useMemo\(\(\) => payrollReady \?/);
   assert.match(page, /payrollFailed/);
 });
 

@@ -167,7 +167,9 @@ test("personnel selection survives live refresh against the full master roster",
   assert.match(monthly, /const masterSelectionIds = new Set/);
   assert.match(monthly, /safeList\(result\?\.masterEmployees\)\.map\(\(item\) => item\.id\)/);
   assert.match(monthly, /safeList\(result\?\.rawEmployees\)\.map\(\(item\) => item\.id\)/);
-  assert.match(monthly, /setSelectedId\(\(old\) => masterSelectionIds\.has\(old\)/);
+  assert.match(monthly, /setSelectedId\(\(old\) => \{/);
+  assert.match(monthly, /masterSelectionIds\.has\(old\) \? old/);
+  assert.match(monthly, /readIkSelectedPerson\(companyId, period\)/);
 });
 
 test("person card save stays usable when the selected historical month is locked", () => {
@@ -198,7 +200,8 @@ test("live sync is quiet, slower and does not show loading loops for background 
   assert.match(monthly, /const IK_LIVE_SYNC_INTERVAL_MS = 15000/);
   assert.match(monthly, /lastSuccessfulLoadStartedAtRef/);
   assert.match(monthly, /silent = false/);
-  assert.match(monthly, /load\(\{ force: true, prepare: periodPrepared, silent: true \}\)/);
+  assert.match(monthly, /load\(\{ force: true, silent: true \}\)/);
+  assert.doesNotMatch(monthly, /readPreparedPeriods|ikPreparedStorageKey/);
   assert.doesNotMatch(monthly, /başka bilgisayarda değişiklik var/);
 });
 
@@ -219,7 +222,8 @@ test("final payroll save uses one backend mutation and keeps the modal open", ()
   const block = monthly.slice(start, end);
   assert.match(block, /const savedFinal = await saveIkAdvancedFinalPayrollControl/);
   assert.doesNotMatch(block, /saveIkAdvancedPersonCard/);
-  assert.match(block, /formMessage: "Son bordro kontrolü atomik kaydedildi/);
+  assert.match(block, /Kaydedildi ✓ Yalnız seçili ayın bordrosu/);
+  assert.match(block, /updatePersonnelCard/);
   assert.doesNotMatch(block, /setModal\(null\)/);
 });
 
@@ -352,4 +356,26 @@ test("movement rows keep only edit and delete actions", () => {
   assert.doesNotMatch(monthly, /Hareket detayı açıldı/);
   assert.match(monthly, /onClick=\{\(\) => openFinance\(displayType, item\)\}>Düzenle<\/button>/);
   assert.match(monthly, /onClick=\{\(\) => deleteFinance\(item\)\}>Sil<\/button>/);
+});
+
+test("IK monthly payroll uses the same responsive dialog for manager and accounting sessions", () => {
+  assert.match(monthly, /size="wide prepayroll-dialog"/);
+  assert.match(css, /\.modal-bg \.modal\.prepayroll-dialog\{[\s\S]*?width:96vw/);
+  assert.match(css, /\.modal-bg \.prepayroll-dialog \.payroll-final-layout\{[\s\S]*?grid-template-columns:clamp\(220px,17vw,310px\)/);
+  assert.match(css, /container:ik-payroll-main \/ inline-size/);
+  assert.match(css, /@container ik-payroll-main \(max-width:1080px\)/);
+  assert.match(css, /@container ik-payroll-main \(max-width:760px\)/);
+  assert.match(css, /@container ik-payroll-main \(max-width:480px\)/);
+  assert.match(css, /\.modal-bg \.prepayroll-dialog \.form label\{[\s\S]*?font-size:clamp\(12px/);
+  assert.match(monthly, /ilgili aya kaydedilir; kalıcı personel kartı ayrıca güncellenir/);
+  assert.match(monthly, /Maaş\/Yol\/EK ve banka\/elden düzeltmesi yalnız seçilen aya aittir/);
+});
+
+test("IK personnel card uses one accessible layout across narrow and wide screens", () => {
+  assert.match(monthly, /size="wide personnel-card-dialog"/);
+  assert.match(css, /\.modal-bg \.modal\.personnel-card-dialog \{/);
+  assert.match(css, /\.personnel-card-dialog \.modal-section-grid/);
+  assert.match(css, /\.personnel-card-dialog \.form/);
+  assert.match(css, /@media \(max-width: 900px\)/);
+  assert.match(css, /@media \(max-width: 560px\)/);
 });

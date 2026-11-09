@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 09.11.2026 — İK Aylık yönetici/muhasebe tek pencere düzeni (PR #547)
+
+- Aynı Son Bordro Kontrolü React bileşeni bütün İK yetkili hesaplarında kullanılır; role özel ikinci bordro ekranı açılmaz. Önceki sabit 1480px pencere sınırı, çok küçük label/input boyutları ve CSS viewport temelli iki sütun geçişi farklı cihaz/Chrome zoom değerlerinde küçük ve sıkışık görünüm üretiyordu.
+- Canonical PR #547 üzerinde pencere genişliği 96vw, yüksekliği 94dvh; sol personel alanı duyarlı genişlik; iç düzen container query ile 1080/760/480px eşikleri; başlık/form/sonuç fontları ölçekli hale getirildi. Personel kartı formu da ekran genişliğine göre iki/tek sütun ve geniş modal kullanır.
+- Bordroda yalnız aylık kaydın ve kalıcı kartın ayrımını anlatan önceki çelişkili uyarılar düzeltildi. İki kullanıcı ekranında farklı ay seçilebildiğinden gerçek tutar farkı ekran tasarım hatası kabul edilmez. Gerçek çalışan tutarları ve üretim D1 verileri bu PR tarafından değiştirilmedi.
+- CI PASS + PR merge + Cloudflare Pages/Worker yayın SHA + gerçek oturum testi kanıtı tamamlanana kadar canlı kabul verilmez.
+
 ## 09.11.2026 — KY ERP tek kayıt penceresi + canonical model kimliği (PR #546)
 
 - Kullanıcı ekranlarında DESEN model/kanaI penceresi sekmelerde değişken boyutlu, firma listesi boş; İmalat/Boyahane/Muhasebe farklı yeni kayıt formları kullanıyordu. Ortak `KyRecordDialog`: 840×600 başlangıç, sağ-alt sürükleme/klavye, kullanıcı ölçüsü, sabit dış çerçeve, iç scroll, mobil tam ekran. Desen, İmalat, Boyahane ve Muhasebe yeni kart formları aynı bileşeni kullanır.
@@ -1241,3 +1248,13 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - İlk feature: `fix/muhasebe-odeme-plan-tek-kaynak-20261025`. Gecikenler / Tüm Planlar + mevcut ödeme endpointinden okuma, gerçek ödeme defter yazımı için teyit kartı ve yinelenen tıklama kilidi, güncelleme ve vade yardımcı testi. 25.10.2026 **PR #444 merged** SHA `4807b2845d16b848fc9e3abd164443b30badec48`, [CI #40193864397](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40193864397) frontend+Worker SUCCESS. [Pages #40194066735](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/40194066735) SUCCESS, release SHA `2f0122716173fc86ca91105a5e60b44c5e6b1e29`, ancestry merge→release behind=0 / ahead=1, live bundle + Günlük Operasyon chunk proof PASS. **Muhasebe yetkili oturumda gerçek ödeme testi ayrıca bekliyor; üretim finans verisi test için değiştirilmedi.**
 - Kaynak temizliği için `DOCS/docs`, `TOOLS/tools`, sürümlü `DEPLOY`, legacy Nest ve çoklu workflows **doğrudan silinmeyecek**. Önce import/CI/runtime referans taraması, sonra test ve manifestli karantina. Yeni paralel repo/ana klasör oluşturulmaz.
 - İmalat 100 kayıt/sayfalama [PR #443](https://github.com/cetin60kaya-lgtm/ky-erp/pull/443) açık; bu muhasebe dalının kapsamı dışında tutulur.
+
+## 09.11.2026 — İK Aylık kalıcı personel kartı / aylık bordro sınırı (PR #547)
+
+- Kalıcı Personel Kartı ve tek aya özgü Son Bordro Kontrolü farklı yazma kapsamıdır. Varsayılan bordro kaydı ana ücret/personel kartını değiştirmez. Kalıcı kayıt ancak ayrı `Personel Kartını Güncelle` düğmesi, geçerlilik tarihi ve açık kullanıcı onayıyla yazılır.
+- Açık ay bordro görünümü personelin o aya ait kayıtlı özel ücretini ve tarihli Mesai/Avans/Kesinti hareketlerini birlikte çözer. Dönem CALCULATED olsa bile aylık özel ücret korunur. Ödenmiş veya kilitli bordro otomatik yeniden yazılmaz.
+- Kalıcı banka/elden ücret planına aylık mesai veya kesinti taşınmaz. Son seçilen personel ve modal kaydırma yeri firma/dönem bazında korunur.
+- **09.11 tek İK veri kararı:** Admin, muhasebe ve diğer yetkili roller için ayrıca bordro/ücret hesabı veya kullanıcıya özel İK veritabanı yoktur. Ortak rota `AppV3 → IkFinancePage → IkAdvancedMonthly`; okuma `/ik/advanced/month`, `/period-state`, `/payroll` ve firma kapsamı D1 üzerinden doğrulanır. Kullanıcı rolü hesaplama değil, erişim/yazma yetkisi belirler. Denetim rolünün kısıtlı görünümü ayrı yetki politikasıdır.
+- Tarayıcıdaki eski `prepared-periods` kaydı artık bordro durumu belirlemez, sunucuya sessiz dönüştürülmez. Başka oturumlarda firma/ay/personel sonucu aynı sunucu kaydından okunur; güncel veri alınamazsa sıfır tutar veya tarayıcı hesabı gerçekmiş gibi sunulmaz. Firma/ay kapsamı uyuşmayan API yanıtı reddedilir. Modal açıkken eşzamanlı değişiklikte mevcut editör taslağı korunup kullanıcı uyarılır; eski sürümü kaydetme 409 koruması devam eder.
+- Güncel kod değişiklikleri PR #547 üzerinde, canonical CI `42620450206` frontend lint/test/build + Worker typecheck/test/build **PASS**. Gerçek admin/muhasebeci iki oturum D1 eşitlik testi, production merge/deploy ve yayın kabulü **henüz yapılmadı**.
+- Çalışma dalı `feature/ik-aylik-kalici-kart-aylik-bordro-20261109`, PR #547. Frontend lint/test/build ve Worker typecheck/test/build mevcut canonical GitHub CI üzerinden doğrulandı; merge/deploy ve gerçek D1/Windows kullanıcı testi ayrı kanıttır.

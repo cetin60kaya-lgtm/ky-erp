@@ -32,6 +32,7 @@ import {
 } from "../../../../services/ik/monthlyApi";
 import { printHtmlDocument } from "../../../../services/printService";
 import { exportRowsToExcelFile } from "../../../../utils/excelExport";
+import { canonicalCompanySlug } from "../../../../utils/companyIdentity";
 import { useAuth } from "../../../../context/AuthContext";
 import IkMonthlyProShell from "./IkMonthlyProShell";
 import "./ik.advanced.css";
@@ -68,8 +69,14 @@ function ikPeriodStorageKey(companyId) {
   return `kyerp.ik.selected-period.v2.${companyId || "default"}`;
 }
 
-function ikPreparedStorageKey(companyId) {
-  return `kyerp.ik.prepared-periods.v2.${companyId || "default"}`;
+function ikSelectedPersonKey(companyId, period) {
+  return `kyerp.ik.selected-person.v1.${companyId || "default"}.${period}`;
+}
+
+function readIkSelectedPerson(companyId, period) {
+  if (typeof window === "undefined") return "";
+  try { return window.localStorage.getItem(ikSelectedPersonKey(companyId, period)) || ""; }
+  catch { return ""; }
 }
 
 function readStoredIkPeriod(companyId) {
@@ -84,16 +91,6 @@ function readStoredIkPeriod(companyId) {
     return fallback;
   }
   return fallback;
-}
-
-function readPreparedPeriods(companyId) {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(ikPreparedStorageKey(companyId)) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((value) => /^\d{4}-\d{2}$/.test(String(value))) : [];
-  } catch {
-    return [];
-  }
 }
 
 function dateKey(year, month, day = 1) {
@@ -415,7 +412,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [month, setMonth] = useState(initial.month);
   const [data, setData] = useState({});
   const [payrollData, setPayrollData] = useState(null);
-  const [preparedPeriods, setPreparedPeriods] = useState(() => readPreparedPeriods(companyId));
+  // A prepared period is shared company data, never a browser/account preference.
+  const [preparedPeriods, setPreparedPeriods] = useState([]);
+  const [periodCheckFailed, setPeriodCheckFailed] = useState(false);
   const [logs, setLogs] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -428,7 +427,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [payrollStatusFilter, setPayrollStatusFilter] = useState("ALL");
   const [payrollEmploymentFilter, setPayrollEmploymentFilter] = useState("ACTIVE");
   const [documentFilter, setDocumentFilter] = useState("ALL");
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(() => readIkSelectedPerson(companyId, `${initial.year}-${String(initial.month).padStart(2, "0")}`));
   const [modal, setModal] = useState(null);
   const [modalDraft, setModalDraft] = useState({});
   const [selectedDays, setSelectedDays] = useState([1]);
@@ -449,6 +448,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [leaveRangeStep, setLeaveRangeStep] = useState(0);
   const leaveAutoPreviewSeq = useRef(0);
   const loadRequestRef = useRef({ key: "", seq: 0, promise: null });
+  const currentDataScopeRef = useRef("");
   const liveVersionRef = useRef("");
   const livePollBusyRef = useRef(false);
   const lastSuccessfulLoadStartedAtRef = useRef(0);
@@ -458,6 +458,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const payrollInput = useRef(null);
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const periodPrepared = preparedPeriods.includes(period);
+  currentDataScopeRef.current = `${companyId}|${year}|${month}`;
 
   useEffect(() => {
     setPage(initialPage);
@@ -467,13 +468,23 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const stored = readStoredIkPeriod(companyId);
     setYear(stored.year);
     setMonth(stored.month);
-    setPreparedPeriods(readPreparedPeriods(companyId));
+    setPreparedPeriods([]);
+    setPeriodCheckFailed(false);
+    setData({});
+    setPayrollData(null);
+    setSelectedId(readIkSelectedPerson(companyId, `${stored.year}-${String(stored.month).padStart(2, "0")}`));
   }, [companyId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(ikPeriodStorageKey(companyId), JSON.stringify({ year, month }));
   }, [companyId, year, month]);
+
+  useEffect(() => {
+    if (!selectedId || typeof window === "undefined") return;
+    try { window.localStorage.setItem(ikSelectedPersonKey(companyId, period), selectedId); }
+    catch { /* Browser storage restrictions cannot block an HR operation. */ }
+  }, [companyId, period, selectedId]);
 
   const rawEmployees = safeList(data.rawEmployees).length ? safeList(data.rawEmployees) : safeList(data.employees);
   const rawMasterEmployees = safeList(data.masterEmployees).length ? safeList(data.masterEmployees) : rawEmployees;
@@ -485,11 +496,21 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const masterDocuments = safeList(data.rawDocuments).length ? safeList(data.rawDocuments) : safeList(data.documents);
   const documents = safeList(data.documents).filter((item) => canonicalEmployeeIds.has(item.employeeId));
   const checks = safeList(data.checks);
-  const payrollLines = safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id));
+  const payrollReady = periodPrepared
+    && Number(payrollData?.year) === year
+    && Number(payrollData?.month) === month
+    && canonicalCompanySlug(payrollData?.mainCompanyId || companyId) === canonicalCompanySlug(companyId);
+  const payrollLines = useMemo(() => payrollReady
+    ? safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id))
+    : [], [payrollReady, payrollData, canonicalEmployeeIds]);
   const totalDays = daysInMonth(year, month);
-  const selected = employees.find((item) => item.id === selectedId) || employees[0] || null;
+  // Personel Kartları always read the permanent master; monthly tabs read
+  // the period-specific employee projection. Neither depends on user role.
+  const selected = page === "personel"
+    ? (masterEmployees.find((item) => item.id === selectedId) || masterEmployees[0] || null)
+    : (employees.find((item) => item.id === selectedId) || employees[0] || null);
 
-  const load = useCallback(async ({ force = false, prepare = false, silent = false } = {}) => {
+  const load = useCallback(async ({ force = false, silent = false } = {}) => {
     const requestKey = `${companyId}|${year}|${month}`;
     let activeRequest = loadRequestRef.current;
     if (activeRequest.promise) {
@@ -511,35 +532,31 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         ]);
         if (resultState.status !== "fulfilled") throw resultState.reason;
         const result = resultState.value;
+        if (result?.mainCompanyId && canonicalCompanySlug(result.mainCompanyId) !== canonicalCompanySlug(companyId)) {
+          throw new Error("İK şirket kimliği uyuşmuyor. Yanlış firmaya ait personel veya bordro gösterilmedi.");
+        }
         const audit = auditState.status === "fulfilled" ? auditState.value : [];
         const center = centerState.status === "fulfilled" ? centerState.value : null;
 
-        let authoritativePrepared = periodState.status === "fulfilled"
-          ? Boolean(periodState.value?.prepared)
-          : null;
-        let periodStateFailed = periodState.status === "rejected";
-
-        // Eski tarayıcı hafızasında bu ay daha önce hazırlanmışsa, yeni sunucu
-        // kaydına bir kez sessizce taşı. Böylece mevcut kullanıcı tekrar düğmeye basmaz.
-        if (authoritativePrepared === false && periodPrepared) {
-          try {
-            const promoted = await prepareIkAdvancedPeriod({ mainCompanyId: companyId, year, month });
-            authoritativePrepared = Boolean(promoted?.prepared);
-          } catch {
-            periodStateFailed = true;
-          }
+        // The D1 period-state endpoint is the single source of truth for every
+        // authorized user. Never promote a period from localStorage during reads.
+        const periodStateFailed = periodState.status !== "fulfilled";
+        if (!periodStateFailed && periodState.value?.mainCompanyId
+          && canonicalCompanySlug(periodState.value.mainCompanyId) !== canonicalCompanySlug(companyId)) {
+          throw new Error("İK dönem bilgisi farklı firmaya ait. İşlem durduruldu.");
         }
-
-        const preparedForView = authoritativePrepared === null || periodStateFailed
-          ? periodPrepared
-          : authoritativePrepared;
-        const includePayroll = prepare || preparedForView;
+        const authoritativePrepared = !periodStateFailed && Boolean(periodState.value?.prepared);
+        const includePayroll = authoritativePrepared;
 
         let payroll = null;
         let payrollFailed = false;
         if (includePayroll) {
           try {
             payroll = await getIkAdvancedPayroll(params({ mainCompanyId: companyId, year, month }));
+            if (payroll?.mainCompanyId
+              && canonicalCompanySlug(payroll.mainCompanyId) !== canonicalCompanySlug(companyId)) {
+              throw new Error("İK bordro verisi farklı firmaya ait.");
+            }
           } catch {
             payrollFailed = true;
           }
@@ -549,7 +566,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           || centerState.status === "rejected"
           || periodStateFailed
           || payrollFailed;
-        if (loadRequestRef.current.seq !== requestId) return;
+        if (loadRequestRef.current.seq !== requestId || currentDataScopeRef.current !== requestKey) return false;
 
         const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
         const currentIds = new Set(nextEmployees.map((item) => item.id));
@@ -575,26 +592,30 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         } : null;
 
         setData(cleanResult);
+        setPeriodCheckFailed(periodStateFailed);
         setLogs(safeList(audit));
         setPayrollData(includePayroll ? cleanPayroll : null);
-        if (authoritativePrepared !== null && !periodStateFailed) {
-          setPreparedPeriods((old) => {
-            const withoutCurrent = old.filter((value) => value !== period);
-            const next = authoritativePrepared ? [...withoutCurrent, period] : withoutCurrent;
-            const unchanged = next.length === old.length && next.every((value, index) => value === old[index]);
-            if (!unchanged && typeof window !== "undefined") {
-              window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
-            }
-            return unchanged ? old : next;
-          });
-        }
+        setPreparedPeriods((old) => {
+          const withoutCurrent = old.filter((value) => value !== period);
+          const next = authoritativePrepared ? [...withoutCurrent, period] : withoutCurrent;
+          return next.length === old.length && next.every((value, index) => value === old[index])
+            ? old
+            : next;
+        });
         setLeaveCenter(center || { policy: {}, plans: [], conflicts: [], employees: [], cashRequests: [] });
         setLeaveCenterWarning(centerState.status === "rejected" ? "Yıllık İzin merkezi yüklenemedi. Bakiye doğrulanamadı; izin işlemleri geçici olarak durduruldu." : "");
         if (center?.policy) setPolicyDraft(center.policy);
-        setSelectedId((old) => masterSelectionIds.has(old) ? old : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "");
+        setSelectedId((old) => {
+          const remembered = readIkSelectedPerson(companyId, period);
+          return masterSelectionIds.has(old) ? old
+            : masterSelectionIds.has(remembered) ? remembered
+              : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "";
+        });
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
         lastSuccessfulLoadStartedAtRef.current = loadStartedAt;
-        if (!silent) setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
+        if (!silent) setNotice(periodStateFailed
+          ? "Aylık bordro durumu sunucudan doğrulanamadı. Yerel bilgisayar bilgileriyle bordro açılmadı; tekrar Yenile seçin."
+          : auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
         return true;
       } catch (error) {
         if (!silent && loadRequestRef.current.seq === requestId) {
@@ -614,7 +635,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         loadRequestRef.current = { ...loadRequestRef.current, promise: null };
       }
     }
-  }, [companyId, month, period, periodPrepared, year]);
+  }, [companyId, month, period, year]);
 
   useEffect(() => {
     load();
@@ -637,9 +658,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           liveVersionRef.current = version;
           return;
         }
-        if (busy || modal) return;
-        const refreshed = await load({ force: true, prepare: periodPrepared, silent: true });
-        if (!cancelled && refreshed) liveVersionRef.current = version;
+        if (busy) return;
+        // Keep the underlying shared data fresh even if a person/payroll dialog
+        // is open. Never overwrite an unsaved editor draft silently.
+        const refreshed = await load({ force: true, silent: true });
+        if (!cancelled && refreshed) {
+          liveVersionRef.current = version;
+          if (modal) setNotice("Başka oturumda İK verileri güncellendi. Açık formdaki değişiklikler korunuyor; güncel kayıt için pencereyi kapatıp yeniden açın.");
+        }
       } catch {
         // Canlı senkron yardımcı katmandır; geçici bağlantı hatası aylık İK işlemlerini durdurmaz.
       } finally {
@@ -670,12 +696,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     try {
       const state = await prepareIkAdvancedPeriod({ mainCompanyId: companyId, year, month });
       if (!state?.prepared) throw new Error("Aylık dönem hazırlık kaydı doğrulanamadı.");
-      setPreparedPeriods((old) => {
-        const next = [...new Set([...old, period])];
-        if (typeof window !== "undefined") window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
-        return next;
-      });
-      const ok = await load({ force: true, prepare: true });
+      setPreparedPeriods((old) => [...new Set([...old, period])]);
+      const ok = await load({ force: true });
       if (!ok) return;
       setNotice(`${MONTHS[month - 1]} ${year} bir kez hazırlandı ve sunucuya kaydedildi. Sayfa kapansa da tekrar hazırlamanız gerekmez.`);
     } catch (error) {
@@ -689,6 +711,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setYear(Number(nextYear));
     setMonth(Number(nextMonth));
     setPayrollData(null);
+    setSelectedId(readIkSelectedPerson(companyId, `${Number(nextYear)}-${String(Number(nextMonth)).padStart(2, "0")}`));
     setSelectedPayrollIds([]);
     setEmployeeStatusFilter("ALL");
     setSgkFilter("ALL");
@@ -830,7 +853,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 }, [periodMovements, payrollLines, rawEmployees]);
 
-  const payrollRows = useMemo(() => periodPrepared ? employees.map((employee) => {
+  const payrollRows = useMemo(() => payrollReady ? employees.map((employee) => {
   const system = planFor(employee);
   const saved = payrollLines.find((line) => line.employeeId === employee.id);
   if (!saved?.final) return system;
@@ -846,22 +869,21 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     bank: saved.final.bank !== undefined ? num(saved.final.bank) : system.bank,
     cash: saved.final.cash !== undefined ? num(saved.final.cash) : system.cash,
   };
-  const sourceChangedSinceSave = [
-    system.salary - snapshot.salary,
-    system.road - snapshot.road,
-    system.extra - snapshot.extra,
-    system.overtime - snapshot.overtime,
-    system.advance - snapshot.advance,
-    system.deduction - snapshot.deduction,
-    system.garnishment - snapshot.garnishment,
-    system.bank - snapshot.bank,
-    system.cash - snapshot.cash,
-  ].some((value) => Math.abs(round(value)) > 0.01);
-
-  // Tek kaynak kuralı: bordro sonucu ay kilitlenene kadar her zaman canlı kaynaklardan okunur.
-  // Eski PAID/snapshot kayıtları yalnız tarihsel kanıttır; düzenleme kilidi değildir.
-  return { ...system, saved, sourceChangedSinceSave, paidLocked: false };
-}): [], [employees, payrollLines, planFor, periodPrepared]);
+  // The monthly API resolves the effective month-only override plus current
+  // dated finance movements. Locked/paid snapshots stay frozen by the server.
+  const final = {
+    salary: snapshot.salary, road: snapshot.road, extra: snapshot.extra,
+    overtime: snapshot.overtime, advance: snapshot.advance,
+    deduction: snapshot.deduction, garnishment: snapshot.garnishment,
+    bank: snapshot.bank, cash: snapshot.cash,
+  };
+  return {
+    ...system, ...final, ...calcRow(final), saved,
+    sourceChangedSinceSave: Boolean(saved.sourceChangedSinceSave),
+    paidLocked: Boolean(saved.frozen),
+    monthOverride: ["OVERRIDE", "MANUAL_APPROVED"].includes(upper(saved.status)),
+  };
+}): [], [employees, payrollLines, planFor, payrollReady]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
     count: acc.count + 1,
@@ -920,7 +942,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
 
   const unbalancedPayrollRows = useMemo(() => payrollRows.filter((row) => Math.abs(num(row.diff)) > 0.01), [payrollRows]);
   const grandPaymentDiff = round(summary.bank + summary.cash - summary.net);
-  const balanced = Math.abs(grandPaymentDiff) <= 0.01 && unbalancedPayrollRows.length === 0;
+  const balanced = payrollReady && Math.abs(grandPaymentDiff) <= 0.01 && unbalancedPayrollRows.length === 0;
   const missingHireEmployees = useMemo(() => employees.filter((employee) => !employeeHireDate(employee)), [employees]);
   const passiveWithoutExitEmployees = useMemo(() => rawEmployees.filter((employee) => upper(`${employee.status || ""} ${employee.activePassive || ""}`).includes("PAS") && !employeeExitDate(employee)), [rawEmployees]);
   const duplicateNameCount = useMemo(() => {
@@ -933,8 +955,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   }, [rawEmployees]);
 
   const smartIssues = [
-    !periodPrepared ? { tone: "orange", title: "Bordro dönemi hazırlanmadı", detail: `${MONTHS[month - 1]} ${year} için önce Bilgileri Hazırla.`, action: preparePeriod, actionLabel: "Hazırla" } : null,
-    periodPrepared && !balanced ? { tone: "red", title: "Ödeme dengesi", detail: unbalancedPayrollRows.length ? `${unbalancedPayrollRows.length} personelde Banka + Elden, Net Ödenecek ile eşleşmiyor.` : `Genel ödeme farkı ${money(grandPaymentDiff)}.`, action: () => go("bordro"), actionLabel: "Bordroya Git" } : null,
+    periodCheckFailed ? { tone: "red", title: "Dönem doğrulanamadı", detail: "Sunucudaki İK hazırlık durumu okunamadı. Yerel tarayıcı verisi kullanılmıyor.", action: () => load({ force: true }), actionLabel: "Yenile" } : null,
+    !periodPrepared && !periodCheckFailed ? { tone: "orange", title: "Bordro dönemi hazırlanmadı", detail: `${MONTHS[month - 1]} ${year} için önce Bilgileri Hazırla.`, action: preparePeriod, actionLabel: "Hazırla" } : null,
+    periodPrepared && !payrollReady ? { tone: "red", title: "Ortak bordro verisi yüklenemedi", detail: "Banka, elden ve net tutarları farklı hesaplamayla doldurulmadı.", action: () => load({ force: true }), actionLabel: "Yenile" } : null,
+    payrollReady && !balanced ? { tone: "red", title: "Ödeme dengesi", detail: unbalancedPayrollRows.length ? `${unbalancedPayrollRows.length} personelde Banka + Elden, Net Ödenecek ile eşleşmiyor.` : `Genel ödeme farkı ${money(grandPaymentDiff)}.`, action: () => go("bordro"), actionLabel: "Bordroya Git" } : null,
     missingHireEmployees.length ? { tone: "orange", title: "İşe giriş tarihi eksik", detail: `${missingHireEmployees.length} dönem personelinde işe giriş tarihi eksik. Ay kapanışı engellenir.`, action: () => go("personel"), actionLabel: "Personellere Git" } : null,
     passiveWithoutExitEmployees.length ? { tone: "red", title: "İşten çıkış tarihi eksik", detail: `${passiveWithoutExitEmployees.length} pasif personelde çıkış tarihi eksik. Ay kapanışı engellenir.`, action: () => go("personel"), actionLabel: "Personellere Git" } : null,
     duplicateNameCount ? { tone: "orange", title: "Mükerrer ad kontrolü", detail: `${duplicateNameCount} ad-soyad birden fazla personel kartında bulunuyor. Kod/TC ile teyit edilmelidir.`, action: () => go("personel"), actionLabel: "Kontrol Et" } : null,
@@ -1013,7 +1037,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       });
       setModal(null);
       setNotice(`Personel kodu ${result?.oldCode || modalDraft.code} → ${result?.code || modalDraft.adminNewCode} olarak değiştirildi.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setModalDraft((old) => ({ ...old, adminActionMessage: error?.message || "Personel kodu değiştirilemedi." }));
     } finally {
@@ -1038,7 +1062,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModal(null);
       setSelectedId(target.id);
       setNotice(`${modalDraft.code} kaydı ${result?.targetCode || target.code} personeline birleştirildi; bağlı geçmiş kayıtlar korundu.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setModalDraft((old) => ({ ...old, adminActionMessage: error?.message || "Personel kayıtları birleştirilemedi." }));
     } finally {
@@ -1060,7 +1084,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModal(null);
       setSelectedId("");
       setNotice(`${modalDraft.fullName} (${modalDraft.code}) yanlış/mükerrer personel kaydı silindi. HKN kodu emekliye ayrıldı ve tekrar otomatik verilmez.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setModalDraft((old) => ({ ...old, adminActionMessage: error?.message || "Personel kaydı silinemedi." }));
     } finally {
@@ -1100,6 +1124,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     return {
       ...base,
       controlMode,
+      payrollVersion: row?.saved?.payrollVersion || "",
       finalEditor: {
         salary: row ? num(row.salary) : compensation.salary,
         road: row && !entry ? num(row.road) : num(base.roadAllowance),
@@ -1110,12 +1135,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         garnishment: entry ? round(sourceTotals.garnishment) : (row ? num(row.garnishment) : round(sourceTotals.garnishment)),
         bank: row && !entry ? num(row.bank) : num(base.bankAmount),
         cash: row && !entry ? num(row.cash) : num(base.cashAmount),
-        paymentType: base.paymentType || "BANKA_ELDEN",
+        paymentType: row?.saved?.paymentType || base.paymentType || "BANKA_ELDEN",
         advanceSource: row?.advanceSource || "Elden",
         deductionSource: row?.deductionSource || "Elden",
         garnishmentSource: row?.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
         legalType: row?.legalType === "HACIZ" ? "HACIZ" : "ICRA",
         reason: controlMode === "FINAL" ? "Son bordro kontrolü" : "Bordro öncesi giriş kontrolü",
+      cardEffectiveDate: istanbulDateKey(),
       },
       movementEditor: {
         id: "",
@@ -1139,7 +1165,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         if (!root) return;
         if (resetMain) {
           const main = root.querySelector(".payroll-final-main");
-          if (main) main.scrollTop = 0;
+          if (main) {
+            const key = `kyerp.ik.payroll-scroll.v1.${companyId}.${period}`;
+            try { main.scrollTop = Math.max(0, Number(window.sessionStorage.getItem(key)) || 0); }
+            catch { main.scrollTop = 0; }
+          }
         }
         const buttons = root.querySelectorAll(".payroll-person-rail-list button[data-employee-id]");
         for (const button of buttons) {
@@ -1262,7 +1292,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
-  const saveFinalPayrollControl = async () => {
+  const saveFinalPayrollControl = async (updatePersonnelCard = false) => {
     const editor = { ...(modalDraft.finalEditor || {}) };
     if (!modalDraft.id) return setModalDraft((old) => ({ ...old, formMessage: "Personel seçilmeden son kontrol kaydedilemez." }));
     const desired = {
@@ -1283,6 +1313,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     desired.bank = split.bank;
     desired.cash = split.cash;
     const resolvedPaymentType = split.mode === "BANKA" ? "Banka" : split.mode === "ELDEN" ? "Elden" : "BANKA_ELDEN";
+    if (updatePersonnelCard) {
+      if (!modalDraft.cardEffectiveDate) {
+        return setModalDraft((old) => ({ ...old, formMessage: "Kalıcı personel kartı için geçerlilik tarihi seçin." }));
+      }
+      if (!window.confirm(`Bu ücret/ödeme planı ${modalDraft.cardEffectiveDate} tarihinden itibaren KALICI personel kartına da işlensin mi? Aylık bordro kaydı ayrıca korunur.`)) return;
+    }
 
     setBusy(true);
     setModalDraft((old) => ({ ...old, formMessage: "Son kontrol tek işlemde kaynaklara kaydediliyor..." }));
@@ -1293,6 +1329,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         month,
         employeeId: modalDraft.id,
         expectedVersion: modalDraft.version || "",
+        expectedPayrollVersion: modalDraft.payrollVersion || "",
+        updatePersonnelCard,
+        effectiveDate: updatePersonnelCard ? modalDraft.cardEffectiveDate : undefined,
         paymentType: resolvedPaymentType,
         salary: desired.salary,
         road: desired.road,
@@ -1313,14 +1352,19 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModalDraft((old) => ({
         ...old,
         version: savedFinal?.version || savedFinal?.updatedAt || old.version,
-        salary: desired.salary,
-        roadAllowance: desired.road,
-        extraPaymentAmount: desired.extra,
-        paymentType: nextPaymentType,
-        bankAmount: savedFinal?.bankPlan ?? old.bankAmount,
-        cashAmount: savedFinal?.cashPlan ?? old.cashAmount,
+        payrollVersion: savedFinal?.payrollVersion || old.payrollVersion,
+        ...(updatePersonnelCard ? {
+          salary: savedFinal?.final?.actualSalary ?? desired.salary,
+          roadAllowance: desired.road,
+          extraPaymentAmount: desired.extra,
+          paymentType: nextPaymentType,
+          bankAmount: savedFinal?.cardBankPlan ?? old.bankAmount,
+          cashAmount: savedFinal?.cardCashPlan ?? old.cashAmount,
+        } : {}),
         finalEditor: { ...old.finalEditor, ...desired, paymentType: nextPaymentType },
-        formMessage: "Son bordro kontrolü atomik kaydedildi ✓ Ücret planı, hareket kaynakları ve bordro snapshotı birlikte güncellendi.",
+        formMessage: updatePersonnelCard
+          ? "Kaydedildi ✓ Aylık bordro ve kalıcı personel kartı güncellendi."
+          : "Kaydedildi ✓ Yalnız seçili ayın bordrosu ve hareketleri güncellendi; kalıcı personel kartı değişmedi.",
       }));
       setNotice("");
       await load({ force: true, silent: true });
@@ -2026,7 +2070,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       }
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: rows.map((row) => row.employee.id), status: "CALCULATED", reason: "Bordro kaydı" });
       setNotice(`${rows.length} personelin bordro ara kaydı güncellendi. Ay kilidi açık olduğu sürece düzenleme devam edebilir.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro kaydedilemedi.");
     } finally {
@@ -2706,7 +2750,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 
   function renderOzet() {
-    const payrollReadyText = periodPrepared ? "Hazır" : "Hazırlanmadı";
+    const payrollReadyText = periodCheckFailed ? "Sunucu doğrulanamadı" : payrollReady ? "Hazır" : periodPrepared ? "Bordro yüklenemedi" : "Hazırlanmadı";
+    const payrollValue = (amount) => payrollReady ? money(amount) : periodPrepared ? "Veri yüklenemedi" : "Hazırlanmadı";
     return (
       <section>
         <div className="page-head">
@@ -2716,14 +2761,19 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         {filters({ third: "Personel / uyarı ara", fourth: "Durum", fifth: "SGK" })}
         <div className={`warnline ${periodPrepared ? "ok" : "warn"}`}>
           <b>Ödeme dönemi: {MONTHS[month - 1]} {year}</b> · Ay bir kez hazırlandığında firma bazında sunucuya kaydedilir ve tekrar hazırlanmaz.
-          {!periodPrepared ? <><span> Bu dönem bordro hesabı henüz açılmadı.</span> <button className="btn primary" onClick={preparePeriod} disabled={busy}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></> : <span> Bordro verileri hazır.</span>}
+          {periodCheckFailed
+            ? <><span> Dönem durumu sunucudan doğrulanamadı.</span> <button className="btn" onClick={() => load({ force: true })}>Yenile</button></>
+            : !periodPrepared
+              ? <><span> Bu dönem bordro hesabı henüz açılmadı.</span> <button className="btn primary" onClick={preparePeriod} disabled={busy}>{busy ? "Hazırlanıyor" : "Bilgileri Hazırla"}</button></>
+              : payrollReady ? <span> Ortak bordro verileri hazır.</span>
+                : <><span> Bordro verisi yüklenemedi; farklı bir hesapla doldurulmaz.</span> <button className="btn" onClick={() => load({ force: true })}>Yenile</button></>}
         </div>
 
         <div className="sumgrid">
           {summaryBox("Dönem personeli", employees.length, "", `${employees.filter(isSgk).length} SGK'lı · ${employees.filter((item) => employeeHireDate(item).startsWith(period)).length} yeni giriş · ${employees.filter((item) => employeeExitDate(item).startsWith(period)).length} çıkış`)}
-          {summaryBox("Banka ödeme", periodPrepared ? money(summary.bank) : "Hazırlanmadı")}
-          {summaryBox("Elden ödeme", periodPrepared ? money(summary.cash) : "Hazırlanmadı")}
-          {summaryBox("Net ödeme", periodPrepared ? money(summary.net) : "Hazırlanmadı", periodPrepared ? (balanced ? "green" : "red") : "orange")}
+          {summaryBox("Banka ödeme", payrollValue(summary.bank))}
+          {summaryBox("Elden ödeme", payrollValue(summary.cash))}
+          {summaryBox("Net ödeme", payrollValue(summary.net), payrollReady ? (balanced ? "green" : "red") : "orange")}
           {summaryBox("Ek ödeme", periodPrepared ? money(summary.extra) : "-", summary.extra ? "green" : "")}
           {summaryBox("Mesai", periodPrepared ? money(summary.overtime) : "-", summary.overtime ? "orange" : "")}
           {summaryBox("Avans", periodPrepared ? money(summary.advance) : "-", summary.advance ? "orange" : "")}
@@ -2751,7 +2801,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           </tbody></table>
         </div>
 
-        {periodPrepared && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Ek</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
+        {payrollReady && <div className="card"><div className="ch"><div><b>Seçili Dönem Ödeme Özeti</b><span>Satıra tıklayıp personeli seçin; son kontrol bordro ekranından yapılır.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>SGK</th><th>Ek</th><th>Mesai</th><th>Avans</th><th>Kesinti</th><th>Banka</th><th>Elden</th><th>Net</th><th>Durum</th></tr></thead><tbody>
           {payrollRows.map((row) => <tr key={row.employee.id} onClick={() => setSelectedId(row.employee.id)}><td><span className="person">{row.employee.fullName}</span><span className="code">{row.employee.code || "-"}</span></td><td>{sgkLabel(row.employee)}</td><td>{money(row.extra)}</td><td>{money(row.overtime)}</td><td>{money(row.advance)}</td><td>{money(row.deduction + row.garnishment)}</td><td>{money(row.bank)}</td><td>{money(row.cash)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.diff === 0 ? "green" : "red"}`}>{row.diff === 0 ? "Hazır" : "Kontrol"}</span></td></tr>)}
           <EmptyRow show={!payrollRows.length} colSpan={10} text="Hazırlanmış bordro satırı yok."/>
         </tbody></table></div></div>}
@@ -3230,7 +3280,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           ? <div className="warnline warn"><b>AY KİLİTLİ.</b> Düzenleme kapalıdır; PDF, fiş ve Excel çıktıları alınabilir. Değişiklik için <b>Kilidi Aç</b>.</div>
           : <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "AY AÇIK · Bordro düzenlenebilir. PDF / fiş / Excel yalnız çıktı alır; ayı kilitlemez ve ödeme durumunu değiştirmez." : "AY AÇIK · Düzenleme serbest; ancak Banka + Elden = Net dengesi kurulmadan final çıktı alınamaz."}</div>}
         <div className="card">
-          <div className="ch"><div><b>Çıktı Öncesi Son Bordro</b><span>Bu tablo sonuç ekranıdır. Düzenleme gerçek kaynağa yazılır: ücret planı veya Mesai / Avans / Kesinti hareketi. Ayrı bordro override kaynağı kullanılmaz.</span></div></div>
+          <div className="ch"><div><b>Çıktı Öncesi Son Bordro</b><span>Personel Kartı kalıcıdır; bu tablo seçili ayın bordro sonucudur. Mesai / Avans / Kesinti kendi tarihli kaynağından gelir. Kalıcı ücret planı yalnız ayrı düğmeyle değiştirilir.</span></div></div>
           <div className="tw payroll-screen-table-wrap"><table className="payroll-screen-table"><thead><tr>
             <th className="check-col"><input type="checkbox" checked={filteredPayrollRows.length>0&&filteredPayrollRows.every((row)=>selectedPayrollIds.includes(row.employee.id))} onChange={(event)=>setSelectedPayrollIds(event.target.checked?[...new Set([...selectedPayrollIds,...filteredPayrollRows.map((row)=>row.employee.id)])]:selectedPayrollIds.filter((id)=>!filteredPayrollRows.some((row)=>row.employee.id===id)))} /></th>
             <th className="person-col">Personel</th>
@@ -3248,7 +3298,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Maaş</em><b>{money(row.salary)}</b></span><span><em>Yol / EK</em><b>{money(row.road)} / {money(row.extra)}</b></span><span><em>Mesai</em><b>{money(row.overtime)}</b></span><span className="cell-total"><em>Hak Ediş</em><b>{money(row.hakedis)}</b></span></div></td>
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(row.advance)}</b></span><span><em>Kesinti</em><b>{money(row.deduction)}</b></span><span><em>İcra/Haciz</em><b>{money(row.garnishment)}</b></span></div></td>
               <td className="payment-col"><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(row.bank)}</b></span><span><em>Elden</em><b>{money(row.cash)}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(row.net)}</b></span></div></td>
-              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${data.close?.isLocked?"red":row.diff===0?"green":"red"}`}>{data.close?.isLocked?"Kilitli":row.diff===0?"Hazır":"Kontrol"}</span>{row.sourceChangedSinceSave ? <span className="badge orange">Kaynak değişti</span> : null}</td>
+              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${data.close?.isLocked?"red":row.diff===0?"green":"red"}`}>{data.close?.isLocked?"Kilitli":row.diff===0?"Hazır":"Kontrol"}</span>{row.monthOverride ? <span className="badge blue">Bu Aya Özel</span> : null}{row.sourceChangedSinceSave ? <span className="badge orange">Kaynak değişti</span> : null}</td>
               <td className="action-col">
                 <details className="payroll-row-actions">
                   <summary>İşlemler</summary>
@@ -3294,7 +3344,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const previousPerson = personIndex > 0 ? masterEmployees[personIndex - 1] : null;
       const nextPerson = personIndex >= 0 && personIndex < masterEmployees.length - 1 ? masterEmployees[personIndex + 1] : null;
       return (
-      <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
+      <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kalıcı personel ana kaydı · Bordro düzenlemeleri ilgili aya özeldir" size="wide personnel-card-dialog" scrollKey={`kyerp.ik.person-scroll.v1.${companyId}`} onClose={() => setModal(null)}>
         {modalDraft.id ? <div className="person-modal-nav">
           <button type="button" className="btn" disabled={busy || !previousPerson} onClick={() => previousPerson && switchPersonInModal(previousPerson.id)}>← Önceki</button>
           <label>
@@ -3442,7 +3492,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         : num(editor.amount);
       const modalTitle = finalMode ? "Son Bordro Kontrolü" : "Bordro Öncesi Giriş Kontrolü";
       const modalSub = editableMode
-        ? `${MONTHS[month - 1]} ${year} · Ay kilidi açık; finans alanları düzenlenebilir ve gerçek kaynaklara kaydedilir`
+        ? `${MONTHS[month - 1]} ${year} · Ay açık · Düzeltme ilgili aya kaydedilir; kalıcı personel kartı ayrıca güncellenir`
         : `${MONTHS[month - 1]} ${year} · Salt okunur kontrol görünümü`;
 
       return (
@@ -3461,13 +3511,16 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               </div>
             </aside>
 
-            <div className="payroll-final-main">
+            <div className="payroll-final-main" onScroll={(event) => {
+              try { window.sessionStorage.setItem(`kyerp.ik.payroll-scroll.v1.${companyId}.${period}`, String(event.currentTarget.scrollTop)); }
+              catch { /* Ignore unavailable session storage. */ }
+            }}>
               <div className="person-modal-nav">
                 <button type="button" className="btn" disabled={busy || !previousPerson} onClick={() => previousPerson && switchPayPlanPerson(previousPerson.id)}>← Önceki</button>
                 <label><span>Personel Seç</span><select value={modalDraft.id || ""} disabled={busy} onChange={(event) => switchPayPlanPerson(event.target.value)}>{periodPeople.map((employee) => <option key={employee.id} value={employee.id}>{employee.code || "HKN yok"} · {employee.fullName}</option>)}</select></label>
                 <span className="person-modal-position">{currentIndex >= 0 ? currentIndex + 1 : 0} / {periodPeople.length}</span>
                 <button type="button" className="btn" disabled={busy || !nextPerson} onClick={() => nextPerson && switchPayPlanPerson(nextPerson.id)}>Sonraki →</button>
-                <small>{editableMode ? "Ay kilidi açıkken maaş, yol, EK, banka/elden ve hareketler düzenlenebilir." : "Salt okunur kontrol görünümü."}</small>
+                <small>{editableMode ? "Bu ayın bordrosu düzenlenebilir. Kalıcı personel kartı yalnız ayrı işlemle değişir." : "Salt okunur kontrol görünümü."}</small>
               </div>
 
               {editableMode ? (
@@ -3491,9 +3544,15 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                       <Field label="Elden Ödenecek"><input type="number" min="0" value={finalEditor.cash ?? ""} onChange={(event) => setFinalValue("cash", event.target.value)} /></Field>
                       <Field label="Son Kontrol Açıklaması" wide><input value={finalEditor.reason || ""} onChange={(event) => setFinalValue("reason", event.target.value)} placeholder="Örn. Eylül son bordro kontrolü" /></Field>
                     </div>
+                    <div className="warnline">Bu ayın bordrosu ayrı kaydedilir. Kalıcı maaş/ödeme planını değiştirmek için alttaki ayrı düğmeyi kullanın.</div>
                     <div className="row-actions">
                       <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
-                      <button type="button" className="btn primary" disabled={busy} onClick={saveFinalPayrollControl}>{busy ? "Kaydediliyor" : finalMode ? "Son Kontrolü Kaydet" : "Değişiklikleri Kaydet"}</button>
+                      <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false)}>{busy ? "Kaydediliyor" : "Yalnız Bu Ayı Kaydet"}</button>
+                    </div>
+                    <div className="ik-permanent-card-action">
+                      <label>Personel kartı geçerlilik tarihi <input type="date" value={modalDraft.cardEffectiveDate || ""} disabled={busy} onChange={(event) => setModalDraft((old) => ({ ...old, cardEffectiveDate: event.target.value }))} /></label>
+                      <button type="button" className="btn" disabled={busy} onClick={() => saveFinalPayrollControl(true)}>Personel Kartını Güncelle</button>
+                      <small>Kalıcı kart değişikliği bu tarihten itibaren geçerli olur; önceki aylık bordrolar otomatik silinmez veya değiştirilmez.</small>
                     </div>
                   </div>
 
@@ -3516,7 +3575,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                         ? "Banka + Elden = Net Ödenecek. Son kontrol kayda hazır."
                         : `Banka + Elden ile Net arasında ${money(Math.abs(finalTotals.diff))} fark var. Kaydetmeden önce düzeltin veya Otomatik Dengele kullanın.`}
                     </div>
-                    <div className="warnline">Bu ekrandaki Maaş/Yol/EK değişikliği ücret kaynağına; Mesai/Avans/Kesinti/İcra değişikliği hareket kaynağına yazılır.</div>
+                    <div className="warnline">Maaş/Yol/EK ve banka/elden düzeltmesi yalnız seçilen aya aittir. Mesai/Avans/Kesinti/İcra ilgili ayın hareket kaynağını günceller. Kalıcı ücret planı yalnız “Personel Kartını Güncelle” ile değişir.</div>
                   </div>
                 </div>
               ) : (
@@ -3865,12 +3924,22 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 }
 
-function Modal({ title, sub = "", size = "", children, onClose }) {
+function Modal({ title, sub = "", size = "", children, onClose, scrollKey = "" }) {
+  const bodyRef = useRef(null);
+  useEffect(() => {
+    if (!scrollKey || !bodyRef.current) return;
+    try { bodyRef.current.scrollTop = Math.max(0, Number(window.sessionStorage.getItem(scrollKey)) || 0); }
+    catch { bodyRef.current.scrollTop = 0; }
+  }, [scrollKey]);
   return createPortal(
     <div className="modal-bg show" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <div className={`modal ${size}`}>
         <div className="mh"><div><b>{title}</b>{sub ? <small>{sub}</small> : null}</div><button className="btn" onClick={onClose}>Kapat</button></div>
-        <div className="mb">{children}</div>
+        <div className="mb" ref={bodyRef} onScroll={(event) => {
+          if (!scrollKey) return;
+          try { window.sessionStorage.setItem(scrollKey, String(event.currentTarget.scrollTop)); }
+          catch { /* Ignore storage-restricted browsers. */ }
+        }}>{children}</div>
       </div>
     </div>,
     document.body,
