@@ -1,0 +1,43 @@
+.ky-model-files{border:1px solid var(--ky-border,#d5dce4);border-radius:12px;padding:12px;background:var(--ky-surface,#fff);color:inherit;display:grid;gap:10px;font-size:13px}
+.ky-model-files-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ky-model-files-head>div:first-child{display:grid;gap:4px}
+.ky-model-files small{color:var(--ky-muted,#657388);font-size:12px;display:block}
+.ky-model-files-actions{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.ky-model-files button{cursor:pointer;border:1px solid var(--ky-border,#cbd5e1);background:var(--ky-surface,#fff);border-radius:8px;padding:8px 11px;color:inherit;min-height:36px}
+.ky-model-files button:disabled{opacity:.6;cursor:wait}
+.ky-model-files-actions button:last-child,.ky-model-files-drop button{color:var(--ky-primary,#174db2);border-color:var(--ky-primary,#174db2);font-weight:600}
+.ky-model-files-drop{border:2px dashed var(--ky-border,#bbc5d5);padding:16px;border-radius:10px;display:grid;gap:5px;justify-items:center;text-align:center}
+.ky-model-files-drop.is-dragging{background:#edf5ff;border-color:#2879ca}
+.ky-model-files-editor{display:grid;gap:12px;background:var(--ky-subtle,#f6f8fa);border-radius:9px;padding:12px}
+.ky-model-files-editor label{display:grid;gap:5px;font-size:12px;font-weight:600;min-width:0}
+.ky-model-files-editor input,.ky-model-files-editor select{border:1px solid #b7c3d0;border-radius:7px;padding:9px;min-width:0;width:100%;background:var(--ky-surface,#fff);color:inherit}
+.ky-model-files-editor p{margin:0}
+.ky-model-files-selected{display:flex;gap:6px;flex-wrap:wrap}
+.ky-model-files-selected span{border-radius:6px;background:var(--ky-surface,#fff);border:1px solid #d8e0ea;padding:5px}
+.ky-model-files-assignment{display:grid;grid-template-columns:minmax(110px,1.2fr) minmax(110px,1fr) minmax(105px,1fr) auto;gap:8px;align-items:end}
+.ky-model-files-error{color:#a61b20;margin:0;font-weight:600}
+.ky-model-files-success{color:#176a3b;margin:0;font-weight:600}
+.ky-model-files-list{border-top:1px solid var(--ky-border,#d5dce4);padding-top:8px}
+.ky-model-files-list summary{cursor:pointer;font-weight:600}
+.ky-model-files-list ul{list-style:none;margin:8px 0 0;padding:0;max-height:270px;overflow-y:auto;display:grid;gap:6px}
+.ky-model-files-list li{border:1px solid #dce2e9;border-radius:8px;padding:8px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.ky-model-files-list li>div{display:grid;gap:4px;min-width:0;overflow-wrap:anywhere}
+@media(max-width:620px){.ky-model-files-assignment{grid-template-columns:1fr 1fr}.ky-model-files-assignment>label:first-child{grid-column:1/-1}.ky-model-files-list li{align-items:stretch;flex-direction:column}.ky-model-files-list li button{width:100%}}
+
+.ky-model-folder-import{border:1px solid var(--ky-border,#d5dce4);background:var(--ky-subtle,#f6f8fa);border-radius:9px;padding:10px;display:grid;grid-template-columns:minmax(180px,1fr) auto;gap:10px;align-items:center}
+.ky-model-folder-import>div:first-child{display:grid;gap:5px}
+.ky-model-folder-preview{grid-column:1/-1;display:grid;gap:6px;padding:9px;background:var(--ky-surface,#fff);border-radius:7px;border:1px solid #dce2e9}
+.ky-model-folder-preview button{justify-self:start}
+@media(max-width:620px){.ky-model-folder-import{grid-template-columns:1fr}.ky-model-folder-preview{grid-column:auto}}
+
+.ky-model-psd-existing{border:1px solid var(--ky-border,#d5dce4);border-radius:9px;padding:10px;display:grid;gap:9px}
+.ky-model-psd-existing>summary{cursor:pointer;font-weight:600}
+.ky-model-psd-existing>div{margin-top:9px}
+.ky-model-psd-search{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+.ky-model-psd-search label{display:grid;flex:1;min-width:160px;gap:5px}
+.ky-model-psd-search input{padding:8px;border:1px solid #bec9d7;border-radius:8px;width:100%;color:inherit;background:var(--ky-surface,#fff)}
+.ky-model-psd-results{display:grid;gap:5px;max-height:175px;overflow:auto}
+.ky-model-psd-results button{text-align:left;overflow-wrap:anywhere}
+.ky-model-psd-results button.is-selected{border-color:var(--ky-primary,#174db2);background:#ebf4ff;color:#14479c}
+.ky-model-psd-assignments{display:grid;gap:9px}
+.ky-model-psd-assignments p{margin:0}

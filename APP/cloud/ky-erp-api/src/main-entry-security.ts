@@ -11,6 +11,7 @@ import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
 import { runSecurityWorkspaceReminderSweep } from "./auth-security-mobile-control";
 import { runFileHubCloudScheduledSync } from "./file-hub-cloud-oauth";
+import { runFileHubAccountingDocumentIntake } from "./file-hub-accounting-intake.ts";
 import { retryPhysicalOperations } from "./accounting-physical-journal";
 
 type Env = { Bindings: Cloudflare.Env };
@@ -117,6 +118,9 @@ export default {
     }));
     ctx.waitUntil(runFileHubCloudScheduledSync(env).catch(() => {
       console.error("FILE_HUB_CLOUD_CRON_FAILED");
+    }));
+    ctx.waitUntil(runFileHubAccountingDocumentIntake(env).catch(() => {
+      console.error("ACCOUNTING_FILE_HUB_INTAKE_FAILED");
     }));
     ctx.waitUntil(retryPhysicalOperations(env).then((result)=>{
       if(result.processed || result.status!=="OK")console.log(JSON.stringify({

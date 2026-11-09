@@ -458,8 +458,9 @@ async function googleExistingFile(token:string,parentId:string,name:string){
   const payload=await providerJson(`https://www.googleapis.com/drive/v3/files?${params}`,token);
   return(Array.isArray(payload.files)?payload.files:[]).find((row:Row)=>text(row.name)===name)||null;
 }
-async function googleUpload(token:string,parentId:string,fileName:string,mimeType:string,bytes:ArrayBuffer){
+async function googleUpload(token:string,parentId:string,fileName:string,mimeType:string,bytes:ArrayBuffer,noOverwrite=false){
   const existing=await googleExistingFile(token,parentId,fileName);
+  if(noOverwrite&&existing)throw Object.assign(new Error("Aynı isimli dosya Drive arşivinde mevcut; orijinalin üzerine yazılmadı."),{code:"ARCHIVE_NAME_COLLISION",status:409});
   const updateId=text(existing?.id),method=updateId?"PATCH":"POST";
   const initUrl=updateId
     ?`https://www.googleapis.com/upload/drive/v3/files/${encodeURIComponent(updateId)}?uploadType=resumable&fields=id,name,mimeType,size,modifiedTime,webViewLink`
@@ -509,14 +510,15 @@ async function microsoftUpload(token:string,driveId:string,parentId:string,fileN
   return{id:text(payload.id),name:text(payload.name||fileName),webUrl:text(payload.webUrl),provider:"MICROSOFT"};
 }
 
-export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string,connectionId:string,input:{relativePath:string;fileName:string;mimeType?:string;bytes:ArrayBuffer}){
+export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string,connectionId:string,input:{relativePath:string;fileName:string;mimeType?:string;bytes:ArrayBuffer;noOverwrite?:boolean}){
   const {link,accessToken}=await connectionAccount(c,slug,connectionId);
   if(Number(link.is_active)===0)throw Object.assign(new Error("Bulut depolama servisi pasif."),{code:"CONNECTION_DISABLED"});
   if(upper(link.sync_mode)!=="CLOUD_API")throw Object.assign(new Error("Seçilen hedef doğrudan bulut API bağlantısı değil."),{code:"NOT_CLOUD_API"});
   const provider=upper(link.provider_type),driveId=text(link.provider_drive_id),rootId=text(link.remote_root_id)||"root",parts=archiveParts(input.relativePath,input.fileName);
+  if(input.noOverwrite&&provider!=="GOOGLE_DRIVE")throw Object.assign(new Error("Üzerine yazmama koruması bu işlemde yalnız Google Drive için doğrulanmıştır."),{code:"CREATE_ONLY_PROVIDER_UNSUPPORTED",status:422});
   if(provider==="GOOGLE_DRIVE"){
     const parentId=await ensureGooglePath(accessToken,rootId,parts.folders);
-    return{...(await googleUpload(accessToken,parentId,parts.fileName,text(input.mimeType)||"application/octet-stream",input.bytes)),providerType:provider,parentId,relativePath:text(input.relativePath)};
+    return{...(await googleUpload(accessToken,parentId,parts.fileName,text(input.mimeType)||"application/octet-stream",input.bytes,input.noOverwrite===true)),providerType:provider,parentId,relativePath:text(input.relativePath)};
   }
   if(provider==="DROPBOX"){
     const path=await dropboxArchivePath(accessToken,rootId,parts.folders,parts.fileName);

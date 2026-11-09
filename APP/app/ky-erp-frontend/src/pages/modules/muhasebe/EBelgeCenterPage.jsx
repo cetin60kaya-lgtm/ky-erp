@@ -216,6 +216,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const [companyOpen, setCompanyOpen] = useState(false);
   const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
   const [finalAcknowledged, setFinalAcknowledged] = useState(false);
+  const [finalPhysicalReceived, setFinalPhysicalReceived] = useState(false);
   const finalInFlight = useRef(false);
   const [editForm, setEditForm] = useState({ documentNo: "", issueDate: "", dueDate: "", currency: "TRY", direction: "INCOMING", documentType: "FATURA", note: "" });
   const [companyQuery, setCompanyQuery] = useState("");
@@ -240,7 +241,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
       setError(e?.message || "Belge detayı alınamadı.");
     }
   }, [id]);
-  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); }, [id]);
+  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); setFinalPhysicalReceived(false); }, [id]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!companyOpen || companyQuery.trim().length < 2) { setCompanies([]); return undefined; }
@@ -267,9 +268,10 @@ function DetailDrawer({ id, onClose, onChanged }) {
     setBusy("final");
     setError("");
     try {
-      await finalizeEBelge(id, { confirmed: true, expectedUpdatedAt: detail.updated_at || detail.updatedAt || "", retryPhysical: detail.status === "FINALIZE_RETRY" });
+      await finalizeEBelge(id, { confirmed: true, expectedUpdatedAt: detail.updated_at || detail.updatedAt || "", retryPhysical: detail.status === "FINALIZE_RETRY", confirmPhysicalReceipt: finalPhysicalReceived });
       setFinalConfirmOpen(false);
       setFinalAcknowledged(false);
+      setFinalPhysicalReceived(false);
       window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id } }));
       await load();
       await onChanged?.();
@@ -285,6 +287,8 @@ function DetailDrawer({ id, onClose, onChanged }) {
   const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
   const relationCount = detail?.relations?.length || 0;
   const fileCount = detail?.files?.length || 0;
+  const supplierPhysicalInvoice = detail?.direction === "INCOMING" && /FATURA|INVOICE|ARSIV/i.test(String(detail?.document_type || "")) &&
+    (detail?.lines || []).some((line) => ["BOYAHANE", "STOCK", "CONSUMABLE"].includes(String(line?.raw_metadata?.routingType || "").toUpperCase()));
 
   return <div className="eb-drawer-backdrop eb-modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
     <section className="eb-drawer eb-document-modal" role="dialog" aria-modal="true" aria-label={detail?.document_no ? `Belge ${detail.document_no}` : "Belge detayı"}>
@@ -313,7 +317,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
               <div className="eb-line head"><span>Ürün</span><span>Miktar</span><span>LOT</span><span>Yönlendirme</span><span>İşlem</span></div>
               {detail.lines.map((line) => <div className="eb-line" key={line.id}>
                 <span><strong>{line.description || line.product_code || "Kalem"}</strong><small>{line.product_code || line.supplier_product_code || ""}</small></span>
-                <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}</span>
+                <span>{Number(line.quantity || 0).toLocaleString("tr-TR")} {line.unit_code || ""}{Number(line.raw_metadata?.calculatedKg || 0) > 0 && <small> · {Number(line.raw_metadata.calculatedKg).toLocaleString("tr-TR")} kg ambalaj karşılığı</small>}</span>
                 <span>{lotLabel(line)}</span>
                 <span><strong>{routingLabel(line)}</strong><small>{line.raw_metadata?.expenseCategoryName ? `Gider: ${line.raw_metadata.expenseCategoryName}` : ""}</small></span>
                 <span><EBelgeLineReview documentId={id} documentType={detail.document_type} line={line} onChanged={async () => { await load(); await onChanged?.(); window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh", { detail: { source: "e-belge", documentId: id, action: "line" } })); }} hasCounterDocument={relationCount > 0} /></span>
@@ -370,6 +374,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
             <div><dt>Tutar / KDV</dt><dd>{money(detail.payable_total, detail.currency)} · KDV {money(detail.tax_total, detail.currency)}</dd></div>
             <div><dt>Kalem / Açık kontrol</dt><dd>{detail.lines?.length || 0} kalem · {openIssues.length} açık kontrol</dd></div>
           </dl>
+          {supplierPhysicalInvoice && <label className="eb-final-acknowledge"><input type="checkbox" checked={finalPhysicalReceived} onChange={(event) => setFinalPhysicalReceived(event.target.checked)} disabled={Boolean(busy)} /> Ürünleri fiziksel olarak teslim aldım; bu alış faturasındaki ürün ve LOT bilgileriyle Boyahane/Stok girişi oluşturulsun. İrsaliye ayrıca gelirse aynı miktar ikinci kez eklenmesin.</label>}
           <label className="eb-final-acknowledge"><input type="checkbox" checked={finalAcknowledged} onChange={(event) => setFinalAcknowledged(event.target.checked)} disabled={Boolean(busy)} /> Belgenin cari, kalem, LOT ve tutar bilgilerini inceledim; muhasebeleştirmeyi açıkça onaylıyorum.</label>
           {error && <p role="alert" className="eb-final-error">{error}</p>}
         </div>

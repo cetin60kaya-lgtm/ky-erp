@@ -1,3 +1,4 @@
+import ModelFilesPanel from "../../../components/shared/ModelFilesPanel";
 /* eslint-disable react-hooks/exhaustive-deps */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -1546,6 +1547,7 @@ export default function BoyahaneWorkPageV4({
         </>
       ) : null}
 
+      {selectedJob?.modelCardId && <details className="bh-model-file-reference"><summary>Model Kartı / Teknik Föy / Desen Dosyaları</summary><ModelFilesPanel modelId={selectedJob.modelCardId} modelName={selectedJob.modelName} activeMainCompany={activeMainCompany} readOnly /></details>}
       {selectedJob ? (
         <section className="bh-operation-workspace">
           <header className="bh-operation-model-head bh-operation-model-head-v4">
