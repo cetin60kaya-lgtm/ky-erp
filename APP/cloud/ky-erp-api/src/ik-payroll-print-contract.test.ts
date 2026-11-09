@@ -199,7 +199,7 @@ test("bordro Excel exports the same core amounts shown on screen", () => {
 test("forced refresh waits for an active read before starting the canonical reread", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
-  assert.match(page, /const load = useCallback\(async \(\{ force = false, prepare = false, silent = false \} = \{\}\) =>/);
+  assert.match(page, /const load = useCallback\(async \(\{ force = false, silent = false \} = \{\}\) =>/);
   assert.match(page, /if \(!force && activeRequest\.key === requestKey\) return activeRequest\.promise/);
   assert.match(page, /await activeRequest\.promise/);
   assert.match(page, /await load\(\{ force: true \}\)/);
@@ -246,7 +246,7 @@ test("IK payroll period persists and new periods require explicit preparation", 
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
 
   assert.match(page, /kyerp\.ik\.selected-period\.v2/);
-  assert.match(page, /kyerp\.ik\.prepared-periods\.v2/);
+  assert.doesNotMatch(page, /kyerp\.ik\.prepared-periods\.v2/);
   assert.match(page, /function previousPeriod\(\)/);
   assert.match(page, /const initial = readStoredIkPeriod\(companyId\)/);
   assert.match(page, /const periodPrepared = preparedPeriods\.includes\(period\)/);
@@ -254,9 +254,9 @@ test("IK payroll period persists and new periods require explicit preparation", 
   assert.match(page, /preparePeriod/);
   assert.match(page, /getIkAdvancedPeriodState/);
   assert.match(page, /prepareIkAdvancedPeriod/);
-  assert.match(page, /const preparedForView =/);
-  assert.match(page, /const includePayroll = prepare \|\| preparedForView/);
-  assert.match(page, /periodPrepared \? employees\.map/);
+  assert.match(page, /const authoritativePrepared = !periodStateFailed/);
+  assert.match(page, /const includePayroll = authoritativePrepared/);
+  assert.match(page, /payrollReady \? employees\.map/);
 });
 
 test("IK overview is finance-focused and leaves live attendance operations to PDKS", () => {
