@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { ensureCanonicalModel } from "./canonical-model-identity";
+import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 import { isHistoricalProduction, matchesProductionPool, PRODUCTION_POOL_CONTRACT } from "./production-pool-classification.ts";
 import { productionIdentity, writeProductionEntryAtomic } from "./production-idempotency";
 
