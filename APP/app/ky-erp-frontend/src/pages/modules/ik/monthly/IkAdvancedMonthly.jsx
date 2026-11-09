@@ -881,6 +881,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     ...system, ...final, ...calcRow(final), saved,
     sourceChangedSinceSave: Boolean(saved.sourceChangedSinceSave),
     paidLocked: Boolean(saved.frozen),
+    monthOverride: ["OVERRIDE", "MANUAL_APPROVED"].includes(upper(saved.status)),
   };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
@@ -1121,6 +1122,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     return {
       ...base,
       controlMode,
+      payrollVersion: row?.saved?.payrollVersion || "",
       finalEditor: {
         salary: row ? num(row.salary) : compensation.salary,
         road: row && !entry ? num(row.road) : num(base.roadAllowance),
@@ -1325,6 +1327,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         month,
         employeeId: modalDraft.id,
         expectedVersion: modalDraft.version || "",
+        expectedPayrollVersion: modalDraft.payrollVersion || "",
         updatePersonnelCard,
         effectiveDate: updatePersonnelCard ? modalDraft.cardEffectiveDate : undefined,
         paymentType: resolvedPaymentType,
@@ -1347,13 +1350,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModalDraft((old) => ({
         ...old,
         version: savedFinal?.version || savedFinal?.updatedAt || old.version,
+        payrollVersion: savedFinal?.payrollVersion || old.payrollVersion,
         ...(updatePersonnelCard ? {
           salary: savedFinal?.final?.actualSalary ?? desired.salary,
           roadAllowance: desired.road,
           extraPaymentAmount: desired.extra,
           paymentType: nextPaymentType,
-          bankAmount: savedFinal?.bankPlan ?? old.bankAmount,
-          cashAmount: savedFinal?.cashPlan ?? old.cashAmount,
+          bankAmount: savedFinal?.cardBankPlan ?? old.bankAmount,
+          cashAmount: savedFinal?.cardCashPlan ?? old.cashAmount,
         } : {}),
         finalEditor: { ...old.finalEditor, ...desired, paymentType: nextPaymentType },
         formMessage: updatePersonnelCard
@@ -3286,7 +3290,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Maaş</em><b>{money(row.salary)}</b></span><span><em>Yol / EK</em><b>{money(row.road)} / {money(row.extra)}</b></span><span><em>Mesai</em><b>{money(row.overtime)}</b></span><span className="cell-total"><em>Hak Ediş</em><b>{money(row.hakedis)}</b></span></div></td>
               <td className="summary-col"><div className="payroll-cell-stack"><span><em>Avans</em><b>{money(row.advance)}</b></span><span><em>Kesinti</em><b>{money(row.deduction)}</b></span><span><em>İcra/Haciz</em><b>{money(row.garnishment)}</b></span></div></td>
               <td className="payment-col"><div className="payroll-cell-stack"><span><em>Banka</em><b>{money(row.bank)}</b></span><span><em>Elden</em><b>{money(row.cash)}</b></span><span className="cell-total net"><em>Net Ödenecek</em><b>{money(row.net)}</b></span></div></td>
-              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${data.close?.isLocked?"red":row.diff===0?"green":"red"}`}>{data.close?.isLocked?"Kilitli":row.diff===0?"Hazır":"Kontrol"}</span>{row.sourceChangedSinceSave ? <span className="badge orange">Kaynak değişti</span> : null}</td>
+              <td className="status-col"><span className={`badge ${num(row.employee.sgkNet)>0?"blue":"orange"}`}>{num(row.employee.sgkNet)>0?"Bordro":"Plan"}</span><span className={`badge ${data.close?.isLocked?"red":row.diff===0?"green":"red"}`}>{data.close?.isLocked?"Kilitli":row.diff===0?"Hazır":"Kontrol"}</span>{row.monthOverride ? <span className="badge blue">Bu Aya Özel</span> : null}{row.sourceChangedSinceSave ? <span className="badge orange">Kaynak değişti</span> : null}</td>
               <td className="action-col">
                 <details className="payroll-row-actions">
                   <summary>İşlemler</summary>
