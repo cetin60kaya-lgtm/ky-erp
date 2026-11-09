@@ -869,18 +869,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     bank: saved.final.bank !== undefined ? num(saved.final.bank) : system.bank,
     cash: saved.final.cash !== undefined ? num(saved.final.cash) : system.cash,
   };
-  const sourceChangedSinceSave = [
-    system.salary - snapshot.salary,
-    system.road - snapshot.road,
-    system.extra - snapshot.extra,
-    system.overtime - snapshot.overtime,
-    system.advance - snapshot.advance,
-    system.deduction - snapshot.deduction,
-    system.garnishment - snapshot.garnishment,
-    system.bank - snapshot.bank,
-    system.cash - snapshot.cash,
-  ].some((value) => Math.abs(round(value)) > 0.01);
-
   // The monthly API resolves the effective month-only override plus current
   // dated finance movements. Locked/paid snapshots stay frozen by the server.
   const final = {
@@ -3280,7 +3268,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           ? <div className="warnline warn"><b>AY KİLİTLİ.</b> Düzenleme kapalıdır; PDF, fiş ve Excel çıktıları alınabilir. Değişiklik için <b>Kilidi Aç</b>.</div>
           : <div className={`warnline ${balanced ? "ok" : "warn"}`}>{balanced ? "AY AÇIK · Bordro düzenlenebilir. PDF / fiş / Excel yalnız çıktı alır; ayı kilitlemez ve ödeme durumunu değiştirmez." : "AY AÇIK · Düzenleme serbest; ancak Banka + Elden = Net dengesi kurulmadan final çıktı alınamaz."}</div>}
         <div className="card">
-          <div className="ch"><div><b>Çıktı Öncesi Son Bordro</b><span>Bu tablo sonuç ekranıdır. Düzenleme gerçek kaynağa yazılır: ücret planı veya Mesai / Avans / Kesinti hareketi. Ayrı bordro override kaynağı kullanılmaz.</span></div></div>
+          <div className="ch"><div><b>Çıktı Öncesi Son Bordro</b><span>Personel Kartı kalıcıdır; bu tablo seçili ayın bordro sonucudur. Mesai / Avans / Kesinti kendi tarihli kaynağından gelir. Kalıcı ücret planı yalnız ayrı düğmeyle değiştirilir.</span></div></div>
           <div className="tw payroll-screen-table-wrap"><table className="payroll-screen-table"><thead><tr>
             <th className="check-col"><input type="checkbox" checked={filteredPayrollRows.length>0&&filteredPayrollRows.every((row)=>selectedPayrollIds.includes(row.employee.id))} onChange={(event)=>setSelectedPayrollIds(event.target.checked?[...new Set([...selectedPayrollIds,...filteredPayrollRows.map((row)=>row.employee.id)])]:selectedPayrollIds.filter((id)=>!filteredPayrollRows.some((row)=>row.employee.id===id)))} /></th>
             <th className="person-col">Personel</th>
