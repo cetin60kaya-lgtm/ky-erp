@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 09.11.2026 — İK Aylık tek kalıcı kart, ayrı aylık bordro (PR #547)
+
+- Kullanıcı kararı: Personel Kartı kalıcı çalışanın tek ana kaydı; Son Bordro Kontrolü sadece seçilen ayın ücret/ödeme ve tarihli hareket sonucudur. Bir ekrandaki her kayıt diğer ekranlarda aynı canonical kaynaktan yeniden okunur, fakat aylık bordro düzeltmesi kalıcı ana kartı izinsiz değiştirmez.
+- Ay son kontrolüne `Yalnız Bu Ayı Kaydet` ve `Personel Kartını Güncelle` (etkili tarih + kullanıcı onayı) işlemleri ayrıştırıldı. Worker normal aylık kayıtta master employee, person-card-settings, salary-contract ve ücret geçmişini değiştirmez; kalıcı işlemde bu kayıtlar kontrollü güncellenir. Kalıcı banka planı o ayın mesaisi/avansı/kesintisi olmadan hesaplanır.
+- Açık dönemde aylık özel maaş ve mevcut hareketlerin birleşiminden canlı sonuç üretilir; eski sonuç güncelmiş gibi gösterilmez. CALCULATED statüsüne geçiş aylık özel planı düşürmez; PAID ve kilitli ay geçmişini korur. Optimistic version kontrolü çakışmada 409 döner.
+- İK modalı geniş uyarlanabilir; son personel seçimi, dönem ve kaydırma konumu kalır. PR #547 `feature/ik-aylik-kalici-kart-aylik-bordro-20261109` dalındadır. GitHub frontend/Worker canonical CI PASS; production merge/deploy ve canlı kullanıcı testi ayrı kanıt bekler.
+
 ## 09.11.2026 — KY ERP tek kayıt penceresi + canonical model kimliği (PR #546)
 
 - Kullanıcı ekranlarında DESEN model/kanaI penceresi sekmelerde değişken boyutlu, firma listesi boş; İmalat/Boyahane/Muhasebe farklı yeni kayıt formları kullanıyordu. Ortak `KyRecordDialog`: 840×600 başlangıç, sağ-alt sürükleme/klavye, kullanıcı ölçüsü, sabit dış çerçeve, iç scroll, mobil tam ekran. Desen, İmalat, Boyahane ve Muhasebe yeni kart formları aynı bileşeni kullanır.
