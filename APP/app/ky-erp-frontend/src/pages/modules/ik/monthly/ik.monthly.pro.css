@@ -1188,6 +1188,19 @@
   overflow:hidden;
   padding:clamp(10px,1vw,18px);
 }
+/* Tarayıcı yakınlaştırması farklı olsa bile modal metinleri aşırı küçülmesin. */
+.modal-bg .prepayroll-dialog .mh b,
+.modal-bg .personnel-card-dialog .mh b {
+  font-size:clamp(19px,1.2vw,32px);
+}
+.modal-bg .prepayroll-dialog .mh small,
+.modal-bg .personnel-card-dialog .mh small {
+  font-size:clamp(12px,.85vw,23px);
+}
+.modal-bg .prepayroll-dialog .person-modal-nav label>span,
+.modal-bg .personnel-card-dialog .person-modal-nav label>span {
+  font-size:clamp(12px,.8vw,22px);
+}
 .modal-bg .prepayroll-dialog .payroll-final-layout{
   height:100%;
   min-height:0;
@@ -1254,7 +1267,7 @@
 .modal-bg .prepayroll-dialog .modal-section h3{
   margin-bottom:10px;
   padding-bottom:8px;
-  font-size:clamp(15px,.95vw,18px);
+  font-size:clamp(15px,1.1vw,30px);
   line-height:1.35;
 }
 .modal-bg .prepayroll-dialog .form{
@@ -1262,33 +1275,33 @@
 }
 .modal-bg .prepayroll-dialog .form label{
   margin-bottom:4px;
-  font-size:clamp(12px,.75vw,14px);
+  font-size:clamp(12px,.85vw,24px);
   line-height:1.35;
 }
 .modal-bg .prepayroll-dialog input,
 .modal-bg .prepayroll-dialog select{
   height:40px;
-  font-size:clamp(13px,.85vw,16px);
+  font-size:clamp(13px,1vw,28px);
 }
 .modal-bg .prepayroll-dialog .btn {
   min-height:40px;
   height:auto;
   padding:8px 12px;
-  font-size:clamp(12px,.78vw,15px);
+  font-size:clamp(12px,.95vw,26px);
   line-height:1.3;
   white-space:normal;
 }
 .modal-bg .prepayroll-dialog .person-modal-nav>small,
 .modal-bg .prepayroll-dialog .payroll-person-rail-head small {
-  font-size:clamp(12px,.7vw,14px);
+  font-size:clamp(12px,.8vw,23px);
   line-height:1.4;
 }
 .modal-bg .prepayroll-dialog .payroll-person-rail-list button b {
-  font-size:clamp(12px,.8vw,15px);
+  font-size:clamp(12px,.88vw,25px);
   line-height:1.3;
 }
 .modal-bg .prepayroll-dialog .payroll-person-rail-list button small {
-  font-size:clamp(11px,.7vw,13px);
+  font-size:clamp(11px,.76vw,21px);
 }
 .modal-bg .prepayroll-dialog input[readonly]{
   background:#f3f6fa;
@@ -1312,11 +1325,11 @@
 }
 .modal-bg .prepayroll-dialog .payment-summary b{
   margin-top:5px;
-  font-size:clamp(15px,1vw,19px);
+  font-size:clamp(15px,1.1vw,30px);
   overflow-wrap:anywhere;
 }
 .modal-bg .prepayroll-dialog .payment-summary span{
-  font-size:clamp(12px,.75vw,14px);
+  font-size:clamp(12px,.85vw,24px);
 }
 .modal-bg .prepayroll-dialog .payment-summary .summary-highlight{
   border-color:#f3c37c;
@@ -2676,16 +2689,16 @@
   grid-column:1/-1;
 }
 .modal-bg .personnel-card-dialog .form label {
-  font-size:clamp(12px,.75vw,14px);
+  font-size:clamp(12px,.85vw,24px);
   line-height:1.35;
 }
 .modal-bg .personnel-card-dialog .modal-section h3 {
-  font-size:clamp(15px,.95vw,18px);
+  font-size:clamp(15px,1.1vw,30px);
 }
 .modal-bg .personnel-card-dialog input,
 .modal-bg .personnel-card-dialog select {
   min-height:40px;
-  font-size:clamp(13px,.85vw,16px);
+  font-size:clamp(13px,1vw,28px);
 }
 .modal-bg .personnel-card-dialog .person-modal-nav .btn,
 .modal-bg .personnel-card-dialog .mf .btn {
