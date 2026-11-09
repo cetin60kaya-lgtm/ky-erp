@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { modelHintFromArchiveName, chooseCanonicalDocumentModels,
+import { archiveDocumentIdentity, modelHintFromArchiveName, chooseCanonicalDocumentModels,
   packageWeightFromItem, dispatchInvoiceQuantity } from "./e-belge-document-automation.ts";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl.ts";
 
@@ -9,6 +9,9 @@ test("DDM/HKN filenames: exact model name and document number, no copy duplicate
     {series:"DDM",documentNo:"DDM2026000000046",modelName:"ECITIR"});
   assert.equal(modelHintFromArchiveName("HKN2026000000807 KEGINEZ - Kopya.pdf")?.modelName,"KEGINEZ");
   assert.equal(modelHintFromArchiveName("SLV2026000004125_several.pdf"),null);
+  assert.deepEqual(archiveDocumentIdentity("HKN2026000000946.pdf"),{series:"HKN",documentNo:"HKN2026000000946",modelName:""});
+  assert.equal(modelHintFromArchiveName("HKN2026000000946.pdf"),null);
+  assert.deepEqual(archiveDocumentIdentity("DDM2026000000933.pdf"),{series:"DDM",documentNo:"DDM2026000000933",modelName:""});
 });
 
 test("canonical model: company + exact name; no cross-company or duplicate guess",()=>{
@@ -28,6 +31,13 @@ test("canonical model: conflicting file and exact line never auto-merge",()=>{
     lines:[{description:"MODEL B"}],fileName:"HKN2026000000845 MODEL A.pdf",documentNo:"HKN2026000000845"};
   assert.equal(chooseCanonicalDocumentModels(data).status,"CONFLICT");
   assert.equal(chooseCanonicalDocumentModels(data).modelId,"");
+});
+
+test("modelsiz HKN PDF'de yalnız belgede açık yazılı model adına göre bağlanır",()=>{
+  const m=chooseCanonicalDocumentModels({models:[{id:"x",model_name:"MODEL X",company_id:"taha"}],
+    lines:[{description:"BASKI HİZMETİ"}],companyId:"taha",
+    documentNo:"HKN2026000000946",fileName:"HKN2026000000946.pdf",explicitModelName:"MODEL X"});
+  assert.equal(m.modelId,"x");
 });
 
 test("invoice may contain multiple model lines; keep independent line IDs",()=>{
