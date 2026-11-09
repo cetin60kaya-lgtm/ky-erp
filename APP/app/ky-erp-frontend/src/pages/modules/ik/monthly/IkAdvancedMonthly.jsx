@@ -68,10 +68,6 @@ function ikPeriodStorageKey(companyId) {
   return `kyerp.ik.selected-period.v2.${companyId || "default"}`;
 }
 
-function ikPreparedStorageKey(companyId) {
-  return `kyerp.ik.prepared-periods.v2.${companyId || "default"}`;
-}
-
 function ikSelectedPersonKey(companyId, period) {
   return `kyerp.ik.selected-person.v1.${companyId || "default"}.${period}`;
 }
@@ -94,16 +90,6 @@ function readStoredIkPeriod(companyId) {
     return fallback;
   }
   return fallback;
-}
-
-function readPreparedPeriods(companyId) {
-  if (typeof window === "undefined") return [];
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(ikPreparedStorageKey(companyId)) || "[]");
-    return Array.isArray(parsed) ? parsed.filter((value) => /^\d{4}-\d{2}$/.test(String(value))) : [];
-  } catch {
-    return [];
-  }
 }
 
 function dateKey(year, month, day = 1) {
@@ -425,7 +411,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [month, setMonth] = useState(initial.month);
   const [data, setData] = useState({});
   const [payrollData, setPayrollData] = useState(null);
-  const [preparedPeriods, setPreparedPeriods] = useState(() => readPreparedPeriods(companyId));
+  // A prepared period is shared company data, never a browser/account preference.
+  const [preparedPeriods, setPreparedPeriods] = useState([]);
   const [logs, setLogs] = useState([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
@@ -459,6 +446,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [leaveRangeStep, setLeaveRangeStep] = useState(0);
   const leaveAutoPreviewSeq = useRef(0);
   const loadRequestRef = useRef({ key: "", seq: 0, promise: null });
+  const currentDataScopeRef = useRef("");
   const liveVersionRef = useRef("");
   const livePollBusyRef = useRef(false);
   const lastSuccessfulLoadStartedAtRef = useRef(0);
@@ -468,6 +456,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const payrollInput = useRef(null);
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const periodPrepared = preparedPeriods.includes(period);
+  currentDataScopeRef.current = `${companyId}|${year}|${month}`;
 
   useEffect(() => {
     setPage(initialPage);
@@ -477,7 +466,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const stored = readStoredIkPeriod(companyId);
     setYear(stored.year);
     setMonth(stored.month);
-    setPreparedPeriods(readPreparedPeriods(companyId));
+    setPreparedPeriods([]);
     setSelectedId(readIkSelectedPerson(companyId, `${stored.year}-${String(stored.month).padStart(2, "0")}`));
   }, [companyId]);
 
@@ -504,9 +493,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const checks = safeList(data.checks);
   const payrollLines = safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id));
   const totalDays = daysInMonth(year, month);
-  const selected = employees.find((item) => item.id === selectedId) || employees[0] || null;
+  // Personel Kartları always read the permanent master; monthly tabs read
+  // the period-specific employee projection. Neither depends on user role.
+  const selected = page === "personel"
+    ? (masterEmployees.find((item) => item.id === selectedId) || masterEmployees[0] || null)
+    : (employees.find((item) => item.id === selectedId) || employees[0] || null);
 
-  const load = useCallback(async ({ force = false, prepare = false, silent = false } = {}) => {
+  const load = useCallback(async ({ force = false, silent = false } = {}) => {
     const requestKey = `${companyId}|${year}|${month}`;
     let activeRequest = loadRequestRef.current;
     if (activeRequest.promise) {
@@ -531,26 +524,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         const audit = auditState.status === "fulfilled" ? auditState.value : [];
         const center = centerState.status === "fulfilled" ? centerState.value : null;
 
-        let authoritativePrepared = periodState.status === "fulfilled"
-          ? Boolean(periodState.value?.prepared)
-          : null;
-        let periodStateFailed = periodState.status === "rejected";
-
-        // Eski tarayıcı hafızasında bu ay daha önce hazırlanmışsa, yeni sunucu
-        // kaydına bir kez sessizce taşı. Böylece mevcut kullanıcı tekrar düğmeye basmaz.
-        if (authoritativePrepared === false && periodPrepared) {
-          try {
-            const promoted = await prepareIkAdvancedPeriod({ mainCompanyId: companyId, year, month });
-            authoritativePrepared = Boolean(promoted?.prepared);
-          } catch {
-            periodStateFailed = true;
-          }
-        }
-
-        const preparedForView = authoritativePrepared === null || periodStateFailed
-          ? periodPrepared
-          : authoritativePrepared;
-        const includePayroll = prepare || preparedForView;
+        // The D1 period-state endpoint is the single source of truth for every
+        // authorized user. Never promote a period from localStorage during reads.
+        const periodStateFailed = periodState.status !== "fulfilled";
+        const authoritativePrepared = !periodStateFailed && Boolean(periodState.value?.prepared);
+        const includePayroll = authoritativePrepared;
 
         let payroll = null;
         let payrollFailed = false;
@@ -566,7 +544,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           || centerState.status === "rejected"
           || periodStateFailed
           || payrollFailed;
-        if (loadRequestRef.current.seq !== requestId) return;
+        if (loadRequestRef.current.seq !== requestId || currentDataScopeRef.current !== requestKey) return false;
 
         const nextEmployees = safeList(result?.employees).filter((item) => payrollVisibleEmployee(item, period));
         const currentIds = new Set(nextEmployees.map((item) => item.id));
@@ -594,17 +572,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         setData(cleanResult);
         setLogs(safeList(audit));
         setPayrollData(includePayroll ? cleanPayroll : null);
-        if (authoritativePrepared !== null && !periodStateFailed) {
-          setPreparedPeriods((old) => {
-            const withoutCurrent = old.filter((value) => value !== period);
-            const next = authoritativePrepared ? [...withoutCurrent, period] : withoutCurrent;
-            const unchanged = next.length === old.length && next.every((value, index) => value === old[index]);
-            if (!unchanged && typeof window !== "undefined") {
-              window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
-            }
-            return unchanged ? old : next;
-          });
-        }
+        setPreparedPeriods((old) => {
+          const withoutCurrent = old.filter((value) => value !== period);
+          const next = authoritativePrepared ? [...withoutCurrent, period] : withoutCurrent;
+          return next.length === old.length && next.every((value, index) => value === old[index])
+            ? old
+            : next;
+        });
         setLeaveCenter(center || { policy: {}, plans: [], conflicts: [], employees: [], cashRequests: [] });
         setLeaveCenterWarning(centerState.status === "rejected" ? "Yıllık İzin merkezi yüklenemedi. Bakiye doğrulanamadı; izin işlemleri geçici olarak durduruldu." : "");
         if (center?.policy) setPolicyDraft(center.policy);
@@ -616,7 +590,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         });
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
         lastSuccessfulLoadStartedAtRef.current = loadStartedAt;
-        if (!silent) setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
+        if (!silent) setNotice(periodStateFailed
+          ? "Aylık bordro durumu sunucudan doğrulanamadı. Yerel bilgisayar bilgileriyle bordro açılmadı; tekrar Yenile seçin."
+          : auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
         return true;
       } catch (error) {
         if (!silent && loadRequestRef.current.seq === requestId) {
@@ -636,7 +612,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         loadRequestRef.current = { ...loadRequestRef.current, promise: null };
       }
     }
-  }, [companyId, month, period, periodPrepared, year]);
+  }, [companyId, month, period, year]);
 
   useEffect(() => {
     load();
@@ -660,7 +636,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           return;
         }
         if (busy || modal) return;
-        const refreshed = await load({ force: true, prepare: periodPrepared, silent: true });
+        const refreshed = await load({ force: true, silent: true });
         if (!cancelled && refreshed) liveVersionRef.current = version;
       } catch {
         // Canlı senkron yardımcı katmandır; geçici bağlantı hatası aylık İK işlemlerini durdurmaz.
@@ -692,12 +668,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     try {
       const state = await prepareIkAdvancedPeriod({ mainCompanyId: companyId, year, month });
       if (!state?.prepared) throw new Error("Aylık dönem hazırlık kaydı doğrulanamadı.");
-      setPreparedPeriods((old) => {
-        const next = [...new Set([...old, period])];
-        if (typeof window !== "undefined") window.localStorage.setItem(ikPreparedStorageKey(companyId), JSON.stringify(next));
-        return next;
-      });
-      const ok = await load({ force: true, prepare: true });
+      setPreparedPeriods((old) => [...new Set([...old, period])]);
+      const ok = await load({ force: true });
       if (!ok) return;
       setNotice(`${MONTHS[month - 1]} ${year} bir kez hazırlandı ve sunucuya kaydedildi. Sayfa kapansa da tekrar hazırlamanız gerekmez.`);
     } catch (error) {
@@ -1035,7 +1007,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       });
       setModal(null);
       setNotice(`Personel kodu ${result?.oldCode || modalDraft.code} → ${result?.code || modalDraft.adminNewCode} olarak değiştirildi.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setModalDraft((old) => ({ ...old, adminActionMessage: error?.message || "Personel kodu değiştirilemedi." }));
     } finally {
@@ -1060,7 +1032,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModal(null);
       setSelectedId(target.id);
       setNotice(`${modalDraft.code} kaydı ${result?.targetCode || target.code} personeline birleştirildi; bağlı geçmiş kayıtlar korundu.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setModalDraft((old) => ({ ...old, adminActionMessage: error?.message || "Personel kayıtları birleştirilemedi." }));
     } finally {
@@ -1082,7 +1054,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModal(null);
       setSelectedId("");
       setNotice(`${modalDraft.fullName} (${modalDraft.code}) yanlış/mükerrer personel kaydı silindi. HKN kodu emekliye ayrıldı ve tekrar otomatik verilmez.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setModalDraft((old) => ({ ...old, adminActionMessage: error?.message || "Personel kaydı silinemedi." }));
     } finally {
@@ -2068,7 +2040,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       }
       await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: rows.map((row) => row.employee.id), status: "CALCULATED", reason: "Bordro kaydı" });
       setNotice(`${rows.length} personelin bordro ara kaydı güncellendi. Ay kilidi açık olduğu sürece düzenleme devam edebilir.`);
-      await load({ force: true, prepare: true });
+      await load({ force: true });
     } catch (error) {
       setNotice(error?.message || "Bordro kaydedilemedi.");
     } finally {
