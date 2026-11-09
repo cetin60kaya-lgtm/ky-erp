@@ -414,6 +414,9 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
     const productId=text(line.product_id),product=productId?await getEBelgeProduct(c,slug,productId):null;
     if(!product)throw Object.assign(new Error("Fiziksel satırın ürünü yok."),{code:"PRODUCT_NOT_FOUND"});
     const policy=resolveProductLotPolicy(product,route),qty=numberValue(line.quantity);
+    const productUnit=upper(product.unit||product.raw?.defaultUnit),invoiceUnit=upper(line.unit_code);
+    const factor=numberValue(raw.packageWeightKg)>0&&["KG","KGM","KILOGRAM"].includes(productUnit)&&["C62","PCE","PCS","AD","ADET"].includes(invoiceUnit)?numberValue(raw.packageWeightKg):1;
+    const physicalQty=qty*factor,physicalUnit=factor!==1?"KG":text(line.unit_code);
     if(qty<=0)throw Object.assign(new Error("Fiziksel miktar pozitif olmalıdır."),{code:"PHYSICAL_QUANTITY_INVALID"});
     const sourceLot=text(raw.dispatchLotNo||raw.lotNo||raw.invoiceLotNo),supplier=text(doc.party_company_id);
     if(!supplier)throw Object.assign(new Error("Fiziksel tedarikçi cari kartı zorunludur."),{code:"PHYSICAL_SUPPLIER_REQUIRED"});
@@ -424,18 +427,18 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
         for(const alloc of list){
           const lot=text(alloc.lotNo||sourceLot),key=normalizeLotNo(lot);
           const current=grouped.get(key)||{lotNo:lot,quantity:0};
-          current.quantity+=numberValue(alloc.quantity);
+          current.quantity+=numberValue(alloc.quantity)*factor;
           grouped.set(key,current);
         }
         if(Math.abs([...grouped.values()].reduce((sum,a)=>sum+numberValue(a.quantity),0)-qty)>0.00001)
           throw Object.assign(new Error("Çoklu LOT toplamı fiziksel irsaliye miktarıyla eşleşmiyor."),{code:"LOT_QUANTITY_MISMATCH"});
-      }else grouped.set(normalizeLotNo(sourceLot),{lotNo:sourceLot,quantity:qty});
+      }else grouped.set(normalizeLotNo(sourceLot),{lotNo:sourceLot,quantity:physicalQty});
       for(const allocation of grouped.values()){
         const args={tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
           physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
           productId,supplierCompanyId:supplier,route,lotNo:text(allocation.lotNo),
           lotPolicy:policy,quantity:numberValue(allocation.quantity),
-          unit:line.unit_code,sourceType:"E_BELGE_DISPATCH"};
+          unit:physicalUnit,sourceType:"E_BELGE_DISPATCH"};
         const matched=await reconcileProvisionalReceipt(c.env.DB,args);
         const receipt=matched || await postPhysicalReceipt(c.env.DB,args);
         result.idempotent+=receipt.idempotent?1:0;
@@ -467,8 +470,8 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
           invoiceLineId:text(line.id),invoiceNo:text(doc.document_no),currency:text(doc.currency),
           physicalDocumentId:text(source.document.id),physicalLineId:text(source.line.id),
           productId,supplierCompanyId:text(source.document.party_company_id),route,lotNo:lot,
-          lotPolicy:policy,quantity:numberValue(source.line.quantity),
-          allocatedQuantity:numberValue(allocation.quantity),allocatedTotal:cost,
+          lotPolicy:policy,quantity:numberValue(source.line.quantity)*(numberValue(sourceRaw.packageWeightKg)>0&&["KG","KGM","KILOGRAM"].includes(productUnit)&&["C62","AD","ADET","PCE","PCS"].includes(upper(source.line.unit_code))?numberValue(sourceRaw.packageWeightKg):1),
+          allocatedQuantity:numberValue(allocation.quantity)*(numberValue(sourceRaw.packageWeightKg)>0&&["KG","KGM","KILOGRAM"].includes(productUnit)&&["C62","AD","ADET","PCE","PCS"].includes(upper(source.line.unit_code))?numberValue(sourceRaw.packageWeightKg):1),allocatedTotal:cost,
         });
         result.costLinks++;result.idempotent+=linked.idempotent?1:0;
       }
@@ -486,13 +489,13 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
       const receiptArgs={tenant:slug,documentId:text(doc.id),documentLineId:text(line.id),
         physicalDocumentId:text(doc.id),physicalLineId:text(line.id),
         productId,supplierCompanyId:supplier,route,lotNo:sourceLot,
-        lotPolicy:policy,quantity:qty,unit:line.unit_code,
+        lotPolicy:policy,quantity:physicalQty,unit:physicalUnit,
         provisional:true,sourceType:"E_BELGE_INVOICE_PROVISIONAL"};
       const receipt=await postPhysicalReceipt(c.env.DB,receiptArgs);
       if(!receipt.idempotent){result.stockMovements++;if(route==="BOYAHANE")result.lots++}
       const cost=await postPhysicalCostLink(c.env.DB,{...receiptArgs,
         invoiceId:text(doc.id),invoiceLineId:text(line.id),invoiceNo:text(doc.document_no),
-        currency:text(doc.currency),allocatedQuantity:qty,allocatedTotal:numberValue(line.line_total)});
+        currency:text(doc.currency),allocatedQuantity:physicalQty,allocatedTotal:numberValue(line.line_total)});
       result.costLinks++;result.idempotent+=(receipt.idempotent?1:0)+(cost.idempotent?1:0);
       continue;
     }
