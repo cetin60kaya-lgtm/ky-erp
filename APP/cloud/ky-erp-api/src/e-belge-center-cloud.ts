@@ -12,7 +12,7 @@ import { requiredLotCoverageComplete, resolveAllocatedLotEvidence } from "./acco
 import { resolveProductLotPolicy, normalizeLotNo } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
 import { reconcileEBelgeInvoice } from "./e-belge-match-engine";
-import { chooseCanonicalDocumentModels, modelHintFromArchiveName } from "./e-belge-document-automation.ts";
+import { chooseCanonicalDocumentModels, archiveDocumentIdentity } from "./e-belge-document-automation.ts";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
 import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
@@ -147,13 +147,14 @@ async function linkDocumentCanonicalModels(c:Context<AppEnv>,slug:string,documen
   ]);
   const list=lines.results||[],current=safeJson(doc.raw_metadata);
   const result=chooseCanonicalDocumentModels({models:models.results||[],lines:list,fileName,
-    documentNo:text(doc.document_no),companyId:text(doc.party_company_id)});
+    documentNo:text(doc.document_no),companyId:text(doc.party_company_id),
+    explicitModelName:text(current.modelName||current.modelAdi||current.documentModelName)});
   if(result.status==="CONFLICT"||result.status==="AMBIGUOUS"){
     await addIssue(c,slug,documentId,"MODEL_MATCH_REVIEW","Belge model adı birden fazla kartla eşleşti veya kalemlerle çelişti.","ERROR","model");
     return;
   }
   if(!result.modelId&&!result.models.some((m:any)=>m.id)){
-    if(result.fileHint)await addIssue(c,slug,documentId,"MODEL_NOT_FOUND","DDM/HKN dosya adındaki model için tek ve kesin model kartı bulunamadı.","ERROR","model");
+    if(result.fileHint||archiveDocumentIdentity(fileName))await addIssue(c,slug,documentId,"MODEL_NOT_FOUND","DDM/HKN belgesi için dosya veya kalemlerden tek ve kesin model kartı bulunamadı.","ERROR","model");
     return;
   }
   const ts=now();
@@ -242,7 +243,7 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     if(!readiness.configured)throw Object.assign(new Error("PDF ayrıştırma servisi hazır değil; dosya Drive'da korunuyor."),{code:"PDF_EXTRACTION_NOT_READY"});
     const file=new File([bytes],text(asset.file_name),{type:text(asset.mime_type)||"application/pdf"});
     const ai=await analyzeAccountingDocument(c,file,"AUTO"),canonical=ai?.canonical||ai?.data||ai||{};
-    const fileHint=modelHintFromArchiveName(asset.file_name);
+    const fileHint=archiveDocumentIdentity(asset.file_name);
     const detected=isDispatch(canonical.inferredDocumentKind)?"IRSALIYE":"FATURA";
     const kind=fileHint?.series==="DDM"?"IRSALIYE":fileHint?.series==="HKN"?"FATURA":detected;
     parsed=await resolveManualDirection(c,slug,"AUTO",{...canonical,documentNo:text(canonical.documentNo)||fileHint?.documentNo},kind);
