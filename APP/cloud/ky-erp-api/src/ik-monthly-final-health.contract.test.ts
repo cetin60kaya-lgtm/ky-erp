@@ -66,7 +66,7 @@ test("monthly filters are real controls and filter personnel and finance movemen
   assert.match(page, /Sadece Kayıt/);
 });
 
-test("employment period safety stays enforced while old PAID snapshots do not lock an open month", () => {
+test("permanent cards, monthly overrides and paid historical snapshots retain separate write rules", () => {
   const relational = cloud("ik-relational-cloud.ts");
   const personnel = cloud("ik-personnel-control.ts");
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
@@ -76,10 +76,13 @@ test("employment period safety stays enforced while old PAID snapshots do not lo
   assert.match(relational, /PAYMENT_TOTAL_MISMATCH/);
   assert.match(personnel, /effectiveExitDate/);
   assert.match(personnel, /EXIT_BEFORE_HIRE/);
-  assert.match(page, /Eski PAID\/snapshot kayıtları yalnız tarihsel kanıttır/);
-  assert.match(page, /paidLocked: false/);
+  assert.match(page, /updatePersonnelCard/);
+  assert.match(page, /paidLocked: Boolean\(saved\.frozen\)/);
   assert.match(page, /sourceChangedSinceSave/);
-  assert.doesNotMatch(relational, /PAYROLL_PAID_LOCKED/);
+  assert.match(relational, /PAYROLL_PAID_LOCKED/);
+  assert.match(relational, /const monthlyOverride = Boolean/);
+  assert.match(relational, /const frozen = Boolean/);
+  assert.match(relational, /if \(updatePersonnelCard\) statements\.push/);
 });
 
 test("monthly live sync is owned by the single canonical personnel and finance workspace", () => {
