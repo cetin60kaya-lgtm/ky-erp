@@ -2660,8 +2660,37 @@
   max-height: calc(100dvh - 20px);
 }
 .modal-bg .personnel-card-dialog .mb {
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow-x:hidden;
+  overflow-y:auto;
+  padding:clamp(12px,1.1vw,20px);
+}
+.modal-bg .personnel-card-dialog .modal-section-grid {
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:clamp(10px,1vw,16px);
+}
+.modal-bg .personnel-card-dialog .form {
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px 12px;
+}
+.modal-bg .personnel-card-dialog .form .wide {
+  grid-column:1/-1;
+}
+.modal-bg .personnel-card-dialog .form label {
+  font-size:clamp(12px,.75vw,14px);
+  line-height:1.35;
+}
+.modal-bg .personnel-card-dialog .modal-section h3 {
+  font-size:clamp(15px,.95vw,18px);
+}
+.modal-bg .personnel-card-dialog input,
+.modal-bg .personnel-card-dialog select {
+  min-height:40px;
+  font-size:clamp(13px,.85vw,16px);
+}
+.modal-bg .personnel-card-dialog .person-modal-nav .btn,
+.modal-bg .personnel-card-dialog .mf .btn {
+  min-height:40px;
+  height:auto;
 }
 .modal-bg .prepayroll-dialog .ik-permanent-card-action {
   display: grid;
@@ -2691,9 +2720,17 @@
 }
 @media (max-width: 900px) {
   .modal-bg .modal.personnel-card-dialog {
-    width: calc(100vw - 16px);
-    height: calc(100dvh - 16px);
-    max-height: calc(100dvh - 16px);
+    width:calc(100vw - 16px);
+    height:calc(100dvh - 16px);
+    max-height:calc(100dvh - 16px);
+  }
+  .modal-bg .personnel-card-dialog .modal-section-grid {
+    grid-template-columns:minmax(0,1fr);
+  }
+}
+@media (max-width: 560px) {
+  .modal-bg .personnel-card-dialog .form {
+    grid-template-columns:minmax(0,1fr);
   }
 }
 @media (max-width: 680px) {
