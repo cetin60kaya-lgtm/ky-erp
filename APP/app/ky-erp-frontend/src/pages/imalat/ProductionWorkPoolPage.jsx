@@ -10,6 +10,7 @@ import {
   TriangleAlert,
 } from "lucide-react";
 import { getDesignCompanies } from "../../services/desenWorkflowApi";
+import KyRecordDialog from "../../components/shared/KyRecordDialog";
 import {
   addUretimGirisi,
   getProductionParserDictionaries,
@@ -292,7 +293,24 @@ export default function ProductionWorkPoolPage({ activeMainCompany }) {
         </section>
       </div>
 
-      {manualOpen ? <div className="iw-modal-backdrop"><section className="iw-modal-box production-create-modal"><div className="iw-card-head"><div><h2><Plus size={18} /> İrsaliyesiz Üretim İşi Aç</h2><small>Model Desen merkezinde tek kayıt olarak açılır. Firma serbest yazılmaz; gerçek müşteri kartı seçilir.</small></div><button className="iw-btn" type="button" onClick={() => setManualOpen(false)}>Kapat</button></div><div className="iw-card-body production-create-grid"><label><span>Model adı *</span><input autoFocus value={manual.modelName} onChange={(event) => setManual({ ...manual, modelName: event.target.value })} /></label><label><span>Müşteri firma *</span><select value={manual.companyId} onChange={(event) => setManual({ ...manual, companyId: event.target.value })}><option value="">Firma seçin</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label><span>Referans / Sipariş no</span><input value={manual.dispatchNo} onChange={(event) => setManual({ ...manual, dispatchNo: event.target.value })} /></label><label><span>Beklenen adet *</span><input type="number" min="0" value={manual.expectedQty} onChange={(event) => setManual({ ...manual, expectedQty: event.target.value })} /></label><label><span>Baskı bölgesi</span><select value={manual.printArea} onChange={(event) => setManual({ ...manual, printArea: event.target.value })}><option>Ön</option><option>Arka</option><option>Kol</option><option>Ense</option><option>Paça</option></select></label></div><footer className="production-modal-footer"><button className="iw-btn" type="button" onClick={() => setManualOpen(false)}>Vazgeç</button><button className="iw-btn primary" type="button" onClick={createManualJob} disabled={saving}>{saving ? "Açılıyor..." : "İşi Aç"}</button></footer></section></div> : null}
+      {manualOpen ? <KyRecordDialog
+        title="İrsaliyesiz Üretim İşi Aç"
+        subtitle="Model tek merkezde kaydedilir; firma ve adet İmalat işine bağlanır."
+        onClose={() => !saving && setManualOpen(false)} busy={saving}
+        className="production-create-modal"
+        footer={<>
+          <button className="iw-btn" type="button" onClick={() => setManualOpen(false)} disabled={saving}>Vazgeç</button>
+          <button className="iw-btn primary" type="button" onClick={createManualJob} disabled={saving}>{saving ? "Açılıyor..." : "İşi Aç"}</button>
+        </>}
+      >
+        <div className="iw-card-body production-create-grid">
+          <label><span>Model adı *</span><input autoFocus value={manual.modelName} onChange={(event) => setManual({ ...manual, modelName: event.target.value })} /></label>
+          <label><span>Firma *</span><select value={manual.companyId} onChange={(event) => setManual({ ...manual, companyId: event.target.value })}><option value="">Firma seçin</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.displayName || company.name}</option>)}</select></label>
+          <label><span>Referans / Sipariş no</span><input value={manual.dispatchNo} onChange={(event) => setManual({ ...manual, dispatchNo: event.target.value })} /></label>
+          <label><span>Beklenen adet *</span><input type="number" min="0" value={manual.expectedQty} onChange={(event) => setManual({ ...manual, expectedQty: event.target.value })} /></label>
+          <label><span>Baskı bölgesi</span><select value={manual.printArea} onChange={(event) => setManual({ ...manual, printArea: event.target.value })}><option>Ön</option><option>Arka</option><option>Kol</option><option>Ense</option><option>Paça</option></select></label>
+        </div>
+      </KyRecordDialog> : null}
     </div>
   );
 }
