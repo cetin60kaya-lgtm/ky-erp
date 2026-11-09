@@ -221,7 +221,8 @@ test("final payroll save uses one backend mutation and keeps the modal open", ()
   const block = monthly.slice(start, end);
   assert.match(block, /const savedFinal = await saveIkAdvancedFinalPayrollControl/);
   assert.doesNotMatch(block, /saveIkAdvancedPersonCard/);
-  assert.match(block, /formMessage: "Son bordro kontrolü atomik kaydedildi/);
+  assert.match(block, /Kaydedildi ✓ Yalnız seçili ayın bordrosu/);
+  assert.match(block, /updatePersonnelCard/);
   assert.doesNotMatch(block, /setModal\(null\)/);
 });
 
