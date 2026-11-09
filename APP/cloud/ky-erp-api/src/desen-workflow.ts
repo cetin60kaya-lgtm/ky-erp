@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { analyzeDesignWithAi, needsAiAnalysis } from "./desen-ai";
-import { ensureCanonicalModel } from "./canonical-model-identity";
+import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
