@@ -2598,3 +2598,57 @@
 .ik-monthly-pro .ik-pro-quick-actions .btn.primary{background:#2859a4;border-color:#2859a4;color:#fff}
 .ik-monthly-pro .ik-pro-quick-actions>summary:focus-visible{outline:2px solid #8ab4f5;outline-offset:-2px}
 @media(max-width:640px){.ik-monthly-pro .ik-pro-quick-actions>summary{align-items:flex-start;flex-direction:column}.ik-monthly-pro .ik-pro-quick-actions .workbar .btn{flex:1 1 145px}}
+
+
+/* İK aylık tek pencere / açık dönem bordrosu ile kalıcı kart ayrımı. */
+.modal-bg .modal.personnel-card-dialog {
+  width: min(1060px, calc(100vw - 28px));
+  height: min(820px, calc(100dvh - 28px));
+  max-height: calc(100dvh - 28px);
+}
+.modal-bg .personnel-card-dialog .mb {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.modal-bg .prepayroll-dialog .ik-permanent-card-action {
+  display: grid;
+  grid-template-columns: minmax(170px, 1fr) auto;
+  gap: 9px 12px;
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #d6e2f0;
+  border-radius: 10px;
+  background: #f7faff;
+}
+.modal-bg .prepayroll-dialog .ik-permanent-card-action label {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  font-weight: 700;
+}
+.modal-bg .prepayroll-dialog .ik-permanent-card-action small {
+  grid-column: 1 / -1;
+  color: #526783;
+  line-height: 1.45;
+}
+.modal-bg .prepayroll-dialog .ik-permanent-card-action button {
+  align-self: end;
+  white-space: nowrap;
+  min-height: 40px;
+}
+@media (max-width: 900px) {
+  .modal-bg .modal.personnel-card-dialog {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - 16px);
+    max-height: calc(100dvh - 16px);
+  }
+}
+@media (max-width: 680px) {
+  .modal-bg .prepayroll-dialog .ik-permanent-card-action {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .modal-bg .prepayroll-dialog .ik-permanent-card-action button {
+    width: 100%;
+    white-space: normal;
+  }
+}
