@@ -316,7 +316,8 @@ test("payroll final control exposes every financial value and saves back to cano
   assert.match(cloud, /UPDATE hr_monthly_adjustments_v2 SET adjustment_type=\? WHERE id=\?/);
   assert.match(cloud, /const bankDeductionsAfter = Math\.max/);
   assert.match(cloud, /"FINAL_CONTROL"/);
-  assert.match(cloud, /gerçek kaynaklar ve ödeme planı güncellendi/);
+  assert.match(cloud, /Yalnız aylık bordro ve dönem hareketleri güncellendi/);
+  assert.match(cloud, /Aylık bordro ve kalıcı personel kartı güncellendi/);
   assert.match(cloud, /await c\.env\.DB\.batch\(statements\)/);
   assert.match(cloud, /status=excluded\.status/);
   assert.match(cloud, /app\.post\("\/api\/ik\/advanced\/payroll\/final-control"/);
@@ -388,7 +389,8 @@ test("unified source editor supports serial personnel review without closing", (
   assert.match(page, /Personel Seç/);
   assert.match(page, /← Önceki/);
   assert.match(page, /Sonraki →/);
-  assert.match(page, /Son Kontrolü Kaydet/);
+  assert.match(page, /Yalnız Bu Ayı Kaydet/);
+  assert.match(page, /Personel Kartını Güncelle/);
   assert.match(page, /Bordro Öncesi Giriş Kontrolü/);
   assert.match(page, /personMovements/);
   assert.match(page, /payroll-person-rail-list/);
@@ -400,15 +402,16 @@ test("unified source editor supports serial personnel review without closing", (
 });
 
 
-test("open month always follows live payroll sources regardless of legacy PAID snapshots", () => {
+test("open month reflects its current dated movements but monthly-only overrides and paid history stay isolated", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.match(page, /return \{ \.\.\.system, saved, sourceChangedSinceSave, paidLocked: false \}/);
-  assert.match(page, /Eski PAID\/snapshot kayıtları yalnız tarihsel kanıttır/);
-  assert.doesNotMatch(page, /paidLocked: true/);
-  assert.doesNotMatch(page, /snapshotPayment/);
-  assert.match(page, /sourceChangedSinceSave/);
-  assert.match(page, /Tek kaynak kuralı/);
+  assert.match(page, /sourceChangedSinceSave: Boolean\(saved\.sourceChangedSinceSave\)/);
+  assert.match(page, /paidLocked: Boolean\(saved\.frozen\)/);
+  assert.match(page, /monthOverride:/);
+  assert.match(cloud, /const monthlyOverride = Boolean/);
+  assert.match(cloud, /const final = frozen \? savedFinal! : currentFinal/);
+  assert.match(cloud, /PAYROLL_PAID_LOCKED/);
 });
 
 
