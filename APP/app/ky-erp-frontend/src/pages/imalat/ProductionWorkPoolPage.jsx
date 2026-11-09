@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { getDesignCompanies } from "../../services/desenWorkflowApi";
 import KyRecordDialog from "../../components/shared/KyRecordDialog";
+import ModelFilesPanel from "../../components/shared/ModelFilesPanel";
 import {
   addUretimGirisi,
   getProductionParserDictionaries,
@@ -277,6 +278,7 @@ export default function ProductionWorkPoolPage({ activeMainCompany }) {
           {selected ? <>
             <div className="iw-card-head"><div><h2>{selected.modelName} · {selected.printArea}</h2><small>{selected.companyName || "Firma Seçilmedi"} · {selected.dispatchNo || "İrsaliye yok"}</small></div><span className={`production-status ${statusTone(selected.status)}`}>{selected.status}</span></div>
             <div className="production-selected-metrics"><span>Gelen <b>{qty(selected.expectedQty)}</b></span><span>Üretilen <b>{qty(selected.producedQty)}</b></span><span>Kalan <b>{qty(selected.remainingQty)}</b></span><span>Fazla <b>{qty(selected.overQty)}</b></span></div>
+            {selected.modelId && <details className="production-model-files"><summary>Model Kartı Dosyaları / Teknik Föy / PSD</summary><ModelFilesPanel modelId={selected.modelId} modelName={selected.modelName} activeMainCompany={activeMainCompany} readOnly /></details>}
             <div className="iw-card-body production-entry-grid">
               <label><span>Tarih *</span><input type="date" value={entry.tarih} onChange={(event) => setEntry({ ...entry, tarih: event.target.value })} /></label>
               <label><span>Vardiya *</span><select value={entry.vardiya} onChange={(event) => setShift(event.target.value)}><option>Gündüz</option><option>Gece</option></select></label>
