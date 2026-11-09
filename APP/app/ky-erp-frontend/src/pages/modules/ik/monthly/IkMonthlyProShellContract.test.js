@@ -200,7 +200,8 @@ test("live sync is quiet, slower and does not show loading loops for background 
   assert.match(monthly, /const IK_LIVE_SYNC_INTERVAL_MS = 15000/);
   assert.match(monthly, /lastSuccessfulLoadStartedAtRef/);
   assert.match(monthly, /silent = false/);
-  assert.match(monthly, /load\(\{ force: true, prepare: periodPrepared, silent: true \}\)/);
+  assert.match(monthly, /load\(\{ force: true, silent: true \}\)/);
+  assert.doesNotMatch(monthly, /readPreparedPeriods|ikPreparedStorageKey/);
   assert.doesNotMatch(monthly, /başka bilgisayarda değişiklik var/);
 });
 
