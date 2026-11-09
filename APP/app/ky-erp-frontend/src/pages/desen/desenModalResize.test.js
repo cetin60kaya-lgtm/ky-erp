@@ -1,35 +1,25 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { resizeModelDetailBox } from "./desenModalResize.js";
+import { dialogSizeBounds } from "../../components/shared/kyRecordDialogSize.js";
 
-const start = { width: 840, height: 580, startX: 160, startY: 580, maxWidth: 1200, maxHeight: 900 };
-
-test("sağ-alt köşeyi sağa çekmek genişliği, aşağı çekmek yüksekliği artırır", () => {
-  assert.deepEqual(resizeModelDetailBox({ ...start, x: 230, y: 640 }), { width: 910, height: 640 });
+test("tüm modüllerde ortak başlangıç en-boy", () => {
+  assert.deepEqual(dialogSizeBounds(null, { width: 1600, height: 1000 }), { width: 840, height: 600 });
 });
 
-test("sağ-alt köşe sola-yukarı sürüklendiğinde iki boyutu küçültür", () => {
-  assert.deepEqual(resizeModelDetailBox({ ...start, x: 100, y: 530 }), { width: 780, height: 530 });
+test("sağ alt boyutlandırma ekran dışına çıkmaz", () => {
+  assert.deepEqual(dialogSizeBounds({ width: 3000, height: 4000 }, { width: 980, height: 650 }), { width: 964, height: 634 });
+  assert.deepEqual(dialogSizeBounds({ width: 10, height: 10 }, { width: 1600, height: 900 }), { width: 460, height: 320 });
+  assert.deepEqual(dialogSizeBounds({ width: 10, height: 10 }, { width: 300, height: 280 }), { width: 284, height: 264 });
 });
 
-test("boyutlar ekrandan taşmadan sınırlandırılır", () => {
-  assert.deepEqual(resizeModelDetailBox({ ...start, x: 2000, y: 4000, maxWidth: 980, maxHeight: 650 }), { width: 980, height: 650 });
-  assert.deepEqual(resizeModelDetailBox({ ...start, x: -2000, y: -2000 }), { width: 460, height: 320 });
-});
-
-test("küçük ekranlarda minimum pencere boyutu ekran sınırını aşmaz", () => {
-  assert.deepEqual(resizeModelDetailBox({ ...start, x: -500, y: -500, maxWidth: 300, maxHeight: 280 }), { width: 300, height: 280 });
-});
-
-test("model detayında yalnız sağ-alt tutacak var ve sekmeler dış boyuta etki etmiyor", () => {
+test("Desen model penceresi ortak dialoga bağlıdır; sekmeler onu yeniden boyutlandırmaz", () => {
+  const shared = readFileSync(new URL("../../components/shared/KyRecordDialog.jsx", import.meta.url), "utf8");
   const jsx = readFileSync(new URL("./DesenWorkflowShared.jsx", import.meta.url), "utf8");
-  const css = readFileSync(new URL("./desenWorkflow.css", import.meta.url), "utf8");
-  assert.match(jsx, /className="dsg-modal-resize-corner"/);
-  assert.doesNotMatch(jsx, /className="dsg-modal-resize-left"/);
-  assert.match(jsx, /height:\s*modalBox\?\.height\s*\?\?\s*"min\(590px/);
-  assert.match(jsx, /width:\s*modalBox\?\.width\s*\?\?\s*"min\(840px/);
-  assert.match(css, /\.dsg-modal\.model-detail\s*\{/);
-  assert.match(css, /grid-template-rows:\s*auto minmax\(0, 1fr\) auto/);
-  assert.match(css, /\.dsg-modal-resize-corner\s*\{[^}]*right:\s*0;[^}]*bottom:\s*0/s);
+  const css = readFileSync(new URL("../../components/shared/kyRecordDialog.css", import.meta.url), "utf8");
+  assert.match(jsx, /export function WideModal[\s\S]*<KyRecordDialog/);
+  assert.match(shared, /onPointerDown=\{resizeStart\}/);
+  assert.match(shared, /onKeyDown=\{resizeKeyboard\}/);
+  assert.match(shared, /style=\{\{ width: size\.width, height: size\.height \}\}/);
+  assert.match(css, /\.ky-record-modal\s*\{[\s\S]*?grid-template-rows: auto minmax\(0, 1fr\) auto/);
 });
