@@ -658,9 +658,14 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           liveVersionRef.current = version;
           return;
         }
-        if (busy || modal) return;
+        if (busy) return;
+        // Keep the underlying shared data fresh even if a person/payroll dialog
+        // is open. Never overwrite an unsaved editor draft silently.
         const refreshed = await load({ force: true, silent: true });
-        if (!cancelled && refreshed) liveVersionRef.current = version;
+        if (!cancelled && refreshed) {
+          liveVersionRef.current = version;
+          if (modal) setNotice("Başka oturumda İK verileri güncellendi. Açık formdaki değişiklikler korunuyor; güncel kayıt için pencereyi kapatıp yeniden açın.");
+        }
       } catch {
         // Canlı senkron yardımcı katmandır; geçici bağlantı hatası aylık İK işlemlerini durdurmaz.
       } finally {
