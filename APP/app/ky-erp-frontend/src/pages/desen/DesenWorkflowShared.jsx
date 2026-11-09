@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -134,7 +134,7 @@ export function EmptyState({ icon: Icon = FileImage, title, text, action }) {
   );
 }
 
-export function WideModal({ title, subtitle, children, footer, onClose, onSave, dirty = false, size = "wide", resizable = false }) {
+export function WideModal({ title, subtitle, children, footer, onClose, onSave, dirty = false, size = "wide" }) {
   // Bütün KY ERP kayıt formları aynı çerçeveyi kullanır; boyut her sekmede sabittir.
   return <KyRecordDialog
     title={title} subtitle={subtitle} footer={footer}
