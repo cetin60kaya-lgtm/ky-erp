@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiFetch, apiGet, apiUpload } from "../../utils/api";
 import "./model-files-panel.css";
+import { folderSubpath, modelSourceFileType, modelFileCategory } from "./model-folder-path";
 
 const CATEGORIES = [
   ["MODEL_IMAGE", "Model Görseli — JPG / PNG"],
@@ -11,26 +12,39 @@ const CATEGORIES = [
   ["INVOICE", "HKN — Fatura"],
 ];
 const PRINT_AREAS = [["", "Baskı bölgesi seçilmedi"], ["FRONT", "Ön"], ["BACK", "Arka"], ["ARM", "Kol"], ["OTHER", "Diğer"]];
-const extOf = (name) => String(name || "").split(".").pop().toLowerCase();
-const initialRole = (name) => {
-  const value = String(name || "");
-  const ext = extOf(value);
-  if (/^DDM\s*\d{8,}/i.test(value)) return "DELIVERY_NOTE";
-  if (/^HKN\s*\d{8,}/i.test(value)) return "INVOICE";
-  if (["jpg", "jpeg", "png", "webp"].includes(ext)) return "MODEL_IMAGE";
-  if (["psd", "psb"].includes(ext)) return "OUTGOING_DESIGN";
-  if (["ai", "tif", "tiff", "eps", "svg", "zip"].includes(ext)) return "MODEL_SOURCE";
-  return "MODEL_SOURCE";
-};
+async function filesFromDrop(dataTransfer) {
+  const entries=[...(dataTransfer.items||[])].map((item)=>item.webkitGetAsEntry?.()).filter(Boolean);
+  if(!entries.some((entry)=>entry.isDirectory))return [...(dataTransfer.files||[])].map((file)=>({file,relative:""}));
+  const out=[];
+  async function read(entry,path) {
+    if(entry.isFile){
+      const file=await new Promise((resolve,reject)=>entry.file(resolve,reject));
+      out.push({file,relative:path+entry.name});
+    }else if(entry.isDirectory){
+      const reader=entry.createReader();
+      for(;;){
+        const batch=await new Promise((resolve,reject)=>reader.readEntries(resolve,reject));
+        if(!batch.length)break;
+        for(const child of batch)await read(child,path+entry.name+"/");
+      }
+    }
+  }
+  for(const entry of entries)await read(entry,"");
+  return out;
+}
 const rowsOf = (data) => Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
 const filePath = (id, fileId) => `/model-files/${encodeURIComponent(id)}/file/${encodeURIComponent(fileId)}`;
 
-export default function ModelFilesPanel({ modelId, modelName = "", activeMainCompany, models = [], onUploaded }) {
+export default function ModelFilesPanel({ modelId, modelName = "", activeMainCompany, models = [], onUploaded, readOnly = false }) {
   const slug = String(activeMainCompany?.slug || activeMainCompany?.id || "").trim();
   const fileInput = useRef(null);
+  const folderInput = useRef(null);
   const [files, setFiles] = useState([]);
   const [incoming, setIncoming] = useState([]);
   const [role, setRole] = useState("MODEL_SOURCE");
+  const [folderMode, setFolderMode] = useState(false);
+  const [folderPreview, setFolderPreview] = useState(null);
+  const [folderBusy, setFolderBusy] = useState(false);
   const [assignments, setAssignments] = useState([]);
   const [busy, setBusy] = useState(false);
   const [busyFile, setBusyFile] = useState("");
@@ -58,14 +72,38 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
     return [...new Map(list.filter((m) => m?.id).map((m) => [String(m.id), m])).values()];
   }, [modelId, modelName, models]);
 
-  const pickFiles = (selection) => {
-    const list = [...(selection || [])].filter((item) => item instanceof File);
-    if (!list.length) return;
+  const pickFiles = (selection, directory = false) => {
+    const list=[...(selection||[])].map((entry)=>entry?.file ? entry : {file:entry,relative:entry?.webkitRelativePath||""})
+      .filter((entry)=>entry.file instanceof File);
+    if(!list.length)return;
+    const isFolder=directory||list.some((entry)=>String(entry.relative).includes("/"));
     setIncoming(list);
-    setRole(initialRole(list[0]?.name));
+    setFolderMode(isFolder);
+    setRole(modelFileCategory(list[0]?.file?.name,isFolder));
     setAssignments([{ key: "primary", modelId: String(modelId), boy: "", printArea: "" }]);
     setError(""); setNotice(""); setExpanded(true);
   };
+  async function checkDriveFolder() {
+    if(!slug||!modelId||folderBusy)return;
+    setFolderBusy(true);setFolderPreview(null);setError("");setNotice("");
+    try{
+      const result=await apiGet(`/model-files/${encodeURIComponent(modelId)}/folder-preview`,query,{forceFresh:true});
+      setFolderPreview(result?.data||result);
+    }catch(err){setError(err?.message||"Drive model klasörü kontrol edilemedi.");}
+    finally{setFolderBusy(false);}
+  }
+  async function linkDriveFolder() {
+    if(!folderPreview?.found||folderBusy||readOnly)return;
+    setFolderBusy(true);setError("");setNotice("");
+    try{
+      const result=await apiFetch(`/model-files/${encodeURIComponent(modelId)}/link-existing-folder`,{method:"POST",params:query});
+      const info=result?.data||result;
+      setNotice(`${info.linked||0} dosya bağlandı; ${info.alreadyLinked||0} dosya zaten bağlıydı. Drive orijinalleri değişmedi.`);
+      setFolderPreview(null);
+      await refresh();onUploaded?.();
+    }catch(err){setError(err?.message||"Drive model klasörü bağlanamadı.");}
+    finally{setFolderBusy(false);}
+  }
   const isPsd = role === "OUTGOING_DESIGN";
   const setAssignment = (key, field, value) => setAssignments((prev) => prev.map((a) => a.key === key ? { ...a, [field]: value } : a));
   const addAssignment = () => setAssignments((prev) => [...prev, { key: String(Date.now()) + "-" + prev.length, modelId: String(modelId), boy: "", printArea: "" }]);
@@ -76,17 +114,18 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
     if (isPsd && assignments.some((a) => !a.modelId || !a.boy.trim())) {
       setError("Giden PSD için her model bağlantısında BOY yazılmalıdır."); return;
     }
-    if (incoming.some((f) => f.size > 24 * 1024 * 1024)) {
+    if (incoming.some(({file}) => file.size > 24 * 1024 * 1024)) {
       setError("24 MB üzeri büyük PSD/PSB dosyalarını mevcut Drive giden desenler klasörüyle senkronize edin; bu form küçük dosyalar içindir."); return;
     }
     setError(""); setNotice(""); setBusy(true);
     let completed = 0;
     try {
-      for (const file of incoming) {
+      for (const {file,relative} of incoming) {
         setBusyFile(file.name);
         const form = new FormData();
         form.append("file", file);
         form.append("fileRole", role);
+        if(folderMode)form.append("sourceSubfolder",folderSubpath(relative));
         if (isPsd) form.append("assignments", JSON.stringify(assignments.map(({ modelId: id, boy, printArea }) => ({ modelId: id, boy: boy.trim(), printArea }))));
         const result = await apiUpload(`/model-files/${encodeURIComponent(modelId)}/upload?mainCompanySlug=${encodeURIComponent(slug)}`, form);
         const item = result?.data || result;
@@ -95,6 +134,7 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
       }
       setNotice(`${completed} dosya Drive arşivine eklendi. Model bağlantıları oluşturuldu.`);
       setIncoming([]);
+      setFolderMode(false);
       setExpanded(false);
       await refresh();
       onUploaded?.();
@@ -118,29 +158,50 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
   return (
     <section className="ky-model-files" aria-label="Model kartı dosyaları">
       <div className="ky-model-files-head">
-        <div><strong>Model Dosya Arşivi</strong><small>Google Drive · Tek dosya, tüm ilgili model kartlarında görünür</small></div>
+        <div><strong>Model Dosya Arşivi</strong><small>Google Drive · Model klasörü teknik föy + kaynaklar birlikte; PSD tek dosya, birden çok model + BOY</small></div>
         <div className="ky-model-files-actions">
           <button type="button" onClick={refresh} disabled={loading || busy}>{loading ? "Okunuyor…" : "Yenile"}</button>
-          <button type="button" onClick={() => setExpanded((v) => !v)} disabled={busy} aria-expanded={expanded}>{expanded ? "Kapat" : "Dosya Ekle"}</button>
+          {!readOnly && <button type="button" onClick={() => setExpanded((v) => !v)} disabled={busy} aria-expanded={expanded}>{expanded ? "Kapat" : "Dosya Ekle"}</button>}
         </div>
       </div>
-      <div
-        className={`ky-model-files-drop ${drag ? "is-dragging" : ""}`}
-        onDragEnter={(ev) => { ev.preventDefault(); setDrag(true); }}
-        onDragOver={(ev) => { ev.preventDefault(); }}
-        onDragLeave={(ev) => { ev.preventDefault(); setDrag(false); }}
-        onDrop={(ev) => { ev.preventDefault(); setDrag(false); pickFiles(ev.dataTransfer.files); }}
-      >
-        <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.xml,.psd,.psb,.ai,.eps,.svg,.zip,.tif,.tiff" onChange={(ev) => { pickFiles(ev.target.files); ev.target.value = ""; }} />
-        <button type="button" onClick={() => fileInput.current?.click()} disabled={busy}>Dosya Seç veya Buraya Sürükle</button>
-        <small>Dosya adı ve model adı yazmak zorunda değilsiniz. Büyük PSD için Drive senkronu kullanılır.</small>
-      </div>
-      {expanded && incoming.length > 0 && (
+      {!readOnly && <>
+        <div className="ky-model-folder-import">
+          <div><strong>Drive'daki mevcut model klasörü</strong><small>Örn. MAMBI klasöründeki MAMBI.pdf + MAMBI FT ÖLÇÜ.pdf — kaynaklar kopyalanmaz.</small></div>
+          <button type="button" onClick={checkDriveFolder} disabled={folderBusy||busy}>{folderBusy?"Kontrol ediliyor…":"Drive Klasörünü Tara"}</button>
+          {folderPreview && <div className="ky-model-folder-preview">
+            <span>{folderPreview.found||0} dosya bulundu · {folderPreview.alreadyLinked||0} zaten bağlı · {folderPreview.linked||0} yeni bağlantı</span>
+            {folderPreview.files?.length>0 && <small>{folderPreview.files.slice(0,5).map((f)=>f.fileName).join(" · ")}{folderPreview.found>5?" …":""}</small>}
+            {folderPreview.found>0
+              ? <button type="button" onClick={linkDriveFolder} disabled={folderBusy}>Bu Klasörü Model Kartına Bağla</button>
+              : <small>Dosya bulunamadı. Drive File Hub taramasını ve klasör adının model adıyla eşleşmesini kontrol edin.</small>}
+          </div>}
+        </div>
+        <div
+          className={`ky-model-files-drop ${drag ? "is-dragging" : ""}`}
+          onDragEnter={(ev) => { ev.preventDefault(); setDrag(true); }}
+          onDragOver={(ev) => { ev.preventDefault(); }}
+          onDragLeave={(ev) => { ev.preventDefault(); setDrag(false); }}
+          onDrop={async (ev) => {
+            ev.preventDefault();setDrag(false);
+            try{const dropped=await filesFromDrop(ev.dataTransfer);pickFiles(dropped);}
+            catch(err){setError(err?.message||"Klasör okunamadı. Klasör Seç düğmesini kullanın.");}
+          }}
+        >
+          <input ref={fileInput} type="file" hidden multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.xml,.psd,.psb,.ai,.eps,.svg,.zip,.tif,.tiff" onChange={(ev) => { pickFiles(ev.target.files); ev.target.value = ""; }} />
+          <input ref={folderInput} type="file" hidden multiple webkitdirectory="" onChange={(ev) => { pickFiles(ev.target.files,true); ev.target.value = ""; }} />
+          <div className="ky-model-files-actions">
+            <button type="button" onClick={() => fileInput.current?.click()} disabled={busy}>Dosya Ekle</button>
+            <button type="button" onClick={() => folderInput.current?.click()} disabled={busy}>Klasör Seç</button>
+          </div>
+          <small>Dosyaları veya model klasörünü bu alana sürükleyebilirsiniz. Klasörün tüm dosyaları kendi adlarıyla tek model paketine girer.</small>
+        </div>
+      </>}
+      {!readOnly && expanded && incoming.length > 0 && (
         <div className="ky-model-files-editor">
           <label>Dosya türü
-            <select value={role} onChange={(ev) => setRole(ev.target.value)} disabled={busy}>{CATEGORIES.map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select>
+            <select value={role} onChange={(ev) => setRole(ev.target.value)} disabled={busy||folderMode}>{CATEGORIES.map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select>
           </label>
-          <div className="ky-model-files-selected">{incoming.map((f) => <span key={f.name + f.size}>{f.name} · {(f.size / 1048576).toFixed(1)} MB</span>)}</div>
+          <div className="ky-model-files-selected">{incoming.map(({file,relative},i) => <span key={relative + file.name + i}>{relative||file.name} · {(file.size / 1048576).toFixed(1)} MB · {folderMode?modelSourceFileType(file.name):role}</span>)}</div>
           {isPsd && <>
             <p><strong>PSD içindeki modeller, boylar ve baskı bölgeleri</strong> — Dosya bir kez Drive'a kaydedilir. Her satır aynı dosyanın ayrı ilişkisidir.</p>
             {assignments.map((item) => <div className="ky-model-files-assignment" key={item.key}>
@@ -167,7 +228,7 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
         <summary>Bağlı Dosyalar ({files.length})</summary>
         {!files.length ? <p>Henüz bu kartla ilişkilendirilen Drive dosyası yok.</p> :
           <ul>{files.map((f) => <li key={f.id}>
-            <div><strong>{f.fileName}</strong><small>{f.role} · {f.documentNo || ""} {f.documentStatus || ""}</small>
+            <div><strong>{f.fileName}</strong><small>{f.role === "MODEL_SOURCE" ? modelSourceFileType(f.fileName) : f.role} · {f.documentNo || ""} {f.documentStatus || ""}</small>
               {(f.variants || []).map((v, i) => <small key={i}>{v.boy || "Boy belirtilmedi"}{v.printArea ? " · " + v.printArea : ""}</small>)}
             </div><button type="button" onClick={() => openFile(f)}>Dosyayı Aç / İndir</button>
           </li>)}</ul>
