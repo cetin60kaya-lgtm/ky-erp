@@ -252,14 +252,28 @@ async function linkExistingModelFolder(c:Context<AppEnv>,id:string,preview=false
     throw Object.assign(new Error("Mevcut Drive model kaynağı için tek etkin salt-okunur File Hub ataması gereklidir."),{code:"MODEL_FOLDER_BINDING_REQUIRED",status:409});
   const root=text(bindingRows[0].root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
   const prefix=root+"/"+name+"/";
-  const rows=(await c.env.DB.prepare(`SELECT a.id,a.file_name,l.relative_path
+  let rows=(await c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,l.storage_connection_id,l.relative_path
     FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id
       AND a.main_company_slug=l.main_company_slug AND a.status='AVAILABLE'
     WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1
       AND LOWER(SUBSTR(REPLACE(l.relative_path,'\\','/'),1,LENGTH(?)))=LOWER(?)
     ORDER BY l.relative_path LIMIT 501`)
     .bind(slug,text(bindingRows[0].storage_connection_id),prefix,prefix).all<Row>()).results||[];
-  if(rows.length>500)throw Object.assign(new Error("Bu klasörde 500'den fazla dosya var; toplu bağlantı bölünmelidir."),{code:"MODEL_FOLDER_TOO_LARGE",status:409});
+  // SQLite LOWER() is ASCII-only. If a Turkish model folder (İ, Ş, Ğ, Ü ...)
+  // yields no direct hits, compare the actual indexed folder path with locale-aware JS.
+  // Only the exact model folder is accepted: not a fuzzy name/prefix match.
+  if(!rows.length){
+    const indexed=(await c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,l.storage_connection_id,l.relative_path
+      FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id
+        AND a.main_company_slug=l.main_company_slug AND a.status='AVAILABLE'
+      WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1
+      ORDER BY l.relative_path LIMIT 15001`)
+      .bind(slug,text(bindingRows[0].storage_connection_id)).all<Row>()).results||[];
+    if(indexed.length>15000)throw Object.assign(new Error("Model arşivi tarama sınırını aştı. File Hub indeksini daraltın."),{code:"MODEL_FOLDER_INDEX_TOO_LARGE",status:409});
+    const key=(v:string)=>v.replace(/\\/g,"/").normalize("NFKC").toLocaleUpperCase("tr-TR");
+    rows=indexed.filter(item=>key(text(item.relative_path)).startsWith(key(prefix))).slice(0,501);
+  }
+    if(rows.length>500)throw Object.assign(new Error("Bu klasörde 500'den fazla dosya var; toplu bağlantı bölünmelidir."),{code:"MODEL_FOLDER_TOO_LARGE",status:409});
   let linked=0,alreadyLinked=0;
   for(const item of rows){
     const existing=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
@@ -274,6 +288,11 @@ async function linkExistingModelFolder(c:Context<AppEnv>,id:string,preview=false
       .bind(crypto.randomUUID(),slug,item.id,id,
         JSON.stringify({originalRelativePath:item.relative_path,folderPrefix:prefix,linkedFromExistingDrive:true}),at,at,
         slug,item.id,id).run();
+    await syncFileHubDesignModel(c,{slug,modelName:text(m.model_name),fileAssetId:text(item.id),
+      purposeCode:"MODEL_SOURCE",extension:text(item.extension),fileName:text(item.file_name),
+      mimeType:text(item.mime_type),sizeBytes:Number(item.size_bytes||0),
+      providerType:"GOOGLE_DRIVE",storageConnectionId:text(item.storage_connection_id),
+      relativePath:text(item.relative_path)});
     linked++;
   }
   return {linked,alreadyLinked,found:rows.length,folder:prefix,source:"FILE_HUB_EXISTING_DRIVE",copied:0,preview,files:preview?rows.slice(0,50).map(x=>({fileName:x.file_name})):undefined};
