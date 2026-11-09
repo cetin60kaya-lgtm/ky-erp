@@ -1,7 +1,7 @@
 // File Hub's existing 5-minute scheduled cycle is the only trigger.
 // Intake is strictly read-only for original Drive/OneDrive files.
 // A signed, tenant-scoped E_BELGE or MUHASEBE binding is mandatory.
-import { ingestIndexedFileHubEBelge } from "./e-belge-center-cloud";
+import { ingestIndexedFileHubEBelge } from "./e-belge-center-cloud.ts";
 
 type Row=Record<string,any>;
 const txt=(v:unknown)=>v==null?"":String(v).trim();
