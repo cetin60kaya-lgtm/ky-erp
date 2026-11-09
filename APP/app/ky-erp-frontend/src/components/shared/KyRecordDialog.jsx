@@ -2,10 +2,9 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import "./kyRecordDialog.css";
 
-const STORAGE_KEY = "kyerp:shared-record-dialog:size:v1";
-const START = { width: 840, height: 600 };
-const clamp = (value, min, max) => Math.min(Math.max(value, min), Math.max(min, max));
+import { dialogSizeBounds, RECORD_START_SIZE } from "./kyRecordDialogSize.js";
 
+const STORAGE_KEY = "kyerp:shared-record-dialog:size:v1";
 function viewport() {
   return {
     width: typeof window === "undefined" ? 1440 : window.innerWidth,
@@ -13,19 +12,13 @@ function viewport() {
   };
 }
 
-export function dialogSizeBounds(size, screen = viewport()) {
-  const width = clamp(Number(size?.width) || START.width, Math.min(460, screen.width - 16), screen.width - 16);
-  const height = clamp(Number(size?.height) || START.height, Math.min(320, screen.height - 16), screen.height - 16);
-  return { width, height };
-}
-
 function initialSize() {
-  if (typeof window === "undefined") return START;
+  if (typeof window === "undefined") return RECORD_START_SIZE;
   try {
     const stored = JSON.parse(window.localStorage.getItem(STORAGE_KEY) || "null");
-    return dialogSizeBounds(stored || START);
+    return dialogSizeBounds(stored || RECORD_START_SIZE, viewport());
   } catch {
-    return dialogSizeBounds(START);
+    return dialogSizeBounds(RECORD_START_SIZE, viewport());
   }
 }
 
@@ -64,7 +57,7 @@ export default function KyRecordDialog({
 
   useEffect(() => {
     function onViewportResize() {
-      setSize((old) => dialogSizeBounds(old));
+      setSize((old) => dialogSizeBounds(old, viewport()));
     }
     window.addEventListener("resize", onViewportResize);
     return () => window.removeEventListener("resize", onViewportResize);
@@ -104,7 +97,7 @@ export default function KyRecordDialog({
     const nudge = { ArrowRight: [24, 0], ArrowLeft: [-24, 0], ArrowDown: [0, 24], ArrowUp: [0, -24] }[event.key];
     if (!nudge) return;
     event.preventDefault();
-    remember(dialogSizeBounds({ width: size.width + nudge[0], height: size.height + nudge[1] }));
+    remember(dialogSizeBounds({ width: size.width + nudge[0], height: size.height + nudge[1] }, viewport()));
   }
 
   return (
