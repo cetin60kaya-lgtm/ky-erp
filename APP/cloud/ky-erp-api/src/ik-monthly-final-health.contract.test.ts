@@ -121,3 +121,46 @@ test("PDKS card-import compatibility stays outside the monthly HR screens", () =
   assert.match(pdks, /previewIkAdvancedCard/);
   assert.match(pdks, /confirmIkAdvancedCard/);
 });
+
+
+test("month-only payroll does not write the permanent card, while the explicit action does", () => {
+  const api = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(api, /const updatePersonnelCard = body\.updatePersonnelCard === true/);
+  assert.match(api, /if \(updatePersonnelCard\) statements\.push\(/[\s\S]*?UPDATE hr_monthly_employees/);
+  assert.match(api, /if \(updatePersonnelCard\) statements\.push\(/[\s\S]*?INSERT INTO ik_person_card_settings/);
+  assert.match(api, /if \(updatePersonnelCard\) for \(const \[field, before, after\] of financialChanges\)/);
+  assert.match(api, /const permanentEarnings =/);
+  assert.match(api, /const permanentBankPlan =/);
+  assert.match(api, /personnelEffectiveDate/);
+  assert.match(page, /onClick=\{\(\) => saveFinalPayrollControl\(false\)\}/);
+  assert.match(page, /onClick=\{\(\) => saveFinalPayrollControl\(true\)\}/);
+  assert.match(page, /Personel Kartını Güncelle/);
+  assert.match(page, /Yalnız Bu Ayı Kaydet/);
+});
+
+test("current monthly movement source recalculates period override, but paid and closed months stay historical", () => {
+  const api = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(api, /const monthPlanByEmployee = new Map/);
+  assert.match(api, /const currentNet = calculatePayrollAmounts/);
+  assert.match(api, /const currentFinal =/);
+  assert.match(api, /const frozen = Boolean\(hasSavedFinal && \(closedPeriod \|\| savedStatus === "PAID"\)\)/);
+  assert.match(api, /const final = frozen \? savedFinal! : currentFinal/);
+  assert.match(api, /savedStatus === "CALCULATED" && latestMonthPlan/);
+  assert.match(api, /PAYROLL_VERSION_CONFLICT/);
+  assert.match(page, /expectedPayrollVersion: modalDraft\.payrollVersion/);
+  assert.match(page, /sourceChangedSinceSave: Boolean\(saved\.sourceChangedSinceSave\)/);
+});
+
+test("monthly employee and modal scroll selections restore without changing canonical employee data", () => {
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const css = frontend("pages/modules/ik/monthly/ik.monthly.pro.css");
+  assert.match(page, /ikSelectedPersonKey/);
+  assert.match(page, /readIkSelectedPerson\(companyId, period\)/);
+  assert.match(page, /ik\.payroll-scroll\.v1/);
+  assert.match(page, /ik\.person-scroll\.v1/);
+  assert.match(page, /size="wide personnel-card-dialog"/);
+  assert.match(css, /\.modal-bg \.modal\.personnel-card-dialog/);
+  assert.match(css, /\.ik-permanent-card-action/);
+});
