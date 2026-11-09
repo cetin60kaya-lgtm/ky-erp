@@ -94,7 +94,7 @@ export async function ensureCanonicalModel(c: Context<AppEnv>, slug: string, inp
   const fields = Object.keys(values).filter((field) => columns.has(field));
   if (!fields.includes("id") || !fields.includes("main_company_slug") || !fields.includes("model_name"))
     throw new Error("MODEL_SCHEMA_NOT_READY: Canonical tablo hazır değil.");
-  await c.env.DB.prepare(
+  const insertResult = await c.env.DB.prepare(
     `INSERT OR IGNORE INTO model_records (${fields.map((field) => `"${field}"`).join(",")}) VALUES (${fields.map(() => "?").join(",")})`
   ).bind(...fields.map((field) => values[field])).run();
   const actual = await c.env.DB.prepare(
@@ -105,5 +105,5 @@ export async function ensureCanonicalModel(c: Context<AppEnv>, slug: string, inp
       (firm && text(actual.company_id || actual.customer_id) !== firm)) {
     throw new Error("MODEL_WRITE_CONFLICT: Başka model ile çakışma var; sessiz ikinci kayıt açılmadı.");
   }
-  return { id, modelName: text(actual.model_name), companyId: text(actual.company_id || actual.customer_id), created: text(actual.created_at) === now };
+  return { id, modelName: text(actual.model_name), companyId: text(actual.company_id || actual.customer_id), created: Number(insertResult.meta?.changes || 0) > 0 };
 }
