@@ -29,7 +29,8 @@ test("only unambiguous TAHA GIYIM company ID can be assigned by default", () => 
   assert.match(design, /companyId: text\(matched\?\.id\)/);
   assert.match(design, /existingCanonicalModel\(c, slug, modelName\)/);
   assert.match(design, /!current && !canonical && purposeCode !== "MODEL_IMAGE"/);
-  assert.match(design, /id: text\(canonical\?\.id\) \|\| crypto\.randomUUID\(\)/);
+  assert.match(design, /id: identity\.id/);
+  assert.match(design, /await ensureCanonicalModel\(c, slug,/);
 });
 
 test("Cloud JPG preview caches a provider thumbnail, not the original PSD or JPEG", () => {
