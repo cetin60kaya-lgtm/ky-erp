@@ -27,6 +27,17 @@ const ROLE_TO_BINDING:Record<string,[string,string]>={
 function safeName(value:unknown){
   return text(value).replace(/[\\/:*?"<>|\x00-\x1f]+/g," ").replace(/\s+/g," ").replace(/^\.+/,"").trim().slice(0,120);
 }
+function safeSubfolder(value:unknown){
+  const input=text(value).replace(/\\/g,"/");
+  if(!input)return "";
+  const parts=input.split("/");
+  if(parts.length>8||parts.some(p=>!p||p==="."||p===".."||safeName(p)!==p))
+    throw Object.assign(new Error("Alt klasör yolu güvenli değil."),{code:"MODEL_FOLDER_INVALID",status:422});
+  return parts.join("/");
+}
+function modelSourcePath(root:string,modelName:string,subfolder:string,fileName:string){
+  return [root,modelName,...(subfolder?subfolder.split("/"):[]),fileName].join("/");
+}
 function chooseFile(fileName:string, requestedRole=""){
   const ext=upper(fileName.split(".").pop()),document=archiveDocumentIdentity(fileName);
   const role=upper(requestedRole);
@@ -102,6 +113,7 @@ async function upload(c:Context<AppEnv>,id:string){
   const m=await model(c,slug,id);
   if(upper(m.status)==="ARCHIVE")throw Object.assign(new Error("Arşiv modeline yeni dosya eklemek için önce kartı etkinleştirin."),{code:"ARCHIVED_MODEL",status:409});
   const assignments=assignList(form.get("assignments"),id);
+  const sourceSubfolder=role==="MODEL_SOURCE"?safeSubfolder(form.get("sourceSubfolder")):"";
   if(["INVOICE","DELIVERY_NOTE"].includes(role)&&assignments.some(x=>x.modelId!==id))
     throw Object.assign(new Error("Çok modelli fatura için belge kalemleri tek tek kontrol edilmelidir."),{code:"INVOICE_MULTIMODEL_REVIEW",status:409});
   for(const item of assignments)await model(c,slug,item.modelId);
@@ -115,9 +127,13 @@ async function upload(c:Context<AppEnv>,id:string){
   if(duplicate)return{assetId:text(duplicate.id),fileName:text(duplicate.file_name),role,duplicate:true,archived:true};
   const stem=picked.document?picked.document.documentNo:
     safeName(file.name.replace(/\.[^.]+$/,""));
-  const name=role==="OUTGOING_DESIGN"?originalName:safeName(stem)+" "+modelName+"."+picked.ext.toLowerCase();
+  // Gelen model dosyası/klasöründeki gerçek isim değiştirilmez (ör. MAMBI FT ÖLÇÜ.pdf).
+  const name=["OUTGOING_DESIGN","MODEL_SOURCE","PLACEMENT"].includes(role)
+    ? originalName : safeName(stem)+" "+modelName+"."+picked.ext.toLowerCase();
   const root=text(target.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
-  const relativePath=root+"/"+(role==="MODEL_SOURCE"?modelName+"/":"")+name;
+  const relativePath=role==="MODEL_SOURCE"
+    ?modelSourcePath(root,modelName,sourceSubfolder,name)
+    :root+"/"+name;
   // CREATE_ONLY. Existing Drive PDF is never changed, including if the archive has not been indexed.
   const stored=await archiveFileToCloudConnection(c,slug,text(target.storage_connection_id),{
     relativePath,fileName:name,mimeType:mime(picked.ext),bytes:buffer,noOverwrite:true,
@@ -126,7 +142,7 @@ async function upload(c:Context<AppEnv>,id:string){
   await c.env.DB.prepare("INSERT INTO file_hub_assets (id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,'AVAILABLE','CLOUD_API','NONE',?,?,?,?,?)")
     .bind(assetId,slug,"GOOGLE_DRIVE:"+text(target.storage_connection_id)+":"+text(stored.id),name,picked.ext,mime(picked.ext),file.size,
       JSON.stringify({provider:"GOOGLE_DRIVE",providerFileId:stored.id,sha256:sha,originalName:file.name,
-        modelId:id,modelName:text(m.model_name),modelSelectedBy:text(user.id),createdFrom:"MODEL_CARD_DROP",webUrl:text(stored.webUrl)}),
+        modelId:id,modelName:text(m.model_name),sourceSubfolder,modelSelectedBy:text(user.id),createdFrom:"MODEL_CARD_DROP",webUrl:text(stored.webUrl)}),
       ts,ts,ts,ts).run();
   await c.env.DB.prepare("INSERT INTO file_hub_locations (id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)")
     .bind(crypto.randomUUID(),slug,assetId,text(target.storage_connection_id),text(stored.id),relativePath,ts,ts,ts,ts).run();
@@ -160,7 +176,53 @@ async function list(c:Context<AppEnv>,id:string){
     relativePath:a.relative_path||"",variants:(()=>{try{return JSON.parse(a.relation_metadata||"{}").variants||[]}catch{return[]}})(),size:Number(a.size_bytes||0),documentId:a.document_id||null,
     documentNo:a.document_no||null,documentStatus:a.document_status||null,createdAt:a.created_at}));
 }
+/** Connect files already in Hakan Emp / modeller / MODEL[/subfolder] without copying or renaming.
+ * Scans only existing File Hub index of a single enabled, readable DESEN/MODEL_SOURCE binding.
+ */
+async function linkExistingModelFolder(c:Context<AppEnv>,id:string){
+  const {slug}=await scope(c,["DESEN"],true);
+  const m=await model(c,slug,id),name=safeName(m.model_name);
+  const bindingRows=(await c.env.DB.prepare(`SELECT b.storage_connection_id,b.root_path
+    FROM file_hub_bindings b JOIN file_hub_connections sc ON sc.id=b.storage_connection_id
+      AND sc.main_company_slug=b.main_company_slug AND sc.is_active=1
+    WHERE b.main_company_slug=? AND b.module_code='DESEN' AND b.purpose_code='MODEL_SOURCE'
+      AND b.read_enabled=1 AND b.sync_enabled=1 AND sc.sync_mode='CLOUD_API'`)
+    .bind(slug).all<Row>()).results||[];
+  if(bindingRows.length!==1||!text(bindingRows[0].root_path))
+    throw Object.assign(new Error("Mevcut Drive model kaynağı için tek etkin salt-okunur File Hub ataması gereklidir."),{code:"MODEL_FOLDER_BINDING_REQUIRED",status:409});
+  const root=text(bindingRows[0].root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
+  const prefix=root+"/"+name+"/";
+  const rows=(await c.env.DB.prepare(`SELECT a.id,a.file_name,l.relative_path
+    FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id
+      AND a.main_company_slug=l.main_company_slug AND a.status='AVAILABLE'
+    WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1
+      AND LOWER(SUBSTR(REPLACE(l.relative_path,'\\','/'),1,LENGTH(?)))=LOWER(?)
+    ORDER BY l.relative_path LIMIT 501`)
+    .bind(slug,text(bindingRows[0].storage_connection_id),prefix,prefix).all<Row>()).results||[];
+  if(rows.length>500)throw Object.assign(new Error("Bu klasörde 500'den fazla dosya var; toplu bağlantı bölünmelidir."),{code:"MODEL_FOLDER_TOO_LARGE",status:409});
+  let linked=0,alreadyLinked=0;
+  for(const item of rows){
+    const existing=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
+      .bind(slug,item.id,id).first<Row>();
+    if(existing){alreadyLinked++;continue;}
+    const at=stamp();
+    await c.env.DB.prepare(`INSERT INTO file_hub_relations
+      (id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at)
+      SELECT ?,?,?, 'MODEL',?,'MODEL_SOURCE',1,1,'EXISTING_DRIVE_FOLDER',?,?,?
+      WHERE NOT EXISTS (SELECT 1 FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=?)`)
+      .bind(crypto.randomUUID(),slug,item.id,id,
+        JSON.stringify({originalRelativePath:item.relative_path,folderPrefix:prefix,linkedFromExistingDrive:true}),at,at,
+        slug,item.id,id).run();
+    linked++;
+  }
+  return {linked,alreadyLinked,found:rows.length,folder:prefix,source:"FILE_HUB_EXISTING_DRIVE",copied:0};
+}
+
 export function registerModelFileTransferRoutes(app:Hono<AppEnv>){
+  app.post("/api/model-files/:modelId/link-existing-folder",async c=>{
+    try{return c.json({ok:true,data:await linkExistingModelFolder(c,c.req.param("modelId"))});}
+    catch(e:any){return c.json(err(text(e.code)||"MODEL_FOLDER_LINK_FAILED",text(e.message)),Number(e.status)||409);}
+  });
   app.get("/api/model-files/:modelId",async c=>{
     try{return c.json({ok:true,data:await list(c,c.req.param("modelId"))});}
     catch(e:any){return c.json(err(text(e.code)||"MODEL_FILES_FAILED",text(e.message)),Number(e.status)||409);}
