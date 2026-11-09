@@ -8,8 +8,6 @@ const CATEGORIES = [
   ["MODEL_SOURCE", "Gelen Model Dosyaları — AI / PDF / TIFF / PSD"],
   ["OUTGOING_DESIGN", "Giden PSD — Birden fazla model / BOY"],
   ["PLACEMENT", "Yerleşim / Kalıp PDF"],
-  ["DELIVERY_NOTE", "DDM — İrsaliye"],
-  ["INVOICE", "HKN — Fatura"],
 ];
 const PRINT_AREAS = [["", "Baskı bölgesi seçilmedi"], ["FRONT", "Ön"], ["BACK", "Arka"], ["ARM", "Kol"], ["OTHER", "Diğer"]];
 async function filesFromDrop(dataTransfer) {
@@ -77,9 +75,14 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
       .filter((entry)=>entry.file instanceof File);
     if(!list.length)return;
     const isFolder=directory||list.some((entry)=>String(entry.relative).includes("/"));
+    const suggested=modelFileCategory(list[0]?.file?.name,isFolder);
+    if(["INVOICE","DELIVERY_NOTE"].includes(suggested)){
+      setError("İşNet fatura ve irsaliyelerini Muhasebe > e-Belge Merkezi üzerinden yükleyin. Desen modeli teknik dosyaları burada tutulur.");
+      setIncoming([]);return;
+    }
     setIncoming(list);
     setFolderMode(isFolder);
-    setRole(modelFileCategory(list[0]?.file?.name,isFolder));
+    setRole(suggested);
     setAssignments([{ key: "primary", modelId: String(modelId), boy: "", printArea: "" }]);
     setError(""); setNotice(""); setExpanded(true);
   };
