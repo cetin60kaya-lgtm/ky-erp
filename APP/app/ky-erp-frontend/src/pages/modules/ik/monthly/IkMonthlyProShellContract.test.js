@@ -357,3 +357,25 @@ test("movement rows keep only edit and delete actions", () => {
   assert.match(monthly, /onClick=\{\(\) => openFinance\(displayType, item\)\}>Düzenle<\/button>/);
   assert.match(monthly, /onClick=\{\(\) => deleteFinance\(item\)\}>Sil<\/button>/);
 });
+
+test("IK monthly payroll uses the same responsive dialog for manager and accounting sessions", () => {
+  assert.match(monthly, /size="wide prepayroll-dialog"/);
+  assert.match(css, /\.modal-bg \.modal\.prepayroll-dialog\{[\s\S]*?width:96vw/);
+  assert.match(css, /\.modal-bg \.prepayroll-dialog \.payroll-final-layout\{[\s\S]*?grid-template-columns:clamp\(220px,17vw,310px\)/);
+  assert.match(css, /container:ik-payroll-main \/ inline-size/);
+  assert.match(css, /@container ik-payroll-main \(max-width:1080px\)/);
+  assert.match(css, /@container ik-payroll-main \(max-width:760px\)/);
+  assert.match(css, /@container ik-payroll-main \(max-width:480px\)/);
+  assert.match(css, /\.modal-bg \.prepayroll-dialog \.form label\{[\s\S]*?font-size:clamp\(12px/);
+  assert.match(monthly, /ilgili aya kaydedilir; kalıcı personel kartı ayrıca güncellenir/);
+  assert.match(monthly, /Maaş\/Yol\/EK ve banka\/elden düzeltmesi yalnız seçilen aya aittir/);
+});
+
+test("IK personnel card uses one accessible layout across narrow and wide screens", () => {
+  assert.match(monthly, /size="wide personnel-card-dialog"/);
+  assert.match(css, /\.modal-bg \.modal\.personnel-card-dialog \{/);
+  assert.match(css, /\.personnel-card-dialog \.modal-section-grid/);
+  assert.match(css, /\.personnel-card-dialog \.form/);
+  assert.match(css, /@media \(max-width: 900px\)/);
+  assert.match(css, /@media \(max-width: 560px\)/);
+});
