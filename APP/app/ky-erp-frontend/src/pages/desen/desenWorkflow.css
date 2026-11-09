@@ -544,38 +544,6 @@
   overflow: auto;
   overscroll-behavior: contain;
 }
-.dsg-modal-resize-corner {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  z-index: 20;
-  width: 26px;
-  height: 26px;
-  display: grid;
-  place-items: center;
-  padding: 0;
-  color: #2e618e;
-  border: 1px solid #9cb7d2;
-  border-bottom: 0;
-  border-right: 0;
-  border-radius: 9px 0 0 0;
-  background: #e8f2fd;
-  cursor: nwse-resize;
-  touch-action: none;
-  user-select: none;
-}
-.dsg-modal-resize-corner::before {
-  content: "⤡";
-  font-size: 17px;
-  line-height: 1;
-  transform: scaleX(-1);
-}
-.dsg-modal-resize-corner:hover,
-.dsg-modal-resize-corner:focus-visible {
-  outline: 2px solid #3978b9;
-  outline-offset: -2px;
-  background: #d1e8ff;
-}
 @media (max-width: 700px) {
   .dsg-modal.model-detail {
     position: relative !important;
@@ -588,5 +556,5 @@
     max-height: none;
     border-radius: 0;
   }
-  .dsg-modal-resize-corner { display: none; }
+
 }
