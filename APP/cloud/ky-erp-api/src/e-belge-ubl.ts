@@ -1,4 +1,4 @@
-import { packageWeightFromItem } from "./e-belge-document-automation";
+import { packageWeightFromItem } from "./e-belge-document-automation.ts";
 
 type Row = Record<string, any>;
 
