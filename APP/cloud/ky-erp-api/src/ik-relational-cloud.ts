@@ -1579,6 +1579,7 @@ async function advancedMonth(c: Context<AppEnv>) {
     checks = Array.isArray(parsed?.checks) ? parsed.checks as Row[] : [];
   } catch {}
   return okData(c, {
+    mainCompanyId: companyId,
     year,
     month,
     employees: employeesWithSgk,
@@ -1704,7 +1705,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
     };
   });
   const totals = lines.reduce((sum, row) => ({ bank: sum.bank + number(row.final.bank), cash: sum.cash + number(row.final.cash), total: sum.total + number(row.final.total) }), { bank: 0, cash: 0, total: 0 });
-  return okData(c, { year, month, policy: { roadByActualPresence: true, defaultOvertimeBase: 225, advanceFirstFromCash: false, deductionRespectsSource: true, legalDeductionsAreMovements: true }, lines, totals });
+  return okData(c, { mainCompanyId: companyId, year, month, policy: { roadByActualPresence: true, defaultOvertimeBase: 225, advanceFirstFromCash: false, deductionRespectsSource: true, legalDeductionsAreMovements: true }, lines, totals });
 }
 
 async function savePersonCard(c: Context<AppEnv>) {
