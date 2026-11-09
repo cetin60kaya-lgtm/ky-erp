@@ -42,7 +42,7 @@ export default function ManualBoyahaneJobModal({
     getDesignCompanies(activeMainCompany).then((items) => { if (live) setCompanies(items); })
       .catch(() => { if (live) setError("Firma kartları getirilemedi; önce Muhasebe firma bağlantısını denetleyin."); });
     return () => { live = false; };
-  }, [activeMainCompany?.slug, activeMainCompany?.id]);
+  }, [activeMainCompany]);
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   async function submit(event) {
