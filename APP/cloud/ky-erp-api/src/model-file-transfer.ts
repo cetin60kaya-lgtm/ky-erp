@@ -298,7 +298,73 @@ async function linkExistingModelFolder(c:Context<AppEnv>,id:string,preview=false
   return {linked,alreadyLinked,found:rows.length,folder:prefix,source:"FILE_HUB_EXISTING_DRIVE",copied:0,preview,files:preview?rows.slice(0,50).map(x=>({fileName:x.file_name})):undefined};
 }
 
+async function outgoingBinding(c:Context<AppEnv>,slug:string){
+  const rows=(await c.env.DB.prepare(`SELECT b.storage_connection_id,b.root_path
+    FROM file_hub_bindings b JOIN file_hub_connections co
+      ON co.id=b.storage_connection_id AND co.main_company_slug=b.main_company_slug
+    WHERE b.main_company_slug=? AND b.module_code='DESEN' AND b.purpose_code='OUTGOING_DESIGN'
+      AND b.read_enabled=1 AND b.sync_enabled=1 AND co.is_active=1
+      AND co.sync_mode='CLOUD_API' AND co.provider_type='GOOGLE_DRIVE'`)
+    .bind(slug).all<Row>()).results||[];
+  if(rows.length!==1||!text(rows[0].root_path))throw Object.assign(new Error("Giden PSD klasörü henüz okunabilir Drive kaynağına bağlanmamış. File Hub'da DESEN / OUTGOING_DESIGN atamasını tamamlayın."),{code:"OUTGOING_DRIVE_BINDING_REQUIRED",status:409});
+  return rows[0];
+}
+async function existingOutgoingCandidates(c:Context<AppEnv>){
+  const {slug}=await scope(c,["DESEN"],false),binding=await outgoingBinding(c,slug);
+  const q=text(c.req.query("q")).slice(0,100);
+  if(q.length<2)return{items:[],queryRequired:true};
+  const term="%"+q.replace(/[\\%_]/g,v=>"\\"+v)+"%";
+  const indexed=(await c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.size_bytes,l.relative_path,l.storage_connection_id
+    FROM file_hub_assets a JOIN file_hub_locations l ON l.file_asset_id=a.id
+      AND l.main_company_slug=a.main_company_slug AND l.is_available=1
+    WHERE a.main_company_slug=? AND l.storage_connection_id=? AND a.status='AVAILABLE'
+      AND UPPER(a.extension) IN ('PSD','PSB') AND a.file_name LIKE ? ESCAPE '\\'
+    ORDER BY a.updated_at DESC LIMIT 250`)
+    .bind(slug,text(binding.storage_connection_id),term).all<Row>()).results||[];
+  const root=text(binding.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"")+"/";
+  const norm=(v:string)=>text(v).replace(/\\/g,"/").normalize("NFKC").toLocaleUpperCase("tr-TR");
+  const unique=new Map<string,Row>();
+  for(const row of indexed){
+    if(!norm(text(row.relative_path)).startsWith(norm(root)))continue;
+    if(!unique.has(text(row.id)))unique.set(text(row.id),{id:row.id,fileName:row.file_name,size:Number(row.size_bytes||0)});
+    if(unique.size===50)break;
+  }
+  return{items:[...unique.values()],source:"EXISTING_DRIVE_INDEX",copied:0};
+}
+async function linkExistingOutgoing(c:Context<AppEnv>,id:string){
+  const {slug}=await scope(c,["DESEN"],true);
+  await model(c,slug,id);
+  const input=await c.req.json().catch(()=>({})) as Row;
+  const assetId=text(input.assetId),assignments=assignList(JSON.stringify(input.assignments||[]),id);
+  if(!assetId||!Array.isArray(input.assignments)||!input.assignments.length||assignments.some(a=>!a.boy))
+    throw Object.assign(new Error("Giden PSD dosyası ve her modelin BOY bilgisi seçilmelidir."),{code:"OUTGOING_LINK_INCOMPLETE",status:422});
+  for(const item of assignments)await model(c,slug,item.modelId);
+  const binding=await outgoingBinding(c,slug);
+  const found=await c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,l.relative_path,l.storage_connection_id
+    FROM file_hub_assets a JOIN file_hub_locations l ON l.file_asset_id=a.id
+      AND l.main_company_slug=a.main_company_slug AND l.is_available=1
+    WHERE a.id=? AND a.main_company_slug=? AND l.storage_connection_id=?
+      AND a.status='AVAILABLE' AND UPPER(a.extension) IN ('PSD','PSB') LIMIT 1`)
+    .bind(assetId,slug,text(binding.storage_connection_id)).first<Row>();
+  const root=text(binding.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"")+"/";
+  const norm=(v:string)=>text(v).replace(/\\/g,"/").normalize("NFKC").toLocaleUpperCase("tr-TR");
+  if(!found||!norm(text(found.relative_path)).startsWith(norm(root)))
+    throw Object.assign(new Error("Seçilen PSD izin verilen giden desenler klasöründe bulunamadı."),{code:"OUTGOING_ASSET_NOT_FOUND",status:404});
+  await relateAssetToModels(c,slug,assetId,"OUTGOING_DESIGN",assignments,text(found.file_name),"");
+  await syncLinkedDesignModels(c,slug,assetId,"OUTGOING_DESIGN",assignments,{
+    extension:found.extension,fileName:found.file_name,mimeType:found.mime_type,sizeBytes:found.size_bytes,
+    storageConnectionId:found.storage_connection_id,relativePath:found.relative_path});
+  return{assetId,fileName:found.file_name,linkedModels:[...new Set(assignments.map(x=>x.modelId))].length,copied:0,source:"EXISTING_DRIVE_INDEX"};
+}
 export function registerModelFileTransferRoutes(app:Hono<AppEnv>){
+  app.get("/api/model-files/library/outgoing",async c=>{
+    try{return c.json({ok:true,data:await existingOutgoingCandidates(c)});}
+    catch(e:any){return c.json(err(text(e.code)||"OUTGOING_LIBRARY_FAILED",text(e.message)),Number(e.status)||409);}
+  });
+  app.post("/api/model-files/:modelId/link-existing-outgoing",async c=>{
+    try{return c.json({ok:true,data:await linkExistingOutgoing(c,c.req.param("modelId"))});}
+    catch(e:any){return c.json(err(text(e.code)||"OUTGOING_LINK_FAILED",text(e.message)),Number(e.status)||409);}
+  });
   app.get("/api/model-files/:modelId/folder-preview",async c=>{
     try{return c.json({ok:true,data:await linkExistingModelFolder(c,c.req.param("modelId"),true)});}
     catch(e:any){return c.json(err(text(e.code)||"MODEL_FOLDER_PREVIEW_FAILED",text(e.message)),Number(e.status)||409);}
