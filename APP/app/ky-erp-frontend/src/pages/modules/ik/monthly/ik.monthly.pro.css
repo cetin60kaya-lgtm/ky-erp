@@ -1178,20 +1178,22 @@
    One scroll owner: header fixed by modal, personnel rail scrolls alone,
    main editor scrolls alone. No sticky footer is used in this dialog. */
 .modal-bg .modal.prepayroll-dialog{
-  width:min(1480px,calc(100vw - 28px));
-  height:min(900px,calc(100dvh - 28px));
-  max-height:calc(100dvh - 28px);
+  /* Aynı pencere, her rol ve ekran çözünürlüğünde görünür alanı kullanır. */
+  width:96vw;
+  max-width:calc(100vw - 20px);
+  height:94dvh;
+  max-height:calc(100dvh - 20px);
 }
 .modal-bg .prepayroll-dialog .mb{
   overflow:hidden;
-  padding:12px 14px 14px;
+  padding:clamp(10px,1vw,18px);
 }
 .modal-bg .prepayroll-dialog .payroll-final-layout{
   height:100%;
   min-height:0;
   overflow:hidden;
-  grid-template-columns:250px minmax(0,1fr);
-  gap:12px;
+  grid-template-columns:clamp(220px,17vw,310px) minmax(0,1fr);
+  gap:clamp(10px,1vw,16px);
 }
 .modal-bg .prepayroll-dialog .payroll-person-rail{
   height:100%;
@@ -1217,11 +1219,13 @@
 .modal-bg .prepayroll-dialog .payroll-final-main{
   height:100%;
   min-height:0;
+  min-width:0;
   overflow-y:auto;
   overflow-x:hidden;
   padding:0 6px 14px 0;
   scrollbar-gutter:stable;
   overscroll-behavior:contain;
+  container:ik-payroll-main / inline-size;
 }
 .modal-bg .prepayroll-dialog .person-modal-nav{
   position:sticky;
@@ -1248,20 +1252,43 @@
   border-radius:10px;
 }
 .modal-bg .prepayroll-dialog .modal-section h3{
-  margin-bottom:9px;
-  padding-bottom:7px;
-  font-size:13px;
+  margin-bottom:10px;
+  padding-bottom:8px;
+  font-size:clamp(15px,.95vw,18px);
+  line-height:1.35;
 }
 .modal-bg .prepayroll-dialog .form{
   gap:7px 9px;
 }
 .modal-bg .prepayroll-dialog .form label{
-  margin-bottom:3px;
-  font-size:10px;
+  margin-bottom:4px;
+  font-size:clamp(12px,.75vw,14px);
+  line-height:1.35;
 }
 .modal-bg .prepayroll-dialog input,
 .modal-bg .prepayroll-dialog select{
-  height:32px;
+  height:40px;
+  font-size:clamp(13px,.85vw,16px);
+}
+.modal-bg .prepayroll-dialog .btn {
+  min-height:40px;
+  height:auto;
+  padding:8px 12px;
+  font-size:clamp(12px,.78vw,15px);
+  line-height:1.3;
+  white-space:normal;
+}
+.modal-bg .prepayroll-dialog .person-modal-nav>small,
+.modal-bg .prepayroll-dialog .payroll-person-rail-head small {
+  font-size:clamp(12px,.7vw,14px);
+  line-height:1.4;
+}
+.modal-bg .prepayroll-dialog .payroll-person-rail-list button b {
+  font-size:clamp(12px,.8vw,15px);
+  line-height:1.3;
+}
+.modal-bg .prepayroll-dialog .payroll-person-rail-list button small {
+  font-size:clamp(11px,.7vw,13px);
 }
 .modal-bg .prepayroll-dialog input[readonly]{
   background:#f3f6fa;
@@ -1285,7 +1312,11 @@
 }
 .modal-bg .prepayroll-dialog .payment-summary b{
   margin-top:5px;
-  font-size:15px;
+  font-size:clamp(15px,1vw,19px);
+  overflow-wrap:anywhere;
+}
+.modal-bg .prepayroll-dialog .payment-summary span{
+  font-size:clamp(12px,.75vw,14px);
 }
 .modal-bg .prepayroll-dialog .payment-summary .summary-highlight{
   border-color:#f3c37c;
@@ -1326,14 +1357,14 @@
   background:#f8fbff;
 }
 .modal-bg .prepayroll-dialog .ik-section-tabs button{
-  min-height:30px;
-  padding:0 11px;
+  min-height:40px;
+  padding:7px 12px;
   border:1px solid transparent;
   border-radius:7px;
   background:transparent;
   color:#52657b;
   font:inherit;
-  font-size:11px;
+  font-size:clamp(12px,.8vw,15px);
   font-weight:900;
   cursor:pointer;
 }
@@ -1370,15 +1401,36 @@
   text-align:left;
 }
 .modal-bg .prepayroll-dialog .prepayroll-source-table td{
-  padding:7px;
+  padding:8px;
   border-bottom:1px solid #edf2f7;
-  font-size:11px;
+  font-size:clamp(12px,.72vw,14px);
   white-space:nowrap;
 }
 .modal-bg .prepayroll-dialog .person-save-message{
   margin-bottom:2px;
 }
 
+/* İç alan daraldığında, ekranın toplam genişliği yerine gerçek form genişliği
+   esas alınır. Böylece Chrome zoom ve hesap farkında kolonlar sıkışmaz. */
+@container ik-payroll-main (max-width:1080px) {
+  .modal-bg .prepayroll-dialog .payroll-control-grid,
+  .modal-bg .prepayroll-dialog .final-manual-grid {
+    grid-template-columns:minmax(0,1fr);
+  }
+  .modal-bg .prepayroll-dialog .payroll-control-grid > .modal-section:last-child {
+    grid-column:1;
+  }
+}
+@container ik-payroll-main (max-width:760px) {
+  .modal-bg .prepayroll-dialog .final-manual-card .form {
+    grid-template-columns:repeat(2,minmax(0,1fr));
+  }
+}
+@container ik-payroll-main (max-width:480px) {
+  .modal-bg .prepayroll-dialog .final-manual-card .form {
+    grid-template-columns:minmax(0,1fr);
+  }
+}
 @media(max-width:1180px){
   .modal-bg .prepayroll-dialog input,
   .modal-bg .prepayroll-dialog select{
@@ -2602,9 +2654,9 @@
 
 /* İK aylık tek pencere / açık dönem bordrosu ile kalıcı kart ayrımı. */
 .modal-bg .modal.personnel-card-dialog {
-  width: min(1060px, calc(100vw - 28px));
-  height: min(820px, calc(100dvh - 28px));
-  max-height: calc(100dvh - 28px);
+  width: min(94vw, 1480px);
+  height: 94dvh;
+  max-height: calc(100dvh - 20px);
 }
 .modal-bg .personnel-card-dialog .mb {
   overflow-x: hidden;
