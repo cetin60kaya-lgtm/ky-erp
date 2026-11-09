@@ -167,7 +167,9 @@ test("personnel selection survives live refresh against the full master roster",
   assert.match(monthly, /const masterSelectionIds = new Set/);
   assert.match(monthly, /safeList\(result\?\.masterEmployees\)\.map\(\(item\) => item\.id\)/);
   assert.match(monthly, /safeList\(result\?\.rawEmployees\)\.map\(\(item\) => item\.id\)/);
-  assert.match(monthly, /setSelectedId\(\(old\) => masterSelectionIds\.has\(old\)/);
+  assert.match(monthly, /setSelectedId\(\(old\) => \{/);
+  assert.match(monthly, /masterSelectionIds\.has\(old\) \? old/);
+  assert.match(monthly, /readIkSelectedPerson\(companyId, period\)/);
 });
 
 test("person card save stays usable when the selected historical month is locked", () => {
