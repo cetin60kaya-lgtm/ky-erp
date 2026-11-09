@@ -7,6 +7,7 @@ import { claimEBelgeFinalization, reclaimEBelgeFinalization, markEBelgeFinalizat
 import { getAuthenticatedUser } from "./auth-cloud";
 import { verifyIsnetReadOnlySession } from "./isnet-runtime-v2";
 import { processCloudArchiveJobs } from "./accounting-document-archive";
+import { readFileHubAssetForMail } from "./file-hub-cloud-oauth";
 import { requiredLotCoverageComplete, resolveAllocatedLotEvidence } from "./accounting-lot-allocation";
 import { resolveProductLotPolicy, normalizeLotNo } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
@@ -138,8 +139,8 @@ async function ensureOfficialXmlCompany(c:Context<AppEnv>,slug:string,p:Row){
 }
 
 async function linkDocumentCanonicalModels(c:Context<AppEnv>,slug:string,documentId:string,fileName:string){
-  const doc=await c.env.DB.prepare("SELECT id,raw_metadata,document_type,direction,document_no,party_company_id FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
-  if(!doc||upper(doc.direction)!=="OUTGOING"||!(isInvoice(doc.document_type)||isDispatch(doc.document_type)))return;
+  const doc=await c.env.DB.prepare("SELECT id,raw_metadata,document_type,direction,document_no,party_company_id,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
+  if(!doc||doc.posted_at||upper(doc.direction)!=="OUTGOING"||!(isInvoice(doc.document_type)||isDispatch(doc.document_type)))return;
   const [lines,models]=await Promise.all([
     c.env.DB.prepare("SELECT id,description,raw_metadata FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no").bind(slug,documentId).all<Row>(),
     c.env.DB.prepare("SELECT id,model_name,model_code,company_id,customer_id,deleted_at FROM model_records WHERE main_company_slug=? AND deleted_at IS NULL LIMIT 10000").bind(slug).all<Row>(),
@@ -197,6 +198,68 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
 async function stageProviderR2Asset(c:Context<AppEnv>,slug:string,input:Row){const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo),storageKey=text(input.storageKey),ext=upper(input.ext),fileName=text(input.fileName)||`${text(input.documentNo)||providerDocumentId||crypto.randomUUID()}.${ext.toLowerCase()}`,logicalKey=`e-belge-provider:${providerType}:${providerDocumentId||normalize(fileName)}:${ext}`;const existing=await c.env.DB.prepare(`SELECT id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key FROM file_hub_assets WHERE main_company_slug=? AND logical_key=? LIMIT 1`).bind(slug,logicalKey).first<Row>();if(existing)return{...existing,ext};let sizeBytes=0;try{const head=storageKey?await c.env.FILES.head(storageKey):null;sizeBytes=Number(head?.size||0)}catch{}const id=crypto.randomUUID(),ts=now(),mimeType=text(input.mimeType)||(ext==="XML"?"application/xml":ext==="PDF"?"application/pdf":"application/octet-stream");await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','E_DOCUMENT_PROVIDER','READY',?,?,?,?,?,?)`).bind(id,slug,logicalKey,fileName,ext,mimeType,sizeBytes,storageKey||null,JSON.stringify({providerType,providerDocumentId,providerManaged:true,sourceKey:storageKey||null}),ts,ts,ts,ts).run();return{id,ext,fileName,preview_storage_key:storageKey,mime_type:mimeType,size_bytes:sizeBytes}}
 
 export async function ingestProviderEBelgeXml(c:Context<AppEnv>,slug:string,input:Row){const xmlText=text(input.xmlText);if(!xmlText)throw Object.assign(new Error("Provider XML içeriği olmadan canonical e-Belge oluşturulamaz."),{code:"PROVIDER_XML_REQUIRED"});const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo||input.uuid),direction=directionOf(input.direction),parsed=parseCanonicalEBelgeUbl(xmlText,direction),documentNo=text(parsed.documentNo)||text(input.documentNo),xmlKey=text(input.xmlKey),pdfKey=text(input.pdfKey),rawMetadata={...safeJson(parsed.rawMetadata),...safeJson(input.rawMetadata),providerType,providerDocumentId,providerSourceId:text(input.sourceId),providerAutomationKey:text(input.automationKey),providerStatus:text(input.statusText),providerSyncedAt:now()};const xmlAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:xmlKey,ext:"XML",fileName:`${documentNo||providerDocumentId||"belge"}.xml`,documentNo});const result=await createDocument(c,slug,{...parsed,direction,documentNo,providerType,providerDocumentId,sourceType:text(input.sourceType)||`${providerType}_DIRECT`,status:"REVIEW_REQUIRED",extractionConfidence:1,rawMetadata},xmlAsset);if(pdfKey){const pdfAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:pdfKey,ext:"PDF",fileName:`${documentNo||providerDocumentId||"belge"}.pdf`,documentNo});const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? LIMIT 1`).bind(result.documentId,slug).first<Row>();if(doc)await attachDuplicateFile(c,slug,doc,pdfAsset)}return{...result,providerType,providerDocumentId,documentNo}}
+
+/** Ingest an already-indexed, explicitly bound Drive/OneDrive file in-place.
+ * Source bytes never enter GitHub or application logs; File Hub remains canonical.
+ * A PDF without configured extraction stays queued for manual review, never guessed.
+ */
+export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,assetId:string){
+  const c={env} as Context<AppEnv>;
+  const asset=await env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.status,
+      l.relative_path,l.storage_connection_id,c.provider_type
+    FROM file_hub_assets a JOIN file_hub_locations l
+      ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.is_available=1
+    JOIN file_hub_connections c ON c.id=l.storage_connection_id AND c.main_company_slug=l.main_company_slug AND c.is_active=1
+    WHERE a.id=? AND a.main_company_slug=? AND a.status='AVAILABLE' LIMIT 1`)
+    .bind(assetId,slug).first<Row>();
+  if(!asset)throw Object.assign(new Error("File Hub kaynağı bulunamadı."),{code:"FILE_HUB_SOURCE_MISSING"});
+  const path=text(asset.relative_path).replace(/\\/g,"/"),ext=upper(asset.extension);
+  if(!["XML","PDF"].includes(ext))throw Object.assign(new Error("XML/PDF dışında belge otomatik alınamaz."),{code:"DOCUMENT_FORMAT_UNSUPPORTED"});
+  const bindings=await env.DB.prepare(`SELECT root_path FROM file_hub_bindings
+    WHERE main_company_slug=? AND storage_connection_id=? AND read_enabled=1 AND sync_enabled=1
+      AND ((module_code='E_BELGE' AND purpose_code='E_DOCUMENT')
+       OR (module_code='MUHASEBE' AND purpose_code IN ('INVOICE','DELIVERY_NOTE')))`)
+    .bind(slug,text(asset.storage_connection_id)).all<Row>();
+  const authorized=(bindings.results||[]).some((b:Row)=>{
+    const root=text(b.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
+    return Boolean(root)&&(path.toLocaleLowerCase("tr-TR").startsWith((root+"/").toLocaleLowerCase("tr-TR"))||path.toLocaleLowerCase("tr-TR")===root.toLocaleLowerCase("tr-TR"));
+  });
+  if(!authorized)throw Object.assign(new Error("Belge bu firma için atanmış senkron klasöründe değil."),{code:"DOCUMENT_BINDING_MISSING"});
+  const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
+    .bind(slug,assetId).first<Row>();
+  if(previous?.entity_id)return {documentId:text(previous.entity_id),duplicate:true,alreadyIndexed:true};
+  const downloaded=await readFileHubAssetForMail(c,slug,assetId,20*1024*1024);
+  const bytes=downloaded.bytes;
+  let parsed:Row;
+  if(ext==="XML"){
+    const xml=new TextDecoder("utf-8",{fatal:false}).decode(bytes);
+    const ubl=parseCanonicalEBelgeUbl(xml,"INCOMING"),kind=isDispatch(ubl.documentType)?"IRSALIYE":"FATURA";
+    parsed=await resolveManualDirection(c,slug,"AUTO",ubl,kind);
+    parsed={...parsed,sourceType:"FILE_HUB_XML",extractionConfidence:1,
+      rawMetadata:{...safeJson(parsed.rawMetadata),fileHubAssetId:assetId,originalFileName:text(asset.file_name)}};
+  }else{
+    const readiness=accountingDocumentIntelligenceStatus(env as any);
+    if(!readiness.configured)throw Object.assign(new Error("PDF ayrıştırma servisi hazır değil; dosya Drive'da korunuyor."),{code:"PDF_EXTRACTION_NOT_READY"});
+    const file=new File([bytes],text(asset.file_name),{type:text(asset.mime_type)||"application/pdf"});
+    const ai=await analyzeAccountingDocument(c,file,"AUTO"),canonical=ai?.canonical||ai?.data||ai||{};
+    const kind=isDispatch(canonical.inferredDocumentKind)?"IRSALIYE":"FATURA";
+    parsed=await resolveManualDirection(c,slug,"AUTO",canonical,kind);
+    parsed={...parsed,sourceType:"FILE_HUB_PDF",extractionConfidence:numberValue(canonical.extractionConfidence),
+      needsManualReview:canonical.needsManualReview===true,manualReviewReasons:canonical.manualReviewReasons,
+      rawMetadata:{...safeJson(canonical.rawMetadata),fileHubAssetId:assetId,
+        originalFileName:text(asset.file_name),extractionProvider:canonical.extractor||"DOCUMENT_INTELLIGENCE"}};
+  }
+  const record=await createDocument(c,slug,parsed,{
+    id:assetId,fileName:text(asset.file_name),ext,canonicalSource:true});
+  const doc=await env.DB.prepare("SELECT id,document_type,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=?")
+    .bind(record.documentId,slug).first<Row>();
+  let reconciliation:Row|null=null;
+  if(doc&&!doc.posted_at&&isInvoice(doc.document_type)){
+    try{reconciliation=await reconcileOne(c,slug,text(doc.id));}
+    catch(error:any){reconciliation={status:"REVIEW_REQUIRED",code:text(error?.code)||"RECONCILE_FAILED"};}
+  }
+  return {...record,reconciliation,source:"FILE_HUB_CLOUD"};
+}
 
 async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirection:string,kind:string,analysisFile:File|null=null){
   const ext=upper(file.name.split(".").pop());
