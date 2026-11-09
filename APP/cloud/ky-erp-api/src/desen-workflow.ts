@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { analyzeDesignWithAi, needsAiAnalysis } from "./desen-ai";
+import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -1248,21 +1249,22 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c, body);
     const modelName = text(body.modelName || body.modelCode);
     if (!modelName) return c.json(errorBody("MODEL_NAME_REQUIRED", "Model adı zorunludur."), 400);
-    const duplicate = (await listWorkflowModels(c, slug)).find(
-      (row) =>
-        normalize(row.modelName) === normalize(modelName) &&
-        text(row.companyId) === text(body.companyId) &&
-        row.status !== "ARCHIVE",
-    );
-    if (duplicate) {
-      return c.json(
-        errorBody("MODEL_EXISTS", "Aynı firma ve model adıyla aktif kayıt zaten var.", {
-          modelId: duplicate.id,
-        }),
-        409,
-      );
+    let identity;
+    try {
+      identity = await ensureCanonicalModel(c, slug, {
+        modelName, modelCode: text(body.modelCode || modelName),
+        companyId: text(body.companyId), companyName: text(body.companyName),
+        sourceModule: "DESEN", requestedId: text(body.id),
+      });
+    } catch (error) {
+      return c.json(errorBody("MODEL_IDENTITY_REVIEW", error instanceof Error ? error.message : String(error)), 409);
     }
-    const id = text(body.id || crypto.randomUUID());
+    if (!identity.created) {
+      const existing = await getModel(c, identity.id, slug);
+      if (!existing) return c.json(errorBody("MODEL_IDENTITY_NOT_FOUND", "Kayıt bulundu ancak model kartı okunamadı."), 409);
+      return c.json({ ok: true, success: true, data: { ...existing, duplicate: true } }, 200);
+    }
+    const id = identity.id;
     const row = await saveModel(
       c,
       id,
@@ -1335,7 +1337,8 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const isModelPreview = row.role === "MODEL_IMAGE";
     const saved = await saveModel(c, model.id, {
       ...model,
-      files: [...model.files, row],
+      // Son seçilen MODEL_IMAGE ana görsel olur; eski dosya silinmez, sürüm olarak saklanır.
+      files: isModelPreview ? [row, ...model.files] : [...model.files, row],
       status: isModelPreview && model.status === "MODEL_INFO_MISSING" ? "NEW_ARRIVAL" : model.status,
       metadata: {
         ...objectOf(model.metadata),

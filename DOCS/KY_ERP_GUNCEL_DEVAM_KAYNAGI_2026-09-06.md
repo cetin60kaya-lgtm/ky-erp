@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 09.11.2026 — KY ERP tek kayıt penceresi + canonical model kimliği (PR #546)
+
+- Kullanıcı ekranlarında DESEN model/kanaI penceresi sekmelerde değişken boyutlu, firma listesi boş; İmalat/Boyahane/Muhasebe farklı yeni kayıt formları kullanıyordu. Ortak `KyRecordDialog`: 840×600 başlangıç, sağ-alt sürükleme/klavye, kullanıcı ölçüsü, sabit dış çerçeve, iç scroll, mobil tam ekran. Desen, İmalat, Boyahane ve Muhasebe yeni kart formları aynı bileşeni kullanır.
+- Desen/Muhasebe firma listesindeki yalnız müşteri filtrelemesi nedeniyle tedarikçi tanımlı mevcut firma görünmüyordu. Aktif kayıtlı firmalar tür etiketiyle görünür, seçimi kullanıcı yapar. Muhasebe firmasının işlevi değiştirilmez.
+- Tek Worker `canonical-model-identity.ts` ile yeni manuel model ve Drive JPEG açılışı canonical D1 `model_records` UUID'sine bağlanır. Mevcut model adı+firma ve UUID kontrol edilir; çakışma otomatik merge edilmez. Boyahane iş UUID'si ayrıca korunarak `modelCardId` taşır. İşNet model listesi canonical kartlardan gelir; uygun müşteri gelen irsaliyesinde açık model adı varsa kart açılabilir; fatura/irsaliye dış gönderimleri otomatik yapılmaz.
+- Desen modalına yeni görsel ekleme/değiştirme eklendi: yeni MODEL_IMAGE öncelik alır, önceki versiyon ve Drive orijinali silinmez. R2 yalnız model önizleme rolündedir.
+- Aktif yönlendirmede gölgelenen eski Boyahane V1 manuel route ve production-runtime-v2 ikinci model create/update/delete yolları, eski ayrı Desen resize helper'ı kaldırıldı. Eski business verileri, depolama, KDV, cari ve diğer üretim akışlarına toplu mutasyon yok.
+- Güncel feature dalı `feature/tek-kayit-penceresi-model-karti-20261109`, PR #546. Canlı kabul için PR son commit frontend lint/test/build + Worker typecheck/unit/integration/build, merge SHA, Pages/Worker deploy ancestry ve canlı smoke kanıtı gerekir. Gerçek D1 verisine toplu düzeltme veya schema migration bu PR'da yoktur.
+
+
 ## 08.11.2026 — DESEN legacy raw görsellerini kaynak senkronunda koruma
 
 - Canlı kullanıcı DESEN Havuzu ekranında **723 toplam / 275 görselsiz**, D1 salt-okunur `model_records.image_url` sorgusunda **723 / 292** görüldü. Aradaki 17 farkın nedeni öncelikle JSON `raw.imageUrl`/`raw.mainImage` fallback olasılığıdır; kesin sayım yeni D1 SELECT adımıyla doğrulanacak, tahmin PASS sayılmaz.

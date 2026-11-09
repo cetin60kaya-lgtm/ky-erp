@@ -1,0 +1,47 @@
+.ky-record-backdrop {
+  position: fixed; inset: 0; z-index: 2400; display: grid; place-items: center;
+  padding: 8px; background: rgba(13, 31, 51, .59); backdrop-filter: blur(3px);
+}
+.ky-record-modal {
+  position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr) auto;
+  box-sizing: border-box; min-width: min(460px, calc(100vw - 16px));
+  min-height: min(320px, calc(100dvh - 16px)); max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 16px); overflow: hidden; background: #fff;
+  border: 1px solid #a9c2d7; border-radius: 13px;
+  box-shadow: 0 24px 76px rgba(12, 31, 57, .3);
+  color: #233c55;
+}
+.ky-record-head {
+  min-height: 57px; flex-shrink: 0; display: flex;
+  align-items: center; justify-content: space-between; gap: 12px;
+  padding: 12px 15px; border-bottom: 1px solid #dae5ee;
+  background: linear-gradient(#fff, #f7faff);
+}
+.ky-record-head > div { min-width: 0; }
+.ky-record-head h2 { margin: 0; font-size: 16px; color: #1d354b; }
+.ky-record-head p { margin: 3px 0 0; font-size: 11px; color: #617b92; }
+.ky-record-close {
+  display: grid; place-items: center; width: 33px; height: 33px; flex-shrink: 0;
+  background: #fff; border: 1px solid #c9d8e7; color: #315675; border-radius: 7px; cursor: pointer;
+}
+.ky-record-body { min-width: 0; min-height: 0; overflow: auto; overscroll-behavior: contain; padding: 12px; }
+.ky-record-foot {
+  min-height: 53px; display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap;
+  gap: 8px; padding: 9px 15px; border-top: 1px solid #dae5ee; background: #fff;
+}
+.ky-record-resize {
+  position: absolute; bottom: 0; right: 0; z-index: 40; width: 26px; height: 26px;
+  border: 1px solid #a9c2d7; border-right: 0; border-bottom: 0;
+  border-radius: 8px 0 0; background: #eaf3fb; color: #365f83;
+  cursor: nwse-resize; touch-action: none;
+}
+.ky-record-resize::before { content: "⤡"; font-size: 17px; }
+.ky-record-resize:focus-visible { outline: 2px solid #266bb1; outline-offset: -2px; }
+.ky-record-modal .ky-record-body > :first-child { min-width: 0; }
+@media(max-width:700px) {
+  .ky-record-backdrop { padding: 0; }
+  .ky-record-modal { width: 100vw !important; height: 100dvh !important; max-width: none; max-height: none; border-radius: 0; }
+  .ky-record-resize { display: none; }
+  .ky-record-head { min-height: 54px; }
+  .ky-record-foot { padding-right: 12px; }
+}

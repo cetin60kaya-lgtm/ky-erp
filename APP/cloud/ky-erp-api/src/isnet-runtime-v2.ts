@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { probeIsnetSessionHealth } from "./isnet-session-health";
+import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -716,29 +717,16 @@ async function resolveBusiness(c: Context<AppEnv>, slug: string, query: Row) {
 }
 
 async function modelRows(c: Context<AppEnv>, slug: string) {
-  const rows: Row[] = [];
-  for (const scope of ["DESEN_WORKFLOW_MODEL", "DESEN_MODEL"]) {
-    for (const item of await storeList(c, scope, slug)) {
-      rows.push({
-        id: text(item.id || item.modelId || item.fileName),
-        name: text(item.modelName || item.name || item.modelAdi || item.desenAdi),
-        modelName: text(item.modelName || item.name || item.modelAdi || item.desenAdi),
-        companyId: text(item.companyId || item.firmId),
-        companyName: text(item.companyName || item.firmaAdi),
-      });
-    }
-  }
-  if (await tableExists(c, "products")) {
-    const cols = await columns(c, "products");
-    const clauses: string[] = [];
-    const vals: any[] = [];
-    if (cols.has("main_company_slug")) { clauses.push("main_company_slug=?"); vals.push(slug); }
-    if (cols.has("deleted_at")) clauses.push("deleted_at IS NULL");
-    const result = await c.env.DB.prepare(`SELECT * FROM products${clauses.length ? ` WHERE ${clauses.join(" AND ")}` : ""} ORDER BY name COLLATE NOCASE LIMIT 5000`).bind(...vals).all<Row>();
-    for (const item of result.results || []) rows.push({ id: text(item.id), name: text(item.name), modelName: text(item.name), companyId: text(item.company_id) });
-  }
-  const seen = new Set<string>();
-  return rows.filter((row) => row.id && row.name && !seen.has(row.id) && seen.add(row.id));
+  // İşNet, ürün/serbest metni model sanmaz; Desen/İmalat/Boyahane ile aynı canonical UUID.
+  const result = await c.env.DB.prepare(
+    `SELECT id,model_name,company_id,customer_name FROM model_records
+      WHERE main_company_slug=? AND deleted_at IS NULL
+      ORDER BY model_name COLLATE NOCASE LIMIT 5000`
+  ).bind(slug).all<Row>();
+  return (result.results || []).map((row: Row) => ({
+    id: text(row.id), name: text(row.model_name), modelName: text(row.model_name),
+    companyId: text(row.company_id), companyName: text(row.customer_name),
+  })).filter((row: Row) => row.id && row.name);
 }
 
 async function flowPreview(c: Context<AppEnv>, slug: string, flow: Row) {
@@ -1066,8 +1054,18 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
 
   app.post("/api/isnet/source-intakes/no-dispatch", async (c) => {
     const body = await bodyOf(c); const slug = slugOf(c, body); const id = crypto.randomUUID();
-    if (!text(body.companyId) || !text(body.modelId) || num(body.quantity) <= 0) return c.json(errorBody("SOURCE_FIELDS_REQUIRED", "Firma, model ve sıfırdan büyük adet zorunludur."), 400);
-    const row = await storePut(c, SCOPE.sourceIntake, id, { ...body, id, sourceType: "NO_DISPATCH", status: "READY_FOR_OUTGOING_DISPATCH", quantity: num(body.quantity), outgoingQuantity: 0, invoicedQuantity: 0 }, slug);
+    if (!text(body.companyId) || (!text(body.modelId) && !text(body.modelName)) || num(body.quantity) <= 0) return c.json(errorBody("SOURCE_FIELDS_REQUIRED", "Firma, model ve sıfırdan büyük adet zorunludur."), 400);
+    let modelId = text(body.modelId);
+    if (!modelId) {
+      try {
+        const model = await ensureCanonicalModel(c, slug, {
+          modelName: text(body.modelName), companyId: text(body.companyId),
+          companyName: text(body.companyName), sourceModule: "ISNET_NO_DISPATCH",
+        });
+        modelId = model.id;
+      } catch (error) { return c.json(errorBody("MODEL_IDENTITY_REVIEW", String(error)), 409); }
+    }
+    const row = await storePut(c, SCOPE.sourceIntake, id, { ...body, modelId, id, sourceType: "NO_DISPATCH", status: "READY_FOR_OUTGOING_DISPATCH", quantity: num(body.quantity), outgoingQuantity: 0, invoicedQuantity: 0 }, slug);
     return c.json({ ok: true, success: true, data: { ...row, capacity: intakeCapacity(row) } }, 201);
   });
 
@@ -1075,19 +1073,33 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     const body = await bodyOf(c); const slug = slugOf(c, body); const docs = await normalizedDocuments(c, slug); const sourceId = text(body.sourceId || body.documentId); const doc = docs.find((row) => text(row.id) === sourceId || text(row.sourceId) === sourceId || text(row.automationKey) === sourceId || text(row.documentNo) === sourceId);
     if (!doc) return c.json(errorBody("NOT_FOUND", "Portal irsaliyesi bulunamadı."), 404);
     if (doc.category !== "CUSTOMER_INCOMING_DISPATCH") return c.json(errorBody("CUSTOMER_DISPATCH_REQUIRED", "Üretim iş akışına yalnız müşteriden gelen irsaliye alınabilir."), 409);
-    const id = crypto.randomUUID(); const row = await storePut(c, SCOPE.sourceIntake, id, { id, sourceType: "PORTAL", documentId: doc.id, customerDispatchNo: doc.documentNo, companyId: doc.companyId, companyName: doc.partnerName, modelId: doc.modelId, modelName: doc.modelName, quantity: num(body.quantity || doc.raw?.quantity), status: doc.modelId ? "READY_FOR_OUTGOING_DISPATCH" : "MODEL_WAITING", outgoingQuantity: 0, invoicedQuantity: 0 }, slug);
+    let modelId = text(doc.modelId);
+    if (!modelId && text(doc.modelName) && text(doc.companyId)) {
+      try { modelId = (await ensureCanonicalModel(c, slug, {
+        modelName: text(doc.modelName), companyId: text(doc.companyId),
+        companyName: text(doc.partnerName), sourceModule: "ISNET_PORTAL_DISPATCH",
+      })).id; } catch { /* Kimlik belirsizse elle inceleme bekler; belge silinmez. */ }
+    }
+    const id = crypto.randomUUID(); const row = await storePut(c, SCOPE.sourceIntake, id, { id, sourceType: "PORTAL", documentId: doc.id, customerDispatchNo: doc.documentNo, companyId: doc.companyId, companyName: doc.partnerName, modelId, modelName: doc.modelName, quantity: num(body.quantity || doc.raw?.quantity), status: modelId ? "READY_FOR_OUTGOING_DISPATCH" : "MODEL_WAITING", outgoingQuantity: 0, invoicedQuantity: 0 }, slug);
     return c.json({ ok: true, success: true, data: { ...row, capacity: intakeCapacity(row) } }, 201);
   });
 
   app.post("/api/isnet/source-intakes/manual-pdf", async (c) => {
     const form = await c.req.formData(); const slug = text(form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || "mecit-hakan"); const file = form.get("pdf"); const id = crypto.randomUUID();
-    const quantity = num(form.get("quantity")); if (!text(form.get("companyId")) || !text(form.get("modelId")) || quantity <= 0) return c.json(errorBody("SOURCE_FIELDS_REQUIRED", "Firma, model ve sıfırdan büyük adet zorunludur."), 400);
+    const quantity = num(form.get("quantity")); if (!text(form.get("companyId")) || (!text(form.get("modelId")) && !text(form.get("modelName"))) || quantity <= 0) return c.json(errorBody("SOURCE_FIELDS_REQUIRED", "Firma, model ve sıfırdan büyük adet zorunludur."), 400);
+    let modelId = text(form.get("modelId"));
+    if (!modelId) {
+      try { modelId = (await ensureCanonicalModel(c, slug, {
+        modelName: text(form.get("modelName")), companyId: text(form.get("companyId")),
+        companyName: text(form.get("companyName")), sourceModule: "ISNET_MANUAL_PDF",
+      })).id; } catch (error) { return c.json(errorBody("MODEL_IDENTITY_REVIEW", String(error)), 409); }
+    }
     let pdfKey = "";
     if (file instanceof File && file.size > 0) {
       pdfKey = `${slug}/isnet/source-intakes/${id}/${file.name.replace(/[^a-zA-Z0-9._-]+/g, "-")}`;
       await c.env.FILES.put(pdfKey, await file.arrayBuffer(), { httpMetadata: { contentType: file.type || "application/pdf" }, customMetadata: { source: "MANUAL_PDF", originalName: file.name } });
     }
-    const row = await storePut(c, SCOPE.sourceIntake, id, { id, sourceType: "MANUAL_PDF", companyId: text(form.get("companyId")), companyName: text(form.get("companyName")), modelId: text(form.get("modelId")), modelName: text(form.get("modelName")), orderNo: text(form.get("orderNo")), customerDispatchNo: text(form.get("customerDispatchNo")), issueDate: text(form.get("issueDate")), quantity, unit: text(form.get("unit") || "ADET"), note: text(form.get("note")), pdfKey, status: "READY_FOR_OUTGOING_DISPATCH", outgoingQuantity: 0, invoicedQuantity: 0 }, slug);
+    const row = await storePut(c, SCOPE.sourceIntake, id, { id, sourceType: "MANUAL_PDF", companyId: text(form.get("companyId")), companyName: text(form.get("companyName")), modelId, modelName: text(form.get("modelName")), orderNo: text(form.get("orderNo")), customerDispatchNo: text(form.get("customerDispatchNo")), issueDate: text(form.get("issueDate")), quantity, unit: text(form.get("unit") || "ADET"), note: text(form.get("note")), pdfKey, status: "READY_FOR_OUTGOING_DISPATCH", outgoingQuantity: 0, invoicedQuantity: 0 }, slug);
     return c.json({ ok: true, success: true, data: { ...row, capacity: intakeCapacity(row) } }, 201);
   });
 
@@ -1156,7 +1168,15 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
       const lines = doc.accountingDocumentId ? await invoiceLines(c, slug, doc.accountingDocumentId) : [];
       const quantity = num(doc.raw?.quantity || doc.raw?.adet) || lines.reduce((sum, line) => sum + num(line.quantity), 0);
       const id = crypto.randomUUID();
-      flow = await storePut(c, SCOPE.autoFlow, id, { id, sourceDocumentId: doc.id, sourceDocumentNo: doc.documentNo, partnerName: doc.partnerName, partnerTaxNo: doc.partnerTaxNo, companyId: doc.companyId, companyName: doc.partnerName, modelId: doc.modelId, modelName: doc.modelName, sourceQuantity: quantity, remainingQuantity: quantity, lines, status: doc.modelId ? "OUTGOING_DRAFT_READY" : "MODEL_REQUIRED" }, slug);
+      let modelId = text(doc.modelId);
+      // Sadece müşteri gelen irsaliyesinde açık model adı ve kayıtlı firma varsa otomatik kart açılır.
+      if (!modelId && text(doc.modelName) && text(doc.companyId)) {
+        try { modelId = (await ensureCanonicalModel(c, slug, {
+          modelName: text(doc.modelName), companyId: text(doc.companyId), companyName: text(doc.partnerName),
+          sourceModule: "ISNET_CUSTOMER_DISPATCH",
+        })).id; } catch { /* Belirsizlikte MODEL_REQUIRED kalır; fatura/irsaliye gönderilmez. */ }
+      }
+      flow = await storePut(c, SCOPE.autoFlow, id, { id, sourceDocumentId: doc.id, sourceDocumentNo: doc.documentNo, partnerName: doc.partnerName, partnerTaxNo: doc.partnerTaxNo, companyId: doc.companyId, companyName: doc.partnerName, modelId, modelName: doc.modelName, sourceQuantity: quantity, remainingQuantity: quantity, lines, status: modelId ? "OUTGOING_DRAFT_READY" : "MODEL_REQUIRED" }, slug);
     }
     const preview = await flowPreview(c, slug, flow);
     const requiresModel = !text(flow.modelId);
@@ -1166,8 +1186,20 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
   app.post("/api/isnet/auto-flows/:id/model", async (c) => {
     const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const current = await storeGet(c, SCOPE.autoFlow, id, slug);
     if (!current) return c.json(errorBody("NOT_FOUND", "İş akışı bulunamadı."), 404);
-    const modelId = text(body.modelId || body.candidateId); const models = await modelRows(c, slug); const model = models.find((row) => text(row.id) === modelId);
-    if (!modelId || !model) return c.json(errorBody("MODEL_REQUIRED", "Geçerli model seçimi zorunludur."), 400);
+    let modelId = text(body.modelId || body.candidateId); const models = await modelRows(c, slug);
+    let model = models.find((row) => text(row.id) === modelId);
+    if (!modelId && text(body.modelName) && text(current.companyId)) {
+      try {
+        const canonical = await ensureCanonicalModel(c, slug, {
+          modelName: text(body.modelName), companyId: text(current.companyId),
+          companyName: text(current.companyName || current.partnerName),
+          sourceModule: "ISNET_MANUAL_MODEL_LINK",
+        });
+        modelId = canonical.id;
+        model = { id: canonical.id, name: canonical.modelName, modelName: canonical.modelName, companyId: canonical.companyId };
+      } catch (error) { return c.json(errorBody("MODEL_IDENTITY_REVIEW", String(error)), 409); }
+    }
+    if (!modelId || !model) return c.json(errorBody("MODEL_REQUIRED", "Geçerli canonical model kartı seçilmeli veya açık model adı girilmelidir."), 400);
     const saved = await storePut(c, SCOPE.autoFlow, id, { ...current, modelId, modelName: text(model.modelName || model.name), status: "OUTGOING_DRAFT_READY" }, slug);
     return c.json({ ok: true, success: true, data: { ...saved, flow: saved, model } });
   });

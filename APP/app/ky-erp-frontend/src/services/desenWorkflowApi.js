@@ -35,7 +35,9 @@ function customerCompanies(rows) {
   return (Array.isArray(rows) ? rows : [])
     .filter((row) => row?.isActive !== false && row?.is_active !== 0)
     .filter((row) => !row?.deletedAt && !row?.deleted_at)
-    .filter(isCustomerCompany)
+    // Muhasebe cari kartları müşteri/tedarikçi ayrımından bağımsız görünür.
+    // Kullanıcı yanlış firmayı otomatik seçmez; tür yalnız etikette açıklanır.
+    .map((row) => ({ ...row, displayName: `${row?.name || row?.firmaAdi || "Firma"} · ${isCustomerCompany(row) ? "Müşteri" : "Tedarikçi / diğer"}` }))
     .sort((a, b) => {
       const aName = String(a?.name || a?.firmaAdi || "");
       const bName = String(b?.name || b?.firmaAdi || "");

@@ -1,4 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import KyRecordDialog from "../../../components/shared/KyRecordDialog";
+import { getDesignCompanies } from "../../../services/desenWorkflowApi";
 import { createManualBoyahaneJob } from "../../../services/boyahaneManualApi";
 
 const PAINT_TYPES = ["SUBAZLI", "PIGMENT", "ECO YÜKSEK", "ECOPLAST", "SİLİKON", "AŞINDIRMA", "FİKSATÖR", "UV", "DİĞER"];
@@ -12,6 +14,7 @@ export default function ManualBoyahaneJobModal({
 }) {
   const [form, setForm] = useState({
     modelName: "",
+    companyId: "",
     companyName: "",
     orderNo: "",
     imageUrl: "",
@@ -33,10 +36,18 @@ export default function ManualBoyahaneJobModal({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [companies, setCompanies] = useState([]);
+  useEffect(() => {
+    let live = true;
+    getDesignCompanies(activeMainCompany).then((items) => { if (live) setCompanies(items); })
+      .catch(() => { if (live) setError("Firma kartları getirilemedi; önce Muhasebe firma bağlantısını denetleyin."); });
+    return () => { live = false; };
+  }, [activeMainCompany]);
   const set = (key, value) => setForm((current) => ({ ...current, [key]: value }));
 
   async function submit(event) {
     event.preventDefault();
+    if (!form.companyId) { setError("Kayıtlı firma seçilmelidir."); return; }
     setBusy(true);
     setError("");
     try {
@@ -59,16 +70,24 @@ export default function ManualBoyahaneJobModal({
   }
 
   return (
-    <div className="bh-modal" role="dialog" aria-modal="true">
-      <form className="bh-modal-card bh-manual-job-modal bh-color-source-modal" onSubmit={submit}>
-        <button type="button" className="bh-modal-close" disabled={busy} onClick={onClose}>Kapat</button>
-        <h2>{mode === "sample" ? "Yeni Desen ve Numune İşi Aç" : "Yeni Desen ve İmalat İşi Aç"}</h2>
-        <p className="bh-modal-note">Desen havuzunu beklemeden iş ve ilk kayıtlı renk kartı birlikte oluşturulur.</p>
+    <KyRecordDialog as="form"
+      title={mode === "sample" ? "Yeni Desen ve Numune İşi Aç" : "Yeni Desen ve Boyahane İşi Aç"}
+      subtitle="Tek model kartı ve Boyahane iş/renk kaydı aynı kimlik üzerinden ilişkilendirilir."
+      className="bh-manual-job-modal bh-color-source-modal"
+      onSubmit={submit} onClose={onClose} busy={busy}
+      footer={<>
+        <button type="button" className="bh-btn" disabled={busy} onClick={onClose}>Vazgeç</button>
+        <button type="submit" className="bh-btn primary" disabled={busy}>{busy ? "İş açılıyor…" : "Yeni Deseni ve İşi Aç"}</button>
+      </>}
+    >
         {error ? <div className="bh-notice danger">{error}</div> : null}
 
         <div className="bh-form-grid three">
           <label className="bh-field"><span>Model / desen adı</span><input required autoFocus value={form.modelName} onChange={(event) => set("modelName", event.target.value)} placeholder="Örn. SONIC 19" /></label>
-          <label className="bh-field"><span>Firma</span><input value={form.companyName} onChange={(event) => set("companyName", event.target.value)} placeholder="Müşteri firma" /></label>
+          <label className="bh-field"><span>Firma *</span><select value={form.companyId} required onChange={(event) => {
+  const found = companies.find((company) => String(company.id) === event.target.value);
+  setForm((old) => ({ ...old, companyId: event.target.value, companyName: found?.name || found?.firmaAdi || "" }));
+}}><option value="">Firma seçin</option>{companies.map((company) => <option value={company.id} key={company.id}>{company.displayName || company.name}</option>)}</select></label>
           <label className="bh-field"><span>Sipariş no</span><input value={form.orderNo} onChange={(event) => set("orderNo", event.target.value)} /></label>
           <label className="bh-field"><span>Baskı bölgesi</span><input value={form.printRegion} onChange={(event) => set("printRegion", event.target.value)} /></label>
           <label className="bh-field"><span>Kanal sayısı</span><input type="number" min="1" step="1" value={form.channelCount} onChange={(event) => set("channelCount", event.target.value)} /></label>
@@ -101,11 +120,6 @@ export default function ManualBoyahaneJobModal({
         </div>
 
         <div className="bh-notice success">İş açıldığında renk doğrudan Kayıtlı Renkler'e düşer. Reçete ve versiyon, numune veya imalat kaydında oluşur.</div>
-        <div className="bh-modal-actions">
-          <button type="button" className="bh-btn" disabled={busy} onClick={onClose}>Vazgeç</button>
-          <button className="bh-btn primary" disabled={busy}>{busy ? "İş açılıyor…" : "Yeni Deseni ve İşi Aç"}</button>
-        </div>
-      </form>
-    </div>
+    </KyRecordDialog>
   );
 }
