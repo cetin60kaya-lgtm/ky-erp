@@ -500,9 +500,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     && Number(payrollData?.year) === year
     && Number(payrollData?.month) === month
     && canonicalCompanySlug(payrollData?.mainCompanyId || companyId) === canonicalCompanySlug(companyId);
-  const payrollLines = payrollReady
+  const payrollLines = useMemo(() => payrollReady
     ? safeList(payrollData?.lines).filter((line) => canonicalEmployeeIds.has(line.employeeId || line.employee?.id))
-    : [];
+    : [], [payrollReady, payrollData, canonicalEmployeeIds]);
   const totalDays = daysInMonth(year, month);
   // Personel Kartları always read the permanent master; monthly tabs read
   // the period-specific employee projection. Neither depends on user role.
