@@ -1,3 +1,5 @@
+import { packageWeightFromItem } from "./e-belge-document-automation";
+
 type Row = Record<string, any>;
 
 const text = (value: unknown) => value == null ? "" : String(value).trim();
@@ -96,6 +98,25 @@ function lotFrom(item: string, line: string) {
   return text(combined.match(/\b(?:LOT|PARTI|BATCH)\s*[-:#]?\s*([A-Z0-9._/-]+)/i)?.[1]);
 }
 
+function partyDetails(block: string) {
+  const party=xmlBlocks(block,"Party")[0]||block;
+  const postal=xmlBlocks(party,"PostalAddress")[0]||"";
+  const contact=xmlBlocks(party,"Contact")[0]||"";
+  const street=xmlTag(postal,["StreetName"]);
+  const building=xmlTag(postal,["BuildingNumber"]);
+  const city=xmlTag(postal,["CityName"]);
+  const district=xmlTag(postal,["CitySubdivisionName","District"]);
+  const postalCode=xmlTag(postal,["PostalZone"]);
+  const country=xmlTag(xmlBlocks(postal,"Country")[0]||"",["Name"]);
+  const taxOffice=xmlTag(xmlBlocks(party,"PartyTaxScheme")[0]||"",["Name"]);
+  return {
+    address:[street,building,district,city,postalCode,country].filter(Boolean).join(" ").trim().slice(0,500),
+    phone:xmlTag(contact,["Telephone"]).slice(0,80),
+    email:xmlTag(contact,["ElectronicMail"]).slice(0,160),
+    taxOffice:taxOffice.slice(0,120),
+  };
+}
+
 export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Row {
   const invoice = /<(?:[A-Za-z0-9_]+:)?Invoice\b/i.test(xml);
   const dispatch = /<(?:[A-Za-z0-9_]+:)?DespatchAdvice\b/i.test(xml);
@@ -115,6 +136,9 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
     xmlBlocks(xml, "DeliveryCustomerParty")[0] ||
     "";
   const party = direction === "INCOMING" ? supplier : customer;
+  const supplierDetails=partyDetails(supplier);
+  const customerDetails=partyDetails(customer);
+  const counterpartyDetails=direction==="INCOMING"?supplierDetails:customerDetails;
   const supplierName = xmlTag(supplier, ["RegistrationName", "Name"]);
   const supplierTaxNo = cleanTax(xmlTag(supplier, ["CompanyID", "ID"]));
   const customerName = xmlTag(customer, ["RegistrationName", "Name"]);
@@ -138,13 +162,16 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
       )?.[1],
     );
 
+    const description=xmlTag(item, ["Name", "Description"]);
+    const packaging=packageWeightFromItem(description,quantity,unitCode);
     return {
       lineNo: index + 1,
       productCode:
         nestedId(item, "BuyersItemIdentification") ||
         nestedId(item, "StandardItemIdentification"),
       supplierProductCode: nestedId(item, "SellersItemIdentification"),
-      description: xmlTag(item, ["Name", "Description"]),
+      description,
+      ...packaging,
       quantity,
       unitCode,
       unitPrice: amount(price, "PriceAmount"),
@@ -194,6 +221,13 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
       supplierTaxNo,
       customerName,
       customerTaxNo,
+      supplierDetails,
+      customerDetails,
+      partyAddress:counterpartyDetails.address,
+      partyPhone:counterpartyDetails.phone,
+      partyEmail:counterpartyDetails.email,
+      partyTaxOffice:counterpartyDetails.taxOffice,
+      ublVerified:true,
     },
   };
 }
