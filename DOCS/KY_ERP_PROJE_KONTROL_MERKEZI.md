@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 09.11.2026 — İK Aylık yönetici/muhasebe tek pencere düzeni (PR #547)
+
+- Aynı Son Bordro Kontrolü React bileşeni bütün İK yetkili hesaplarında kullanılır; role özel ikinci bordro ekranı açılmaz. Önceki sabit 1480px pencere sınırı, çok küçük label/input boyutları ve CSS viewport temelli iki sütun geçişi farklı cihaz/Chrome zoom değerlerinde küçük ve sıkışık görünüm üretiyordu.
+- Canonical PR #547 üzerinde pencere genişliği 96vw, yüksekliği 94dvh; sol personel alanı duyarlı genişlik; iç düzen container query ile 1080/760/480px eşikleri; başlık/form/sonuç fontları ölçekli hale getirildi. Personel kartı formu da ekran genişliğine göre iki/tek sütun ve geniş modal kullanır.
+- Bordroda yalnız aylık kaydın ve kalıcı kartın ayrımını anlatan önceki çelişkili uyarılar düzeltildi. İki kullanıcı ekranında farklı ay seçilebildiğinden gerçek tutar farkı ekran tasarım hatası kabul edilmez. Gerçek çalışan tutarları ve üretim D1 verileri bu PR tarafından değiştirilmedi.
+- CI PASS + PR merge + Cloudflare Pages/Worker yayın SHA + gerçek oturum testi kanıtı tamamlanana kadar canlı kabul verilmez.
+
 ## 09.11.2026 — KY ERP tek kayıt penceresi + canonical model kimliği (PR #546)
 
 - Kullanıcı ekranlarında DESEN model/kanaI penceresi sekmelerde değişken boyutlu, firma listesi boş; İmalat/Boyahane/Muhasebe farklı yeni kayıt formları kullanıyordu. Ortak `KyRecordDialog`: 840×600 başlangıç, sağ-alt sürükleme/klavye, kullanıcı ölçüsü, sabit dış çerçeve, iç scroll, mobil tam ekran. Desen, İmalat, Boyahane ve Muhasebe yeni kart formları aynı bileşeni kullanır.
