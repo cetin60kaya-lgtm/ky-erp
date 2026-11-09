@@ -36,6 +36,7 @@ import {
   replaceDesignChannels,
   updateDesignModel,
   updateDesignOperation,
+  uploadDesignWorkflowFile,
 } from "../../services/desenWorkflowApi";
 
 export { DesenImage };
@@ -284,6 +285,27 @@ export function ModelEditorModal({
   const [dirty, setDirty] = useState(false);
   const [quickEntry, setQuickEntry] = useState(false);
   const [colorPicker, setColorPicker] = useState(null);
+  const [pendingImage, setPendingImage] = useState(null);
+  const [pendingImagePreview, setPendingImagePreview] = useState("");
+  useEffect(() => () => { if (pendingImagePreview) URL.revokeObjectURL(pendingImagePreview); }, [pendingImagePreview]);
+  function selectModelImage(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
+      setMessage("Model önizlemesi için JPEG, PNG veya WEBP kullanılmalıdır.");
+      event.target.value = "";
+      return;
+    }
+    if (file.size > 15 * 1024 * 1024) {
+      setMessage("Görsel boyutu 15 MB'ı aşamaz.");
+      event.target.value = "";
+      return;
+    }
+    setPendingImage(file);
+    setPendingImagePreview(URL.createObjectURL(file));
+    setDirty(true);
+    setMessage("");
+  }
   const [draft, setDraft] = useState(() => ({
     companyId: model?.companyId || "",
     companyName: model?.companyName || "",
@@ -484,6 +506,10 @@ export function ModelEditorModal({
         }
         saved = await getDesignModel(activeMainCompany, model.id);
       }
+      if (pendingImage) {
+        if (!saved?.id) throw new Error("Model kaydı kimliği alınamadı; görsel yüklenmedi.");
+        await uploadDesignWorkflowFile(activeMainCompany, saved.id, null, pendingImage, "MODEL_IMAGE");
+      }
       setDirty(false);
       onSaved?.(saved, readyForDyehouse);
     } catch (error) {
@@ -503,6 +529,7 @@ export function ModelEditorModal({
   ];
 
   const mainImage =
+    pendingImagePreview ||
     draft.files.find((file) => file.role === "MODEL_IMAGE")?.previewUrl ||
     model?.mainImage?.previewUrl;
 
@@ -604,7 +631,14 @@ export function ModelEditorModal({
 
       {tab === "model" && (
         <div className="dsg-tab-grid model-info">
-          <ImagePreview src={mainImage} />
+          <div className="dsg-editor-image-picker">
+            <ImagePreview src={mainImage} />
+            <label className="dsg-image-pick-action">
+              Görsel ekle / değiştir (JPEG, PNG, WEBP)
+              <input type="file" accept="image/jpeg,image/png,image/webp" onChange={selectModelImage} />
+            </label>
+            <small>{pendingImage ? `Seçildi: ${pendingImage.name} · Kaydet ile modele bağlanacak` : "Görsel seçilmezse mevcut görsel değişmez; PSD/AI/Drive orijinali korunur."}</small>
+          </div>
           <div className="dsg-form-grid two">
             <label>
               Firma
