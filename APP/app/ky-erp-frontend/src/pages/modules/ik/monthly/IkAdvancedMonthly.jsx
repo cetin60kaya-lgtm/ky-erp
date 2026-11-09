@@ -72,6 +72,16 @@ function ikPreparedStorageKey(companyId) {
   return `kyerp.ik.prepared-periods.v2.${companyId || "default"}`;
 }
 
+function ikSelectedPersonKey(companyId, period) {
+  return `kyerp.ik.selected-person.v1.${companyId || "default"}.${period}`;
+}
+
+function readIkSelectedPerson(companyId, period) {
+  if (typeof window === "undefined") return "";
+  try { return window.localStorage.getItem(ikSelectedPersonKey(companyId, period)) || ""; }
+  catch { return ""; }
+}
+
 function readStoredIkPeriod(companyId) {
   const fallback = previousPeriod();
   if (typeof window === "undefined") return fallback;
@@ -428,7 +438,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [payrollStatusFilter, setPayrollStatusFilter] = useState("ALL");
   const [payrollEmploymentFilter, setPayrollEmploymentFilter] = useState("ACTIVE");
   const [documentFilter, setDocumentFilter] = useState("ALL");
-  const [selectedId, setSelectedId] = useState("");
+  const [selectedId, setSelectedId] = useState(() => readIkSelectedPerson(companyId, `${initial.year}-${String(initial.month).padStart(2, "0")}`));
   const [modal, setModal] = useState(null);
   const [modalDraft, setModalDraft] = useState({});
   const [selectedDays, setSelectedDays] = useState([1]);
@@ -468,12 +478,19 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setYear(stored.year);
     setMonth(stored.month);
     setPreparedPeriods(readPreparedPeriods(companyId));
+    setSelectedId(readIkSelectedPerson(companyId, `${stored.year}-${String(stored.month).padStart(2, "0")}`));
   }, [companyId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     window.localStorage.setItem(ikPeriodStorageKey(companyId), JSON.stringify({ year, month }));
   }, [companyId, year, month]);
+
+  useEffect(() => {
+    if (!selectedId || typeof window === "undefined") return;
+    try { window.localStorage.setItem(ikSelectedPersonKey(companyId, period), selectedId); }
+    catch { /* Browser storage restrictions cannot block an HR operation. */ }
+  }, [companyId, period, selectedId]);
 
   const rawEmployees = safeList(data.rawEmployees).length ? safeList(data.rawEmployees) : safeList(data.employees);
   const rawMasterEmployees = safeList(data.masterEmployees).length ? safeList(data.masterEmployees) : rawEmployees;
@@ -591,7 +608,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         setLeaveCenter(center || { policy: {}, plans: [], conflicts: [], employees: [], cashRequests: [] });
         setLeaveCenterWarning(centerState.status === "rejected" ? "Yıllık İzin merkezi yüklenemedi. Bakiye doğrulanamadı; izin işlemleri geçici olarak durduruldu." : "");
         if (center?.policy) setPolicyDraft(center.policy);
-        setSelectedId((old) => masterSelectionIds.has(old) ? old : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "");
+        setSelectedId((old) => {
+          const remembered = readIkSelectedPerson(companyId, period);
+          return masterSelectionIds.has(old) ? old
+            : masterSelectionIds.has(remembered) ? remembered
+              : nextEmployees[0]?.id || safeList(result?.masterEmployees)[0]?.id || "";
+        });
         setSelectedPayrollIds((old) => old.filter((id) => currentIds.has(id)));
         lastSuccessfulLoadStartedAtRef.current = loadStartedAt;
         if (!silent) setNotice(auxiliaryFailed ? "İK ana verisi yüklendi; bazı yardımcı özetler geçici olarak alınamadı." : "");
@@ -689,6 +711,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setYear(Number(nextYear));
     setMonth(Number(nextMonth));
     setPayrollData(null);
+    setSelectedId(readIkSelectedPerson(companyId, `${Number(nextYear)}-${String(Number(nextMonth)).padStart(2, "0")}`));
     setSelectedPayrollIds([]);
     setEmployeeStatusFilter("ALL");
     setSgkFilter("ALL");
@@ -858,9 +881,19 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     system.cash - snapshot.cash,
   ].some((value) => Math.abs(round(value)) > 0.01);
 
-  // Tek kaynak kuralı: bordro sonucu ay kilitlenene kadar her zaman canlı kaynaklardan okunur.
-  // Eski PAID/snapshot kayıtları yalnız tarihsel kanıttır; düzenleme kilidi değildir.
-  return { ...system, saved, sourceChangedSinceSave, paidLocked: false };
+  // The monthly API resolves the effective month-only override plus current
+  // dated finance movements. Locked/paid snapshots stay frozen by the server.
+  const final = {
+    salary: snapshot.salary, road: snapshot.road, extra: snapshot.extra,
+    overtime: snapshot.overtime, advance: snapshot.advance,
+    deduction: snapshot.deduction, garnishment: snapshot.garnishment,
+    bank: snapshot.bank, cash: snapshot.cash,
+  };
+  return {
+    ...system, ...final, ...calcRow(final), saved,
+    sourceChangedSinceSave: Boolean(saved.sourceChangedSinceSave),
+    paidLocked: Boolean(saved.frozen),
+  };
 }): [], [employees, payrollLines, planFor, periodPrepared]);
 
   const summary = useMemo(() => payrollRows.reduce((acc, row) => ({
@@ -1110,12 +1143,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         garnishment: entry ? round(sourceTotals.garnishment) : (row ? num(row.garnishment) : round(sourceTotals.garnishment)),
         bank: row && !entry ? num(row.bank) : num(base.bankAmount),
         cash: row && !entry ? num(row.cash) : num(base.cashAmount),
-        paymentType: base.paymentType || "BANKA_ELDEN",
+        paymentType: row?.saved?.paymentType || base.paymentType || "BANKA_ELDEN",
         advanceSource: row?.advanceSource || "Elden",
         deductionSource: row?.deductionSource || "Elden",
         garnishmentSource: row?.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
         legalType: row?.legalType === "HACIZ" ? "HACIZ" : "ICRA",
         reason: controlMode === "FINAL" ? "Son bordro kontrolü" : "Bordro öncesi giriş kontrolü",
+      cardEffectiveDate: istanbulDateKey(),
       },
       movementEditor: {
         id: "",
@@ -1139,7 +1173,11 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         if (!root) return;
         if (resetMain) {
           const main = root.querySelector(".payroll-final-main");
-          if (main) main.scrollTop = 0;
+          if (main) {
+            const key = `kyerp.ik.payroll-scroll.v1.${companyId}.${period}`;
+            try { main.scrollTop = Math.max(0, Number(window.sessionStorage.getItem(key)) || 0); }
+            catch { main.scrollTop = 0; }
+          }
         }
         const buttons = root.querySelectorAll(".payroll-person-rail-list button[data-employee-id]");
         for (const button of buttons) {
@@ -1262,7 +1300,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
-  const saveFinalPayrollControl = async () => {
+  const saveFinalPayrollControl = async (updatePersonnelCard = false) => {
     const editor = { ...(modalDraft.finalEditor || {}) };
     if (!modalDraft.id) return setModalDraft((old) => ({ ...old, formMessage: "Personel seçilmeden son kontrol kaydedilemez." }));
     const desired = {
@@ -1283,6 +1321,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     desired.bank = split.bank;
     desired.cash = split.cash;
     const resolvedPaymentType = split.mode === "BANKA" ? "Banka" : split.mode === "ELDEN" ? "Elden" : "BANKA_ELDEN";
+    if (updatePersonnelCard) {
+      if (!modalDraft.cardEffectiveDate) {
+        return setModalDraft((old) => ({ ...old, formMessage: "Kalıcı personel kartı için geçerlilik tarihi seçin." }));
+      }
+      if (!window.confirm(`Bu ücret/ödeme planı ${modalDraft.cardEffectiveDate} tarihinden itibaren KALICI personel kartına da işlensin mi? Aylık bordro kaydı ayrıca korunur.`)) return;
+    }
 
     setBusy(true);
     setModalDraft((old) => ({ ...old, formMessage: "Son kontrol tek işlemde kaynaklara kaydediliyor..." }));
@@ -1293,6 +1337,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         month,
         employeeId: modalDraft.id,
         expectedVersion: modalDraft.version || "",
+        updatePersonnelCard,
+        effectiveDate: updatePersonnelCard ? modalDraft.cardEffectiveDate : undefined,
         paymentType: resolvedPaymentType,
         salary: desired.salary,
         road: desired.road,
@@ -1313,14 +1359,18 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setModalDraft((old) => ({
         ...old,
         version: savedFinal?.version || savedFinal?.updatedAt || old.version,
-        salary: desired.salary,
-        roadAllowance: desired.road,
-        extraPaymentAmount: desired.extra,
-        paymentType: nextPaymentType,
-        bankAmount: savedFinal?.bankPlan ?? old.bankAmount,
-        cashAmount: savedFinal?.cashPlan ?? old.cashAmount,
+        ...(updatePersonnelCard ? {
+          salary: savedFinal?.final?.actualSalary ?? desired.salary,
+          roadAllowance: desired.road,
+          extraPaymentAmount: desired.extra,
+          paymentType: nextPaymentType,
+          bankAmount: savedFinal?.bankPlan ?? old.bankAmount,
+          cashAmount: savedFinal?.cashPlan ?? old.cashAmount,
+        } : {}),
         finalEditor: { ...old.finalEditor, ...desired, paymentType: nextPaymentType },
-        formMessage: "Son bordro kontrolü atomik kaydedildi ✓ Ücret planı, hareket kaynakları ve bordro snapshotı birlikte güncellendi.",
+        formMessage: updatePersonnelCard
+          ? "Kaydedildi ✓ Aylık bordro ve kalıcı personel kartı güncellendi."
+          : "Kaydedildi ✓ Yalnız seçili ayın bordrosu ve hareketleri güncellendi; kalıcı personel kartı değişmedi.",
       }));
       setNotice("");
       await load({ force: true, silent: true });
@@ -3294,7 +3344,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       const previousPerson = personIndex > 0 ? masterEmployees[personIndex - 1] : null;
       const nextPerson = personIndex >= 0 && personIndex < masterEmployees.length - 1 ? masterEmployees[personIndex + 1] : null;
       return (
-      <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kimlik, çalışma, SGK, ücret, banka ve izin bilgilerini tek ekrandan yönetin" size="medium" onClose={() => setModal(null)}>
+      <Modal title="Personel Kartı ve Ödeme Ayarları" sub="Kalıcı personel ana kaydı · Bordro düzenlemeleri ilgili aya özeldir" size="wide personnel-card-dialog" scrollKey={`kyerp.ik.person-scroll.v1.${companyId}`} onClose={() => setModal(null)}>
         {modalDraft.id ? <div className="person-modal-nav">
           <button type="button" className="btn" disabled={busy || !previousPerson} onClick={() => previousPerson && switchPersonInModal(previousPerson.id)}>← Önceki</button>
           <label>
@@ -3461,7 +3511,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               </div>
             </aside>
 
-            <div className="payroll-final-main">
+            <div className="payroll-final-main" onScroll={(event) => {
+              try { window.sessionStorage.setItem(`kyerp.ik.payroll-scroll.v1.${companyId}.${period}`, String(event.currentTarget.scrollTop)); }
+              catch { /* Ignore unavailable session storage. */ }
+            }}>
               <div className="person-modal-nav">
                 <button type="button" className="btn" disabled={busy || !previousPerson} onClick={() => previousPerson && switchPayPlanPerson(previousPerson.id)}>← Önceki</button>
                 <label><span>Personel Seç</span><select value={modalDraft.id || ""} disabled={busy} onChange={(event) => switchPayPlanPerson(event.target.value)}>{periodPeople.map((employee) => <option key={employee.id} value={employee.id}>{employee.code || "HKN yok"} · {employee.fullName}</option>)}</select></label>
@@ -3491,9 +3544,15 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                       <Field label="Elden Ödenecek"><input type="number" min="0" value={finalEditor.cash ?? ""} onChange={(event) => setFinalValue("cash", event.target.value)} /></Field>
                       <Field label="Son Kontrol Açıklaması" wide><input value={finalEditor.reason || ""} onChange={(event) => setFinalValue("reason", event.target.value)} placeholder="Örn. Eylül son bordro kontrolü" /></Field>
                     </div>
+                    <div className="warnline">Bu ayın bordrosu ayrı kaydedilir. Kalıcı maaş/ödeme planını değiştirmek için alttaki ayrı düğmeyi kullanın.</div>
                     <div className="row-actions">
                       <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
-                      <button type="button" className="btn primary" disabled={busy} onClick={saveFinalPayrollControl}>{busy ? "Kaydediliyor" : finalMode ? "Son Kontrolü Kaydet" : "Değişiklikleri Kaydet"}</button>
+                      <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false)}>{busy ? "Kaydediliyor" : "Yalnız Bu Ayı Kaydet"}</button>
+                    </div>
+                    <div className="ik-permanent-card-action">
+                      <label>Personel kartı geçerlilik tarihi <input type="date" value={modalDraft.cardEffectiveDate || ""} disabled={busy} onChange={(event) => setModalDraft((old) => ({ ...old, cardEffectiveDate: event.target.value }))} /></label>
+                      <button type="button" className="btn" disabled={busy} onClick={() => saveFinalPayrollControl(true)}>Personel Kartını Güncelle</button>
+                      <small>Kalıcı kart değişikliği bu tarihten itibaren geçerli olur; önceki aylık bordrolar otomatik silinmez veya değiştirilmez.</small>
                     </div>
                   </div>
 
@@ -3865,12 +3924,22 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
   }
 }
 
-function Modal({ title, sub = "", size = "", children, onClose }) {
+function Modal({ title, sub = "", size = "", children, onClose, scrollKey = "" }) {
+  const bodyRef = useRef(null);
+  useEffect(() => {
+    if (!scrollKey || !bodyRef.current) return;
+    try { bodyRef.current.scrollTop = Math.max(0, Number(window.sessionStorage.getItem(scrollKey)) || 0); }
+    catch { bodyRef.current.scrollTop = 0; }
+  }, [scrollKey]);
   return createPortal(
     <div className="modal-bg show" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose?.(); }}>
       <div className={`modal ${size}`}>
         <div className="mh"><div><b>{title}</b>{sub ? <small>{sub}</small> : null}</div><button className="btn" onClick={onClose}>Kapat</button></div>
-        <div className="mb">{children}</div>
+        <div className="mb" ref={bodyRef} onScroll={(event) => {
+          if (!scrollKey) return;
+          try { window.sessionStorage.setItem(scrollKey, String(event.currentTarget.scrollTop)); }
+          catch { /* Ignore storage-restricted browsers. */ }
+        }}>{children}</div>
       </div>
     </div>,
     document.body,
