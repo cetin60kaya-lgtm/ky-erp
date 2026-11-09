@@ -2,6 +2,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createManualBoyahaneJob } from "../../../services/boyahaneManualApi";
 import { getRegisteredColor } from "../../../services/boyahaneWorkflowApi";
+import { getDesignCompanies } from "../../../services/desenWorkflowApi";
+import KyRecordDialog from "../../../components/shared/KyRecordDialog";
 import BoyahaneWorkPageV4 from "./BoyahaneWorkPageV4";
 import { safeArray } from "./boyahaneFormat";
 
@@ -28,6 +30,7 @@ export default function BoyahaneWorkPageV5({
   const [dismissedNonce, setDismissedNonce] = useState("");
   const [form, setForm] = useState({
     modelName: "",
+    companyId: "",
     companyName: "",
     orderNo: "",
     printRegion: "Tüm baskı bölgeleri",
@@ -37,6 +40,13 @@ export default function BoyahaneWorkPageV5({
   });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [companies, setCompanies] = useState([]);
+  useEffect(() => {
+    let live = true;
+    getDesignCompanies(activeMainCompany).then((items) => { if (live) setCompanies(items); })
+      .catch(() => { if (live) setError("Firma kartları getirilemedi."); });
+    return () => { live = false; };
+  }, [activeMainCompany?.slug, activeMainCompany?.id]);
 
   useEffect(() => {
     setLocalContext(moduleActionContext || {});
@@ -78,6 +88,7 @@ export default function BoyahaneWorkPageV5({
   async function startFromRegistered(event) {
     event.preventDefault();
     if (!registeredColor?.id) return;
+    if (!form.companyId) { setError("Kayıtlı firma seçiniz."); return; }
     setBusy(true);
     setError("");
     try {
@@ -127,9 +138,17 @@ export default function BoyahaneWorkPageV5({
       {loadingColor ? <div className="bh-modal"><div className="bh-modal-card"><div className="bh-empty compact">Kayıtlı renk hazırlanıyor…</div></div></div> : null}
 
       {shouldOpenStarter ? (
-        <div className="bh-modal" role="dialog" aria-modal="true">
-          <form className="bh-modal-card bh-registered-color-starter" onSubmit={startFromRegistered}>
-            <button type="button" className="bh-modal-close" disabled={busy} onClick={() => setDismissedNonce(requestNonce)}>Kapat</button>
+        <KyRecordDialog
+          as="form" title="Kayıtlı Renkte Yeni Model / İş"
+          subtitle="Model adı ve firma tek kayıt kimliğine bağlanır; reçete/renk geçmişi korunur."
+          className="bh-registered-color-starter"
+          onSubmit={startFromRegistered} onClose={() => setDismissedNonce(requestNonce)}
+          busy={busy}
+          footer={<>
+            <button type="button" className="bh-btn" disabled={busy} onClick={() => setDismissedNonce(requestNonce)}>Vazgeç</button>
+            <button type="submit" className="bh-btn primary" disabled={busy}>{busy ? "İş açılıyor…" : mode === "sample" ? "Kayıtlı Gramajla Numune Aç" : "Kayıtlı Gramajla İmalat Aç"}</button>
+          </>}
+        >
             <div className="bh-registered-starter-head">
               <i style={{ background: registeredColor.colorHex || "#cbd5e1" }} />
               <div>
@@ -144,7 +163,10 @@ export default function BoyahaneWorkPageV5({
 
             <div className="bh-form-grid three">
               <label className="bh-field"><span>Model / desen adı</span><input required autoFocus value={form.modelName} onChange={(event) => set("modelName", event.target.value)} /></label>
-              <label className="bh-field"><span>Firma</span><input value={form.companyName} onChange={(event) => set("companyName", event.target.value)} /></label>
+              <label className="bh-field"><span>Firma *</span><select value={form.companyId} required onChange={(event) => {
+  const found = companies.find((company) => String(company.id) === event.target.value);
+  setForm((old) => ({ ...old, companyId: event.target.value, companyName: found?.name || found?.firmaAdi || "" }));
+}}><option value="">Firma seçin</option>{companies.map((company) => <option value={company.id} key={company.id}>{company.displayName || company.name}</option>)}</select></label>
               <label className="bh-field"><span>Sipariş no</span><input value={form.orderNo} onChange={(event) => set("orderNo", event.target.value)} /></label>
               <label className="bh-field"><span>Baskı bölgesi</span><input value={form.printRegion} onChange={(event) => set("printRegion", event.target.value)} /></label>
               <label className="bh-field"><span>{mode === "sample" ? "Numune planı KG" : "Planlanan boya KG"}</span><input type="number" min="0" step="0.001" value={form.plannedKg} onChange={(event) => set("plannedKg", event.target.value)} /></label>
@@ -153,9 +175,7 @@ export default function BoyahaneWorkPageV5({
             </div>
 
             <div className="bh-notice success">İş açıldığında seçili kayıtlı renk ve son gramajlı reçetesi otomatik çalışma ekranına gelecektir.</div>
-            <div className="bh-modal-actions"><button type="button" className="bh-btn" disabled={busy} onClick={() => setDismissedNonce(requestNonce)}>Vazgeç</button><button className="bh-btn primary" disabled={busy}>{busy ? "İş açılıyor…" : mode === "sample" ? "Kayıtlı Gramajla Numune Aç" : "Kayıtlı Gramajla İmalat Aç"}</button></div>
-          </form>
-        </div>
+            </KyRecordDialog>
       ) : null}
     </>
   );
