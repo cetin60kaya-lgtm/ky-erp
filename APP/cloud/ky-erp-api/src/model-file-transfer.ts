@@ -80,9 +80,57 @@ function assignList(raw:unknown,primary:string){
     if(!/^[a-zA-Z0-9_-]{8,72}$/.test(modelId)||(data.length>0&&!boy))throw Object.assign(new Error("Model ve BOY seçilmelidir."),{code:"MODEL_ASSIGNMENT_INCOMPLETE",status:422});
     return{modelId,boy,printArea};
   });
-  if(!result.some(x=>x.modelId===primary))result.unshift({modelId:primary,boy:"",printArea:""});
   const seen=new Set<string>();
   return result.filter(x=>{const k=x.modelId+"|"+x.boy+"|"+x.printArea;if(seen.has(k))return false;seen.add(k);return true});
+}
+const DESEN_FILE_ROLES=["MODEL_IMAGE","MODEL_SOURCE","OUTGOING_DESIGN","PLACEMENT","SOURCE_PSD","SOURCE_AI","SOURCE_FILE","PLACEMENT_PDF"];
+const ACCOUNTING_FILE_ROLES=["INVOICE","DELIVERY_NOTE"];
+function allowedFileRoles(user:Row):string[]|null {
+  const role=upper(user.role);
+  if(["SUPER_ADMIN","COMPANY_ADMIN","ADMIN","OWNER","COMPANY_OWNER"].includes(role))return null;
+  const permitted=new Set((Array.isArray(user.permissions)?user.permissions:[])
+    .filter((p:Row)=>p.canView===true||p.can_view===true)
+    .map((p:Row)=>upper(p.moduleKey||p.module_key)));
+  const visible=new Set<string>();
+  if(["DESEN","IMALAT","BOYAHANE"].some(key=>permitted.has(key)))DESEN_FILE_ROLES.forEach(key=>visible.add(key));
+  if(["MUHASEBE","E_BELGE"].some(key=>permitted.has(key)))ACCOUNTING_FILE_ROLES.forEach(key=>visible.add(key));
+  return [...visible];
+}
+function parseRelationMetadata(value:unknown):Row{
+  try{const row=JSON.parse(text(value)||"{}");return row&&typeof row==="object"&&!Array.isArray(row)?row:{}}catch{return{}}
+}
+async function relateAssetToModels(c:Context<AppEnv>,slug:string,assetId:string,role:string,assignments:Row[],fileName:string,sha:string){
+  const time=stamp();
+  for(const linkedModelId of [...new Set(assignments.map(x=>x.modelId))]){
+    const variants=assignments.filter(x=>x.modelId===linkedModelId).map(x=>({boy:x.boy,printArea:x.printArea}));
+    const row=await c.env.DB.prepare("SELECT id,metadata FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? AND relation_type=? LIMIT 1")
+      .bind(slug,assetId,linkedModelId,role).first<Row>();
+    if(row){
+      const existing=parseRelationMetadata(row.metadata);
+      const unique=new Map<string,Row>();
+      for(const item of [...(Array.isArray(existing.variants)?existing.variants:[]),...variants]){
+        if(!item||typeof item!=="object")continue;
+        const value={boy:text(item.boy),printArea:text(item.printArea)};
+        unique.set(value.boy+"|"+value.printArea,value);
+      }
+      await c.env.DB.prepare("UPDATE file_hub_relations SET metadata=?,updated_at=? WHERE id=? AND main_company_slug=?")
+        .bind(JSON.stringify({...existing,variants:[...unique.values()]}),time,row.id,slug).run();
+      continue;
+    }
+    await c.env.DB.prepare("INSERT INTO file_hub_relations (id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,1,1,'MODEL_CARD_DROP',?,?,?)")
+      .bind(crypto.randomUUID(),slug,assetId,"MODEL",linkedModelId,role,JSON.stringify({originalName:fileName,sha256:sha,variants}),time,time).run();
+  }
+}
+async function syncLinkedDesignModels(c:Context<AppEnv>,slug:string,assetId:string,role:string,assignments:Row[],details:Row){
+  if(ACCOUNTING_FILE_ROLES.includes(role))return;
+  for(const linkedModelId of [...new Set(assignments.map(x=>x.modelId))]){
+    const linked=await model(c,slug,linkedModelId);
+    await syncFileHubDesignModel(c,{slug,modelName:text(linked.model_name),fileAssetId:assetId,
+      purposeCode:role,extension:text(details.extension),fileName:text(details.fileName),
+      mimeType:text(details.mimeType),sizeBytes:Number(details.sizeBytes||0),
+      sha256:text(details.sha256),providerType:"GOOGLE_DRIVE",
+      storageConnectionId:text(details.storageConnectionId),relativePath:text(details.relativePath)});
+  }
 }
 async function model(c:Context<AppEnv>,slug:string,id:string){
   const row=await c.env.DB.prepare("SELECT id,model_name,model_code,company_id,customer_id,status,deleted_at FROM model_records WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(id,slug).first<Row>();
@@ -121,10 +169,25 @@ async function upload(c:Context<AppEnv>,id:string){
   const modelName=safeName(m.model_name);
   if(!modelName)throw Object.assign(new Error("Model adı boş."),{code:"MODEL_NAME_REQUIRED",status:422});
   const buffer=await file.arrayBuffer(),sha=await digest(buffer);
+  // Same physical source should be linked to additional model+BOY rows, not uploaded twice.
+  // File name is part of the key so identical technical sheets with different names remain distinct.
   const duplicate=await c.env.DB.prepare(
-    "SELECT a.id,a.file_name FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.entity_id=? AND r.relation_type=? AND json_extract(a.metadata,'$.sha256')=? AND a.status='AVAILABLE' LIMIT 1"
-  ).bind(slug,id,role,sha).first<Row>();
-  if(duplicate)return{assetId:text(duplicate.id),fileName:text(duplicate.file_name),role,duplicate:true,archived:true};
+    `SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,l.relative_path,l.storage_connection_id
+       FROM file_hub_assets a JOIN file_hub_relations r ON r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug
+       JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.is_available=1
+       WHERE a.main_company_slug=? AND r.entity_type='MODEL' AND r.relation_type=?
+         AND json_extract(a.metadata,'$.sha256')=? AND json_extract(a.metadata,'$.originalName')=?
+         AND a.status='AVAILABLE' AND a.source_type='CLOUD_API' LIMIT 1`
+  ).bind(slug,role,sha,file.name).first<Row>();
+  if(duplicate){
+    await relateAssetToModels(c,slug,text(duplicate.id),role,assignments,file.name,sha);
+    await syncLinkedDesignModels(c,slug,text(duplicate.id),role,assignments,{
+      extension:duplicate.extension,fileName:duplicate.file_name,mimeType:duplicate.mime_type,
+      sizeBytes:duplicate.size_bytes,sha256:sha,storageConnectionId:duplicate.storage_connection_id,
+      relativePath:duplicate.relative_path});
+    return{assetId:text(duplicate.id),fileName:text(duplicate.file_name),role,
+      linkedModels:[...new Set(assignments.map(x=>x.modelId))].length,duplicate:true,archived:true};
+  }
   const stem=picked.document?picked.document.documentNo:
     safeName(file.name.replace(/\.[^.]+$/,""));
   // Gelen model dosyası/klasöründeki gerçek isim değiştirilmez (ör. MAMBI FT ÖLÇÜ.pdf).
@@ -146,11 +209,7 @@ async function upload(c:Context<AppEnv>,id:string){
       ts,ts,ts,ts).run();
   await c.env.DB.prepare("INSERT INTO file_hub_locations (id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES (?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)")
     .bind(crypto.randomUUID(),slug,assetId,text(target.storage_connection_id),text(stored.id),relativePath,ts,ts,ts,ts).run();
-  for(const linkedModelId of [...new Set(assignments.map(x=>x.modelId))]){
-    const variants=assignments.filter(x=>x.modelId===linkedModelId).map(x=>({boy:x.boy,printArea:x.printArea}));
-    await c.env.DB.prepare("INSERT OR IGNORE INTO file_hub_relations (id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES (?,?,?,?,?,?,1,1,'MODEL_CARD_DROP',?,?,?)")
-      .bind(crypto.randomUUID(),slug,assetId,"MODEL",linkedModelId,role,JSON.stringify({originalName:file.name,sha256:sha,variants}),ts,ts).run();
-  }
+  await relateAssetToModels(c,slug,assetId,role,assignments,file.name,sha);
   let documentStatus="NOT_APPLICABLE",documentId="";
   if(role==="INVOICE"||role==="DELIVERY_NOTE"){
     try{
@@ -161,26 +220,27 @@ async function upload(c:Context<AppEnv>,id:string){
     await c.env.DB.prepare("UPDATE file_hub_assets SET metadata=json_set(metadata,'$.accountingImportState',?,'$.accountingImportUpdatedAt',?) WHERE id=? AND main_company_slug=?")
       .bind(documentId?"STAGED":"NEEDS_REVIEW",stamp(),assetId,slug).run();
   }else{
-    await syncFileHubDesignModel(c,{slug,modelName:text(m.model_name),fileAssetId:assetId,
-      purposeCode:role,extension:picked.ext,fileName:name,mimeType:mime(picked.ext),sizeBytes:file.size,
-      sha256:sha,providerType:"GOOGLE_DRIVE",storageConnectionId:text(target.storage_connection_id),relativePath});
+    await syncLinkedDesignModels(c,slug,assetId,role,assignments,{
+      extension:picked.ext,fileName:name,mimeType:mime(picked.ext),sizeBytes:file.size,
+      sha256:sha,storageConnectionId:text(target.storage_connection_id),relativePath});
   }
   return{assetId,fileName:name,role,relativePath,documentId,documentStatus,linkedModels:[...new Set(assignments.map(x=>x.modelId))].length,archived:true,duplicate:false};
 }
 async function list(c:Context<AppEnv>,id:string){
-  const {slug}=await scope(c,["DESEN","IMALAT","MUHASEBE","E_BELGE"],false);await model(c,slug,id);
+  const {slug,user}=await scope(c,["DESEN","IMALAT","BOYAHANE","MUHASEBE","E_BELGE"],false);await model(c,slug,id);
+  const allowed=allowedFileRoles(user);
   const rows=await c.env.DB.prepare(
     "SELECT a.id,a.file_name,a.extension,a.size_bytes,a.created_at,a.status,r.relation_type,r.metadata relation_metadata,l.relative_path, d.id document_id,d.document_no,d.status document_status FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.is_available=1 LEFT JOIN file_hub_relations dr ON dr.file_asset_id=a.id AND dr.main_company_slug=a.main_company_slug AND dr.entity_type='DOCUMENT' LEFT JOIN accounting_documents d ON d.id=dr.entity_id AND d.main_company_slug=dr.main_company_slug AND d.deleted_at IS NULL WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.entity_id=? AND a.status='AVAILABLE' ORDER BY a.created_at DESC LIMIT 250"
   ).bind(slug,id).all<Row>();
-  return (rows.results||[]).map((a:Row)=>({id:a.id,fileName:a.file_name,role:a.relation_type,
+  return (rows.results||[]).filter((a:Row)=>allowed===null||allowed.includes(upper(a.relation_type))).map((a:Row)=>({id:a.id,fileName:a.file_name,role:a.relation_type,
     relativePath:a.relative_path||"",variants:(()=>{try{return JSON.parse(a.relation_metadata||"{}").variants||[]}catch{return[]}})(),size:Number(a.size_bytes||0),documentId:a.document_id||null,
     documentNo:a.document_no||null,documentStatus:a.document_status||null,createdAt:a.created_at}));
 }
 /** Connect files already in Hakan Emp / modeller / MODEL[/subfolder] without copying or renaming.
  * Scans only existing File Hub index of a single enabled, readable DESEN/MODEL_SOURCE binding.
  */
-async function linkExistingModelFolder(c:Context<AppEnv>,id:string){
-  const {slug}=await scope(c,["DESEN"],true);
+async function linkExistingModelFolder(c:Context<AppEnv>,id:string,preview=false){
+  const {slug}=await scope(c,["DESEN"],!preview);
   const m=await model(c,slug,id),name=safeName(m.model_name);
   const bindingRows=(await c.env.DB.prepare(`SELECT b.storage_connection_id,b.root_path
     FROM file_hub_bindings b JOIN file_hub_connections sc ON sc.id=b.storage_connection_id
@@ -205,6 +265,7 @@ async function linkExistingModelFolder(c:Context<AppEnv>,id:string){
     const existing=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
       .bind(slug,item.id,id).first<Row>();
     if(existing){alreadyLinked++;continue;}
+    if(preview){linked++;continue;}
     const at=stamp();
     await c.env.DB.prepare(`INSERT INTO file_hub_relations
       (id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at)
@@ -215,10 +276,14 @@ async function linkExistingModelFolder(c:Context<AppEnv>,id:string){
         slug,item.id,id).run();
     linked++;
   }
-  return {linked,alreadyLinked,found:rows.length,folder:prefix,source:"FILE_HUB_EXISTING_DRIVE",copied:0};
+  return {linked,alreadyLinked,found:rows.length,folder:prefix,source:"FILE_HUB_EXISTING_DRIVE",copied:0,preview,files:preview?rows.slice(0,50).map(x=>({fileName:x.file_name})):undefined};
 }
 
 export function registerModelFileTransferRoutes(app:Hono<AppEnv>){
+  app.get("/api/model-files/:modelId/folder-preview",async c=>{
+    try{return c.json({ok:true,data:await linkExistingModelFolder(c,c.req.param("modelId"),true)});}
+    catch(e:any){return c.json(err(text(e.code)||"MODEL_FOLDER_PREVIEW_FAILED",text(e.message)),Number(e.status)||409);}
+  });
   app.post("/api/model-files/:modelId/link-existing-folder",async c=>{
     try{return c.json({ok:true,data:await linkExistingModelFolder(c,c.req.param("modelId"))});}
     catch(e:any){return c.json(err(text(e.code)||"MODEL_FOLDER_LINK_FAILED",text(e.message)),Number(e.status)||409);}
@@ -233,11 +298,13 @@ export function registerModelFileTransferRoutes(app:Hono<AppEnv>){
   });
   app.get("/api/model-files/:modelId/file/:fileId",async c=>{
     try{
-      const {slug}=await scope(c,["DESEN","IMALAT","MUHASEBE","E_BELGE"],false),id=c.req.param("modelId"),assetId=c.req.param("fileId");
+      const {slug,user}=await scope(c,["DESEN","IMALAT","BOYAHANE","MUHASEBE","E_BELGE"],false),id=c.req.param("modelId"),assetId=c.req.param("fileId");
       await model(c,slug,id);
-      const linked=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
+      const linked=await c.env.DB.prepare("SELECT relation_type FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
         .bind(slug,assetId,id).first<Row>();
-      if(!linked)throw Object.assign(new Error("Dosya bu modele bağlı değil."),{code:"FILE_FORBIDDEN",status:404});
+      const allowed=allowedFileRoles(user);
+      if(!linked||(allowed!==null&&!allowed.includes(upper(linked.relation_type))))
+        throw Object.assign(new Error("Dosya bu modelde yetkinizle erişilebilir değil."),{code:"FILE_FORBIDDEN",status:404});
       const item=await readFileHubAssetForMail(c,slug,assetId,25*1024*1024);
       return new Response(item.bytes,{headers:{"Content-Type":item.mimeType,"Content-Disposition":"inline; filename*=UTF-8''"+encodeURIComponent(item.fileName),"Cache-Control":"private,no-store"}});
     }catch(e:any){return c.json(err(text(e.code)||"FILE_DOWNLOAD_FAILED",text(e.message)),Number(e.status)||409);}
