@@ -11,7 +11,7 @@ import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
 import { runSecurityWorkspaceReminderSweep } from "./auth-security-mobile-control";
 import { runFileHubCloudScheduledSync } from "./file-hub-cloud-oauth";
-import { runFileHubAccountingDocumentIntake } from "./file-hub-accounting-intake";
+import { runFileHubAccountingDocumentIntake } from "./file-hub-accounting-intake.ts";
 import { retryPhysicalOperations } from "./accounting-physical-journal";
 
 type Env = { Bindings: Cloudflare.Env };
