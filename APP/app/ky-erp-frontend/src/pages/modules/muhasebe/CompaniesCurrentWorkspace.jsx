@@ -14,6 +14,7 @@ import {
 import { apiDelete, apiGet, apiPatch, apiPost } from "../../../utils/api";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import CompanyFibeSection from "./CompanyFibeSection";
+import KyRecordDialog from "../../../components/shared/KyRecordDialog";
 import "./companiesCurrentWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -699,15 +700,22 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       </div>
 
       {companyFormOpen ? (
-        <div className="ccw-modal-layer" role="presentation" onMouseDown={() => setCompanyFormOpen(false)}>
-          <section className="ccw-modal" role="dialog" aria-modal="true" aria-label="Yeni firma" onMouseDown={(event) => event.stopPropagation()}>
-            <header><div><h2>Yeni Firma / Cari</h2><p>Firma kartı belge sağlayıcısından bağımsızdır; VKN veya alias ile e‑Belgeye bağlanır.</p></div><button type="button" className="icon" onClick={() => setCompanyFormOpen(false)} aria-label="Kapat"><X size={18} /></button></header>
-            <div className="ccw-modal-body"><CompanyFormFields value={companyForm} onChange={setCompanyForm} /><div className="ccw-rule-note">Peşin tedarikçide cari borç oluşmaz. Resmî belgede KDV takibi açıksa KDV kaydı belge onayıyla oluşur.</div></div>
-            <footer><button type="button" onClick={() => setCompanyFormOpen(false)}>Vazgeç</button><button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button></footer>
-          </section>
-        </div>
+        <KyRecordDialog
+          title="Yeni Firma / Cari"
+          subtitle="Firma kartı, belge sağlayıcısı, irsaliye ve fatura ile aynı kayıt kimliğini kullanır."
+          onClose={() => !companySaving && setCompanyFormOpen(false)}
+          busy={companySaving}
+          footer={<>
+            <button type="button" onClick={() => setCompanyFormOpen(false)} disabled={companySaving}>Vazgeç</button>
+            <button type="button" className="primary" disabled={companySaving} onClick={createCompany}>{companySaving ? "Kaydediliyor…" : "Firma Kartını Oluştur"}</button>
+          </>}
+        >
+          <div className="ccw-modal-body">
+            <CompanyFormFields value={companyForm} onChange={setCompanyForm} />
+            <div className="ccw-rule-note">Peşin tedarikçide cari borç oluşmaz. Resmî belgede KDV takibi açıksa KDV kaydı belge onayıyla oluşur.</div>
+          </div>
+        </KyRecordDialog>
       ) : null}
-
 
       {mergeOpen && selected ? (
         <div className="ccw-modal-layer" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && !mergeBusy) setMergeOpen(false); }}>
