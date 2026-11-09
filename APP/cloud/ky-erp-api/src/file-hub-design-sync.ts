@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context } from "hono";
+import { ensureCanonicalModel } from "./canonical-model-identity";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -193,16 +194,27 @@ export async function syncFileHubDesignModel(c: Context<AppEnv>, input: Row) {
   // Modeli otomatik AÇAN dosya yalnız görseldir. PSD/PDF/AI mevcut modele
   // bağlanabilir, ancak tek başına yeni ve eksik hayalet model üretmez.
   if (!current && !canonical && purposeCode !== "MODEL_IMAGE") return null;
-  const created = !current && !canonical;
+  let created = false;
   if (!current) {
     const defaultCompany = await defaultDesignCompany(c, slug);
+    // Görsel geldiğinde ilk model kartı aynı merkezi kimlik motorunda açılır.
+    // Kaynak PDF/AI/PSD, tek başına model oluşturamaz.
+    const identity = await ensureCanonicalModel(c, slug, {
+      modelName: text(canonical?.model_name) || modelName,
+      modelCode: text(canonical?.model_code) || modelName,
+      companyId: text(canonical?.company_id || canonical?.customer_id) || defaultCompany.companyId,
+      companyName: text(canonical?.customer_name) || defaultCompany.companyName,
+      sourceModule: "FILE_HUB",
+      requestedId: text(canonical?.id),
+    });
+    created = identity.created && !canonical;
     const oldRaw = objectOf(canonical?.raw);
     current = {
       ...oldRaw,
-      id: text(canonical?.id) || crypto.randomUUID(),
+      id: identity.id,
       modelName,
       modelCode:text(canonical?.model_code) || modelName,
-      companyId:text(canonical?.company_id || canonical?.customer_id) || defaultCompany.companyId,
+      companyId:identity.companyId || defaultCompany.companyId,
       companyName:text(canonical?.customer_name) || defaultCompany.companyName,
       status:text(canonical?.status) || (purposeCode === "MODEL_IMAGE" ? "NEW_ARRIVAL" : "MODEL_INFO_MISSING"),
       sourceType:text(oldRaw.sourceType) || "FILE_HUB",
