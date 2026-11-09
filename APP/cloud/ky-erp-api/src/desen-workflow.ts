@@ -1337,7 +1337,8 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const isModelPreview = row.role === "MODEL_IMAGE";
     const saved = await saveModel(c, model.id, {
       ...model,
-      files: [...model.files, row],
+      // Son seçilen MODEL_IMAGE ana görsel olur; eski dosya silinmez, sürüm olarak saklanır.
+      files: isModelPreview ? [row, ...model.files] : [...model.files, row],
       status: isModelPreview && model.status === "MODEL_INFO_MISSING" ? "NEW_ARRIVAL" : model.status,
       metadata: {
         ...objectOf(model.metadata),
