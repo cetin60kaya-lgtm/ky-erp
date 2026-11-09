@@ -164,3 +164,35 @@ test("monthly employee and modal scroll selections restore without changing cano
   assert.match(css, /\.modal-bg \.modal\.personnel-card-dialog/);
   assert.match(css, /\.ik-permanent-card-action/);
 });
+
+test("every authorized company account reads one canonical personnel and monthly payroll implementation", () => {
+  const app = frontend("AppV3.jsx");
+  const route = frontend("pages/modules/ik/monthly/IkFinancePage.jsx");
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const api = cloud("ik-relational-cloud.ts");
+
+  assert.match(app, /return <IkFinancePage activeTab=\{activeTab\}/);
+  assert.match(route, /import IkAdvancedMonthly from "\.\/IkAdvancedMonthly"/);
+  assert.match(route, /activeMainCompany=\{activeMainCompany\}/);
+  assert.match(monthly, /getIkAdvancedMonth\(params\(\{ mainCompanyId: companyId, year, month \}\)\)/);
+  assert.match(monthly, /getIkAdvancedPeriodState\(params\(\{ mainCompanyId: companyId, year, month \}\)\)/);
+  assert.match(monthly, /getIkAdvancedPayroll\(params\(\{ mainCompanyId: companyId, year, month \}\)\)/);
+  assert.doesNotMatch(monthly, /readPreparedPeriods|ikPreparedStorageKey|preparedForView/);
+  assert.match(monthly, /const includePayroll = authoritativePrepared/);
+  assert.match(monthly, /const payrollRows = useMemo\(\(\) => payrollReady \?/);
+  assert.match(monthly, /const balanced = payrollReady &&/);
+  assert.match(monthly, /currentDataScopeRef\.current !== requestKey/);
+  assert.match(monthly, /canonicalCompanySlug\(result\.mainCompanyId\)/);
+  assert.match(monthly, /canonicalCompanySlug\(payroll\.mainCompanyId\)/);
+  assert.match(api, /mainCompanyId: companyId, year, month, policy:/);
+  assert.match(api, /mainCompanyId: companyId,\s*year,\s*month,\s*employees: employeesWithSgk/);
+});
+
+test("when another user changes HR data, a modal never silently overwrites a pending draft", () => {
+  const monthly = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(monthly, /const refreshed = await load\(\{ force: true, silent: true \}\)/);
+  assert.match(monthly, /if \(modal\) setNotice\("Başka oturumda İK verileri güncellendi/);
+  assert.doesNotMatch(monthly, /if \(busy \|\| modal\) return/);
+  assert.match(monthly, /expectedVersion: modalDraft\.version/);
+  assert.match(monthly, /expectedPayrollVersion: modalDraft\.payrollVersion/);
+});
