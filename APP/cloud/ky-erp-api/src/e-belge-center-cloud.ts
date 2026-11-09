@@ -12,7 +12,7 @@ import { requiredLotCoverageComplete, resolveAllocatedLotEvidence } from "./acco
 import { resolveProductLotPolicy, normalizeLotNo } from "./accounting-lot-reconciliation-core";
 import { recordBoyahanePhysicalReceipt, recordGenericPhysicalReceipt } from "./accounting-physical-receipt";
 import { reconcileEBelgeInvoice } from "./e-belge-match-engine";
-import { chooseCanonicalDocumentModels, modelHintFromArchiveName } from "./e-belge-document-automation";
+import { chooseCanonicalDocumentModels, modelHintFromArchiveName } from "./e-belge-document-automation.ts";
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
 import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
