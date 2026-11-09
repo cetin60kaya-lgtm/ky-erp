@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { modelHintFromArchiveName, chooseCanonicalDocumentModels,
-  packageWeightFromItem, dispatchInvoiceQuantity } from "./e-belge-document-automation";
-import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
+  packageWeightFromItem, dispatchInvoiceQuantity } from "./e-belge-document-automation.ts";
+import { parseCanonicalEBelgeUbl } from "./e-belge-ubl.ts";
 
 test("DDM/HKN filenames: exact model name and document number, no copy duplicate",()=>{
   assert.deepEqual(modelHintFromArchiveName("DDM2026000000046 ECITIR.pdf"),
