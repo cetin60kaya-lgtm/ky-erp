@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { buildFileHubSmartDiagnostics } from "./file-hub-smart-diagnostics";
+import { normalizePsdModelLinks, mergePsdModelMetadata } from "./desen-psd-model-links.ts";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -127,13 +128,72 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
 
   app.get("/api/file-hub/entity-files", async c => {
     if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),entityType=upper(c.req.query("entityType")),entityId=text(c.req.query("entityId")); if(!entityType||!entityId) return c.json(err("REQUIRED","entityType ve entityId zorunludur."),422);
-    const r=await c.env.DB.prepare(`SELECT a.*,r.relation_type,r.is_primary relation_primary,r.confidence,r.source,l.relative_path,l.storage_connection_id,c.provider_type,c.name connection_name FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE r.main_company_slug=? AND r.entity_type=? AND r.entity_id=? ORDER BY r.is_primary DESC,a.updated_at DESC`).bind(slug,entityType,entityId).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(rowView)});
+    const r=await c.env.DB.prepare(`SELECT a.*,r.relation_type,r.is_primary relation_primary,r.confidence,r.source,r.metadata relation_metadata,l.relative_path,l.storage_connection_id,c.provider_type,c.name connection_name FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE r.main_company_slug=? AND r.entity_type=? AND r.entity_id=? ORDER BY r.is_primary DESC,a.updated_at DESC`).bind(slug,entityType,entityId).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(row => ({...rowView(row),relationMetadata:json(row.relation_metadata)}))});
   });
 
   app.post("/api/file-hub/files/:id/relations", async c => {
     const u=await requireUser(c); if(!u) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const b=await bodyOf(c),slug=slugOf(c,b),fileId=c.req.param("id"),entityType=upper(b.entityType),entityId=text(b.entityId),relationType=upper(b.relationType)||"ATTACHMENT",ts=now(); if(!entityType||!entityId) return c.json(err("REQUIRED","entityType ve entityId zorunludur."),422);
     const a=await c.env.DB.prepare(`SELECT id FROM file_hub_assets WHERE id=? AND main_company_slug=?`).bind(fileId,slug).first<Row>(); if(!a) return c.json(err("NOT_FOUND","Dosya bulunamadı."),404);
     await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),slug,fileId,entityType,entityId,relationType,bool(b.isPrimary,false)?1:0,b.confidence==null?null:Number(b.confidence),upper(b.source)||"MANUAL",JSON.stringify(b.metadata||{}),ts,ts).run(); await event(c,slug,"LINKED",{actorType:"USER",actorId:u.id,fileAssetId:fileId,details:{entityType,entityId,relationType}}); return c.json({ok:true});
+  });
+
+
+  // Desenci: tek mevcut PSD/PSB dosyasini birden cok model + BOY + bolgeye baglar.
+  // Fiziksel Drive/OneDrive dosyasi kopyalanmaz veya yerinden tasinmaz.
+  app.post("/api/file-hub/files/:id/desen-model-links", async c => {
+    const user = await requireUser(c);
+    if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
+    const body = await bodyOf(c), slug = slugOf(c, body);
+    const signedSlug = text(user.mainCompanySlug || user.main_company_slug || user.security?.main_company_slug);
+    if (!signedSlug || signedSlug !== slug) {
+      return c.json(err("FORBIDDEN", "Yalniz kendi firmanizin desen kayitlarini degistirebilirsiniz."), 403);
+    }
+    let links;
+    try { links = normalizePsdModelLinks(body.links); }
+    catch (error) { return c.json(err("INVALID_PSD_LINKS", error instanceof Error ? error.message : "Model/boy secimi gecersiz."), 422); }
+    const fileAssetId = c.req.param("id");
+    const asset = await c.env.DB.prepare(
+      "SELECT id,file_name,extension,status FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1",
+    ).bind(fileAssetId, slug).first<Row>();
+    if (!asset) return c.json(err("NOT_FOUND", "Kayitli File Hub dosyasi bulunamadi."), 404);
+    if (!["PSD", "PSB"].includes(upper(asset.extension || text(asset.file_name).split(".").pop()))) {
+      return c.json(err("NOT_PSD", "Bu islem yalniz PSD/PSB dosyalarina uygulanir."), 422);
+    }
+    if (upper(asset.status) !== "AVAILABLE") {
+      return c.json(err("FILE_NOT_AVAILABLE", "Kaynak dosya erisilebilir degil; arşiv bağlantısını kontrol edin."), 409);
+    }
+    const byModel = new Map<string, typeof links>();
+    for (const link of links) byModel.set(link.modelId, [...(byModel.get(link.modelId) || []), link]);
+    const modelIds = [...byModel.keys()];
+    const models = await c.env.DB.prepare(
+      "SELECT id FROM model_records WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' AND id IN (" + modelIds.map(() => "?").join(",") + ")",
+    ).bind(slug, ...modelIds).all<Row>();
+    if ((models.results || []).length !== modelIds.length) {
+      return c.json(err("MODEL_SCOPE_MISMATCH", "Modellerden biri bulunamadi veya bu firmaya ait degil."), 409);
+    }
+    const previous = await c.env.DB.prepare(
+      "SELECT id,entity_id,metadata FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND relation_type='OUTGOING_DESIGN'",
+    ).bind(slug, fileAssetId).all<Row>();
+    const oldByModel = new Map((previous.results || []).map(row => [text(row.entity_id), row]));
+    const updatedAt = now();
+    const statements = [];
+    for (const [modelId, placements] of byModel) {
+      const existing = oldByModel.get(modelId);
+      const metadata = mergePsdModelMetadata(json(existing?.metadata), placements);
+      if (existing?.id) {
+        if (JSON.stringify(json(existing.metadata)) !== JSON.stringify(metadata)) {
+          statements.push(c.env.DB.prepare("UPDATE file_hub_relations SET metadata=?,updated_at=? WHERE id=? AND main_company_slug=?")
+            .bind(JSON.stringify(metadata), updatedAt, existing.id, slug));
+        }
+      } else {
+        statements.push(c.env.DB.prepare(
+          "INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,'MODEL',?,'OUTGOING_DESIGN',0,1,'DESEN_USER',?,?,?)",
+        ).bind(crypto.randomUUID(), slug, fileAssetId, modelId, JSON.stringify(metadata), updatedAt, updatedAt));
+      }
+    }
+    if (statements.length) await c.env.DB.batch(statements);
+    await event(c, slug, "PSD_MODEL_LINKED", { actorType:"USER", actorId:user.id, fileAssetId, details:{ modelCount:modelIds.length, placementCount:links.length } });
+    return c.json({ok:true,success:true,data:{fileAssetId,modelCount:modelIds.length,placementCount:links.length,changed:statements.length>0}});
   });
 
   app.get("/api/file-hub/search", async c => {
