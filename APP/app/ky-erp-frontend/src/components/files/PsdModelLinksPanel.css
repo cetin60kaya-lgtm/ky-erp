@@ -1,0 +1,12 @@
+.dsg-psd-link-panel{border:1px solid #c9d8e6;border-radius:10px;padding:12px;display:grid;gap:10px;background:#f9fbfd;color:#234}
+.dsg-psd-link-panel h3{margin:0;font-size:15px}.dsg-psd-link-panel p{margin:0;font-size:13px}
+.dsg-psd-link-panel input,.dsg-psd-link-panel select{min-width:0;width:100%;border:1px solid #b8c9d8;border-radius:6px;background:white;padding:8px;font:inherit;color:#234}
+.dsg-psd-link-panel button{border:1px solid #a6bfd3;background:#eef5fa;border-radius:6px;padding:8px 10px;color:#234;cursor:pointer}
+.dsg-psd-link-panel button:disabled{opacity:.5;cursor:default}
+.dsg-psd-find{display:flex;gap:8px}.dsg-psd-find input{flex:1}.dsg-psd-link-panel label{display:grid;gap:5px}
+.dsg-psd-targets{display:grid;gap:8px}.dsg-psd-target{display:grid;grid-template-columns:minmax(100px,2fr) minmax(92px,1fr) minmax(92px,1fr) auto;gap:6px}
+.dsg-psd-actions{display:flex;justify-content:flex-end;flex-wrap:wrap;gap:7px}
+.dsg-psd-existing{display:grid;gap:7px;border-top:1px solid #dae4eb;padding-top:10px}
+.dsg-psd-existing>div{display:grid;gap:2px;font-size:13px}.dsg-psd-existing small{color:#48647b}
+.dsg-psd-error{color:#a12b30}.dsg-psd-message{color:#15533a}
+@media(max-width:740px){.dsg-psd-target{grid-template-columns:1fr 1fr}.dsg-psd-target select:first-child{grid-column:1/-1}.dsg-psd-find{flex-wrap:wrap}}
