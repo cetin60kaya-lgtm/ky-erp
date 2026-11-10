@@ -499,8 +499,14 @@ export function registerMicrosoftMailRoutes(app:any){
     catch(error:any){return c.json(err(text(error?.code)||"MICROSOFT_ATTACHMENT_SYNC_FAILED",text(error?.message)||"File Hub ekleri Microsoft taslağına aktarılamadı."),Number(error?.status)||502);}
     const jobId=text(existingJob?.id)||crypto.randomUUID(),ts=nowIso();
     if(existingJob){const claim=await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=? AND status='FAILED'").bind(ts,jobId,tenant).run();if(!claim.meta?.changes)return c.json(err("SEND_IN_PROGRESS","Gönderim zaten işleniyor; tekrar gönderilmedi."),409);}
-    else await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",providerDraftId,null,1,null,text(current.id),null,ts,ts).run();
+    else {
+      // SQLite/D1 atomic claim: concurrent tabs cannot create two SENDING jobs
+      // for the same invoice event even if their read checks both saw no job.
+      const claim=await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=?)")
+        .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",providerDraftId,null,1,null,text(current.id),null,ts,ts,tenant,logicalEventId).run();
+      if(!Number(claim.meta?.changes||0))
+        return c.json(err("MAIL_EVENT_ALREADY_USED","Başka bir oturum bu gönderimi başlattı. Sonucu doğrulamadan yeniden gönderim yapmayın."),409);
+    }
     try{
       const response=await fetch(base+"/messages/"+encodeURIComponent(providerDraftId)+"/send",{method:"POST",headers:{Authorization:"Bearer "+token}});
       if(response.status>=500)throw new Error("Microsoft gönderim sonucu doğrulanamadı.");
