@@ -42,3 +42,18 @@ export function makeInvoiceMailContent(modelName, invoiceNo, deliveryNo) {
     bodyText: "Merhaba,\n\n" + model + " modelimizin " + hkn + " numaralı faturası ve " + ddm + " numaralı irsaliyesi ektedir.\n\nİyi çalışmalar.",
   };
 }
+
+/**
+ * One dispatch identity for a specific real invoice/delivery pair.
+ * Recipient/account changes are not a reason to send the same document twice.
+ * A deliberate re-send requires a separately reviewed workflow.
+ */
+export function invoiceMailEventId(companySlug, invoiceNo, deliveryNo) {
+  const tenant = String(companySlug || "").trim().toLocaleLowerCase("tr-TR");
+  const hkn = documentKey(invoiceNo);
+  const ddm = documentKey(deliveryNo);
+  if (!tenant || !/^HKN[0-9]{8,18}$/.test(hkn) || !/^DDM[0-9]{8,18}$/.test(ddm)) {
+    throw new Error("Gönderim anahtarı için ana firma, HKN ve DDM zorunludur.");
+  }
+  return ["MODEL_INVOICE_MAIL", tenant, hkn, ddm].join(":");
+}
