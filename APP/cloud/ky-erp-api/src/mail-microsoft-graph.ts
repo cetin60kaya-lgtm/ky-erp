@@ -491,7 +491,7 @@ export function registerMicrosoftMailRoutes(app:any){
     let providerDraftId=text(draft.provider_draft_id);
     if(!providerDraftId){
       const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
-      const created=(await graphJson(endpoint,token,{method:"POST",body:JSON.stringify(original?{message}:message)})).payload;providerDraftId=text(created.id);
+      const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;providerDraftId=text(created.id);
       if(!providerDraftId)return c.json(err("PROVIDER_DRAFT_MISSING","Microsoft taslak kimliği dönmedi."),502);
       await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=?").bind(providerDraftId,nowIso(),draftId,tenant).run();
     }
