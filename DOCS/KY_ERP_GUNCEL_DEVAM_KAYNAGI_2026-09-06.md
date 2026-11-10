@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 10.11.2026 — TEK UÇTAN UCA KABUL LİSTESİ (geri dönük talep–işlem karşılaştırması)
+
+- Detaylı işler/kanıt/öncelik/test: `DOCS/KY_ERP_UCTAN_UCA_KABUL_MATRISI_20261110.md`. İlgili kanıtlar PR #548 (e-Belge + model dosya paketi), PR #542 (giden PSD Drive onaylı bağlantısı), PR #549 (çakışan ikinci PSD şeması) ve PR #550 (taslak mail rotalama) üzerinden kontrol edildi.
+- **İşlem mantığı sabit:** Desenci `MODEL_SOURCE` klasöründeki 1–N teknik/dosya ekini tek model kartına ve tek fiziksel PSD'yi birçok MODEL + BOY + baskı bölgesine bağlar. Muhasebeci orijinal HKN/DDM XML/PDF belgelerini e-Belge'ye alır; cari/KDV/LOT ve irsaliye esaslı kısmi faturalama yalnız doğru eşleşme ve onay ile kesinleşir. İmalat/Boyahane kendi kayıtlarını tutar, model dosyaları salt okunur ortak görünür. Tek canonical model kimliği/tek File Hub.
+- **Açık P0:** PR #550 mükerrer dış e-posta için idempotency ve ACCEPTED sonrası link kurtarma; PR #549 `variants`/ `placements` çakışması; yetkili kullanıcının gerçek Drive 4 binding ve indeks/kart bağı kabulü; İşNet ve LOT uçtan uca negatif/pozitif testleri. Haftalık müşteri XLSX mutabakatı ve Outlook kişi/grup çıkarımı plan seviyesindedir.
+- **Düzenli takip:** KY ERP Günlük Kabul Kontrolü, yaklaşık 08.00 Europe/Istanbul. Günlük rapor GitHub/CI/release farkını doğrular; işletme dosyalarına ve canlı iş kayıtlarına otomatik yazmaz.
+
+
 ## 10.11.2026 — YAPILACAK: Muhasebe haftalık cari mutabakatı, Outlook fatura takibi ve KY ERP Asistan
 
 - **Durum: PLANLANDI / KULLANICI ONAYLI İŞ LİSTESİ.** Bu kayıt yalnız iş kapsamıdır; uygulandı/test edildi/yayınlandı anlamına gelmez. Kullanıcı sıradaki mantığı anlatmadan geliştirmeye veya canlı operasyona geçilmez.
