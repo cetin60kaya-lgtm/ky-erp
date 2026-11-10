@@ -60,7 +60,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     setModelName(String(selectedInvoice?.model_name || selectedInvoice?.modelName || ""));
     setRouteForm((current) => ({ ...current, customerName: String(selectedInvoice?.party_name || current.customerName || "") }));
     setDraft(null); setSent(false); setInvoiceAssetId(""); setDeliveryAssetId("");
-  }, [selectedInvoice?.id, selectedInvoice?.document_no, selectedInvoice?.invoiceNo]);
+  }, [selectedInvoice]);
 
   const invalidate = () => { setDraft(null); setSent(false); setNotice(""); };
   const chosenRoute = routes.find((row) => row.id === routeId);
