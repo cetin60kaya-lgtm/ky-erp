@@ -86,7 +86,7 @@ export default function CustomerDocumentsWorkspace({ activeMainCompany, openModu
   const openInvoiceMail = (row) => { setMailInvoice(row); setView("mail"); };
   useEffect(() => {
     if (!moduleActionContext?.mailModelName) return;
-    setMailInvoice({ id: "model-" + (moduleActionContext.mailModelId || moduleActionContext.mailModelName), model_name: moduleActionContext.mailModelName, party_name: moduleActionContext.mailCompanyName || "" });
+    setMailInvoice({ id: "model-" + (moduleActionContext.mailModelId || moduleActionContext.mailModelName), model_name: moduleActionContext.mailModelName, model_id: moduleActionContext.mailModelId || "", party_name: moduleActionContext.mailCompanyName || "" });
     setView("mail");
   }, [moduleActionContext?.mailModelId, moduleActionContext?.mailModelName, moduleActionContext?.mailCompanyName]);
   return (
