@@ -131,7 +131,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       setRouteForm(emptyRoute());
       setNotice("Grup ve alıcı profili KY ERP'ye kaydedildi.");
       await refresh();
-      if (saved?.id) chooseRoute(saved.id);
+      if (saved?.id) { setRouteId(saved.id); setToText(stringifyEmails(saved.to)); setCcText(stringifyEmails(saved.cc)); invalidate(); }
     } catch (e) {
       setError(e?.message || "Alıcı profili kaydedilemedi.");
     } finally { setSavingRoute(false); }
