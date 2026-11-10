@@ -20,4 +20,5 @@
 .imw-directory-list span{display:flex;gap:6px;flex-wrap:wrap}
 .imw-preview{border:1px solid var(--border-color,#d0d9e2);border-radius:8px;padding:12px;overflow-wrap:anywhere}
 .imw-preview p{margin:6px 0 0;font-size:.9rem}
+.imw-history{display:grid;gap:8px;padding:12px;border:1px solid var(--border-color,#d0d9e2);border-radius:8px}.imw-history>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;padding:7px 0;border-top:1px solid var(--border-color,#e7ebef)}.imw-history small{overflow-wrap:anywhere}
 @media(max-width:700px){.invoice-mail-workspace{padding:12px}.imw-directory-list>div{grid-template-columns:minmax(0,1fr)}}
