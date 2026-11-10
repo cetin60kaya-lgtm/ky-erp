@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { documentKey, matchingPdfFiles, matchingRecipientRoutes, parseRecipientEmails, makeInvoiceMailContent } from "./invoiceMailRouting.js";
+import { documentKey, matchingPdfFiles, matchingRecipientRoutes, parseRecipientEmails, makeInvoiceMailContent, invoiceMailEventId } from "./invoiceMailRouting.js";
 
 test("HKN ve DDM belgeleri numaraya göre eksiksiz ve kesin eşleşir", () => {
   const files = [
@@ -34,4 +34,12 @@ test("Mail metni yalnız kesin HKN/DDM ve modelden üretilir", () => {
   assert.match(draft.bodyText,/HKN2026000000909/);
   assert.match(draft.bodyText,/DDM2026000000897/);
   assert.throws(()=>makeInvoiceMailContent("OSTENES","HKN2026000000909",""));
+});
+
+test("tek HKN/DDM olayı grup, hesap ve kullanıcı değişse de aynı gönderim anahtarını taşır", () => {
+  const expected = "MODEL_INVOICE_MAIL:mecit-hakan:HKN2026000000909:DDM2026000000897";
+  assert.equal(invoiceMailEventId("mecit-hakan", " HKN-2026000000909 ", "DDM 2026000000897"), expected);
+  assert.equal(invoiceMailEventId("mecit-hakan", "HKN2026000000909", "DDM2026000000897"), expected);
+  assert.notEqual(invoiceMailEventId("mecit-hakan", "HKN2026000000909", "DDM2026000000898"), expected);
+  assert.throws(() => invoiceMailEventId("", "HKN2026000000909", "DDM2026000000897"));
 });
