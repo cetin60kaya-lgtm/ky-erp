@@ -8,7 +8,7 @@
 .imw-form-grid textarea{min-height:65px;resize:vertical}
 .imw-actions{display:flex;gap:10px;flex-wrap:wrap}
 .imw-actions button,.imw-head button,.imw-directory-list button{min-height:44px;padding:8px 14px;border-radius:8px;border:1px solid var(--border-color,#c8d1db);background:var(--surface,#fff);color:inherit;cursor:pointer;font:inherit}
-.imw-actions button:first-child,.imw-send{background:#1a5f97!important;color:#fff!important;border-color:#1a5f97!important}
+.imw-actions .imw-send{background:#1a5f97!important;color:#fff!important;border-color:#1a5f97!important}
 .imw-actions button:disabled{opacity:.55;cursor:default}
 .imw-error,.imw-notice{padding:10px 12px;border-radius:8px;margin:0;font-size:.9rem}
 .imw-error{background:#fff0ee;color:#9c2820}.imw-notice{background:#edf6ff;color:#145180}
@@ -22,3 +22,7 @@
 .imw-preview p{margin:6px 0 0;font-size:.9rem}
 .imw-history{display:grid;gap:8px;padding:12px;border:1px solid var(--border-color,#d0d9e2);border-radius:8px}.imw-history>div{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px;padding:7px 0;border-top:1px solid var(--border-color,#e7ebef)}.imw-history small{overflow-wrap:anywhere}
 @media(max-width:700px){.invoice-mail-workspace{padding:12px}.imw-directory-list>div{grid-template-columns:minmax(0,1fr)}}
+
+.imw-form-grid .imw-wide{grid-column:1/-1}
+.imw-form-grid .imw-wide textarea{min-height:130px}
+.imw-send{font-weight:700!important}
