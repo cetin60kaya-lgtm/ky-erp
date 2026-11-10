@@ -466,15 +466,24 @@ export function registerMicrosoftMailRoutes(app:any){
     let original=null;
     try { original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id)); }
     catch(error:any){return c.json(err(error.code,error.message),error.status||422);}
-    if(upper(draft.status)==="SENT")return c.json({ok:true,data:{idempotent:true,status:"PROVIDER_ACCEPTED",delivered:false}});
+
     const attachments=parseAttachments(draft.attachment_refs_json);
     let resolvedAttachments:any[]=[];
     try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
     catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Mail eki File Hub'dan alınamadı."),Number(error?.status)||502);}
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId;
     const existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
+    // An idempotency key belongs to exactly one immutable draft.
+    // Never attribute another draft's accepted send to a new recipient/attachment set.
+    if(existingJob && text(existingJob.draft_id)!==draftId)
+      return c.json(err("MAIL_EVENT_ALREADY_USED","Bu HKN/DDM gönderimi başka bir taslak ile daha önce başlatılmış. Önce mevcut gönderimin geçmişini kontrol edin.",{sendJobId:existingJob.id}),409);
+    if(upper(draft.status)==="SENT"){
+      if(existingJob && upper(existingJob.status)==="ACCEPTED")
+        return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id,delivered:false}});
+      return c.json(err("MAIL_SEND_RECONCILIATION_REQUIRED","Gönderilmiş taslağın iş anahtarı doğrulanamadı; yeniden gönderim kapalı."),409);
+    }
     if(existingJob){
-      if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id}});
+      if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id,delivered:false}});
       if(["SENDING","UNKNOWN_REVIEW_REQUIRED"].includes(upper(existingJob.status)))return c.json(err("UNKNOWN_REVIEW_REQUIRED","Önceki gönderimin sonucu belirsiz. Çift mail riskine karşı otomatik tekrar gönderim kapalıdır.",{sendJobId:existingJob.id}),409);
     }
     const account=await c.env.DB.prepare("SELECT * FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(draft.account_id,tenant).first<AnyRow>(),token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),recipients=parseRecipients(draft.recipients_json);
