@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 10.11.2026 — Muhasebe modelden HKN/DDM mail gönderimi (PR #550; dalda, canlı değil)
+
+- Kullanıcı kararı: işin fatura/irsaliye mail gönderim ayağı ilk önce yapay zekâ olmadan, Muhasebe ve model kartından yönetilecek. Müşteri grup (ör. 165), alt ekip (ör. 165-6, 165-7), model atayan planlamacı, irsaliyeyi gönderen ve fatura TO/CC alıcıları farklı olabilir. Kişi/adresler gerçek yetkili Outlook yazışmalarından teyit edilmeden otomatik kesin eşleştirilmez; kişi listeleri GitHub'a kaydedilmez.
+- PR #550 `feature/muhasebe-model-fatura-mail-rotalama-20261110`: tenant/yetki kontrollü `MUHASEBE_INVOICE_MAIL_ROUTE` profilleri mevcut D1 `json_store` tablosunda müşteri+alt ekip+planlamacı+TO/CC olarak kullanıcı tarafından oluşturulur/düzenlenir/çıkarılır. Yeni migration veya paralel mail servisi yok.
+- Muhasebe > Müşteri/Satış Belgeleri > Fatura/İrsaliye Maili ve fatura/irsaliye kontrol detayından geçiş eklendi. Desen model detayındaki HKN/DDM mail düğmesi canonical model UUID'sini aktarır; modelden girildiğinde File Hub yalnız o modele bağlı PDF'leri aday gösterir. HKN ve DDM tam belge numarası + AVAILABLE PDF gereklidir; dosya yoksa taslak oluşturulamaz.
+- Mevcut Mail Core taslak+File Hub ek+yetki, Microsoft Graph/Gmail gönderim yolları tekrar kullanılır. Kayıtlı TO/CC kullanıcıca kontrol edilir; taslak ayrı hazırlanır, ikinci açık kullanıcı eylemiyle gönderilir. Gönderim için sabit logicalEventId ve mevcut UNKNOWN_REVIEW_REQUIRED tekrar engeli vardır; sağlayıcı kabulü teslim kanıtı değildir.
+- Frontend kesin fatura/eşlenmiş dosya/alt grup/alıcı testleri eklendi. **Kabul:** PR CI sonuçları, merge/yayın SHA, canlı OAuth, ilgili model File Hub asset ilişki ve kullanıcı oturumunda alıcı/ek/doğru thread saha testi ayrıca doğrulanmadan canlı/bitmiş ilan edilmez. İşbu geliştirmede canlı Outlook maili gönderilmedi ve D1/Drive kaydı elle değiştirilmedi.
+- **Açık sonraki safha:** Outlook'tan eski mailleri öneri olarak gruplara topluca teyit ettirme, belge gönderim geçmişini model bazında gösterme, haftalık cari XLSX import/fark/ödeme/mahsup ve eksik faturaya orijinal thread üzerinden hatırlatma; bu PR'da henüz yapılmadı. Önce belgenin gönderim ayağı güvenilir ve gerçek kullanıcıyla kabul edilmelidir.
+
 ## 10.11.2026 — YAPILACAK: Muhasebe haftalık cari mutabakatı, Outlook fatura takibi ve KY ERP Asistan
 
 - **Durum: PLANLANDI / KULLANICI ONAYLI İŞ LİSTESİ.** Bu kayıt yalnız iş kapsamıdır; uygulandı/test edildi/yayınlandı anlamına gelmez. Kullanıcı sıradaki mantığı anlatmadan geliştirmeye veya canlı operasyona geçilmez.
