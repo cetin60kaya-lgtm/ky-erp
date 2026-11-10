@@ -110,6 +110,53 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     return c.json({ok:true,data:{...data,createdAt:ts,updatedAt:ts}},201);
   });
 
+  // Read-only preflight: verify the exact two tenant-owned PDFs and, when present,
+  // their canonical model relationships before creating any mail draft or send job.
+  app.post("/api/muhasebe/invoice-mail-preflight", async (c) => {
+    const body=await jsonBody(c),a=await access(c,body,true);
+    if(a.failure)return a.failure;
+    const invoiceNo=txt(body.invoiceNo).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    const deliveryNo=txt(body.deliveryNo).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    const modelId=txt(body.modelId),routeId=txt(body.routeId),accountId=txt(body.accountId);
+    const invoiceAssetId=txt(body.invoiceAssetId),deliveryAssetId=txt(body.deliveryAssetId);
+    if(!/^HKN[0-9]{8,18}$/.test(invoiceNo)||!/^DDM[0-9]{8,18}$/.test(deliveryNo)||
+       !accountId||!routeId||!invoiceAssetId||!deliveryAssetId||invoiceAssetId===deliveryAssetId)
+      return error(c,"MAIL_PREFLIGHT_INVALID","HKN/DDM, ayrı PDF ekleri, alıcı profili ve posta hesabı zorunludur.",422);
+    if(!emails(body.to,true)||!emails(body.cc||[],false)||!emails(body.bcc||[],false))
+      return error(c,"MAIL_RECIPIENT_INVALID","TO/CC/BCC adreslerini kontrol edin.",422);
+    if(!txt(body.subject)||txt(body.subject).length>250||!txt(body.bodyText)||txt(body.bodyText).length>20000)
+      return error(c,"MAIL_CONTENT_INVALID","Konu ve mesaj boş olamaz; içerik sınırlarını kontrol edin.",422);
+    const route=await c.env.DB.prepare("SELECT id FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1")
+      .bind(SCOPE,a.tenant,routeId).first<Row>();
+    if(!route)return error(c,"MAIL_ROUTE_NOT_FOUND","Firma/grup alıcı profili bulunamadı.",409);
+    const account=await c.env.DB.prepare("SELECT id,provider_type,status,provider_connected FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1")
+      .bind(accountId,a.tenant).first<Row>();
+    if(!account||role(account.provider_type)!=="MICROSOFT_365"||role(account.status)!=="ACTIVE"||Number(account.provider_connected)!==1)
+      return error(c,"MAIL_ACCOUNT_NOT_READY","Yetkili ve bağlı bir Outlook hesabı gereklidir.",409);
+    if(modelId){
+      const model=await c.env.DB.prepare("SELECT id FROM model_records WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1")
+        .bind(modelId,a.tenant).first<Row>();
+      if(!model)return error(c,"MAIL_MODEL_NOT_FOUND","Canonical model kartı bulunamadı.",409);
+    }
+    for(const [assetId,number] of [[invoiceAssetId,invoiceNo],[deliveryAssetId,deliveryNo]]){
+      const asset=await c.env.DB.prepare("SELECT id,file_name,status,mime_type FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1")
+        .bind(assetId,a.tenant).first<Row>();
+      const fileName=txt(asset?.file_name).toUpperCase();
+      if(!asset||role(asset.status)!=="AVAILABLE"||!new RegExp("^"+number+"(?![0-9]).*\\\\.PDF$").test(fileName))
+        return error(c,"MAIL_PDF_MISMATCH","Dosya File Hub'da mevcut değil veya tam HKN/DDM numarasıyla eşleşmiyor.",409);
+      if(modelId){
+        const relation=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
+          .bind(a.tenant,assetId,modelId).first<Row>();
+        if(!relation)return error(c,"MAIL_PDF_MODEL_MISMATCH","PDF seçili modelin File Hub ilişkilerinde bulunamadı.",409);
+      }
+    }
+    const logicalEventId=["MODEL_INVOICE_MAIL",a.tenant,invoiceNo,deliveryNo].join(":");
+    const previous=await c.env.DB.prepare("SELECT id,status FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1")
+      .bind(a.tenant,logicalEventId).first<Row>();
+    if(previous)return error(c,"MAIL_ALREADY_ATTEMPTED","Bu HKN/DDM gönderimi daha önce başlatılmış. Tekrar göndermeden önce yazışma geçmişinden kontrol edin.",409);
+    return c.json({ok:true,data:{verified:true,logicalEventId}});
+  });
+
   // Read-only reporting uses the accepted provider send job, never a client-claimed "sent" flag.
   app.get("/api/muhasebe/invoice-mail-links", async (c) => {
     const a = await access(c);
