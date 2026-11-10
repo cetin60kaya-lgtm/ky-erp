@@ -1,0 +1,23 @@
+.invoice-mail-workspace{display:flex;flex-direction:column;gap:16px;padding:18px;border:1px solid var(--border-color,#dbe3e9);border-radius:12px;min-width:0}
+.imw-head{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.imw-head h3{font-size:1.15rem;margin:0 0 5px}
+.imw-head p,.imw-directory p,.imw-foot{font-size:.9rem;color:var(--text-muted,#657386);margin:0;line-height:1.45}
+.imw-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;min-width:0}
+.imw-form-grid label{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:.88rem;min-width:0}
+.imw-form-grid input,.imw-form-grid textarea,.imw-form-grid select{width:100%;min-height:44px;box-sizing:border-box;padding:10px;border:1px solid var(--border-color,#ccd5df);border-radius:8px;background:var(--surface,#fff);color:inherit;font:inherit}
+.imw-form-grid textarea{min-height:65px;resize:vertical}
+.imw-actions{display:flex;gap:10px;flex-wrap:wrap}
+.imw-actions button,.imw-head button,.imw-directory-list button{min-height:44px;padding:8px 14px;border-radius:8px;border:1px solid var(--border-color,#c8d1db);background:var(--surface,#fff);color:inherit;cursor:pointer;font:inherit}
+.imw-actions button:first-child,.imw-send{background:#1a5f97!important;color:#fff!important;border-color:#1a5f97!important}
+.imw-actions button:disabled{opacity:.55;cursor:default}
+.imw-error,.imw-notice{padding:10px 12px;border-radius:8px;margin:0;font-size:.9rem}
+.imw-error{background:#fff0ee;color:#9c2820}.imw-notice{background:#edf6ff;color:#145180}
+.imw-directory{display:flex;flex-direction:column;gap:14px;padding:16px;border:1px solid var(--border-color,#dbe3e9);border-radius:10px}
+.imw-directory h4{margin:0}
+.imw-directory-list{display:grid;gap:8px;max-height:300px;overflow:auto}
+.imw-directory-list>div{display:grid;grid-template-columns:minmax(150px,2fr) minmax(150px,3fr) auto;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border-color,#e7ebef)}
+.imw-directory-list small{overflow-wrap:anywhere}
+.imw-directory-list span{display:flex;gap:6px;flex-wrap:wrap}
+.imw-preview{border:1px solid var(--border-color,#d0d9e2);border-radius:8px;padding:12px;overflow-wrap:anywhere}
+.imw-preview p{margin:6px 0 0;font-size:.9rem}
+@media(max-width:700px){.invoice-mail-workspace{padding:12px}.imw-directory-list>div{grid-template-columns:minmax(0,1fr)}}
