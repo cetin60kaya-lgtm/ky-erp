@@ -234,9 +234,17 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       cc:Array.isArray(recipients.cc)?recipients.cc:[],status:"PROVIDER_ACCEPTED",
       createdBy:txt(a.user?.id),recordedAt:now()
     };
-    await c.env.DB.prepare(
-      "INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)"
-    ).bind(crypto.randomUUID(),"MUHASEBE_INVOICE_MAIL_LINK",a.tenant,draftId,JSON.stringify(data),data.recordedAt,data.recordedAt).run();
+    // A delayed response/retry must only create a single relationship row.
+    const inserted=await c.env.DB.prepare(
+      "INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=?)"
+    ).bind(crypto.randomUUID(),"MUHASEBE_INVOICE_MAIL_LINK",a.tenant,draftId,JSON.stringify(data),data.recordedAt,data.recordedAt,
+      "MUHASEBE_INVOICE_MAIL_LINK",a.tenant,draftId).run();
+    if(!Number(inserted.meta?.changes||0)){
+      const same=await c.env.DB.prepare("SELECT data FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1")
+        .bind("MUHASEBE_INVOICE_MAIL_LINK",a.tenant,draftId).first<Row>();
+      if(!same)return error(c,"MAIL_LINK_RACE_REVIEW","Gönderim kaydı henüz doğrulanamadı.",409);
+      return c.json({ok:true,data:JSON.parse(txt(same.data)),idempotent:true});
+    }
     return c.json({ok:true,data},201);
   });
 
