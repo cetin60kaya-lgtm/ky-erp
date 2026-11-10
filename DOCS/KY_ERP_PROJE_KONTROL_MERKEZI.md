@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 10.11.2026 — TALEP/KOD/YAYIN/SAHA KABUL TOPLU DENETİMİ (tek kanonik iş listesi)
+
+- **Tek rapor:** `DOCS/KY_ERP_UCTAN_UCA_KABUL_MATRISI_20261110.md` (commit `9884fbcda688cdadb8b253b842e0adcc6ba3c118`). İşNet HKN/DDM, Drive model klasöründeki çoklu teknik föy/AI/PDF/TIFF, giden tek PSD'nin çoklu MODEL + BOY + baskı bölgesi, İmalat, Boyahane/LOT, Outlook fatura ve mobil model kartı istekleri birer kabul satırı olarak eşlendi.
+- **Kanıt:** PR #548 Worker + Pages yayınları başarılı; PR #542 giden PSD bağlama arayüzü Pages yayını başarılı. Bunlar File Hub'ın gerçek 4 binding ve kullanıcı D1 ilişki/yükleme işleminin canlı kabulü yerine geçmez.
+- **P0 açık:** PR #550 aynı HKN/DDM için idempotency anahtarı tutarsızlığı ve ACCEPTED sonrası link recovery; taslak CI PASS ama üretim yayınına alınamaz. PR #549, canonical `variants` ile ikinci `placements` şeması çakışması; ikinci paneli olduğu gibi merge etme. E-Belge cari/KDV/LOT finalizasyonu ve büyük PSD/multi-BOY gerçek testleri açık.
+- **Günlük denetim:** Kullanıcının düzenli izleme isteğiyle KY ERP Günlük Kabul Kontrolü görevi oluşturuldu; Türkiye saatiyle sabah yaklaşık 08.00, yalnız yeni kanıt ve blocker raporlanır; otomatik canlı D1/Drive/mail mutasyonu yapılmaz.
+- **Sınır:** Bu kayıt yalnız sürüm/iş kabul durumudur; güvenli test ve yetkili oturum olmadan gerçek stok, fatura ve üretim kayıtları değiştirilmez.
+
+
 ## 10.11.2026 — YAPILACAK: Muhasebe haftalık cari mutabakatı, Outlook fatura takibi ve KY ERP Asistan
 
 - **Durum: PLANLANDI / KULLANICI ONAYLI İŞ LİSTESİ.** Bu kayıt yalnız iş kapsamıdır; uygulandı/test edildi/yayınlandı anlamına gelmez. Kullanıcı sıradaki mantığı anlatmadan geliştirmeye veya canlı operasyona geçilmez.
