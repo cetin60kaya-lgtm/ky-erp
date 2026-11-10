@@ -80,10 +80,15 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, onInvoiceMail, r
   </section>;
 }
 
-export default function CustomerDocumentsWorkspace({ activeMainCompany, openModule, refreshKey = 0 }) {
+export default function CustomerDocumentsWorkspace({ activeMainCompany, openModule, moduleActionContext, refreshKey = 0 }) {
   const [view, setView] = useState("chain");
   const [mailInvoice, setMailInvoice] = useState(null);
   const openInvoiceMail = (row) => { setMailInvoice(row); setView("mail"); };
+  useEffect(() => {
+    if (!moduleActionContext?.mailModelName) return;
+    setMailInvoice({ id: "model-" + (moduleActionContext.mailModelId || moduleActionContext.mailModelName), model_name: moduleActionContext.mailModelName, party_name: moduleActionContext.mailCompanyName || "" });
+    setView("mail");
+  }, [moduleActionContext?.mailModelId, moduleActionContext?.mailModelName, moduleActionContext?.mailCompanyName]);
   return (
     <section className="accounting-composite-workspace">
       <div className="accounting-subbar" role="tablist" aria-label="Müşteri satış görünümü">
