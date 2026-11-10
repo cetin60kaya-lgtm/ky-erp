@@ -26,3 +26,16 @@ export function canOfferPlacementBinding(targets = []) {
     && String(source.rootPath || "").trim().toLocaleLowerCase("tr-TR") === "modeller"
     && source.connectionId && source.connectionId === placement.connectionId);
 }
+
+/** Giden PSD kaynağını, yalnız mevcut Google Drive AGENT doğrulanamıyorsa kullanıcıya bulut seçeneği olarak öner. */
+export function canOfferOutgoingCloudBinding(targets = []) {
+  const source = targets.find((row) => row?.purposeCode === "MODEL_SOURCE");
+  const outgoing = targets.find((row) => row?.purposeCode === "OUTGOING_DESIGN");
+  return Boolean(outgoing?.ok && outgoing.exact === true && outgoing.syncEnabled !== false
+    && outgoing.provider === "GOOGLE_DRIVE" && outgoing.syncMode === "AGENT"
+    && ["UNKNOWN", "ERROR", "DISCONNECTED"].includes(outgoing.connectionStatus)
+    && source?.ok && source.exact === true && source.syncEnabled !== false
+    && source.provider === "GOOGLE_DRIVE" && source.syncMode === "CLOUD_API"
+    && source.connectionStatus === "CONNECTED" && source.remoteRootId && source.connectionId
+    && String(source.rootPath || "").trim().toLocaleLowerCase("tr-TR") === "modeller");
+}

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { analyzeDesenStorageTargets, canOfferPlacementBinding } from "./desenStorageReadiness.js";
+import { analyzeDesenStorageTargets, canOfferPlacementBinding, canOfferOutgoingCloudBinding } from "./desenStorageReadiness.js";
 
 const connected = (purposeCode) => ({
   purposeCode, ok: true, provider: "GOOGLE_DRIVE", syncMode: "CLOUD_API",
@@ -66,4 +66,18 @@ test("yerleşim ataması yalnız doğrulanmış MODELLER kökünden ve aynı ba�
   assert.equal(canOfferPlacementBinding([{ ...source, rootPath: "farkli" }, placement]), false);
   assert.equal(canOfferPlacementBinding([{ ...source, connectionStatus: "ERROR" }, placement]), false);
   assert.equal(canOfferPlacementBinding([source, { ...placement, exact: true }]), false);
+});
+
+test("giden PSD yalnız çalışmayan Drive AGENT atamasından, onaylı kaynak bağlantısına geçirilebilir", () => {
+  const source = { ...connected("MODEL_SOURCE"), exact: true, syncEnabled: true, connectionId: "cloud-1", rootPath: "modeller" };
+  const outgoing = { ...connected("OUTGOING_DESIGN"), exact: true, syncEnabled: true,
+    provider: "GOOGLE_DRIVE", syncMode: "AGENT", connectionStatus: "UNKNOWN", connectionId: "old-agent", rootPath: "giden desenler" };
+  assert.equal(canOfferOutgoingCloudBinding([source, outgoing]), true);
+  assert.equal(canOfferOutgoingCloudBinding([source, { ...outgoing, connectionStatus: "CONNECTED" }]), false);
+  assert.equal(canOfferOutgoingCloudBinding([source, { ...outgoing, syncMode: "CLOUD_API" }]), false);
+  assert.equal(canOfferOutgoingCloudBinding([source, { ...outgoing, provider: "LOCAL_FOLDER" }]), false);
+  assert.equal(canOfferOutgoingCloudBinding([{ ...source, rootPath: "baska" }, outgoing]), false);
+  assert.equal(canOfferOutgoingCloudBinding([{ ...source, remoteRootId: "" }, outgoing]), false);
+  assert.equal(canOfferOutgoingCloudBinding([{ ...source, connectionStatus: "ERROR" }, outgoing]), false);
+  assert.equal(canOfferOutgoingCloudBinding([source, { ...outgoing, syncEnabled: false }]), false);
 });
