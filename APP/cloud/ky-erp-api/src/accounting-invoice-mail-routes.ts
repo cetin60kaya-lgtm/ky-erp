@@ -157,6 +157,32 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     return c.json({ok:true,data:{verified:true,logicalEventId}});
   });
 
+  // Status is read from the canonical send job, not from an optimistic browser flag.
+  // This also makes a lost client response recoverable after a page reload.
+  app.get("/api/muhasebe/invoice-mail-dispatch-status", async (c) => {
+    const a=await access(c);
+    if(a.failure)return a.failure;
+    const invoiceNo=txt(c.req.query("invoiceNo")).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    const deliveryNo=txt(c.req.query("deliveryNo")).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if(!/^HKN[0-9]{8,18}$/.test(invoiceNo)||!/^DDM[0-9]{8,18}$/.test(deliveryNo))
+      return error(c,"MAIL_STATUS_DOCUMENT_INVALID","Tam HKN ve DDM numarası gerekir.",422);
+    const eventId=["MODEL_INVOICE_MAIL",a.tenant,invoiceNo,deliveryNo].join(":");
+    const job=await c.env.DB.prepare("SELECT id,draft_id,status,provider_message_id,requested_by,created_at,updated_at FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1")
+      .bind(a.tenant,eventId).first<Row>();
+    if(!job)return c.json({ok:true,data:{status:"NOT_STARTED",linked:false}});
+    const linked=await c.env.DB.prepare("SELECT id FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1")
+      .bind("MUHASEBE_INVOICE_MAIL_LINK",a.tenant,txt(job.draft_id)).first<Row>();
+    const canReconcile=elevated(a.user!)||txt(job.requested_by)===txt(a.user?.id);
+    return c.json({ok:true,data:{
+      status:role(job.status),linked:Boolean(linked),
+      draftId:canReconcile?txt(job.draft_id):null,
+      sendJobId:canReconcile?txt(job.id):null,
+      updatedAt:txt(job.updated_at),
+      providerAccepted:role(job.status)==="ACCEPTED",
+      delivered:false,
+    }});
+  });
+
   // Read-only reporting uses the accepted provider send job, never a client-claimed "sent" flag.
   app.get("/api/muhasebe/invoice-mail-links", async (c) => {
     const a = await access(c);
