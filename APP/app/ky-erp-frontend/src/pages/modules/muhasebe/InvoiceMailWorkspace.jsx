@@ -68,6 +68,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   }, [modelId,companySlug]);
   useEffect(() => {
     setInvoiceNo(String(selectedInvoice?.document_no || selectedInvoice?.invoiceNo || ""));
+    setDeliveryNo(String(selectedInvoice?.delivery_no || selectedInvoice?.deliveryNo || ""));
     setModelName(String(selectedInvoice?.model_name || selectedInvoice?.modelName || ""));
     setRouteForm((current) => ({ ...current, customerName: String(selectedInvoice?.party_name || current.customerName || "") }));
     setDraft(null); setSent(false); setInvoiceAssetId(""); setDeliveryAssetId("");
