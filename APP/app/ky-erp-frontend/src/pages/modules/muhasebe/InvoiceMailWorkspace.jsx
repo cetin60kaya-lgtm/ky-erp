@@ -32,6 +32,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const [deliveryAssetId, setDeliveryAssetId] = useState("");
   const [draft, setDraft] = useState(null);
   const [sent, setSent] = useState(false);
+  const [mailHistory, setMailHistory] = useState([]);
   const [working, setWorking] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -75,6 +76,21 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   }, [selectedInvoice]);
 
   const invalidate = () => { setDraft(null); setSent(false); setNotice(""); };
+  useEffect(() => {
+    let cancelled=false;
+    const invoice=documentKey(invoiceNo);
+    if (!modelId && !/^HKN[0-9]{8,18}$/.test(invoice)) {setMailHistory([]);return undefined;}
+    const timer=window.setTimeout(async () => {
+      try {
+        const params={mainCompanySlug:companySlug};
+        if (/^HKN[0-9]{8,18}$/.test(invoice)) params.invoiceNo=invoice;
+        if (modelId) params.modelId=modelId;
+        const result=unwrap(await apiGet("/muhasebe/invoice-mail-links",params));
+        if (!cancelled) setMailHistory(Array.isArray(result)?result:[]);
+      } catch {if(!cancelled)setMailHistory([]);}
+    },300);
+    return ()=>{cancelled=true;window.clearTimeout(timer);};
+  },[companySlug,invoiceNo,modelId,sent]);
   const chosenRoute = routes.find((row) => row.id === routeId);
   const account = accounts.find((row) => row.id === accountId);
   const possibleRoute = useMemo(() =>
@@ -197,7 +213,16 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
         throw new Error("Posta sağlayıcısı gönderimi kabul ettiğini doğrulamadı; tekrar göndermeyin.");
       }
       setSent(true);
-      setNotice("Posta sağlayıcısı gönderimi kabul etti. Teslim edildi anlamına gelmez; gönderilenlerden izleyin.");
+      try {
+        await apiPost("/muhasebe/invoice-mail-links", {
+          mainCompanySlug:companySlug, draftId:draft.id,
+          invoiceNo:documentKey(invoiceNo), deliveryNo:documentKey(deliveryNo),
+          modelId,modelName,routeId,
+        });
+        setNotice("Sağlayıcı gönderimi kabul etti; HKN/DDM ve model gönderim ilişkisi KY ERP'ye kaydedildi. Teslim edilme durumu ayrıca izlenir.");
+      } catch (linkError) {
+        setNotice("Sağlayıcı gönderimi kabul etti fakat ERP model/fatura gönderim bağı henüz doğrulanamadı: "+(linkError?.message||"Kayıt hatası")+". Tekrar mail göndermeyin.");
+      }
     } catch (e) {
       setError((e?.message || "Gönderimin sonucu belirsiz.") + " Otomatik tekrar gönderim yapılmadı; Mail & Dosyalar'dan gönderim durumunu denetleyin.");
     } finally { setWorking(false); }
@@ -262,6 +287,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       <p>TO: {draft.to.join("; ")}{draft.cc.length ? " · CC: " + draft.cc.join("; ") : ""}</p>
       <p>Ek: {invoiceFiles.find((file) => file.id === draft.invoiceAssetId)?.file_name} / {deliveryFiles.find((file) => file.id === draft.deliveryAssetId)?.file_name}</p>
     </div> : null}
+    {mailHistory.length ? <section className="imw-history"><strong>Fatura / model mail geçmişi</strong>{mailHistory.map((item) => <div key={item.draftId}><span>{item.invoiceNo} · {item.modelName || modelName} · {item.recordedAt ? new Date(item.recordedAt).toLocaleDateString("tr-TR") : ""}</span><small>{Array.isArray(item.to)?item.to.join("; "):""} · Sağlayıcı kabul etti</small></div>)}</section> : null}
     <p className="imw-foot">PDF bulunamazsa otomatik ek oluşturulmaz. Gönderim sadece yetkili posta kutusu ve açık onayla yapılır. Mevcut Mail & Dosyalar gönderim korumaları geçerlidir.</p>
   </section>;
 }
