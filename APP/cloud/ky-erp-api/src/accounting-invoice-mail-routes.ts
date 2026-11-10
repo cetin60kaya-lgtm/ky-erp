@@ -110,6 +110,84 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     return c.json({ok:true,data:{...data,createdAt:ts,updatedAt:ts}},201);
   });
 
+  // Read-only reporting uses the accepted provider send job, never a client-claimed "sent" flag.
+  app.get("/api/muhasebe/invoice-mail-links", async (c) => {
+    const a = await access(c);
+    if (a.failure) return a.failure;
+    const invoiceNo=txt(c.req.query("invoiceNo")).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    const modelId=txt(c.req.query("modelId"));
+    if (!invoiceNo && !modelId) return c.json({ok:true,data:[]});
+    const filters=["scope=?","main_company_slug=?"];
+    const args:any[]=["MUHASEBE_INVOICE_MAIL_LINK",a.tenant];
+    if (invoiceNo) {filters.push("json_extract(data,'$.invoiceNo')=?");args.push(invoiceNo);}
+    if (modelId) {filters.push("json_extract(data,'$.modelId')=?");args.push(modelId);}
+    const result=await c.env.DB.prepare("SELECT file_name,data,created_at FROM json_store WHERE "+filters.join(" AND ")+" ORDER BY created_at DESC LIMIT 80")
+      .bind(...args).all<Row>();
+    const links=(result.results||[]).map((row) => {
+      try{return {...JSON.parse(txt(row.data)),id:row.file_name,recordedAt:row.created_at};}
+      catch{return null;}
+    }).filter(Boolean);
+    return c.json({ok:true,data:links});
+  });
+
+  app.post("/api/muhasebe/invoice-mail-links", async (c) => {
+    const body=await jsonBody(c),a=await access(c,body,true);
+    if(a.failure)return a.failure;
+    const draftId=txt(body.draftId),modelId=txt(body.modelId);
+    const invoiceNo=txt(body.invoiceNo).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    const deliveryNo=txt(body.deliveryNo).toUpperCase().replace(/[^A-Z0-9]/g,"");
+    if (!draftId || !/^HKN[0-9]{8,18}$/.test(invoiceNo) || !/^DDM[0-9]{8,18}$/.test(deliveryNo))
+      return error(c,"MAIL_LINK_DOCUMENT_INVALID","Gönderim kaydı için doğru HKN/DDM ve taslak gereklidir.",422);
+    const job=await c.env.DB.prepare(
+      "SELECT j.id job_id,j.status,j.provider_message_id,j.account_id,j.requested_by,j.logical_event_id,d.attachment_refs_json,d.recipients_json,d.subject FROM mail_send_jobs j JOIN mail_drafts d ON d.id=j.draft_id AND d.main_company_slug=j.main_company_slug AND d.account_id=j.account_id WHERE j.draft_id=? AND j.main_company_slug=? ORDER BY j.created_at DESC LIMIT 1"
+    ).bind(draftId,a.tenant).first<Row>();
+    if (!job || role(job.status)!=="ACCEPTED")
+      return error(c,"MAIL_LINK_NOT_ACCEPTED","Sağlayıcının kabul ettiği mail gönderimi bulunamadı.",409);
+    if (txt(job.requested_by)!==txt(a.user?.id) && !elevated(a.user!))
+      return error(c,"MAIL_LINK_FORBIDDEN","Başka kullanıcının gönderimini bağlayamazsınız.",403);
+    const expectEvent="MODEL_INVOICE_MAIL:"+a.tenant+":"+invoiceNo+":";
+    if (!txt(job.logical_event_id).startsWith(expectEvent))
+      return error(c,"MAIL_LINK_EVENT_MISMATCH","Gönderim olayı HKN faturasına ait değil.",409);
+    if (modelId) {
+      const model=await c.env.DB.prepare("SELECT id FROM model_records WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1")
+        .bind(modelId,a.tenant).first<Row>();
+      if(!model)return error(c,"MODEL_NOT_FOUND","Model kartı eşleşmesi doğrulanamadı.",422);
+    }
+    let refs:any[]=[];
+    try{refs=JSON.parse(txt(job.attachment_refs_json)||"[]");}
+    catch{return error(c,"MAIL_LINK_ATTACHMENTS_INVALID","Mail eki bilgisi okunamadı.",409);}
+    if(refs.length!==2)return error(c,"MAIL_LINK_ATTACHMENTS_INVALID","Gönderimde iki belge eki olmalıdır.",409);
+    const names:string[]=[];
+    for(const ref of refs){
+      const assetId=txt(ref.fileAssetId||ref.file_asset_id||ref.id);
+      const asset=await c.env.DB.prepare("SELECT file_name FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1")
+        .bind(assetId,a.tenant).first<Row>();
+      if(!asset)return error(c,"MAIL_LINK_ATTACHMENT_MISSING","Gönderim eki File Hub'da bulunamadı.",409);
+      names.push(txt(asset.file_name).toUpperCase());
+    }
+    if(!names.some(n=>n.startsWith(invoiceNo)&&/\.PDF$/i.test(n)) ||
+       !names.some(n=>n.startsWith(deliveryNo)&&/\.PDF$/i.test(n)))
+      return error(c,"MAIL_LINK_ATTACHMENT_MISMATCH","Mail ekleri bu HKN/DDM belgeleriyle eşleşmiyor.",409);
+    let recipients:Row={};
+    try{recipients=JSON.parse(txt(job.recipients_json)||"{}");}catch{recipients={};}
+    const existing=await c.env.DB.prepare(
+      "SELECT file_name,data FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1"
+    ).bind("MUHASEBE_INVOICE_MAIL_LINK",a.tenant,draftId).first<Row>();
+    if(existing){return c.json({ok:true,data:JSON.parse(txt(existing.data)),idempotent:true});}
+    const data={
+      draftId,sendJobId:job.job_id,providerMessageId:job.provider_message_id||"",
+      accountId:job.account_id,invoiceNo,deliveryNo,modelId,
+      modelName:txt(body.modelName).slice(0,160),routeId:txt(body.routeId),
+      subject:txt(job.subject),to:Array.isArray(recipients.to)?recipients.to:[],
+      cc:Array.isArray(recipients.cc)?recipients.cc:[],status:"PROVIDER_ACCEPTED",
+      createdBy:txt(a.user?.id),recordedAt:now()
+    };
+    await c.env.DB.prepare(
+      "INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)"
+    ).bind(crypto.randomUUID(),"MUHASEBE_INVOICE_MAIL_LINK",a.tenant,draftId,JSON.stringify(data),data.recordedAt,data.recordedAt).run();
+    return c.json({ok:true,data},201);
+  });
+
   app.delete("/api/muhasebe/invoice-mail-routes/:id", async (c) => {
     const a=await access(c,{},true);
     if (a.failure) return a.failure;
