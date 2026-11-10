@@ -5,15 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-10",
   "scope": [
-    "PR548-MODEL-files-Drive-folder-preview-link",
-    "PR548-local-model-folder-drag-drop-multi-files",
-    "PR548-PSD-existing-index-multimodel-BOY",
-    "PR548-DESEN-IMALAT-BOYAHANE-readonly-model-file",
-    "CI-42706495506-success",
-    "Cloudflare-Pages-production-smoke"
+    "PR542-DESEN-OUTGOING_DESIGN-GoogleDrive-readonly-binding-UI",
+    "PR548-shared-model-files-and-multi-model-BOY",
+    "CI-PR542-green",
+    "frontend-only-no-D1-business-writes",
+    "Pages-production-smoke"
   ],
-  "note": "10.11.2026 açık canlı yayın talebi: PR #548 frontend + Worker canonical merge d52b6a2; Worker release 42706860180 başarılı. Model klasörü ve teknik föy, Drive dosya paketi, giden PSD BOY bağlantıları, Desen/İmalat/Boyahane kartı görünürlüğü. Frontend Pages paket/test/build ve canlı doğrulama; canlı üretim kayıtlarına dokunma.",
-  "sourceCommit": "b808489bbd4234a8418889e2ea94b179a75081f3",
+  "note": "10.11.2026 kalan işler kapsamında PR #542 eklendi: yalnız yetkili kullanıcı onayıyla AGENT UNKNOWN giden PSD kaynağını mevcut Hakan Emp Google Drive CLOUD_API kaynağına salt okunur atama seçeneği. Herhangi bir Drive dosyası taşınmaz, silinmez; D1 binding kullanıcının ayrıca tıklamasıyla oluşur. Canlı Pages doğrulama ayrı; dosya indeksleme ve model-BOY kullanıcı kabulü bekliyor.",
+  "sourceCommit": "ee1fe8b413fa436857b2dbd5624d1a60a398f2ca",
   "requestedAt": "2026-11-10",
-  "attempt": 1
+  "attempt": 2
 }
