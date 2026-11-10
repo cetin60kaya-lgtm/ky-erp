@@ -163,10 +163,15 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       const asset=await c.env.DB.prepare("SELECT file_name FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1")
         .bind(assetId,a.tenant).first<Row>();
       if(!asset)return error(c,"MAIL_LINK_ATTACHMENT_MISSING","Gönderim eki File Hub'da bulunamadı.",409);
+      if (modelId) {
+        const relation=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
+          .bind(a.tenant,assetId,modelId).first<Row>();
+        if (!relation)return error(c,"MAIL_LINK_MODEL_MISMATCH","Gönderilen belge seçili model kartına bağlı değil.",409);
+      }
       names.push(txt(asset.file_name).toUpperCase());
     }
-    if(!names.some(n=>n.startsWith(invoiceNo)&&/\.PDF$/i.test(n)) ||
-       !names.some(n=>n.startsWith(deliveryNo)&&/\.PDF$/i.test(n)))
+    const pdfFor=(number:string) => names.some((n) => new RegExp("^"+number+"(?![0-9]).*\\.PDF$").test(n));
+    if(!pdfFor(invoiceNo) || !pdfFor(deliveryNo))
       return error(c,"MAIL_LINK_ATTACHMENT_MISMATCH","Mail ekleri bu HKN/DDM belgeleriyle eşleşmiyor.",409);
     let recipients:Row={};
     try{recipients=JSON.parse(txt(job.recipients_json)||"{}");}catch{recipients={};}
