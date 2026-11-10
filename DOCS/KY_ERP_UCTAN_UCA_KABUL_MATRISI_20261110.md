@@ -14,6 +14,7 @@ Bu kaynak, aynı işi tekrar kodlayan PR'lar açmamak ve `kod / test / merge / y
 | PR #549, ikinci PSD-model-BOY paneli | taslak / CI SUCCESS | alternatif `placements` şema/ekranı var | canonical `variants` ile **çakışıyor**, merge yasak; ikinci panel açılmayacak |
 | PR #550, HKN/DDM Outlook rotalama | taslak / CI SUCCESS (son head `4edfa824`) | e-posta adres/profil + ek doğrulama taslağı | canlı değil; P0 mükerrer gönderim kimliği ve sağlayıcı kabulü-sonrası kayıt onarımı tamamlanmalı |
 | PR #521 / #522, İmalat 2026 rapor/60 gün takip | taslak / CI geçmişte başarılı | kendi dalında kod | canonical üstüne çakışma/senaryo analizi, güncel yayın ve gerçek kullanıcı kabulü yok |
+| PR #511, geçmiş 2026 imalat Excel/XLSM kayıt aktarımı | açık PR / CI geçmişte başarılı | mükerrerlik korumalı import scripti ve sözleşme testleri mevcut | canlı veride çalıştırılmadı; tekrar eden tarihsel model/üretim kayıtları ve dosya eşleşmesi için ayrı kabul gerek |
 
 **Not:** `https://kyerp.net/` tek canonical ERP adresidir. `app.kyerp.net` DNS kaydının yokluğu mevcut resmî uygulamanın canlılık engeli değildir.
 
@@ -59,7 +60,7 @@ Her satır için gerçek `PASS / FAIL / BLOCKED`, kullanıcı/cihaz bağlamı, c
 - **P0:** Gerçek File Hub Drive 4 atama + sync/read-only kabul, model klasörü/PSD BOY indeks ilişkisi.
 - **P0:** İşNet HKN/DDM ve LOT/irsaliye-fatura testleri; gerçek mutasyon öncesi yedek ve onay.
 - **P1:** PR #549'u canonical `variants` içine kayıpsız birleştir veya gereksiz iki paneli kapat; üçüncü yol kurma.
-- **P1:** PR #521/#522 ile mevcut İmalat 2026 kontrolünü diff karşılaştır, yalnız eksik fonksiyonu al.
+- **P1:** PR #511 tarihsel Excel aktarımı ve PR #521/#522 rapor/son 60 gün takibini güncel İmalat canonical kaynakla diff karşılaştır; yalnız eksik fonksiyonu al. Gerçek XLSM import test verisini D1 üretime yazma.
 - **P1:** Outlook son 12 aylık kişi/alıcı/grup tanıma ve haftalık XLSX cari mutabakatı (10.11 planı), mevcut Microsoft Graph/File Hub/muhasebe çekirdeği.
 - **P1:** Android/Windows yetkili kullanıcı saha kabulü ve teknik dosya indirme denetimi.
 
