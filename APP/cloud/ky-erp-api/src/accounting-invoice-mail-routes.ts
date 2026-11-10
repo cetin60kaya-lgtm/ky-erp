@@ -142,7 +142,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       const asset=await c.env.DB.prepare("SELECT id,file_name,status,mime_type FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1")
         .bind(assetId,a.tenant).first<Row>();
       const fileName=txt(asset?.file_name).toUpperCase();
-      if(!asset||role(asset.status)!=="AVAILABLE"||!new RegExp("^"+number+"(?![0-9]).*\\\\.PDF$").test(fileName))
+      if(!asset||role(asset.status)!=="AVAILABLE"||!new RegExp("^"+number+"(?![0-9]).*\\.PDF$").test(fileName))
         return error(c,"MAIL_PDF_MISMATCH","Dosya File Hub'da mevcut değil veya tam HKN/DDM numarasıyla eşleşmiyor.",409);
       if(modelId){
         const relation=await c.env.DB.prepare("SELECT id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='MODEL' AND entity_id=? LIMIT 1")
