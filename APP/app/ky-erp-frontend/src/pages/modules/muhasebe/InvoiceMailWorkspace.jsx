@@ -12,6 +12,7 @@ const stringifyEmails = (value) => (Array.isArray(value) ? value : []).join("; "
 
 export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoice = null }) {
   const companySlug = activeMainCompany?.slug || "";
+  const modelId = selectedInvoice?.model_id || selectedInvoice?.modelId || "";
   const [routes, setRoutes] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState("");
@@ -24,6 +25,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const [deliveryNo, setDeliveryNo] = useState("");
   const [toText, setToText] = useState("");
   const [ccText, setCcText] = useState("");
+  const [modelFiles, setModelFiles] = useState([]);
   const [invoiceFiles, setInvoiceFiles] = useState([]);
   const [deliveryFiles, setDeliveryFiles] = useState([]);
   const [invoiceAssetId, setInvoiceAssetId] = useState("");
@@ -56,6 +58,15 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => {
+    let cancelled=false;
+    setModelFiles([]);
+    if (!modelId || !companySlug) return undefined;
+    listCommunicationFiles({q:modelId,take:200}).then((result) => {
+      if (!cancelled) setModelFiles(Array.isArray(unwrap(result)) ? unwrap(result) : []);
+    }).catch((e) => { if (!cancelled) setError(e?.message || "Model kartı dosya ilişkileri doğrulanamadı."); });
+    return () => {cancelled=true;};
+  }, [modelId,companySlug]);
+  useEffect(() => {
     setInvoiceNo(String(selectedInvoice?.document_no || selectedInvoice?.invoiceNo || ""));
     setModelName(String(selectedInvoice?.model_name || selectedInvoice?.modelName || ""));
     setRouteForm((current) => ({ ...current, customerName: String(selectedInvoice?.party_name || current.customerName || "") }));
@@ -86,13 +97,13 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       try {
         const result = unwrap(await listCommunicationFiles({ q: wanted, take: 100 }));
         if (cancelled) return;
-        const matches = matchingPdfFiles(result, wanted, "HKN");
+        const matches = matchingPdfFiles(result, wanted, "HKN").filter((file) => !modelId || modelFiles.some((related) => related.id === file.id));
         setInvoiceFiles(matches);
         if (matches.length === 1) setInvoiceAssetId(matches[0].id);
       } catch (e) { if (!cancelled) setError(e?.message || "HKN dosyaları aranamadı."); }
     }, 300);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [invoiceNo, companySlug]);
+  }, [invoiceNo, companySlug, modelId, modelFiles]);
 
   useEffect(() => {
     let cancelled = false;
@@ -103,13 +114,13 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       try {
         const result = unwrap(await listCommunicationFiles({ q: wanted, take: 100 }));
         if (cancelled) return;
-        const matches = matchingPdfFiles(result, wanted, "DDM");
+        const matches = matchingPdfFiles(result, wanted, "DDM").filter((file) => !modelId || modelFiles.some((related) => related.id === file.id));
         setDeliveryFiles(matches);
         if (matches.length === 1) setDeliveryAssetId(matches[0].id);
       } catch (e) { if (!cancelled) setError(e?.message || "DDM dosyaları aranamadı."); }
     }, 300);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [deliveryNo, companySlug]);
+  }, [deliveryNo, companySlug, modelId, modelFiles]);
 
   const editRoute = (row) => {
     setRouteForm({ id: row.id, customerName: row.customerName, groupCode: row.groupCode,
@@ -238,6 +249,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       <label>Bilgi alıcıları (CC)<textarea value={ccText} onChange={(e) => {setCcText(e.target.value);invalidate();}} rows={2} placeholder="Gerekli diğer alıcılar" /></label>
     </div>
 
+    {modelId ? <p className="imw-foot">Model kartı bağlantısı: {modelName || "Seçili model"}. Yalnız bu modele File Hub üzerinden gerçekten bağlı HKN/DDM PDF dosyaları seçilebilir.</p> : null}
     {possibleRoute.length > 1 ? <p className="imw-error">Aynı grupta birden çok kişi var; doğru planlamacı ve fatura alıcısını ayrıca kontrol edin.</p> : null}
     <div className="imw-actions">
       <button type="button" disabled={!accountId || !routeId || working || sent} onClick={prepare}>{working ? "İşleniyor..." : "PDF Ekleriyle Taslak Oluştur"}</button>
