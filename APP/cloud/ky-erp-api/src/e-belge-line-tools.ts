@@ -89,7 +89,7 @@ export function registerEBelgeLineToolRoutes(app:Hono<AppEnv>){
       const owned=text(user?.mainCompanySlug||user?.main_company_slug);
       const permission=(Array.isArray(user?.permissions)?user?.permissions:[])
         .find((row:Row)=>text(row.moduleKey||row.module_key).toUpperCase()==="MUHASEBE");
-      if(!user?.id||(!owner&&(!owned||owned!==slug||!(permission?.canUpdate||permission?.canCreate||permission?.can_update))))
+      if(!user?.id||(role!=="SUPER_ADMIN"&&(!owned||owned!==slug))||(!owner&&!(permission?.canUpdate||permission?.canCreate||permission?.can_update)))
         return c.json({ok:false,error:{code:"PACKAGE_CONFIRM_FORBIDDEN",message:"Ambalaj onayı muhasebe düzenleme yetkisi gerektirir."}},403);
       const chosen=product||(text(line.product_id)?await getEBelgeProduct(c,slug,text(line.product_id)):null);
       if(!chosen)return c.json({ok:false,error:{code:"PACKAGE_PRODUCT_REQUIRED",message:"Ambalajı doğrulamadan önce kesin ürünü seçin."}},409);
