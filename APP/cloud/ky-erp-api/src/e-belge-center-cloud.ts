@@ -16,6 +16,7 @@ import { chooseCanonicalDocumentModels, archiveDocumentIdentity } from "./e-belg
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
 import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
+import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -64,7 +65,20 @@ async function resolveManualDirection(c:Context<AppEnv>,slug:string,requested:un
 
 async function addIssue(c:Context<AppEnv>,slug:string,documentId:string,code:string,message:string,severity="WARNING",field=""){const existing=await c.env.DB.prepare(`SELECT id,is_resolved FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? AND issue_code=? ORDER BY created_at DESC LIMIT 1`).bind(slug,documentId,code).first<Row>();if(existing){await c.env.DB.prepare(`UPDATE accounting_document_issues SET severity=?,field_name=?,message=?,is_resolved=0,resolved_at=NULL WHERE id=? AND main_company_slug=? AND document_id=?`).bind(severity,field||null,message,existing.id,slug,documentId).run();return}await c.env.DB.prepare(`INSERT INTO accounting_document_issues(id,main_company_slug,document_id,issue_code,severity,field_name,message,is_resolved,created_at) VALUES(?,?,?,?,?,?,?,0,?)`).bind(crypto.randomUUID(),slug,documentId,code,severity,field||null,message,now()).run()}
 async function resolveIssues(c:Context<AppEnv>,slug:string,documentId:string,codes:string[]){if(!codes.length)return;const placeholders=codes.map(()=>"?").join(",");await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE main_company_slug=? AND document_id=? AND is_resolved=0 AND issue_code IN (${placeholders})`).bind(now(),slug,documentId,...codes).run()}
-async function matchCompany(c:Context<AppEnv>,slug:string,name:string,taxNo:string){const tax=cleanTax(taxNo);if(tax){const r=await c.env.DB.prepare(`SELECT id,name,tax_no FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND REPLACE(REPLACE(COALESCE(tax_no,''),' ',''),'-','')=? LIMIT 1`).bind(slug,tax).first<Row>();if(r)return{companyId:text(r.id),companyName:text(r.name),status:"AUTO_MATCHED",confidence:1}}const n=normalize(name);if(n){const r=await c.env.DB.prepare(`SELECT c.id,c.name,c.tax_no FROM company_aliases a JOIN companies c ON c.id=a.company_id AND c.main_company_slug=a.main_company_slug WHERE a.main_company_slug=? AND a.deleted_at IS NULL AND a.is_active=1 AND a.normalized_name=? LIMIT 1`).bind(slug,n).first<Row>();if(r)return{companyId:text(r.id),companyName:text(r.name),status:"AUTO_MATCHED",confidence:.98}}return{companyId:"",companyName:name,status:"UNMATCHED",confidence:0}}
+async function matchCompany(c:Context<AppEnv>,slug:string,name:string,taxNo:string){
+  const tax=cleanTax(taxNo);
+  // Legal identity is VKN/TCKN + tenant. A name/alias alone cannot establish
+  // a financial counterparty; old aliases remain suggestions for manual review.
+  if(!/^[0-9]{10,11}$/.test(tax))
+    return{companyId:"",companyName:name,status:"TAX_REVIEW_REQUIRED",confidence:0};
+  const candidates=(await c.env.DB.prepare(`SELECT id,name,tax_no FROM companies
+     WHERE main_company_slug=? AND deleted_at IS NULL
+       AND REPLACE(REPLACE(COALESCE(tax_no,''),' ',''),'-','')=? LIMIT 3`)
+    .bind(slug,tax).all<Row>()).results||[];
+  const chosen=chooseExactCompanyByTax(candidates,tax);
+  if(chosen.company)return{companyId:text(chosen.company.id),companyName:text(chosen.company.name),status:"AUTO_MATCHED_VKN",confidence:1};
+  return{companyId:"",companyName:name,status:chosen.status,confidence:0};
+}
 async function saveCompanyAlias(c:Context<AppEnv>,slug:string,companyId:string,rawName:string){
   const name=text(rawName),normalized=normalize(name);
   if(!companyId||!name||!normalized||!(await tableExists(c,"company_aliases")))return false;
@@ -105,19 +119,24 @@ async function ensureOfficialXmlCompany(c:Context<AppEnv>,slug:string,p:Row){
   const raw=safeJson(p.rawMetadata),tax=cleanTax(p.partyTaxNo),name=text(p.partyName);
   if(raw.ublVerified!==true||p.directionNeedsReview===true||!["INCOMING","OUTGOING"].includes(upper(p.direction))||
      !/^[0-9]{10,11}$/.test(tax)||!name||name.length>240)return null;
-  const byTax=await c.env.DB.prepare("SELECT id FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND REPLACE(REPLACE(COALESCE(tax_no,''),' ',''),'-','')=? LIMIT 1").bind(slug,tax).first<Row>();
-  if(byTax?.id){
-    // Fill only missing legal contact data. Never alter payment / balance / official flags.
+  const byTaxRows=(await c.env.DB.prepare(`SELECT id,name,tax_no FROM companies WHERE main_company_slug=?
+    AND deleted_at IS NULL AND REPLACE(REPLACE(COALESCE(tax_no,''),' ',''),'-','')=? LIMIT 3`)
+    .bind(slug,tax).all<Row>()).results||[];
+  const existing=chooseExactCompanyByTax(byTaxRows,tax);
+  if(existing.status==="DUPLICATE_VKN_REVIEW")return null;
+  const partyEmail=verifiedContactEmail(raw.partyEmail),partyPhone=verifiedContactPhone(raw.partyPhone);
+  if(existing.company?.id){
+    // Existing manual company fields are authoritative. Only fill blank contact fields.
     await c.env.DB.prepare(`UPDATE companies SET
         address=COALESCE(NULLIF(TRIM(address),''),?),
         phone=COALESCE(NULLIF(TRIM(phone),''),?),
         email=COALESCE(NULLIF(TRIM(email),''),?),
         tax_office=COALESCE(NULLIF(TRIM(tax_office),''),?)
        WHERE id=? AND main_company_slug=? AND deleted_at IS NULL`)
-      .bind(text(raw.partyAddress).slice(0,500)||null,text(raw.partyPhone).slice(0,80)||null,
-        text(raw.partyEmail).slice(0,160)||null,text(raw.partyTaxOffice).slice(0,120)||null,
-        byTax.id,slug).run();
-    return {id:text(byTax.id),created:false};
+      .bind(text(raw.partyAddress).slice(0,500)||null,partyPhone||null,
+        partyEmail||null,text(raw.partyTaxOffice).slice(0,120)||null,
+        text(existing.company.id),slug).run();
+    return{id:text(existing.company.id),created:false};
   }
   const key=normalize(name);
   const collision=await c.env.DB.prepare("SELECT id,tax_no FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND (normalized_name=? OR UPPER(name)=UPPER(?)) LIMIT 2")
@@ -132,8 +151,8 @@ async function ensureOfficialXmlCompany(c:Context<AppEnv>,slug:string,p:Row){
      current_balance,opening_balance,default_record_type,is_active,supplier_debt_tracking,
      customer_receivable_tracking,payment_mode,vat_tracking_enabled,created_at,updated_at,deleted_at)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,0,0,'RESMI',1,0,?,? ,1,?,?,NULL)`)
-    .bind(id,slug,name,key,role,role,tax,text(raw.partyTaxOffice)||null,text(raw.partyPhone)||null,
-      text(raw.partyEmail)||null,text(raw.partyAddress)||null,outgoing?1:0,outgoing?"CREDIT":"CASH",ts,ts).run();
+    .bind(id,slug,name,key,role,role,tax,text(raw.partyTaxOffice)||null,partyPhone||null,
+      partyEmail||null,text(raw.partyAddress)||null,outgoing?1:0,outgoing?"CREDIT":"CASH",ts,ts).run();
   const actual=await c.env.DB.prepare("SELECT id FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(id,slug).first<Row>();
   return actual?.id?{id:text(actual.id),created:true}:null;
 }
