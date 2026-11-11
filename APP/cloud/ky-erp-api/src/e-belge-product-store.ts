@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Context } from "hono";
-import { chooseExactEBelgeProduct, exactProductKey } from "./e-belge-exact-product";
+import { chooseExactEBelgeProduct, exactProductKey } from "./e-belge-exact-product.ts";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
