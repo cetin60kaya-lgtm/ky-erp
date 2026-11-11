@@ -1,5 +1,5 @@
 // KY ERP: deterministic archive-name → canonical model identity. No fuzzy auto-merge.
-import { exactPackageKg } from "./e-belge-exact-product";
+import { exactPackageKg } from "./e-belge-exact-product.ts";
 type Row = Record<string, any>;
 const txt=(v:unknown)=>v==null?"":String(v).trim();
 export const modelKey=(value:unknown)=>txt(value).toLocaleUpperCase("tr-TR")
