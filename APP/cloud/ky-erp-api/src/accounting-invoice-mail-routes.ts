@@ -218,9 +218,11 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       return error(c,"MAIL_LINK_NOT_ACCEPTED","Sağlayıcının kabul ettiği mail gönderimi bulunamadı.",409);
     if (txt(job.requested_by)!==txt(a.user?.id) && !elevated(a.user!))
       return error(c,"MAIL_LINK_FORBIDDEN","Başka kullanıcının gönderimini bağlayamazsınız.",403);
-    const expectEvent="MODEL_INVOICE_MAIL:"+a.tenant+":"+invoiceNo+":";
-    if (!txt(job.logical_event_id).startsWith(expectEvent))
-      return error(c,"MAIL_LINK_EVENT_MISMATCH","Gönderim olayı HKN faturasına ait değil.",409);
+    // A mail send job belongs to exactly one HKN + DDM pair in this tenant.
+    // A shared HKN prefix is not enough: a different DDM must never be attached.
+    const expectEvent=["MODEL_INVOICE_MAIL",a.tenant,invoiceNo,deliveryNo].join(":");
+    if (txt(job.logical_event_id)!==expectEvent)
+      return error(c,"MAIL_LINK_EVENT_MISMATCH","Gönderim işi seçilen HKN ve DDM belge çiftine ait değil.",409);
     if (modelId) {
       const model=await c.env.DB.prepare("SELECT id FROM model_records WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1")
         .bind(modelId,a.tenant).first<Row>();
