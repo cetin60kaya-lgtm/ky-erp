@@ -4,6 +4,7 @@
 // structured fields + line items + confidence
 import type { Context } from "hono";
 import { analyzeAccountingImageWithWorkersAi, workersAiAccountingDocumentStatus } from "./accounting-document-workers-ai.ts";
+import { reviewAccountingOcr } from "./accounting-document-ocr-quality.ts";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -243,7 +244,13 @@ async function azureAnalyze(c: Context<AppEnv>, file: File, documentKind: string
   const bytes = await file.arrayBuffer();
   const initial = await fetch(url, { method:"POST", headers:{"Ocp-Apim-Subscription-Key":key,"Content-Type":file.type||"application/octet-stream"}, body:bytes });
   if (!initial.ok) { const detail=await initial.text().catch(()=>""); throw Object.assign(new Error(`Belge analiz servisi ${initial.status} hatası verdi.`),{code:"DOCINTEL_ANALYZE_FAILED",detail:detail.slice(0,1200)}); }
-  const operationUrl=initial.headers.get("operation-location"); if(!operationUrl)throw Object.assign(new Error("Belge analiz servisi işlem adresi döndürmedi."),{code:"DOCINTEL_OPERATION_MISSING"});
+  const location=initial.headers.get("operation-location");
+  if(!location)throw Object.assign(new Error("Belge analiz servisi işlem adresi döndürmedi."),{code:"DOCINTEL_OPERATION_MISSING"});
+  const operationUrl=new URL(location,url);
+  // Poll uses the API credential: never send it to an off-origin operation URL.
+  if(operationUrl.protocol!=="https:"||operationUrl.origin!==new URL(endpoint).origin
+    ||!operationUrl.pathname.startsWith("/documentintelligence/"))
+    throw Object.assign(new Error("OCR servisi güvenli olmayan sonuç adresi döndürdü."),{code:"DOCINTEL_OPERATION_URL_REJECTED"});
   for(let attempt=0;attempt<30;attempt+=1){
     if(attempt)await sleep(Math.min(1000+attempt*250,3000));
     const poll=await fetch(operationUrl,{headers:{"Ocp-Apim-Subscription-Key":key}});if(!poll.ok)throw Object.assign(new Error(`Belge analiz sonucu alınamadı (${poll.status}).`),{code:"DOCINTEL_POLL_FAILED"});
@@ -264,24 +271,42 @@ async function extractionProfile(c: Context<AppEnv>, partyTaxNo: string, partyNa
   } catch { return null; }
 }
 
-export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, documentKind = "INVOICE") {
+export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, documentKind = "INVOICE", previewImage: File | null = null) {
   if(!file.size)throw Object.assign(new Error("Belge dosyası boş."),{code:"EMPTY_DOCUMENT"});
   if(file.size>40_000_000)throw Object.assign(new Error("Belge dosyası 40 MB sınırını aşıyor."),{code:"DOCUMENT_TOO_LARGE"});
 
   const requested=upper(documentKind)||"AUTO",env=c.env as any,readiness=accountingDocumentIntelligenceStatus(env);
   if(!readiness.configured)throw Object.assign(new Error("Belge yapay zeka servisi yapılandırılmamış."),{code:"DOCINTEL_NOT_CONFIGURED",detail:{provider:readiness.provider,endpointConfigured:readiness.endpointConfigured,keyConfigured:readiness.keyConfigured,workersAiConfigured:readiness.workersAiConfigured}});
-  const useAzure=readiness.azureConfigured===true;
+  let useAzure=readiness.azureConfigured===true;
   let resolvedKind=inferAccountingDocumentKind("",requested),first:Row,autoLayout:Row|null=null;
-
-  if(useAzure&&requested==="AUTO"){
-    autoLayout=await azureAnalyze(c,file,"IRSALIYE");
-    resolvedKind=inferAccountingDocumentKind(autoLayout.rawText,"AUTO");
-    if(resolvedKind==="FATURA"){try{first=await azureAnalyze(c,file,"FATURA")}catch{first={...autoLayout,autoInvoiceRefineFailed:true}}}else first=autoLayout;
-    first={...first,inferredDocumentKind:resolvedKind,autoDetected:true,autoDetectionSource:"OCR_TEXT"};
-  }else if(useAzure){
-    first=await azureAnalyze(c,file,resolvedKind);
+  const workersImage=previewImage instanceof File ? previewImage
+    : /^image\//i.test(file.type) ? file : null;
+  if(useAzure){
+    try{
+      if(requested==="AUTO"){
+        autoLayout=await azureAnalyze(c,file,"IRSALIYE");
+        resolvedKind=inferAccountingDocumentKind(autoLayout.rawText,"AUTO");
+        if(resolvedKind==="FATURA"){
+          try{first=await azureAnalyze(c,file,"FATURA")}
+          catch{first={...autoLayout,autoInvoiceRefineFailed:true}}
+        }else first=autoLayout;
+        first={...first,inferredDocumentKind:resolvedKind,autoDetected:true,autoDetectionSource:"OCR_TEXT"};
+      }else first=await azureAnalyze(c,file,resolvedKind);
+    }catch(err:any){
+      // Use the existing independent vision adapter if Azure is unavailable.
+      // An actual image or a rendered PDF page is mandatory; no invented text.
+      if(!readiness.workersAiConfigured||!workersImage)throw err;
+      first=await analyzeAccountingImageWithWorkersAi(c,workersImage,requested);
+      resolvedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(text(first.inferredDocumentKind))?"IRSALIYE":"FATURA";
+      first={...first,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",
+        autoDetectionSource:"WORKERS_AI_VISION",azureFallbackUsed:true,
+        azureFailureCode:text(err?.code)||"DOCINTEL_UNAVAILABLE"};
+      useAzure=false;
+    }
   }else{
-    first=await analyzeAccountingImageWithWorkersAi(c,file,requested);
+    // Cloudflare vision accepts images, not raw PDF. Frontend must render
+    // a genuine preview for this path when the input is a PDF.
+    first=await analyzeAccountingImageWithWorkersAi(c,workersImage||file,requested);
     resolvedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(text(first.inferredDocumentKind))?"IRSALIYE":"FATURA";
     first={...first,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",autoDetectionSource:"WORKERS_AI_VISION"};
   }
@@ -299,9 +324,27 @@ export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, 
   let secondary:Row|null=null;
   if(useAzure&&shouldFallback&&autoLayout&&candidate.extractorModel!==autoLayout.extractorModel)secondary=autoLayout;
   if(useAzure&&shouldFallback&&!secondary){const configuredSecondary=text(env.KYERP_DOCINTEL_SECONDARY_MODEL),defaultSecondary=resolvedKind==="FATURA"?(text(env.KYERP_DOCINTEL_DISPATCH_MODEL)||"prebuilt-layout"):"",secondaryModel=configuredSecondary||defaultSecondary;if(secondaryModel&&secondaryModel!==text(candidate.extractorModel)){try{secondary=await azureAnalyze(c,file,resolvedKind,secondaryModel)}catch(error:any){candidate={...candidate,secondaryFallbackFailed:true,secondaryFallbackError:text(error?.code)||"DOCINTEL_SECONDARY_FAILED"}}}}
-  if(secondary)candidate={...selectAccountingExtraction(candidate,secondary),inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",secondaryFallbackModel:text(secondary.extractorModel)};
+  if(useAzure&&shouldFallback&&!secondary&&readiness.workersAiConfigured&&workersImage){
+    try{secondary=await analyzeAccountingImageWithWorkersAi(c,workersImage,requested)}
+    catch(err:any){candidate={...candidate,secondaryVisionUnavailable:text(err?.code)||"WORKERS_AI_OCR_FAILED"}}
+  }
+  if(secondary)candidate={...selectAccountingExtraction(candidate,secondary),inferredDocumentKind:resolvedKind,
+    autoDetected:requested==="AUTO",secondaryFallbackModel:text(secondary.extractorModel)};
 
   const finalScore=scoreAccountingExtraction(candidate);
-  return{...candidate,extractionQualityScore:finalScore,lowConfidence:lowConfidence||finalScore<70,needsManualReview:Boolean(candidate.needsManualReview||missingCritical||finalScore<60),manualReviewReasons:[...(missingCritical?["CRITICAL_FIELDS_MISSING"]:[]),...(finalScore<60?["EXTRACTION_QUALITY_LOW"]:[]),...((candidate.extractionDiscrepancies||[]).filter((item:any)=>item.severity==="ERROR").map((item:any)=>item.code))]};
+  const thresholdSafe=Number.isFinite(threshold)&&threshold>0&&threshold<=1?threshold:.75;
+  const reviewReasons=reviewAccountingOcr(candidate,resolvedKind,thresholdSafe);
+  const compareIssues=(candidate.extractionDiscrepancies||[])
+    .filter((item:any)=>item.severity==="ERROR").map((item:any)=>item.code);
+  const manualReviewReasons=[...new Set([
+    ...(Array.isArray(candidate.manualReviewReasons)?candidate.manualReviewReasons:[]),
+    ...reviewReasons,
+    ...(finalScore<70?["EXTRACTION_QUALITY_LOW"]:[]),
+    ...compareIssues,
+  ])];
+  return{...candidate,extractionQualityScore:finalScore,
+    lowConfidence:num(candidate.extractionConfidence)<thresholdSafe||finalScore<70,
+    needsManualReview:Boolean(candidate.needsManualReview||manualReviewReasons.length),
+    manualReviewReasons};
 }
 

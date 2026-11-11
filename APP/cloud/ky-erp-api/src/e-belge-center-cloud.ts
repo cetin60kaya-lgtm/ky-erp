@@ -280,7 +280,7 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
     }
     const requestedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(kind)?"IRSALIYE":/FATURA|INVOICE/i.test(kind)?"FATURA":"AUTO";
     const analysisTarget=readiness.azureConfigured?file:(analysisFile instanceof File?analysisFile:file);
-    const ai=await analyzeAccountingDocument(c,analysisTarget,requestedKind),canonical=ai?.canonical||ai?.data||ai||{};
+    const ai=await analyzeAccountingDocument(c,analysisTarget,requestedKind,analysisFile),canonical=ai?.canonical||ai?.data||ai||{};
     const resolvedKind=/IRSALIYE|DISPATCH|DESPATCH/i.test(text(canonical.inferredDocumentKind))?"IRSALIYE":"FATURA";
     const parsed=await resolveManualDirection(c,slug,requestedDirection,canonical,resolvedKind);
     const outgoing=parsed.direction==="OUTGOING";
