@@ -16,7 +16,7 @@ import { chooseCanonicalDocumentModels, archiveDocumentIdentity } from "./e-belg
 import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
 import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
-import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity";
+import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity.ts";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
