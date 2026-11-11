@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity";
+import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity.ts";
 
 test("Yalnız tekil gerçek VKN/TCKN firma kartına otomatik bağlar",()=>{
   const firms=[
