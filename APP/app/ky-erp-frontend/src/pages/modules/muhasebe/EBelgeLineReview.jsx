@@ -26,26 +26,30 @@ export default function EBelgeLineReview({ documentId, documentType, line, onCha
   const [selected, setSelected] = useState(null);
   const [saveAlias, setSaveAlias] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [packageAcknowledged, setPackageAcknowledged] = useState(false);
   const [message, setMessage] = useState("");
   const lotRequired = Boolean(raw.lotRequired || raw.lotPolicy === "REQUIRED" || routingType === "BOYAHANE");
   const lotStatus = upper(raw.lotReconciliationStatus);
   const lotResolved = Boolean(initialLot || raw.lotCanPostStock === true || ["FROM_DISPATCH", "FROM_DISPATCH_MULTI", "FROM_INVOICE", "VERIFIED"].includes(lotStatus));
   const lotMissingConfirmed = lotRequired && lotStatus === "MISSING_REQUIRED" && hasCounterDocument;
   const lotWaiting = lotRequired && !lotResolved && !lotMissingConfirmed;
-  const productRequired = routingType !== "EXPENSE" || lotRequired;
-  const needsReview = (productRequired && !line?.product_id) || lotMissingConfirmed;
+  const productRequired = routingType !== "EXPENSE" || lotRequired || raw.productIdentityNeedsReview===true;
+  const packageReview = raw.packageReviewRequired===true && Number(raw.packageWeightKg||0)>0;
+  const needsReview = (productRequired && !line?.product_id) || lotMissingConfirmed || packageReview;
   const label = useMemo(() => {
     if (!line?.product_id && productRequired) return "Ürünü eşleştir";
     if (lotMissingConfirmed) return "LOT gir";
+    if (packageReview) return "Ambalajı kontrol et";
     if (lotWaiting) return isInvoice(documentType) ? "İrsaliye / LOT bekleniyor" : isDispatch(documentType) ? "Fatura / LOT bekleniyor" : "LOT bekleniyor";
     return "Düzenle";
-  }, [documentType, line?.product_id, lotMissingConfirmed, lotWaiting, productRequired]);
+  }, [documentType, line?.product_id, lotMissingConfirmed, lotWaiting, productRequired, packageReview]);
 
   useEffect(() => {
     if (!open) {
       setLotNo(initialLot);
       setExpenseCategoryName(raw.expenseCategoryName || defaultExpense);
       setSelected(null);
+      setPackageAcknowledged(false);
     }
   }, [defaultExpense, initialLot, open, raw.expenseCategoryName]);
 
@@ -65,6 +69,9 @@ export default function EBelgeLineReview({ documentId, documentType, line, onCha
         lotNo,
         expenseCategoryName,
         rememberExpenseRule,
+        ...(packageReview ? {packageReviewConfirmed:packageAcknowledged,
+          expectedPackageWeightKg:Number(raw.packageWeightKg||0),
+          expectedPackageCount:Number(raw.packageCount||0)} : {}),
       });
       if (saveAlias && selected?.id && line?.description?.trim()) {
         await saveEBelgeProductAlias(selected.id, line.description.trim(), documentId);
@@ -98,6 +105,18 @@ export default function EBelgeLineReview({ documentId, documentType, line, onCha
             {products.length > 0 && <div className="eb-line-review-results">{products.map((product) => <button type="button" key={product.id} className={selected?.id === product.id ? "selected" : ""} onClick={() => setSelected(product)}><span>{product.name}</span><small>{product.legacy_id || product.unit || ""}</small></button>)}</div>}
             <label className="eb-line-review-check"><input type="checkbox" checked={saveAlias} onChange={(e) => setSaveAlias(e.target.checked)} /><span>Bu açıklamayı ürün eşleştirmesi olarak hatırla</span></label>
           </section>}
+          {packageReview && <section className="eb-line-modal-section">
+            <strong>Ambalaj ve stok birimi kontrolü</strong>
+            <p>Belge: <b>{Number(line?.quantity || 0).toLocaleString("tr-TR")} {line?.unit_code || ""}</b>.
+              Ambalaj: <b>{Number(raw.packageWeightKg || 0).toLocaleString("tr-TR")} kg</b>
+              {Number(raw.packageCount || 0)>0 ? <> · <b>{Number(raw.packageCount).toLocaleString("tr-TR")} paket = {Number(raw.calculatedKg || 0).toLocaleString("tr-TR")} kg</b></> : " · kilogram birimi ayrıca çevrilmeyecek"}.
+            </p>
+            <small>30 kg ve 60 kg aynı ürün ailesinin farklı ambalajları olabilir. Kesin ürün kartını ve stok birimini doğrulamadan son onay yapılamaz.</small>
+            <label className="eb-line-review-check">
+              <input type="checkbox" checked={packageAcknowledged} onChange={e => setPackageAcknowledged(e.target.checked)} />
+              <span>Seçili ürün, ambalaj kg bilgisi ve stok miktarı karşılığını kontrol ettim.</span>
+            </label>
+          </section>}
           <section className="eb-line-modal-section two-col">
             <label><span>Gider kategorisi</span><input list={`expense-categories-${line?.id}`} value={expenseCategoryName} onChange={(e) => { setExpenseCategoryName(e.target.value); setRememberExpenseRule(true); }} placeholder="Gider / rapor kategorisi" /><datalist id={`expense-categories-${line?.id}`}>{EXPENSE_CATEGORIES.map((category) => <option key={category} value={category} />)}</datalist></label>
             <label><span>{lotLabel}{lotRequired ? " · zorunlu" : " · varsa kaydet"}</span><input value={lotNo} onChange={(e) => setLotNo(e.target.value)} placeholder="LOT numarası" required={lotRequired} /></label>
@@ -109,7 +128,7 @@ export default function EBelgeLineReview({ documentId, documentType, line, onCha
         </div>
         <footer>
           <button type="button" onClick={() => setOpen(false)}>Vazgeç</button>
-          <button type="button" className="eb-line-review-save" disabled={busy || (productRequired && !line?.product_id && !selected?.id) || (lotRequired && !lotNo.trim())} onClick={save}>{busy ? <LoaderCircle className="eb-spin" size={15} /> : <Check size={15} />} Kaydet</button>
+          <button type="button" className="eb-line-review-save" disabled={busy || (productRequired && !line?.product_id && !selected?.id) || (lotRequired && !lotNo.trim()) || (packageReview && !packageAcknowledged)} onClick={save}>{busy ? <LoaderCircle className="eb-spin" size={15} /> : <Check size={15} />} Kaydet</button>
         </footer>
       </section>
     </div>}
