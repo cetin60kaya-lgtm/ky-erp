@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../../../utils/api";
 import { createMailDraft, listCommunicationFiles, listMailAccounts, sendMailDraft } from "../../../services/mailApi";
-import { documentKey, matchingPdfFiles, matchingRecipientRoutes, makeInvoiceMailContent, parseRecipientEmails, invoiceMailEventId } from "./invoiceMailRouting";
+import { documentKey, matchingPdfFiles, matchingRecipientRoutes, makeInvoiceMailContent, parseRecipientEmails, invoiceMailEventId, INVOICE_MAIL_TEMPLATES, contactsForInvoiceRoute, routeContactRecipients } from "./invoiceMailRouting";
 import "./invoiceMailWorkspace.css";
 
 const unwrap = (value) => value?.data?.data ?? value?.data ?? value ?? [];
 const emptyRoute = () => ({ id: "", customerName: "", groupCode: "", department: "", plannerName: "", plannerEmail: "", to: "", cc: "" });
+const emptyContact = () => ({ id:"", firstName:"", lastName:"", email:"", phone:"", recipientKind:"TO", active:true });
 const displayName = (row) => [row.customerName, row.groupCode, row.department, row.plannerName].filter(Boolean).join(" / ");
 const isMailActive = (row) => String(row?.status || "").toUpperCase() === "ACTIVE" && Number(row?.provider_connected ?? row?.providerConnected ?? 0) === 1;
 const stringifyEmails = (value) => (Array.isArray(value) ? value : []).join("; ");
@@ -15,6 +16,10 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const companySlug = activeMainCompany?.slug || "";
   const modelId = selectedInvoice?.model_id || selectedInvoice?.modelId || "";
   const [routes, setRoutes] = useState([]);
+  const [contacts, setContacts] = useState([]);
+  const [contactForm, setContactForm] = useState(emptyContact);
+  const [savingContact, setSavingContact] = useState(false);
+  const [templateId, setTemplateId] = useState("STANDARD");
   const [accounts, setAccounts] = useState([]);
   const [accountId, setAccountId] = useState("");
   const [routeId, setRouteId] = useState("");
@@ -51,20 +56,23 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const refresh = useCallback(async () => {
     if (!companySlug) return;
     try {
-      const [saved, mailAccounts] = await Promise.all([
+      const [saved, mailAccounts, savedContacts] = await Promise.all([
         apiGet("/muhasebe/invoice-mail-routes", { mainCompanySlug: companySlug }),
         listMailAccounts(),
+        apiGet("/muhasebe/invoice-mail-contacts", { mainCompanySlug: companySlug }),
       ]);
       const loaded = unwrap(saved);
       const available = unwrap(mailAccounts);
+      const directory = unwrap(savedContacts);
       setRoutes(Array.isArray(loaded) ? loaded : []);
+      setContacts(Array.isArray(directory) ? directory : []);
       setAccounts(Array.isArray(available) ? available : []);
       const enabled = (Array.isArray(available) ? available : []).filter(isOutlookActive);
       const preferred = enabled.find((row) => Number(row.is_default_send ?? row.isDefaultSend ?? 0) === 1) || enabled[0];
       setAccountId((current) => enabled.some((row) => row.id === current) ? current : preferred?.id || "");
       setError("");
     } catch (e) {
-      setError(e?.message || "Alıcı profilleri veya posta kutuları okunamadı.");
+      setError(e?.message || "Alıcı profilleri, kişi listesi veya posta kutuları okunamadı.");
     }
   }, [companySlug]);
 
@@ -90,9 +98,9 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   }, [selectedInvoice]);
 
   const suggested = useMemo(() => {
-    try { return makeInvoiceMailContent(modelName, invoiceNo, deliveryNo); }
+    try { return makeInvoiceMailContent(modelName, invoiceNo, deliveryNo, templateId); }
     catch { return { subject: "", bodyText: "" }; }
-  }, [modelName, invoiceNo, deliveryNo]);
+  }, [modelName, invoiceNo, deliveryNo, templateId]);
   const subject = subjectOverride === null ? suggested.subject : subjectOverride;
   const bodyText = bodyOverride === null ? suggested.bodyText : bodyOverride;
   const invalidate = () => { setDraft(null); setSent(false); setNotice(""); setPhase("IDLE"); };
@@ -160,10 +168,52 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   function chooseRoute(id) {
     setRouteId(id);
     const row = routes.find((item) => item.id === id);
-    setToText(stringifyEmails(row?.to));
-    setCcText(stringifyEmails(row?.cc));
+    const recipients = routeContactRecipients(contacts, row);
+    setToText(stringifyEmails(recipients.to));
+    setCcText(stringifyEmails(recipients.cc));
     setBccText("");
+    setContactForm(emptyContact());
     invalidate();
+  }
+  const roster = useMemo(() => contactsForInvoiceRoute(contacts, chosenRoute), [contacts, chosenRoute]);
+  const selectedAddresses = useMemo(() =>
+    new Set([toText, ccText].flatMap((value) => String(value || "").split(/[,;\n]+/))
+      .map((email) => email.trim().toLowerCase()).filter(Boolean)), [toText, ccText]);
+  function toggleContact(person, enabled) {
+    const email=String(person.email||"").toLowerCase();
+    const split=(value)=>String(value||"").split(/[,;\n]+/).map((v)=>v.trim()).filter(Boolean);
+    const to=split(toText).filter((v)=>v.toLowerCase()!==email);
+    const cc=split(ccText).filter((v)=>v.toLowerCase()!==email);
+    if(enabled && person.active!==false && email){
+      (String(person.recipientKind||"TO").toUpperCase()==="CC"?cc:to).push(email);
+    }
+    setToText([...new Set(to)].join("; "));
+    setCcText([...new Set(cc)].join("; "));
+    invalidate();
+  }
+  async function saveContact() {
+    if(savingContact || !chosenRoute)return;
+    setSavingContact(true);setError("");setNotice("");
+    try {
+      await apiPost("/muhasebe/invoice-mail-contacts",{
+        ...contactForm,mainCompanySlug:companySlug,customerName:chosenRoute.customerName,
+        groupCode:chosenRoute.groupCode,
+      });
+      const fresh=unwrap(await apiGet("/muhasebe/invoice-mail-contacts",{mainCompanySlug:companySlug}));
+      const next=Array.isArray(fresh)?fresh:[];
+      setContacts(next);
+      const recipients=routeContactRecipients(next,chosenRoute);
+      setToText(stringifyEmails(recipients.to));
+      setCcText(stringifyEmails(recipients.cc));
+      setContactForm(emptyContact());
+      invalidate();
+      setNotice("Kişi kaydedildi; departmanın aktif alıcı listesi yenilendi.");
+    } catch(e){setError(e?.message||"Kişi kaydedilemedi.");}
+    finally{setSavingContact(false);}
+  }
+  function editContact(person){
+    setContactForm({id:person.id,firstName:person.firstName,lastName:person.lastName,
+      email:person.email,phone:person.phone||"",recipientKind:person.recipientKind||"TO",active:person.active!==false});
   }
 
   useEffect(() => {
@@ -240,7 +290,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const createVerifiedDraft = async () => {
     if (!chosenRoute) throw new Error("Önce doğrulanmış grup ve fatura alıcısı profilini seçin.");
     if (!account || !isOutlookActive(account)) throw new Error("Aktif Microsoft Outlook gönderim hesabı seçin.");
-    const content = makeInvoiceMailContent(modelName, invoiceNo, deliveryNo);
+    const content = makeInvoiceMailContent(modelName, invoiceNo, deliveryNo, templateId);
     if (!invoiceFiles.some((file) => file.id === invoiceAssetId) || !deliveryFiles.some((file) => file.id === deliveryAssetId)) {
       throw new Error("HKN ve DDM PDF dosyalarının ikisi de mevcut File Hub'dan seçilmelidir.");
     }
@@ -362,6 +412,35 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       </div>
       <div className="imw-actions"><button type="button" disabled={savingRoute} onClick={saveRoute}>{savingRoute ? "Kaydediliyor..." : routeForm.id ? "Alıcı Profilini Güncelle" : "Alıcı Profili Ekle"}</button><button type="button" onClick={() => setRouteForm(emptyRoute())}>Yeni / Temizle</button></div>
       <div className="imw-directory-list">{routes.map((row) => <div key={row.id}><strong>{displayName(row)}</strong><small>{stringifyEmails(row.to)}{row.cc?.length ? " · CC: " + stringifyEmails(row.cc) : ""}</small><span><button type="button" onClick={() => editRoute(row)}>Düzenle</button><button type="button" onClick={() => void removeRoute(row)}>Çıkar</button></span></div>)}{!routes.length ? <p>Henüz kayıtlı grup/alıcı profili yok.</p> : null}</div>
+
+      <h4>Departmanın kişi listesi</h4>
+      <p>Her kişi aynı firma içinde yalnız bir gruba bağlıdır. İzne çıkan kişiyi pasifleştirin; kaydı ve geçmiş yazışmaları silinmez.</p>
+      <label>Firma / departman
+        <select value={routeId} onChange={(e)=>chooseRoute(e.target.value)}>
+          <option value="">Önce kayıtlı departmanı seçin</option>
+          {routes.map((item)=><option key={item.id} value={item.id}>{displayName(item)}</option>)}
+        </select>
+      </label>
+      {chosenRoute ? <>
+        <div className="imw-form-grid">
+          <label>Ad<input value={contactForm.firstName} onChange={(e)=>setContactForm({...contactForm,firstName:e.target.value})} /></label>
+          <label>Soyad<input value={contactForm.lastName} onChange={(e)=>setContactForm({...contactForm,lastName:e.target.value})} /></label>
+          <label>E-posta<input type="email" value={contactForm.email} onChange={(e)=>setContactForm({...contactForm,email:e.target.value})} /></label>
+          <label>Telefon / iletişim<input value={contactForm.phone} onChange={(e)=>setContactForm({...contactForm,phone:e.target.value})} /></label>
+          <label>Alıcı türü<select value={contactForm.recipientKind} onChange={(e)=>setContactForm({...contactForm,recipientKind:e.target.value})}><option value="TO">Kime (TO)</option><option value="CC">Bilgi (CC)</option></select></label>
+          <label><input type="checkbox" checked={contactForm.active} onChange={(e)=>setContactForm({...contactForm,active:e.target.checked})} /> Aktif alıcı</label>
+        </div>
+        <div className="imw-actions">
+          <button type="button" disabled={savingContact} onClick={()=>void saveContact()}>{savingContact?"Kaydediliyor...":contactForm.id?"Kişiyi Güncelle":"Kişi Ekle"}</button>
+          <button type="button" onClick={()=>setContactForm(emptyContact())}>Yeni Kişi</button>
+        </div>
+        <div className="imw-directory-list">{roster.map((person)=><div key={person.id}>
+          <strong>{person.firstName} {person.lastName} · {person.recipientKind==="CC"?"CC":"TO"} {person.active===false?"(Pasif)":""}</strong>
+          <small>{person.email}{person.phone?" · "+person.phone:""}</small>
+          <span><button type="button" onClick={()=>editContact(person)}>Düzenle</button></span>
+        </div>)}{!roster.length?<p>Bu departmanda henüz kişi yok.</p>:null}</div>
+      </>:null}
+
     </section> : null}
 
     <div className="imw-form-grid">
@@ -385,6 +464,21 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       <label>Faturayı alanlar (TO)<textarea disabled={working || dispatchLocked} value={toText} onChange={(e) => {setToText(e.target.value);invalidate();}} rows={2} placeholder="Alıcı profili seçildiğinde doldurulur, değiştirilebilir" /></label>
       <label>Bilgi alıcıları (CC)<textarea disabled={working || dispatchLocked} value={ccText} onChange={(e) => {setCcText(e.target.value);invalidate();}} rows={2} placeholder="Gerekli diğer alıcılar" /></label>
       <label>Gizli bilgi (BCC)<textarea disabled={working || dispatchLocked} value={bccText} onChange={(e) => {setBccText(e.target.value);invalidate();}} rows={2} placeholder="İsteğe bağlı" /></label>
+      {chosenRoute && roster.length ? <div className="imw-wide">
+        <strong>Departman alıcıları — tek tıkla seç / çıkar</strong>
+        <div className="imw-directory-list">{roster.map((person)=>
+          <label key={person.id}>
+            <input type="checkbox" disabled={working || dispatchLocked || person.active===false}
+              checked={person.active!==false && selectedAddresses.has(String(person.email||"").toLowerCase())}
+              onChange={(e)=>toggleContact(person,e.target.checked)} />
+            {" "}{person.firstName} {person.lastName} · {person.email} ({person.recipientKind||"TO"}) {person.active===false?"— İzinli / pasif":""}
+          </label>)}</div>
+      </div> : null}
+      <label>Hazır konu ve mesaj şablonu
+        <select disabled={working || dispatchLocked} value={templateId} onChange={(e)=>{setTemplateId(e.target.value);setSubjectOverride(null);setBodyOverride(null);invalidate();}}>
+          {INVOICE_MAIL_TEMPLATES.map((t)=><option key={t.id} value={t.id}>{t.label}</option>)}
+        </select>
+      </label>
       <label>Mail konusu<input disabled={working || dispatchLocked} value={subject} maxLength={250} onChange={(e) => {setSubjectOverride(e.target.value);invalidate();}} placeholder="Konu" /></label>
       <label className="imw-wide">Mail mesajı<textarea disabled={working || dispatchLocked} value={bodyText} rows={5} onChange={(e) => {setBodyOverride(e.target.value);invalidate();}} placeholder="Alıcıya iletilecek mesaj" /></label>
     </div>

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { documentKey, matchingPdfFiles, matchingRecipientRoutes, parseRecipientEmails, makeInvoiceMailContent, invoiceMailEventId } from "./invoiceMailRouting.js";
+import { documentKey, matchingPdfFiles, matchingRecipientRoutes, parseRecipientEmails, makeInvoiceMailContent, invoiceMailEventId, contactsForInvoiceRoute, routeContactRecipients, makeCariReminderContent } from "./invoiceMailRouting.js";
 
 test("HKN ve DDM belgeleri numaraya göre eksiksiz ve kesin eşleşir", () => {
   const files = [
@@ -42,4 +42,32 @@ test("tek HKN/DDM olayı grup, hesap ve kullanıcı değişse de aynı gönderim
   assert.equal(invoiceMailEventId("mecit-hakan", "HKN2026000000909", "DDM2026000000897"), expected);
   assert.notEqual(invoiceMailEventId("mecit-hakan", "HKN2026000000909", "DDM2026000000898"), expected);
   assert.throws(() => invoiceMailEventId("", "HKN2026000000909", "DDM2026000000897"));
+});
+
+test("Otomatik konu model adı + Fatura; mesaj şablonu ayrı düzenlenebilir", () => {
+  const result=makeInvoiceMailContent("Model A","HKN2026000000909","DDM2026000000897");
+  assert.equal(result.subject,"Model A Fatura");
+  assert.match(result.bodyText,/muhasebe işlemlerine almanızı rica ederiz/i);
+  assert.match(makeInvoiceMailContent("Model A","HKN2026000000909","DDM2026000000897","SHORT").bodyText,/HKN2026000000909/);
+  assert.throws(()=>makeInvoiceMailContent("Model A","HKN2026000000909","DDM2026000000897","INVALID"));
+});
+test("Kişi yalnız kendi firma/alt departmanında görünür; pasif kişiler seçilmez", () => {
+  const route={customerName:"Taha Tekstil",groupCode:"165-1",to:["legacy@example.com"]};
+  const people=[
+    {customerName:"Taha Tekstil",groupCode:"165-1",firstName:"Ali",lastName:"A",email:"ali@example.com",recipientKind:"TO",active:true},
+    {customerName:"Taha Tekstil",groupCode:"165-1",firstName:"Ayşe",lastName:"B",email:"ayse@example.com",recipientKind:"CC",active:true},
+    {customerName:"Taha Tekstil",groupCode:"165-1",firstName:"İzinli",lastName:"C",email:"izinli@example.com",recipientKind:"TO",active:false},
+    {customerName:"Taha Tekstil",groupCode:"165-2",firstName:"Başka",email:"wrong@example.com",recipientKind:"TO",active:true},
+    {customerName:"Başka Firma",groupCode:"165-1",firstName:"Başka",email:"other@example.com",recipientKind:"TO",active:true},
+  ];
+  assert.deepEqual(routeContactRecipients(people,route),{to:["ali@example.com"],cc:["ayse@example.com"],managed:true});
+  assert.equal(contactsForInvoiceRoute(people,route).length,3);
+  assert.deepEqual(routeContactRecipients([people[2]],route).to,[]);
+  assert.deepEqual(routeContactRecipients([],route).to,["legacy@example.com"]);
+});
+test("Cari hatırlatmasında Excel'de yok ifadesi kesin ödenmediye dönüşmez",()=>{
+  const remind=makeCariReminderContent("Model A","HKN2026000000909");
+  assert.match(remind.bodyText,/güncel cari ekstrede görünmemektedir/);
+  assert.doesNotMatch(remind.bodyText,/ödenmedi/i);
+  assert.throws(()=>makeCariReminderContent("","09"));
 });

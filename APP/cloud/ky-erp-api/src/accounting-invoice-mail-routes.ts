@@ -6,6 +6,7 @@ import { getAuthenticatedUser } from "./auth-cloud";
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
 const SCOPE = "MUHASEBE_INVOICE_MAIL_ROUTE";
+const CONTACT_SCOPE = "MUHASEBE_INVOICE_MAIL_CONTACT";
 const txt = (v: unknown) => v == null ? "" : String(v).trim();
 const role = (v: unknown) => txt(v).toUpperCase().replace(/İ/g, "I");
 const now = () => new Date().toISOString();
@@ -274,6 +275,68 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       return c.json({ok:true,data:JSON.parse(txt(same.data)),idempotent:true});
     }
     return c.json({ok:true,data},201);
+  });
+
+
+  // Person directory belongs to a tenant + customer + exactly one department.
+  // It is independent from legacy TO/CC route strings and does not send messages.
+  app.get("/api/muhasebe/invoice-mail-contacts", async (c) => {
+    const a=await access(c);
+    if(a.failure)return a.failure;
+    const rows=await c.env.DB.prepare(
+      "SELECT file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND main_company_slug=? ORDER BY updated_at DESC LIMIT 1500"
+    ).bind(CONTACT_SCOPE,a.tenant).all<Row>();
+    const contacts=(rows.results||[]).map((row)=>{
+      try {return {...JSON.parse(txt(row.data)),id:txt(row.file_name),createdAt:row.created_at,updatedAt:row.updated_at};}
+      catch{return null;}
+    }).filter(Boolean);
+    return c.json({ok:true,data:contacts});
+  });
+  app.post("/api/muhasebe/invoice-mail-contacts", async (c) => {
+    const body=await jsonBody(c),a=await access(c,body,true);
+    if(a.failure)return a.failure;
+    const customerName=txt(body.customerName);
+    const groupCode=role(body.groupCode).replace(/\s+/g,"");
+    const customerKey=customerName.toLocaleUpperCase("tr-TR").replace(/\s+/g," ");
+    const firstName=txt(body.firstName),lastName=txt(body.lastName);
+    const email=txt(body.email).toLowerCase(),phone=txt(body.phone);
+    const recipientKind=role(body.recipientKind||"TO");
+    const active=body.active===false?false:true;
+    const id=txt(body.id);
+    if(!customerName||customerName.length>160||!customerKey||!/^\d{2,4}(?:-\d{1,3})?$/.test(groupCode)
+      ||!firstName||firstName.length>100||!lastName||lastName.length>100||phone.length>60
+      ||!/^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(email)||!["TO","CC"].includes(recipientKind))
+      return error(c,"MAIL_CONTACT_INVALID","Firma, departman, ad, soyad, e-posta ve alıcı türünü kontrol edin.",422);
+    // The contact must not be assigned to two departments in the same customer.
+    const matches=await c.env.DB.prepare(
+      "SELECT file_name,data FROM json_store WHERE scope=? AND main_company_slug=? AND json_extract(data,'$.email')=? AND json_extract(data,'$.customerKey')=? LIMIT 10"
+    ).bind(CONTACT_SCOPE,a.tenant,email,customerKey).all<Row>();
+    for(const item of matches.results||[]){
+      if(txt(item.file_name)!==id)
+        return error(c,"MAIL_CONTACT_EXISTS","Bu kişi firmada zaten kayıtlı. Departmanı mevcut kişi kartından değiştirin.",409);
+    }
+    const data={customerName,customerKey,groupCode,firstName,lastName,email,phone,recipientKind,active};
+    const ts=now();
+    if(id){
+      const previous=await c.env.DB.prepare(
+        "SELECT id,created_at FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1"
+      ).bind(CONTACT_SCOPE,a.tenant,id).first<Row>();
+      if(!previous)return error(c,"MAIL_CONTACT_NOT_FOUND","Kişi kartı bulunamadı.",404);
+      await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=?")
+        .bind(JSON.stringify(data),ts,previous.id,CONTACT_SCOPE,a.tenant).run();
+      return c.json({ok:true,data:{...data,id,createdAt:previous.created_at,updatedAt:ts}});
+    }
+    const newId=crypto.randomUUID();
+    // A conditional INSERT prevents parallel creation of the same address within
+    // this customer's directory even if both requests passed the initial SELECT.
+    const result=await c.env.DB.prepare(
+      "INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) "+
+      "SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM json_store WHERE scope=? AND main_company_slug=? AND json_extract(data,'$.email')=? AND json_extract(data,'$.customerKey')=?)"
+    ).bind(crypto.randomUUID(),CONTACT_SCOPE,a.tenant,newId,JSON.stringify(data),ts,ts,
+      CONTACT_SCOPE,a.tenant,email,customerKey).run();
+    if(!Number(result.meta?.changes||0))
+      return error(c,"MAIL_CONTACT_EXISTS","Kişi başka bir işlemde kaydedildi; listeyi yenileyin.",409);
+    return c.json({ok:true,data:{...data,id:newId,createdAt:ts,updatedAt:ts}},201);
   });
 
   app.delete("/api/muhasebe/invoice-mail-routes/:id", async (c) => {
