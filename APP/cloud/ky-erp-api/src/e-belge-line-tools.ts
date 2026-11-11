@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { exactPackageKg } from "./e-belge-exact-product";
+import { exactPackageKg } from "./e-belge-exact-product.ts";
 import { requiredLotCoverageComplete } from "./accounting-lot-allocation";
 import { resolveProductLotPolicy } from "./accounting-lot-reconciliation-core";
 import { registerBoyahaneLotMovementV2Routes } from "./boyahane-lot-movement-v2";
