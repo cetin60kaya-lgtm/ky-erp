@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { exactPackageKg, chooseExactEBelgeProduct } from "./e-belge-exact-product";
+import { exactPackageKg, chooseExactEBelgeProduct } from "./e-belge-exact-product.ts";
 import { packageWeightFromItem } from "./e-belge-document-automation";
 
 test("Paket 30 KG, 60 kilogram, kesirsiz ve Türkçe biçimlerde tanınır",()=>{
