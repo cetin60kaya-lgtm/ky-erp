@@ -3,6 +3,7 @@
 // Existing File Hub cloud connection and explicit writable bindings only.
 // A file drop NEVER finalizes financial records or sends official documents.
 import type { Context, Hono } from "hono";
+import { normalizeModelBoy, normalizeModelPrintArea } from "./model-file-boy";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { archiveFileToCloudConnection, readFileHubAssetForMail } from "./file-hub-cloud-oauth";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
@@ -76,7 +77,7 @@ function assignList(raw:unknown,primary:string){
   let data:any;try{data=JSON.parse(text(raw)||"[]")}catch{throw Object.assign(new Error("Model bağlantıları okunamadı."),{code:"MODEL_ASSIGNMENTS_INVALID",status:422})}
   if(!Array.isArray(data)||data.length>30)throw Object.assign(new Error("Bir dosya en çok 30 model-boy bağlantısı içerebilir."),{code:"MODEL_ASSIGNMENTS_INVALID",status:422});
   const result=(data.length?data:[{modelId:primary}]).map((v:Row)=>{
-    const modelId=text(v.modelId),boy=text(v.boy).slice(0,80),printArea=text(v.printArea).slice(0,60);
+    const modelId=text(v.modelId),boy=normalizeModelBoy(v.boy),printArea=normalizeModelPrintArea(v.printArea);
     if(!/^[a-zA-Z0-9_-]{8,72}$/.test(modelId)||(data.length>0&&!boy))throw Object.assign(new Error("Model ve BOY seçilmelidir."),{code:"MODEL_ASSIGNMENT_INCOMPLETE",status:422});
     return{modelId,boy,printArea};
   });

@@ -9,7 +9,7 @@ const CATEGORIES = [
   ["OUTGOING_DESIGN", "Giden PSD — Birden fazla model / BOY"],
   ["PLACEMENT", "Yerleşim / Kalıp PDF"],
 ];
-const PRINT_AREAS = [["", "Baskı bölgesi seçilmedi"], ["FRONT", "Ön"], ["BACK", "Arka"], ["ARM", "Kol"], ["OTHER", "Diğer"]];
+const PRINT_AREAS = [["", "Baskı bölgesi seçilmedi"], ["FRONT", "Ön"], ["BACK", "Arka"], ["ARM", "Kol"], ["NECK", "Yaka"], ["NECK_LABEL", "Yaka etiketi"], ["LEFT_SLEEVE", "Sol Kol"], ["RIGHT_SLEEVE", "Sağ Kol"], ["LEFT_LEG", "Sol Paça"], ["RIGHT_LEG", "Sağ Paça"], ["POCKET", "Cep"], ["COLLAR", "Yaka Parçası"], ["FRONT_HEM", "Ön Etek Ucu"], ["BACK_HEM", "Arka Etek Ucu"], ["HOOD", "Kapüşon"], ["SIDE_PANEL", "Yan Parça"], ["STRIP", "Şerit"], ["OTHER", "Diğer"]];
 async function filesFromDrop(dataTransfer) {
   const entries=[...(dataTransfer.items||[])].map((item)=>item.webkitGetAsEntry?.()).filter(Boolean);
   if(!entries.some((entry)=>entry.isDirectory))return [...(dataTransfer.files||[])].map((file)=>({file,relative:""}));
@@ -154,7 +154,7 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
             {options.map((m) => <option key={m.id} value={m.id}>{m.modelName || m.name || m.id}</option>)}
           </select>
         </label>
-        <label>BOY <input value={item.boy} disabled={busy||psdBusy} onChange={(ev) => setAssignment(item.key, "boy", ev.target.value)} placeholder="Küçük Boy / Büyük Boy / Özel ölçü" /></label>
+        <label>BOY <input value={item.boy} disabled={busy||psdBusy} onChange={(ev) => setAssignment(item.key, "boy", ev.target.value)} placeholder="Küçük Boy / Büyük Boy / Özel Boy: ölçü" /></label>
         <label>Baskı bölgesi <select value={item.printArea} disabled={busy||psdBusy} onChange={(ev) => setAssignment(item.key, "printArea", ev.target.value)}>{PRINT_AREAS.map(([code, title]) => <option key={code} value={code}>{title}</option>)}</select></label>
         <button type="button" onClick={() => removeAssignment(item.key)} disabled={busy||psdBusy||assignments.length===1} aria-label="Model BOY bağlantısını kaldır">Sil</button>
       </div>)}
