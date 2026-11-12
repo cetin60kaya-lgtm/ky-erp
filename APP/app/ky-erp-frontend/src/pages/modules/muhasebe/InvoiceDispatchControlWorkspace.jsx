@@ -74,7 +74,7 @@ function exportCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-export default function InvoiceDispatchControlWorkspace({ activeMainCompany, openModule }) {
+export default function InvoiceDispatchControlWorkspace({ activeMainCompany, openModule, onInvoiceMail }) {
   const [state, setState] = useState({ loading: true, error: "", rows: [], summary: {} });
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("OPEN");
@@ -234,6 +234,7 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany, ope
               <div className="accounting-inline-actions">
                 {selected.id && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-belgeler", actionContext: { documentId: selected.id } })}>Müşteri İrsaliyesini Aç</button>}
                 {selected.invoiceId && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-belgeler", actionContext: { documentId: selected.invoiceId } })}>İlişkili Faturayı Aç</button>}
+                {String(selected.invoiceNo || "").toUpperCase().startsWith("HKN") && <button type="button" onClick={() => onInvoiceMail?.({ id: selected.invoiceId || selected.id, document_no: selected.invoiceNo, model_name: selected.modelName, party_name: selected.companyName })}>HKN Faturasını Maille Gönder</button>}
               </div>
               <section className="idc-detail-grid">
                 <div><span>Müşteri</span><strong>{selected.companyName || "-"}</strong></div>

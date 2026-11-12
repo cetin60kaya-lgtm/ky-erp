@@ -466,15 +466,24 @@ export function registerMicrosoftMailRoutes(app:any){
     let original=null;
     try { original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id)); }
     catch(error:any){return c.json(err(error.code,error.message),error.status||422);}
-    if(upper(draft.status)==="SENT")return c.json({ok:true,data:{idempotent:true,status:"PROVIDER_ACCEPTED",delivered:false}});
+
     const attachments=parseAttachments(draft.attachment_refs_json);
     let resolvedAttachments:any[]=[];
     try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
     catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Mail eki File Hub'dan alınamadı."),Number(error?.status)||502);}
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId;
     const existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
+    // An idempotency key belongs to exactly one immutable draft.
+    // Never attribute another draft's accepted send to a new recipient/attachment set.
+    if(existingJob && text(existingJob.draft_id)!==draftId)
+      return c.json(err("MAIL_EVENT_ALREADY_USED","Bu HKN/DDM gönderimi başka bir taslak ile daha önce başlatılmış. Önce mevcut gönderimin geçmişini kontrol edin.",{sendJobId:existingJob.id}),409);
+    if(upper(draft.status)==="SENT"){
+      if(existingJob && upper(existingJob.status)==="ACCEPTED")
+        return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id,delivered:false}});
+      return c.json(err("MAIL_SEND_RECONCILIATION_REQUIRED","Gönderilmiş taslağın iş anahtarı doğrulanamadı; yeniden gönderim kapalı."),409);
+    }
     if(existingJob){
-      if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id}});
+      if(upper(existingJob.status)==="ACCEPTED")return c.json({ok:true,data:{idempotent:true,status:"ACCEPTED",sendJobId:existingJob.id,providerMessageId:existingJob.provider_message_id,delivered:false}});
       if(["SENDING","UNKNOWN_REVIEW_REQUIRED"].includes(upper(existingJob.status)))return c.json(err("UNKNOWN_REVIEW_REQUIRED","Önceki gönderimin sonucu belirsiz. Çift mail riskine karşı otomatik tekrar gönderim kapalıdır.",{sendJobId:existingJob.id}),409);
     }
     const account=await c.env.DB.prepare("SELECT * FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(draft.account_id,tenant).first<AnyRow>(),token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),recipients=parseRecipients(draft.recipients_json);
@@ -482,7 +491,7 @@ export function registerMicrosoftMailRoutes(app:any){
     let providerDraftId=text(draft.provider_draft_id);
     if(!providerDraftId){
       const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
-      const created=(await graphJson(endpoint,token,{method:"POST",body:JSON.stringify(original?{message}:message)})).payload;providerDraftId=text(created.id);
+      const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;providerDraftId=text(created.id);
       if(!providerDraftId)return c.json(err("PROVIDER_DRAFT_MISSING","Microsoft taslak kimliği dönmedi."),502);
       await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=?").bind(providerDraftId,nowIso(),draftId,tenant).run();
     }
@@ -490,8 +499,14 @@ export function registerMicrosoftMailRoutes(app:any){
     catch(error:any){return c.json(err(text(error?.code)||"MICROSOFT_ATTACHMENT_SYNC_FAILED",text(error?.message)||"File Hub ekleri Microsoft taslağına aktarılamadı."),Number(error?.status)||502);}
     const jobId=text(existingJob?.id)||crypto.randomUUID(),ts=nowIso();
     if(existingJob){const claim=await c.env.DB.prepare("UPDATE mail_send_jobs SET status='SENDING',attempt_count=attempt_count+1,last_error=NULL,updated_at=? WHERE id=? AND main_company_slug=? AND status='FAILED'").bind(ts,jobId,tenant).run();if(!claim.meta?.changes)return c.json(err("SEND_IN_PROGRESS","Gönderim zaten işleniyor; tekrar gönderilmedi."),409);}
-    else await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",providerDraftId,null,1,null,text(current.id),null,ts,ts).run();
+    else {
+      // SQLite/D1 atomic claim: concurrent tabs cannot create two SENDING jobs
+      // for the same invoice event even if their read checks both saw no job.
+      const claim=await c.env.DB.prepare("INSERT INTO mail_send_jobs(id,main_company_slug,account_id,draft_id,logical_event_id,status,provider_message_id,provider_acceptance_id,attempt_count,last_error,requested_by,approved_request_id,created_at,updated_at) SELECT ?,?,?,?,?,?,?,?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=?)")
+        .bind(jobId,tenant,draft.account_id,draftId,logicalEventId,"SENDING",providerDraftId,null,1,null,text(current.id),null,ts,ts,tenant,logicalEventId).run();
+      if(!Number(claim.meta?.changes||0))
+        return c.json(err("MAIL_EVENT_ALREADY_USED","Başka bir oturum bu gönderimi başlattı. Sonucu doğrulamadan yeniden gönderim yapmayın."),409);
+    }
     try{
       const response=await fetch(base+"/messages/"+encodeURIComponent(providerDraftId)+"/send",{method:"POST",headers:{Authorization:"Bearer "+token}});
       if(response.status>=500)throw new Error("Microsoft gönderim sonucu doğrulanamadı.");

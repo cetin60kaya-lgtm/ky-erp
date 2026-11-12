@@ -1482,6 +1482,7 @@ export function ModelDetailModal({
   activeMainCompany,
   models = [],
   onFilesUpdated,
+  onInvoiceMail,
 }) {
   const [tab, setTab] = useState("general");
   const logRows = safeModelLogRows(model?.logs);
@@ -1510,6 +1511,7 @@ export function ModelDetailModal({
           <button className="dsg-btn" onClick={onEdit}>
             Düzenle
           </button>
+          {onInvoiceMail ? <button type="button" className="dsg-btn" onClick={onInvoiceMail}>Fatura / İrsaliye Maili</button> : null}
           <button className="dsg-btn primary" onClick={onDyehouse}>
             <Palette size={16} /> Boyahaneye Hazırla
           </button>
