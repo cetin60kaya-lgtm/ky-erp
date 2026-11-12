@@ -4,7 +4,8 @@ import { analyzeAccountingImageWithWorkersAi, workersAiAccountingDocumentStatus 
 
 test("Workers AI belge OCR readiness AI binding ile aktif olur",()=>{
   assert.equal(workersAiAccountingDocumentStatus({}).configured,false);
-  assert.equal(workersAiAccountingDocumentStatus({AI:{}}).configured,true);
+  assert.equal(workersAiAccountingDocumentStatus({AI:{}}).configured,false);
+  assert.equal(workersAiAccountingDocumentStatus({AI:{run:async()=>({})}}).configured,true);
 });
 
 test("Workers AI belge OCR structured sonucu canonical kayda çevirir",async()=>{
@@ -17,4 +18,15 @@ test("Workers AI belge OCR structured sonucu canonical kayda çevirir",async()=>
   assert.equal(result.issueDate,"2026-09-11");
   assert.equal(result.payableTotal,1200);
   assert.equal(result.lines[0].lotNo,"LOT-A1");
+});
+test("Eksik veya düşük OCR güveni dolu JSON alanlarına bakarak yükseltilmez",async()=>{
+  const answer=JSON.stringify({documentKind:"IRSALIYE",supplierName:"TEST TEKSTİL",
+    supplierTaxNo:"1234567890",customerName:"MÜŞTERİ",customerTaxNo:"1234509876",
+    documentNo:"DDM2026000001001",issueDate:"2026-11-11",confidence:.19,
+    lines:[{description:"Kumaş",quantity:18,confidence:.14}]});
+  const c:any={env:{AI:{run:async()=>({answer})}},req:{header:()=>""},get:()=>""};
+  const f=new File([new Uint8Array([1,2,3])],"file.png",{type:"image/png"});
+  const result=await analyzeAccountingImageWithWorkersAi(c,f,"AUTO");
+  assert.equal(result.extractionConfidence,.19);
+  assert.equal(result.lines[0].extractionConfidence,.14);
 });
