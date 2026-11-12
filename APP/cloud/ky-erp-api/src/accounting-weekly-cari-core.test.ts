@@ -27,3 +27,11 @@ test("Bir HKN farklı gruba geçerse, veya iki kere varsa kesin eşleşme yapıl
  assert.equal(d.rows[0].occurrencesCurrent,2);
  assert.equal(d.rows[0].erpPresent,false);
 });
+
+test("Önceki hafta yüklenmediyse bütün HKN'lar yeni fatura diye etiketlenmez",()=>{
+ const a={invoiceNo:"HKN2026000000931",groupCode:"165-6",debit:100,credit:0,balance:100,occurrence:1};
+ const report=compareWeeklyStatements([],[a],new Set([a.invoiceNo]),false);
+ assert.equal(report.rows[0].state,"CURRENT_ONLY_NOT_COMPARED");
+ assert.equal(report.summary.newlySeen,0);
+ assert.equal(report.groups[0].needsReview,0);
+});

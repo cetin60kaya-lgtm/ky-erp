@@ -37,6 +37,7 @@ export function registerWeeklyCariPreviewRoutes(app:Hono<AppEnv>){
   try{
    const now=await parseWorkbook(current);
    const old=previous instanceof File?await parseWorkbook(previous):{lines:[],ignoredRows:0,ambiguousRows:0,sheets:0};
+   if(previous instanceof File&&!old.lines.length)return failed(c,"PREVIOUS_HKN_NOT_FOUND","Önceki ekstre HKN içermiyor; karşılaştırma yapılmadı.",422);
    if(!now.lines.length)return failed(c,"HKN_NOT_FOUND","Ekstrede HKN belge numarası bulunamadı. Sütunları ve dosya dönemini kontrol edin.",422);
    const all=[...new Set([...old.lines,...now.lines].map(x=>x.invoiceNo))];
    const matched=new Set<string>();
@@ -46,7 +47,7 @@ export function registerWeeklyCariPreviewRoutes(app:Hono<AppEnv>){
     const docs=(await c.env.DB.prepare(sql).bind(slug,companyId,...chunk).all<Row>()).results||[];
     for(const d of docs)matched.add(up(d.document_no).replace(/\s+/g,""));
    }
-   const report=compareWeeklyStatements(old.lines,now.lines,matched);
+   const report=compareWeeklyStatements(old.lines,now.lines,matched,previous instanceof File);
    return c.json({ok:true,data:{companyId,companyName:txt(company.name),summary:report.summary,groups:report.groups,rows:report.rows,
     source:{currentName:txt(current.name),previousName:previous instanceof File?txt(previous.name):null,currentSheets:now.sheets,previousSheets:old.sheets,currentAmbiguousRows:now.ambiguousRows,previousAmbiguousRows:old.ambiguousRows,onlyPreview:true},
     note:"Cari ekstresinde bulunmamak ödeme kanıtı değildir. Eski dönem, mahsup, toplu ödeme ve revizyonlar manuel kontrol gerektirir. Hiçbir kayıt/gönderim yapılmadı."}});

@@ -75,7 +75,7 @@ export default function ReconciliationPanel({ activeMainCompany, refreshKey = 0 
     finally{setWeekBusy(false);}
   };
   const weeklyLabel = (status) => ({
-    NEW_ON_STATEMENT:"Yeni ekstre kaydı",MISSING_ON_CURRENT_REVIEW:"Yeni ekstrede yok — teyit",AMOUNT_CHANGED_REVIEW:"Tutar değişti — teyit",
+    CURRENT_ONLY_NOT_COMPARED:"Güncel ekstre — karşı hafta yok",NEW_ON_STATEMENT:"Yeni ekstre kaydı",MISSING_ON_CURRENT_REVIEW:"Yeni ekstrede yok — teyit",AMOUNT_CHANGED_REVIEW:"Tutar değişti — teyit",
     DUPLICATE_REVIEW:"Mükerrer satır — teyit",GROUP_CONFLICT_REVIEW:"Grup uyuşmazlığı",PRESENT_BOTH_REVIEW:"İki ekstrede mevcut"
   }[status] || "İncele");
 

@@ -6,7 +6,7 @@ const fold=(v:unknown)=>value(v).toLocaleUpperCase("tr-TR").normalize("NFD")
  .replace(/[\u0300-\u036f]/g,"").replace(/İ/g,"I").replace(/\s+/g," ").trim();
 export const exactHkn=(v:unknown)=>{const m=value(v).toUpperCase().replace(/\s+/g,"").match(/^HKN[0-9]{8,18}$/);return m?m[0]:"";};
 const extractHkn=(v:unknown)=>{
- const matches=[...value(v).toUpperCase().matchAll(/HKN[\s-]*[0-9]{8,18}(?![0-9])/g)]
+ const matches=[...value(v).toUpperCase().matchAll(/HKN[\s-]*[0-9]{8,18}(?![A-Z0-9])/g)]
    .map(x=>exactHkn(x[0].replace(/-/g,"")));
  return [...new Set(matches.filter(Boolean))];
 };
@@ -59,13 +59,14 @@ const comparable=(a:StatementLine,b:StatementLine)=>{
  const fields:(keyof StatementLine)[]=["debit","credit","balance"];
  return fields.some(k=>typeof a[k]==="number"&&typeof b[k]==="number"&&Math.abs(Number(a[k])-Number(b[k]))>0.009);
 };
-export function compareWeeklyStatements(previous:StatementLine[],current:StatementLine[],erp:ReadonlySet<string>){
+export function compareWeeklyStatements(previous:StatementLine[],current:StatementLine[],erp:ReadonlySet<string>,hasPrevious=true){
  const map=(arr:StatementLine[])=>{const m=new Map<string,StatementLine[]>();for(const v of arr)m.set(v.invoiceNo,[...(m.get(v.invoiceNo)||[]),v]);return m;};
  const prev=map(previous),cur=map(current),ids=[...new Set([...prev.keys(),...cur.keys()])].sort();
  const result=ids.map(invoiceNo=>{
   const old=prev.get(invoiceNo)||[],latest=cur.get(invoiceNo)||[],p=old[0],n=latest[0];
-  let state="PRESENT_BOTH_REVIEW";
-  if(!latest.length)state="MISSING_ON_CURRENT_REVIEW";
+  let state=hasPrevious?"PRESENT_BOTH_REVIEW":"CURRENT_ONLY_NOT_COMPARED";
+  if(!hasPrevious)state="CURRENT_ONLY_NOT_COMPARED";
+  else if(!latest.length)state="MISSING_ON_CURRENT_REVIEW";
   else if(!old.length)state="NEW_ON_STATEMENT";
   else if(old.length>1||latest.length>1)state="DUPLICATE_REVIEW";
   else if(p&&n&&comparable(p,n))state="AMOUNT_CHANGED_REVIEW";
@@ -77,7 +78,7 @@ export function compareWeeklyStatements(previous:StatementLine[],current:Stateme
     paymentStatus:"NOT_DETERMINED" as const};
  });
  const groupMap=new Map<string,{groupCode:string;current:number;notInErp:number;needsReview:number}>();
- for(const row of result){const code=row.groupCode||"BELIRSIZ",e=groupMap.get(code)||{groupCode:code,current:0,notInErp:0,needsReview:0};if(row.inCurrent){e.current++;if(!row.erpPresent)e.notInErp++;}if(row.state!=="PRESENT_BOTH_REVIEW"||!row.erpPresent)e.needsReview++;groupMap.set(code,e);}
+ for(const row of result){const code=row.groupCode||"BELIRSIZ",e=groupMap.get(code)||{groupCode:code,current:0,notInErp:0,needsReview:0};if(row.inCurrent){e.current++;if(!row.erpPresent)e.notInErp++;}if(!["PRESENT_BOTH_REVIEW","CURRENT_ONLY_NOT_COMPARED"].includes(row.state)||!row.erpPresent)e.needsReview++;groupMap.set(code,e);}
  return {rows:result,groups:[...groupMap.values()].sort((a,b)=>a.groupCode.localeCompare(b.groupCode,"tr-TR")),summary:{
    total:result.length,inCurrent:result.filter(x=>x.inCurrent).length,
    notInErp:result.filter(x=>x.inCurrent&&!x.erpPresent).length,
