@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context } from "hono";
+import { chooseExactEBelgeProduct, exactProductKey } from "./e-belge-exact-product.ts";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -22,7 +23,63 @@ export async function listEBelgeProducts(c:Context<AppEnv>,slug:string,q=""){con
 
 export async function getEBelgeProduct(c:Context<AppEnv>,slug:string,id:string){const wanted=text(id);if(!wanted)return null;if(await tableExists(c,"products")){const row=await c.env.DB.prepare(`SELECT * FROM products WHERE main_company_slug=? AND id=? LIMIT 1`).bind(slug,wanted).first<Row>();if(row)return productView(row,"PRODUCTS")}return(await boyahaneProducts(c,slug)).find(row=>text(row.id)===wanted)||null}
 
-export async function matchEBelgeProduct(c:Context<AppEnv>,slug:string,line:Row,companyId=""){const code=normalize(line.productCode||line.supplierProductCode),name=normalize(line.description);let product:Row|null=null;if(await tableExists(c,"products")){const cols=await tableColumns(c,"products"),or:string[]=[],args:any[]=[slug];if(code&&cols.has("code")){or.push("UPPER(COALESCE(code,''))=?");args.push(code)}if(code&&cols.has("legacy_id")){or.push("UPPER(COALESCE(legacy_id,''))=?");args.push(code)}if(name&&cols.has("normalized_name")){or.push("normalized_name=?");args.push(name)}if(name&&cols.has("name")){or.push("UPPER(COALESCE(name,''))=UPPER(?)");args.push(text(line.description))}if(or.length){const row=await c.env.DB.prepare(`SELECT * FROM products WHERE main_company_slug=? AND (${or.join(" OR ")}) LIMIT 1`).bind(...args).first<Row>();if(row)product=productView(row,"PRODUCTS")}}const boya=await boyahaneProducts(c,slug);if(!product)product=boya.find(row=>code&&[row.code,row.legacy_id].map(normalize).includes(code))||boya.find(row=>name&&normalize(row.name)===name)||null;if(!product&&name){const aliases=await jsonStoreList(c,"MUHASEBE_PRODUCT_ALIAS",slug);const alias=aliases.find(row=>{if(row.isActive===false)return false;if(normalize(row.rawName||row.raw_name)!==name)return false;const aliasCompanyId=text(row.companyId||row.supplierFirmId||row.supplierCompanyId);return !aliasCompanyId||Boolean(companyId&&aliasCompanyId===companyId)});if(alias)product=await getEBelgeProduct(c,slug,text(alias.productId))}return product?{productId:text(product.id),product,status:"AUTO_MATCHED",source:product._source==="BOYAHANE"?"BOYAHANE_PRODUCT":"PRODUCT_OR_ALIAS"}:{productId:"",product:null,status:"UNMATCHED",source:"NONE"}}
+export async function matchEBelgeProduct(c:Context<AppEnv>,slug:string,line:Row,companyId=""){
+  const codeInputs=[text(line.productCode),text(line.supplierProductCode)].filter(Boolean);
+  const description=text(line.description),name=normalize(description);
+  const candidates:Row[]=[];
+  if(await tableExists(c,"products")){
+    const cols=await tableColumns(c,"products"),filters:string[]=[],args:any[]=[slug];
+    for(const code of codeInputs){
+      if(cols.has("code")){filters.push("UPPER(COALESCE(code,''))=UPPER(?)");args.push(code)}
+      if(cols.has("legacy_id")){filters.push("UPPER(COALESCE(legacy_id,''))=UPPER(?)");args.push(code)}
+    }
+    if(name && cols.has("normalized_name")){filters.push("normalized_name=?");args.push(name)}
+    if(description && cols.has("name")){filters.push("UPPER(COALESCE(name,''))=UPPER(?)");args.push(description)}
+    if(filters.length){
+      const found=await c.env.DB.prepare(`SELECT * FROM products WHERE main_company_slug=? AND (${filters.join(" OR ")}) ORDER BY id LIMIT 251`)
+        .bind(...args).all<Row>();
+      const rows=found.results||[];
+      // Never select an arbitrary first result if one exact identity maps to >250 catalog rows.
+      if(rows.length>250)return{productId:"",product:null,status:"AMBIGUOUS",source:"PRODUCT_CANDIDATE_OVERFLOW",packageReviewRequired:false};
+      candidates.push(...rows.map(row=>productView(row,"PRODUCTS")));
+    }
+  }
+  const boya=await boyahaneProducts(c,slug);
+  candidates.push(...boya);
+  let choice=chooseExactEBelgeProduct(candidates,line);
+  if(!choice.product && choice.source==="NONE" && name){
+    // Only an explicitly configured exact alias, scoped to the right supplier,
+    // may resolve a different commercial description. Never fuzzy-match.
+    const aliases=await jsonStoreList(c,"MUHASEBE_PRODUCT_ALIAS",slug);
+    const applicable=aliases.filter(row=>{
+      if(row.isActive===false||exactProductKey(row.rawName||row.raw_name)!==exactProductKey(description))return false;
+      const supplier=text(row.companyId||row.supplierFirmId||row.supplierCompanyId);
+      return !supplier||Boolean(companyId&&supplier===companyId);
+    });
+    const aliasIds=[...new Set(applicable.map(row=>text(row.productId)).filter(Boolean))];
+    if(aliasIds.length===1){
+      const aliasProduct=await getEBelgeProduct(c,slug,aliasIds[0]);
+      if(aliasProduct){
+        const verified=chooseExactEBelgeProduct([aliasProduct],{
+          ...line,description:text(aliasProduct.name),
+          productCode:text(aliasProduct.code||aliasProduct.legacy_id),
+          supplierProductCode:""
+        });
+        choice=verified.product?{...verified,source:verified.source==="PACKAGING_REVIEW"?"PACKAGING_REVIEW":"EXACT_NAME"}:verified;
+      }
+    }else if(aliasIds.length>1){
+      return{productId:"",product:null,status:"AMBIGUOUS",source:"ALIAS_CONFLICT",packageReviewRequired:false};
+    }
+  }
+  if(!choice.product)return{productId:"",product:null,status:choice.source==="AMBIGUOUS"?"AMBIGUOUS":"UNMATCHED",
+    source:choice.source,matchNote:choice.reason,packageReviewRequired:false};
+  const product=choice.product;
+  return{productId:text(product.id),product,
+    status:choice.source==="PACKAGING_REVIEW"?"PACKAGING_REVIEW":"AUTO_MATCHED",
+    source:choice.source==="EXACT_NAME"?"EXACT_NAME":choice.source==="PACKAGING_REVIEW"?"PACKAGING_REVIEW":choice.source==="EXACT_CODE"?"EXACT_CODE":"PRODUCT_ALIAS",
+    matchNote:choice.reason,packageReviewRequired:choice.source==="PACKAGING_REVIEW",
+    packageWeightKg:choice.packageWeightKg};
+}
 
 export function eBelgeProductRouting(product:Row|null,line:Row,supplierProfile:Row={}){const raw=json(product?.raw),routing=upper(raw.routingType||raw.routing_type),group=upper(raw.productGroup||raw.product_group),name=normalize(`${product?.name||product?.productName||""} ${line.description||""}`),supplierChemical=supplierProfile.isChemicalSupplier===true,detectedChemical=product?._source==="BOYAHANE"||routing==="BOYAHANE"||group==="BOYAHANE"||/BOYA|PIGMENT|KIMYA|WHITE|RETARDER|FIXATOR|FIXAT|SILIKON|SILICONE|EMULSIYON|TINER|GAZ|SPREY|SIM/.test(name),chemical=detectedChemical||supplierChemical,effectiveRouting=chemical?"BOYAHANE":routing==="STOCK"?"STOCK":routing||"EXPENSE",explicitLot=raw.requiresLot??raw.requireLot??raw.lotRequired??raw.lot_required,lotRequired=explicitLot===true||effectiveRouting==="BOYAHANE"||supplierChemical&&supplierProfile.requireLot!==false;return{routing:effectiveRouting,chemical,lotRequired,expenseCategoryId:text(raw.expenseCategoryId||raw.expense_category_id)||null,expenseCategoryName:text(raw.expenseCategoryName||raw.expense_category_name||raw.expenseCategory)||(effectiveRouting==="BOYAHANE"?"Kimya / Boya":effectiveRouting==="STOCK"?"Stok / Malzeme Alımı":effectiveRouting==="CONSUMABLE"?"Kumaş / Yardımcı Malzeme":"Mal ve Hizmet Alımı"),warehouse:text(raw.warehouse||supplierProfile.defaultWarehouse)||null,defaultUnit:text(raw.defaultUnit||supplierProfile.defaultUnit)||null,supplierChemical}}
 

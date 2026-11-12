@@ -1,4 +1,5 @@
 // KY ERP: deterministic archive-name → canonical model identity. No fuzzy auto-merge.
+import { exactPackageKg } from "./e-belge-exact-product.ts";
 type Row = Record<string, any>;
 const txt=(v:unknown)=>v==null?"":String(v).trim();
 export const modelKey=(value:unknown)=>txt(value).toLocaleUpperCase("tr-TR")
@@ -59,13 +60,18 @@ export function chooseCanonicalDocumentModels(input:{
 }
 
 export function packageWeightFromItem(description:unknown,quantity:unknown,unit:unknown) {
-  const match=txt(description).match(/\(\s*(\d+(?:[.,]\d+)?)\s*(?:KG|KİLOGRAM|KILOGRAM)\s*\)/i);
-  const each=match?Number(match[1].replace(",",".")):0;
-  const packages=Number(quantity)||0;
-  const isPiece=["C62","AD","ADET","PCE","PCS"].includes(txt(unit).toUpperCase());
-  return each>0&&packages>0&&isPiece?
-    {packageWeightKg:each,packageCount:packages,calculatedKg:Math.round(each*packages*1000)/1000,requiresStockUnitReview:true}:
-    {packageWeightKg:0,packageCount:0,calculatedKg:0,requiresStockUnitReview:false};
+  const each=exactPackageKg(description);
+  const count=Number(quantity);
+  const unitCode=txt(unit).toLocaleUpperCase("tr-TR");
+  const isPackageUnit=["C62","AD","ADET","PCE","PCS","PK","PAK","PAKET","BX","BOX","KUTU","KOLI","KOLİ"].includes(unitCode);
+  const packages=isPackageUnit&&Number.isFinite(count)&&count>0?count:0;
+  // Quantities in KGM/KG are already mass; never multiply kg by package weight.
+  return {
+    packageWeightKg:each,
+    packageCount:each>0?packages:0,
+    calculatedKg:each>0&&packages>0?Math.round(each*packages*1000)/1000:0,
+    requiresStockUnitReview:each>0&&packages>0,
+  };
 }
 
 export function dispatchInvoiceQuantity(dispatchQty:unknown,invoicedQty:unknown,productionQty?:unknown) {
