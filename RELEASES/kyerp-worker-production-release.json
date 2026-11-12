@@ -3,21 +3,21 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "d52b6a2e1f8e1575d923d263a59c0d2eae5dc94d",
-  "requestedAt": "2026-11-10",
-  "attempt": 50,
+  "sourceCommit": "4921a5504182f12a084a86068fe54488b5a2fd1f",
+  "requestedAt": "2026-11-12",
+  "attempt": 51,
   "scope": [
-    "PR548-e-belge-ddm-hkn-and-ubl-source-intake",
-    "PR548-model-folder-multi-file-package",
-    "PR548-outgoing-psd-multi-model-boy",
-    "PR548-model-file-role-permissions",
-    "no-d1-business-writes",
-    "no-schema-migration",
-    "full-d1-backup-required"
+    "PR552-IsNet-company-product-package-identity",
+    "PR553-OCR-dual-reader-quality-gates",
+    "PR554-Outlook-Graph-idempotent-confirmed-send-core",
+    "CI-PR552-553-554-PASS",
+    "D1-full-backup-before-deploy",
+    "no-live-mail-no-business-data-write-no-schema-migration"
   ],
-  "note": "10.11.2026 kullanıcı canlıya al talebi: PR #548 CI frontend ve Worker PASS, merge d52b6a2. İşNet XML/PDF belge alma ve Drive File Hub model klasörü/teknik föy/çoklu PSD-BOY bağları. Migration, toplu D1 iş kaydı ve resmi belge gönderimi yok; Worker release tam yedek ve canlı health kontrolü gerekir.",
+  "note": "12.11.2026 açık kullanıcı talebiyle İşNet kimlik/ambalaj, OCR çift okuyucu, Graph tek gönderim kodu yayınlanacak. Canlı veri için D1 tam yedek zorunlu. Schema migration ve fiziksel kabul kapalıdır; müşteri e-postası otomatik gönderilmez.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
-  "approvedMigrationId": null
+  "approvedMigrationId": null,
+  "releaseDate": "2026-11-12"
 }

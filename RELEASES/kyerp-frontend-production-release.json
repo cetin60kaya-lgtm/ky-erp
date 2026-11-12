@@ -3,16 +3,16 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-11-10",
+  "releaseDate": "2026-11-12",
   "scope": [
-    "PR542-DESEN-OUTGOING_DESIGN-GoogleDrive-readonly-binding-UI",
-    "PR548-shared-model-files-and-multi-model-BOY",
-    "CI-PR542-green",
-    "frontend-only-no-D1-business-writes",
-    "Pages-production-smoke"
+    "PR552-IsNet-identity-frontend",
+    "PR553-OCR-worker-config-readonly-UI",
+    "PR554-Outlook-HKN-DDM-ui-with-user-confirmation",
+    "CI-PR552-553-554-PASS",
+    "production-frontend-smoke-no-D1-transaction"
   ],
-  "note": "10.11.2026 kalan işler kapsamında PR #542 eklendi: yalnız yetkili kullanıcı onayıyla AGENT UNKNOWN giden PSD kaynağını mevcut Hakan Emp Google Drive CLOUD_API kaynağına salt okunur atama seçeneği. Herhangi bir Drive dosyası taşınmaz, silinmez; D1 binding kullanıcının ayrıca tıklamasıyla oluşur. Canlı Pages doğrulama ayrı; dosya indeksleme ve model-BOY kullanıcı kabulü bekliyor.",
-  "sourceCommit": "ee1fe8b413fa436857b2dbd5624d1a60a398f2ca",
-  "requestedAt": "2026-11-10",
-  "attempt": 2
+  "note": "12.11.2026 açık kullanıcı talebiyle PR 552, 553, 554 kodu CI başarılı birleştirildi; Pages production yayını ve canlı bundle doğrulaması. Gerçek mail gönderimi yok; yetkili kullanıcı aksiyonu ayrıca gereklidir.",
+  "sourceCommit": "4921a5504182f12a084a86068fe54488b5a2fd1f",
+  "requestedAt": "2026-11-12",
+  "attempt": 3
 }
