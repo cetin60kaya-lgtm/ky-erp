@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { BadgeCheck, RefreshCcw, X } from "lucide-react";
-import { apiGet, apiPost } from "../../../utils/api";
+import { apiGet, apiPost, apiUpload } from "../../../utils/api";
 import "./reconciliationPanel.css";
 import { reviewDraft } from "./reconciliationReview";
 
@@ -17,6 +17,11 @@ export default function ReconciliationPanel({ activeMainCompany, refreshKey = 0 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [pending, setPending] = useState(null);
+  const [weekCompanyId,setWeekCompanyId] = useState("");
+  const [weekCurrent,setWeekCurrent] = useState(null);
+  const [weekPrevious,setWeekPrevious] = useState(null);
+  const [weeklyReport,setWeeklyReport] = useState(null);
+  const [weekBusy,setWeekBusy] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const saveLock = useRef(false);
@@ -52,6 +57,27 @@ export default function ReconciliationPanel({ activeMainCompany, refreshKey = 0 
   useEffect(() => { setPending(null); setMessage(""); }, [period, params]);
 
   const updateDraft = (id, key, value) => setDrafts((current) => ({ ...current, [id]: { ...(current[id] || {}), [key]: value } }));
+
+  const previewWeekly = async () => {
+    if (!weekCompanyId || !weekCurrent || weekBusy) { setError("Cari ve bu haftanın XLSX/CSV dosyasını seçin.");return; }
+    const data = new FormData();
+    data.append("mainCompanySlug", String(params.mainCompanySlug || ""));
+    data.append("companyId", weekCompanyId);
+    data.append("currentFile", weekCurrent);
+    if (weekPrevious) data.append("previousFile", weekPrevious);
+    setWeekBusy(true);setWeeklyReport(null);setError("");
+    try{
+      const response = await apiUpload("/muhasebe/weekly-cari-preview",data);
+      const parsed = response?.data?.data || response?.data || response;
+      if (!parsed?.summary || !Array.isArray(parsed.rows)) throw new Error("Cari rapor önizlemesi doğrulanamadı.");
+      setWeeklyReport(parsed);
+    }catch(e){setError(e?.message || "Ekstre önizlemesi oluşturulamadı. Hiçbir cari/ödeme kaydı değiştirilmedi.");}
+    finally{setWeekBusy(false);}
+  };
+  const weeklyLabel = (status) => ({
+    NEW_ON_STATEMENT:"Yeni ekstre kaydı",MISSING_ON_CURRENT_REVIEW:"Yeni ekstrede yok — teyit",AMOUNT_CHANGED_REVIEW:"Tutar değişti — teyit",
+    DUPLICATE_REVIEW:"Mükerrer satır — teyit",GROUP_CONFLICT_REVIEW:"Grup uyuşmazlığı",PRESENT_BOTH_REVIEW:"İki ekstrede mevcut"
+  }[status] || "İncele");
 
   const requestSave = (row) => {
     if (saving || loading || saveLock.current) return;
@@ -112,6 +138,26 @@ export default function ReconciliationPanel({ activeMainCompany, refreshKey = 0 
           </tr>;
         }) : <tr><td colSpan="7" className="accounting-workspace-empty">Firma bulunamadı.</td></tr>}
       </tbody></table></div>
+      <details className="weekly-cari-preview">
+        <summary>Haftalık müşteri XLSX cari karşılaştırması</summary>
+        <p>Yalnız okuma/önizleme. Ekstrede görünmeyen fatura otomatik ödenmiş veya iptal edilmiş sayılmaz. Ödeme ve bakiye ayrı onaylanır.</p>
+        <div className="weekly-cari-fields">
+          <label>Cari / müşteri<select value={weekCompanyId} disabled={weekBusy} onChange={(e)=>{setWeekCompanyId(e.target.value);setWeeklyReport(null);}}><option value="">Cari seçin</option>{rows.map(r=><option key={r.company_id} value={r.company_id}>{r.company_name}</option>)}</select></label>
+          <label>Bu haftanın ekstresi<input type="file" accept=".xlsx,.xls,.csv" disabled={weekBusy} onChange={e=>{setWeekCurrent(e.target.files?.[0]||null);setWeeklyReport(null);}} /></label>
+          <label>Geçen haftanın ekstresi (isteğe bağlı)<input type="file" accept=".xlsx,.xls,.csv" disabled={weekBusy} onChange={e=>{setWeekPrevious(e.target.files?.[0]||null);setWeeklyReport(null);}} /></label>
+          <button type="button" onClick={previewWeekly} disabled={weekBusy||!weekCompanyId||!weekCurrent}>{weekBusy?"Dosyalar kontrol ediliyor...":"HKN ve Cari Farklarını İncele"}</button>
+        </div>
+        {weeklyReport ? <section className="weekly-cari-results">
+          <strong>{weeklyReport.companyName} · Salt okunur karşılaştırma</strong>
+          <p>{weeklyReport.summary.inCurrent} güncel HKN · {weeklyReport.summary.notInErp} ERP'de kesin eşleşmeyen · {weeklyReport.summary.disappeared} bu hafta görünmeyen · {weeklyReport.summary.changed} tutarı değişen. Belirsiz satırlar: {weeklyReport.source.currentAmbiguousRows}.</p>
+          <div className="weekly-cari-groups">{weeklyReport.groups.map(g=><span key={g.groupCode}>{g.groupCode}: {g.current} HKN · {g.needsReview} inceleme</span>)}</div>
+          <div className="reconciliation-table-wrap"><table><thead><tr><th>HKN Fatura</th><th>Grup</th><th>Ekstre farkı</th><th>ERP kaydı</th><th>Karşı bakiye</th></tr></thead><tbody>
+            {weeklyReport.rows.slice(0,200).map(item=><tr key={item.invoiceNo}><td>{item.invoiceNo}</td><td>{item.groupCode||"Belirsiz"}</td><td>{weeklyLabel(item.state)}</td><td>{item.erpPresent?"Var":"Kesin eşleşme yok"}</td><td>{item.balance==null?"Doğrulanmadı":money(item.balance)}</td></tr>)}
+          </tbody></table></div>
+          {weeklyReport.rows.length>200?<p>İlk 200 HKN gösteriliyor. Toplam {weeklyReport.rows.length} kayıt; özet toplam üzerinden hesaplandı.</p>:null}
+          <p>Önizleme hiçbir borç, tahsilat, ödeme veya gönderim kaydı oluşturmadı.</p>
+        </section>:null}
+      </details>
       {pending ? <div className="reconciliation-confirm-layer" onMouseDown={(event) => { if (event.currentTarget === event.target && !saving) setPending(null); }}>
         <section className="reconciliation-confirm" role="dialog" aria-modal="true" aria-labelledby="reconciliation-confirm-title">
           <header><h3 id="reconciliation-confirm-title">Mutabakatı Onayla</h3><button type="button" aria-label="Kapat" disabled={saving} onClick={() => setPending(null)}><X size={18}/></button></header>
