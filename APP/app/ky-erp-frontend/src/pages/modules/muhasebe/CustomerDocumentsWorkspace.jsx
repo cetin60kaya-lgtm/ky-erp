@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileText, RefreshCcw, Search } from "lucide-react";
 import { getEBelgePool } from "../../../services/eBelgeApi";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
+import InvoiceMailWorkspace from "./InvoiceMailWorkspace";
 import { DOCUMENT_PAGE_SIZE, documentPageMeta } from "./documentPageMeta";
 import "./documentPagination.css";
 
@@ -17,7 +18,7 @@ const statusText = (value) => ({
   ERROR: "Hata",
 }[String(value || "").toUpperCase()] || value || "-");
 
-function OutgoingInvoicesPanel({ activeMainCompany, openModule, refreshKey = 0 }) {
+function OutgoingInvoicesPanel({ activeMainCompany, openModule, onInvoiceMail, refreshKey = 0 }) {
   const [state, setState] = useState({ loading: true, error: "", items: [], pagination: documentPageMeta() });
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
@@ -65,7 +66,7 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, refreshKey = 0 }
     <section className="accounting-table-card">
       {state.error ? null : state.loading ? <div className="accounting-list-skeleton">{Array.from({ length: 6 }, (_, index) => <span key={index} />)}</div> : state.items.length ? (
         <div className="accounting-table-wrap"><table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Fatura No</th><th>Matrah</th><th>KDV</th><th>Toplam</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>
-          {state.items.map((row) => <tr key={row.id}><td>{dateText(row.issue_date)}</td><td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td><td>{row.document_no || "-"}</td><td>{money(row.subtotal, row.currency)}</td><td>{money(row.tax_total, row.currency)}</td><td><strong>{money(row.payable_total, row.currency)}</strong></td><td>{statusText(row.status)}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-belgeler", actionContext: { documentId: row.id } })}>Belgeyi Aç</button></td></tr>)}
+          {state.items.map((row) => <tr key={row.id}><td>{dateText(row.issue_date)}</td><td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td><td>{row.document_no || "-"}</td><td>{money(row.subtotal, row.currency)}</td><td>{money(row.tax_total, row.currency)}</td><td><strong>{money(row.payable_total, row.currency)}</strong></td><td>{statusText(row.status)}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-belgeler", actionContext: { documentId: row.id } })}>Belgeyi Aç</button> {String(row.document_no || "").toUpperCase().startsWith("HKN") ? <button type="button" onClick={() => onInvoiceMail?.(row)}>Fatura Maili</button> : null}</td></tr>)}
         </tbody></table></div>
       ) : <div className="accounting-empty"><FileText size={26} /><strong>Giden fatura bulunamadı.</strong><span>Satış faturaları e-Belge canonical havuzuna ulaştığında burada otomatik görünür.</span></div>}
       {!state.loading && !state.error && state.pagination.total > 0 ? <nav className="accounting-document-pagination" aria-label="Satış faturası sayfaları">
@@ -79,15 +80,23 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, refreshKey = 0 }
   </section>;
 }
 
-export default function CustomerDocumentsWorkspace({ activeMainCompany, openModule, refreshKey = 0 }) {
+export default function CustomerDocumentsWorkspace({ activeMainCompany, openModule, moduleActionContext, refreshKey = 0 }) {
   const [view, setView] = useState("chain");
+  const [mailInvoice, setMailInvoice] = useState(null);
+  const openInvoiceMail = (row) => { setMailInvoice(row); setView("mail"); };
+  useEffect(() => {
+    if (!moduleActionContext?.mailModelName) return;
+    setMailInvoice({ id: "model-" + (moduleActionContext.mailModelId || moduleActionContext.mailModelName), model_name: moduleActionContext.mailModelName, model_id: moduleActionContext.mailModelId || "", party_name: moduleActionContext.mailCompanyName || "" });
+    setView("mail");
+  }, [moduleActionContext?.mailModelId, moduleActionContext?.mailModelName, moduleActionContext?.mailCompanyName]);
   return (
     <section className="accounting-composite-workspace">
       <div className="accounting-subbar" role="tablist" aria-label="Müşteri satış görünümü">
         <button type="button" className={view === "chain" ? "active" : ""} onClick={() => setView("chain")}>İrsaliye / Fatura Zinciri</button>
         <button type="button" className={view === "invoices" ? "active" : ""} onClick={() => setView("invoices")}>Satış Faturaları</button>
+        <button type="button" className={view === "mail" ? "active" : ""} onClick={() => setView("mail")}>Fatura / İrsaliye Maili</button>
       </div>
-      {view === "chain" ? <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} openModule={openModule} /> : <OutgoingInvoicesPanel activeMainCompany={activeMainCompany} openModule={openModule} refreshKey={refreshKey} />}
+      {view === "chain" ? <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} openModule={openModule} onInvoiceMail={openInvoiceMail} /> : view === "invoices" ? <OutgoingInvoicesPanel activeMainCompany={activeMainCompany} openModule={openModule} onInvoiceMail={openInvoiceMail} refreshKey={refreshKey} /> : <InvoiceMailWorkspace activeMainCompany={activeMainCompany} selectedInvoice={mailInvoice} />}
     </section>
   );
 }
