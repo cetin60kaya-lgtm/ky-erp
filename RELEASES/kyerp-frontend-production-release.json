@@ -5,14 +5,13 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-12",
   "scope": [
-    "PR552-IsNet-identity-frontend",
-    "PR553-OCR-worker-config-readonly-UI",
-    "PR554-Outlook-HKN-DDM-ui-with-user-confirmation",
-    "CI-PR552-553-554-PASS",
-    "production-frontend-smoke-no-D1-transaction"
+    "PR555-canonical-PSD-multi-model-BOY-print-area-normalization",
+    "PR556-weekly-cari-XLSX-readonly-preview",
+    "CI-PR555-556-green",
+    "Pages-production-live-bundle-smoke"
   ],
-  "note": "12.11.2026 açık kullanıcı talebiyle PR 552, 553, 554 kodu CI başarılı birleştirildi; Pages production yayını ve canlı bundle doğrulaması. Gerçek mail gönderimi yok; yetkili kullanıcı aksiyonu ayrıca gereklidir.",
-  "sourceCommit": "4921a5504182f12a084a86068fe54488b5a2fd1f",
+  "note": "12.11.2026 ikinci dalga: PSD model/BOY tek paneli ve haftalık cari XLSX/CSV salt-okunur önizleme. Önceki haftasız yanlış NEW durumu engellendi; gerçek müşteri yükleme/kabul ayrı.",
+  "sourceCommit": "34f3288506286b1b04c0820ca21b36dc239c28e9",
   "requestedAt": "2026-11-12",
-  "attempt": 3
+  "attempt": 4
 }
