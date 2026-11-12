@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 12.11.2026 — İşNet / OCR / Outlook / PSD-BOY / haftalık cari canlı yayın teslimi
+
+- **Canonical birleşimler:** PR #552 İşNet firma/ürün/30–60 kg merge 2dfa877; PR #553 OCR kalite/çift okuyucu merge d00c718; PR #554 Outlook HKN/DDM tek gönderim idempotency merge 4921a550; PR #555 tek ModelFilesPanel ve variants BOY/baskı bölgesi merge a220104e; PR #556 XLSX/CSV cari farkı salt okunur merge 34f32885. Son kod başlarında frontend/Worker CI SUCCESS. Eski çakışan PR #549 ve #550 replacement sonrasında kapatıldı.
+- **Üretim yayın kanıtı:** İlk frontend Actions 43162677317 ve Worker 43162677427 SUCCESS (release 400f2f81). İkinci frontend 43164275442 ve Worker 43164275408 SUCCESS (release ade04154). Worker tam D1 backup, test, deploy ve health geçti. applyMigrations=false, applyPhysical0062=false; hiçbir schema migration uygulanmadı. Bu CI/deploy kabulüdür, gerçek muhasebe işlemi değildir.
+- **XLSX sınırı:** Haftalık Cari Mutabakat iki dosyanın HKN tam kimliği, grup ve farklarını, seçilen firmanın resmî ERP faturalarıyla yalnız SELECT üzerinden karşılaştırır. Önceki hafta yokken yeni fatura ve ekstreden kayboldu diye ödendi çıkarımı yoktur. Gerçek müşteri XLSX yüklemesi kabul edilmedi; otomatik Outlook original thread reply / 12 aylık kişi grubu çıkarımı eksiktir.
+- **DESEN:** Gerçek özel Chat Bridge status DESEN_KYERP_20261112_1794461380291 ok:true, desktop:true ama hub8840:false, mesh8443:false. Desteklenen open_hub DESEN_KYERP_OPEN_20261112_1794462677536 ok:true; hemen ardından status DESEN_KYERP_POSTOPEN_1794462779609 yine iki port false. Remote Desktop Commander offline. Gerçek Windows ekran/oturum testi PASS değildir. Yeni ZIP, token, kurulum istenmedi.
+- **Açık kabul:** Gerçek Drive/File Hub dört binding/sync, indeksli model-PSD BOY bağı, gerçek İşNet HKN/DDM XML+PDF ve LOT/fiziksel journal, Outlook OAuth/Sent Items ve açık kullanıcı gönderimi, müşteri haftalık XLSX, role/mobile testleri. Gerçek e-posta, resmî e-belge, finansal son onay veya production D1 veri işlemi yapılmadı.
+
+
 ## 10.11.2026 — TALEP/KOD/YAYIN/SAHA KABUL TOPLU DENETİMİ (tek kanonik iş listesi)
 
 - **Tek rapor:** `DOCS/KY_ERP_UCTAN_UCA_KABUL_MATRISI_20261110.md` (commit `9884fbcda688cdadb8b253b842e0adcc6ba3c118`). İşNet HKN/DDM, Drive model klasöründeki çoklu teknik föy/AI/PDF/TIFF, giden tek PSD'nin çoklu MODEL + BOY + baskı bölgesi, İmalat, Boyahane/LOT, Outlook fatura ve mobil model kartı istekleri birer kabul satırı olarak eşlendi.
