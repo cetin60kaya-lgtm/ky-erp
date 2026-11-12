@@ -14,3 +14,13 @@
 .reconciliation-confirm button:disabled{opacity:.5;cursor:not-allowed}
 .reconciliation-panel table td input,.reconciliation-panel table td select{min-width:100px}
 @media(max-width:620px){.reconciliation-confirm{padding:14px}.reconciliation-confirm footer{flex-direction:column-reverse}.reconciliation-confirm footer button{width:100%}.reconciliation-table-wrap{overflow-x:auto}}
+
+.weekly-cari-preview{margin-top:16px;padding:14px;border:1px solid var(--border-color,#dbe3e9);border-radius:10px}
+.weekly-cari-preview>summary{cursor:pointer;font-weight:700;min-height:44px;display:flex;align-items:center}
+.weekly-cari-preview p{font-size:.9rem;line-height:1.5}
+.weekly-cari-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px;margin:12px 0}
+.weekly-cari-fields label{display:grid;gap:6px;font-weight:600;font-size:.88rem}
+.weekly-cari-fields select,.weekly-cari-fields input,.weekly-cari-fields button{width:100%;min-height:44px;padding:9px;border:1px solid var(--border-color,#c8d1db);border-radius:7px;box-sizing:border-box}
+.weekly-cari-results{display:grid;gap:10px}
+.weekly-cari-groups{display:flex;gap:6px;flex-wrap:wrap}
+.weekly-cari-groups span{padding:6px 9px;border:1px solid var(--border-color,#dbe3e9);border-radius:6px;font-size:.85rem}
