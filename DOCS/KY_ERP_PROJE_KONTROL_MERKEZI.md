@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 12.11.2026 — Work'süz DESEN Chrome canlı test otomasyonu / gerçek kabul sınırı
+
+- **Kullanıcı kararı:** Work/Codex/ek ZIP/token/kurulum olmadan mevcut KY Control Hub, özel GitHub Chat Bridge ve ihtiyaç oldukça Remote Desktop Commander 0.3.1 kullanılacak. Mevcut günlük kod kontrolü ve DESEN sabah hazırlığına ek, ayrı **KY ERP Canlı Ekran Kabulü** otomasyonu etkin: `Automation_bb4ed255e0888191b5c51f1449ab8367`, Pazartesi–Cuma 09:15 Europe/Istanbul (ilk tarih 13.11.2026), salt-okunur gerçek sağlık/GUI erişim doğrulaması ve mevcut PR/testlerle karşılaştırma; gerçek müşteri işlemi otomatik yapılmaz.
+- **DESEN canlı Windows kanıtı (bu sohbet):** Remote Desktop Commander cihaz listesi `Desen Online v0.3.1`. DESEN Windows PowerShell yalnız sağlık kontrolü: `CHROME_COUNT=25`, `https://kyerp.net/ HTTP 200`, `https://api.kyerp.net/api/health HTTP 200`. Oturumsuz GET `/api/e-belge/dashboard`, `/api/muhasebe/invoice-mail-routes`, `/api/muhasebe/weekly-cari-preview` HTTP **401**; bunlar güvenli oturum kontrolü PASS, finansal işlem testi değildir. Hub localhost 8840 health 200, Hub/ChatBridge görevleri Running, watchdog Ready; GoogleDriveFS çalışan işlem sayısı 2.
+- **Gerçek Chrome bulgusu:** Doğrudan tarayıcı sekmeleri bağlayıcısı çağrısı bağlantı hatası verdi. DESEN Windows'dan `https://kyerp.net/ana-sayfa/genel-bakis` adresi varsayılan Chrome'da açıldı; Chrome penceresinde KY ERP başlığı doğrulandı ve özel bridge `DESEN_KYERP_HOME_1794474437754` gerçek 840×472 JPEG sonucu **giriş ekranı** gösterdi. UIAutomation aracılığıyla Chrome erişilebilirlik kontrolü yanıt verdi (4 sekme, 61 düğme, 2 giriş alanı), ancak gerçek kullanıcı oturumunda Muhasebe/e-Belge tıklama, belge/Outlook/İmalat uçtan uca çalışma **henüz PASS değil**. Oturum bilgisi/parola istenmedi veya paylaşılmadı. Görüntü public depoya taşınmadı.
+- **Yerel canonical kök uyarısı:** `D:\Googledrive` mevcut ve GoogleDriveFS çalışıyor; `D:\Googledrive\KYERP` ile `D:\Googledrive\KYERP\00_CANONICAL\GITHUB\ky-erp` bu kontrolde **False**. Farklı clone/kök oluşturmadan mevcut eşitlenme/Drive bağlantısı ayrıca teyit edilecek.
+- **Kabul sınırı:** Ekran/oturum açılması kullanıcı tarafından yapılmadan kişisel veya mali kayıt okunmaz. Gerçek HKN/DDM faturası/irsaliyesi düzenleme/kesim, Outlook gönderme, cari/bakiye/stok/LOT ve D1 yazımı otomatik yapılmaz. Bir kontrolün Windows sağlığı PASS olması gerçek iş akışı PASS anlamına gelmez.
+
+
 ## 12.11.2026 — İşNet / OCR / Outlook / PSD-BOY / haftalık cari canlı yayın teslimi
 
 - **Canonical birleşimler:** PR #552 İşNet firma/ürün/30–60 kg merge 2dfa877; PR #553 OCR kalite/çift okuyucu merge d00c718; PR #554 Outlook HKN/DDM tek gönderim idempotency merge 4921a550; PR #555 tek ModelFilesPanel ve variants BOY/baskı bölgesi merge a220104e; PR #556 XLSX/CSV cari farkı salt okunur merge 34f32885. Son kod başlarında frontend/Worker CI SUCCESS. Eski çakışan PR #549 ve #550 replacement sonrasında kapatıldı.
