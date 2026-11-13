@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { probeIsnetSessionHealth } from "./isnet-session-health.ts";
+import { probeIsnetSessionHealth, verifiedCachedIsnetSession } from "./isnet-session-health.ts";
 const URL="https://provider.example/api/Company/GetRecipientList";
 const mock=(status:number,data:any={Result:0})=>async(_url:any,init:any)=>{
   assert.equal(_url,URL);
@@ -50,4 +50,14 @@ test("HTTP 200 ama kimlik kanıtı içermeyen boş cevap BAĞLI sayılmaz",async
   assert.equal(unverified.sourceError,"PROVIDER_RESPONSE_UNVERIFIED");
   const list=await probeIsnetSessionHealth(mock(200,{Recipients:[]}) as any,URL,"TEST_DUMMY_TOKEN","123");
   assert.equal(list.connected,true);
+});
+
+test("Eski İşNet tokenı yalnız canlı sağlayıcı doğrulamasıyla başarı sayılır",()=>{
+ const settings={accessToken:"DUMMY_TOKEN",companyId:"123",connectionMode:"api"};
+ assert.equal(verifiedCachedIsnetSession(settings,{connected:true,status:"CONNECTED"}),true);
+ for(const status of ["SESSION_INVALID","ERROR","TIMEOUT","UNVERIFIED","NOT_CONFIGURED"])
+   assert.equal(verifiedCachedIsnetSession(settings,{connected:false,status}),false);
+ assert.equal(verifiedCachedIsnetSession({...settings,companyId:""},{connected:true,status:"CONNECTED"}),false);
+ assert.equal(verifiedCachedIsnetSession({...settings,accessToken:""},{connected:true,status:"CONNECTED"}),false);
+ assert.equal(verifiedCachedIsnetSession({...settings,connectionMode:"portal"},{connected:true,status:"CONNECTED"}),false);
 });

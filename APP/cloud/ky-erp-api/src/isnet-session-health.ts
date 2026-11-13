@@ -33,3 +33,12 @@ export async function probeIsnetSessionHealth(
       sourceError:e?.name==="AbortError"?"TIMEOUT":"NETWORK_ERROR"};
   }finally{clearTimeout(timeout)}
 }
+
+/** Cache existence is not provider verification. Requires selected firm and live read-only proof. */
+export function verifiedCachedIsnetSession(
+ settings:{accessToken?:unknown;companyId?:unknown;connectionMode?:unknown},
+ check:{connected?:unknown;status?:unknown},
+) {
+ return Boolean(settings?.accessToken && settings?.companyId &&
+   settings?.connectionMode !== "portal" && check?.connected === true && check?.status === "CONNECTED");
+}
