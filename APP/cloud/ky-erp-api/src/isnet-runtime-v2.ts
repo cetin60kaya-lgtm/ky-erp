@@ -1,6 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
-import { probeIsnetSessionHealth } from "./isnet-session-health";
+import { probeIsnetSessionHealth, verifiedCachedIsnetSession } from "./isnet-session-health";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
@@ -850,7 +850,19 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     const password = text(body.password);
     if (!username || !password) {
       if (current.accessToken && Array.isArray(current.companies) && current.companies.length) {
-        return c.json({ ok: true, success: true, data: { ...publicSettings(current), companies: current.companies, message: "Kayıtlı İşNet API oturumu kullanılabilir." } });
+        // A previously stored API token does NOT prove that the live provider still accepts it.
+        // Only the read-only recipient probe may mark the cached connection as verified.
+        const checked = await verifyIsnetReadOnlySession(c, slug);
+        if (verifiedCachedIsnetSession(current, checked)) {
+          return c.json({ ok: true, success: true, data: {
+            ...publicSettings(current), companies: current.companies,
+            verifiedAt: checked.lastVerifiedAt, providerStatus: checked.status,
+            message: "Kayıtlı İşNet oturumu sağlayıcıdan salt okunur sorguyla doğrulandı.",
+          } });
+        }
+        return c.json(errorBody("ISNET_CACHED_SESSION_UNVERIFIED",
+          "İşNet oturumu doğrulanamadı. Yetkili firmayı seçerek bağlantıyı kullanıcı şifresiyle tekrar test edin.",
+          { providerStatus: checked.status }), 409);
       }
       return c.json(errorBody("ISNET_CREDENTIALS_REQUIRED", "İşNet kullanıcı adı/TCKN ve şifre zorunludur."), 400);
     }
