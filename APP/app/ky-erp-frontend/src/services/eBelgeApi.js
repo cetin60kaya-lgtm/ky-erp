@@ -72,6 +72,9 @@ export async function uploadEBelge(files, { direction = "AUTO", documentKind = "
   return unwrap(await apiUpload("/e-belge/upload", form));
 }
 
+export const recoverEBelgeCompanyFromXml = (id) =>
+  apiPost(`/e-belge/documents/${encodeURIComponent(id)}/recover-company-from-xml`, { confirmed: true }).then(unwrap);
+
 export const reconcileEBelge = (id) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/reconcile`, {}).then(unwrap);
 

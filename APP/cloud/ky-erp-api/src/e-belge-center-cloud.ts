@@ -17,6 +17,8 @@ import { parseCanonicalEBelgeUbl } from "./e-belge-ubl";
 import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge-direction";
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
 import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity.ts";
+import { verifiedXmlPartyRecoveryDecision } from "./e-belge-xml-party-recovery";
+import { accountingAccess } from "./accounting-access-policy";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -642,6 +644,51 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(companyId)await rerouteDocumentLines(c,slug,id,companyId);
     await resolveIssues(c,slug,id,["DIRECTION_UNRESOLVED"]);
     return c.json({ok:true,data:{id,direction:targetDirection,documentType:targetType}});
+  });
+
+  app.post("/api/e-belge/documents/:id/recover-company-from-xml",async c=>{
+    const user=await getAuthenticatedUser(c);
+    if(!user?.id)return c.json(error("UNAUTHORIZED","Yetkili oturum gerekli."),401);
+    if(!accountingAccess(user,"POST",c.req.path))
+      return c.json(error("ACCOUNTING_FORBIDDEN","Firma kaydı ve eşleştirme için muhasebe işlem yetkisi gerekli."),403);
+    const body=await c.req.json<Row>().catch(()=>({}));
+    if(body.confirmed!==true)return c.json(error("RECOVERY_APPROVAL_REQUIRED","XML'den cari oluşturma/eşleştirme için açık kullanıcı onayı gerekli."),400);
+    const slug=slugOf(c),id=c.req.param("id");
+    if(!slug)return c.json(error("TENANT_REQUIRED","Aktif ana firma seçilmelidir."),400);
+    const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
+    if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);
+    if(doc.party_company_id)return c.json({ok:true,data:{documentId:id,status:"ALREADY_LINKED",idempotent:true}});
+    const fileId=text(doc.xml_file_asset_id);
+    if(!fileId)return c.json(error("VERIFIED_XML_REQUIRED","Bu belgede asıl XML dosyası kayıtlı değil; manuel cari kontrolü gereklidir."),409);
+    try{
+      const asset=await readFileHubAssetForMail(c,slug,fileId,20*1024*1024);
+      if(!/\.xml$/i.test(text(asset.fileName))&&!/xml/i.test(text(asset.mimeType)))
+        return c.json(error("VERIFIED_XML_REQUIRED","Kaynak dosya doğrulanmış UBL-TR XML değil."),409);
+      const raw=parseCanonicalEBelgeUbl(new TextDecoder("utf-8",{fatal:false}).decode(asset.bytes),"INCOMING");
+      const kind=isDispatch(raw.documentType)?"IRSALIYE":"FATURA";
+      const parsed=await resolveManualDirection(c,slug,"AUTO",raw,kind);
+      const decision=verifiedXmlPartyRecoveryDecision(doc,parsed);
+      if(!decision.ok)
+        return c.json(error(decision.code,"XML ile mevcut belge kimliği birebir uyuşmuyor; otomatik cari değiştirilmeyecek."),409);
+      const card=await ensureOfficialXmlCompany(c,slug,parsed);
+      if(!card?.id)return c.json(error("COMPANY_IDENTITY_REVIEW","VKN veya firma ünvanı çakışıyor; otomatik yeni firma kartı oluşturulmadı."),409);
+      const match=await matchCompany(c,slug,text(parsed.partyName),cleanTax(parsed.partyTaxNo));
+      if(!match.companyId||match.companyId!==card.id)
+        return c.json(error("COMPANY_IDENTITY_REVIEW","Kesin VKN ile tek firma kimliği doğrulanamadı."),409);
+      const changed=await c.env.DB.prepare(`UPDATE accounting_documents SET party_company_id=?,updated_at=?
+         WHERE id=? AND main_company_slug=? AND party_company_id IS NULL AND posted_at IS NULL
+           AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED')`)
+        .bind(match.companyId,now(),id,slug).run();
+      if(Number(changed.meta?.changes)!==1)return c.json(error("DOCUMENT_CHANGED","Belge bu sırada değişti; güncel kaydı tekrar açın."),409);
+      await resolveIssues(c,slug,id,["PARTY_UNMATCHED"]);
+      let routingReview=false;
+      try{await rerouteDocumentLines(c,slug,id,match.companyId)}
+      catch{routingReview=true;await addIssue(c,slug,id,"PRODUCT_ROUTING_REVIEW","Cari eşleşti; ürün ve LOT yönlendirmesi ayrıca kontrol edilmelidir.","WARNING","lines").catch(()=>undefined)}
+      return c.json({ok:true,data:{documentId:id,status:routingReview?"COMPANY_LINKED_PRODUCT_REVIEW":"COMPANY_LINKED",
+        cardCreated:card.created===true,requiresProductReview:routingReview}});
+    }catch(e:any){
+      return c.json(error(text(e?.code)||"XML_RECOVERY_FAILED",text(e?.message)||"XML belgesi okunamadı; kayıt değişmedi."),409);
+    }
   });
   app.post("/api/e-belge/documents/:id/reconcile",async c=>{try{return c.json({ok:true,data:await reconcileOne(c,slugOf(c),c.req.param("id"))})}catch(e:any){return c.json(error(text(e.code)||"RECONCILE_FAILED",text(e.message)||"Eşleştirme tamamlanamadı."),text(e.code)==="NOT_FOUND"?404:409)}});
   app.post("/api/e-belge/reconcile-all",async c=>{const slug=slugOf(c),rows=(await c.env.DB.prepare(`SELECT id FROM accounting_documents WHERE main_company_slug=? AND document_type LIKE '%FATURA%' AND deleted_at IS NULL AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED') ORDER BY COALESCE(issue_date,created_at) DESC LIMIT 500`).bind(slug).all<Row>()).results||[],results=[];for(const row of rows){try{results.push(await reconcileOne(c,slug,text(row.id)))}catch(e:any){results.push({documentId:row.id,status:"ERROR",message:text(e.message)})}}return c.json({ok:true,data:{total:results.length,results}})});
