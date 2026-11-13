@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 13.11.2026 — Muhasebe haftalık cari tenant koruması / PR #560
+
+- Haftalık müşteri XLSX/CSV `/api/muhasebe/weekly-cari-preview` önizleme rotasındaki `COMPANY_ADMIN` için firma eşleşmesi atlama hatası giderildi. Global `ADMIN/SUPER_ADMIN` dışında istenen tenant, yetkili kullanıcının ana firmasıyla eşleşir; ASCII firma kodu Türkçe I/ı dönüşümünden etkilenmez.
+- PR #560 squash merge `4c30a01619bac6a79b1b9bc051f487061a587c8f`; Worker+Frontend CI #43413918757 SUCCESS. 3 yeni negatif/pozitif tenant testi PASS. D1 schema veya canlı finans kaydı, mail, İşNet oturumu, Drive orijinali değişmedi.
+- **Yayın/kabul:** PR merge ve CI PASS; bu commit için ayrı Worker production deploy kanıtı henüz yok. DESEN cihazından `kyerp.net` HTTP 200, `api.kyerp.net/api/health` HTTP 200 ve oturumsuz muhasebe mail rotası 401 görüldü; bunlar yeni kodun canlı deploy kanıtı değildir.
+- Kalan P0: İşNet yetkili firma/sağlayıcı doğrulaması, Microsoft 365 Outlook OAuth/posta hesabı, Google Drive File Hub CLOUD_API ve binding/senkron indeks; gerçek HKN/DDM/LOT ve müşteri haftalık XLSX örnekleriyle yetkili kullanıcı kabulü. Resmî gönderim veya kesin mali kayıt onaysız yapılmaz.
+
+
 ## 13.11.2026 — Canlı e-Belge, İşNet, Outlook ve File Hub son kabul (P0)
 
 - DESEN Chrome oturumu gerçek UI Automation ile doğrulandı. KY ERP / API HTTP 200, Hub 8840 ve Mesh 8443 Windows TCP erişimi TRUE. GitHub Bridge 13.11 tarihli status yanıtında ok:true ve desktop:true, fakat hub/mesh:false (ayrı telemetri farkı); GoogleDriveFS çalışıyor ve Hakan Emp / KYERP klasörleri mevcut.
