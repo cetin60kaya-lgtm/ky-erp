@@ -61,7 +61,7 @@ test("IK bulk slips are compact ten-up A4 cards with strong cash and total field
   assert.match(page, /<span>AVANS<\/span>/);
   assert.match(page, /<span>KESİNTİ<\/span>/);
   assert.ok(page.includes("ELDEN"));
-  assert.ok(page.includes("TOPLAM ÖDEME"));
+  assert.ok(page.includes("GENEL NET · EK DAHİL"));
   assert.ok(page.includes("Personel İmza"));
   assert.ok(page.includes("Ödeme Yapan"));
   assert.match(page, /<span>YOL<\/span>/);
