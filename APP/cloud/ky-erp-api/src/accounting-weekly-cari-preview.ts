@@ -2,6 +2,7 @@
 import type { Hono,Context } from "hono";
 import * as XLSX from "xlsx";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { accountingTenantReadAllowed } from "./accounting-access-policy";
 import { parseStatementTables,compareWeeklyStatements } from "./accounting-weekly-cari-core";
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -26,8 +27,7 @@ export function registerWeeklyCariPreviewRoutes(app:Hono<AppEnv>){
   if(!allowed)return failed(c,"ACCOUNTING_FORBIDDEN","Muhasebe okuma yetkisi gereklidir.",403);
   const body=await c.req.parseBody({all:true}).catch(()=>({} as Row));
   const slug=txt(body.mainCompanySlug||c.req.header("X-KYERP-Tenant-Slug"));
-  const own=txt(user.mainCompanySlug||user.main_company_slug||user.security?.main_company_slug);
-  if(!slug||(!elevated&&own!==slug))return failed(c,"TENANT_FORBIDDEN","Ana firma yetkisi doğrulanamadı.",403);
+  if(!accountingTenantReadAllowed(user,slug))return failed(c,"TENANT_FORBIDDEN","Ana firma yetkisi doğrulanamadı.",403);
   const companyId=txt(body.companyId);
   const company=companyId?await c.env.DB.prepare("SELECT id,name FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(companyId,slug).first<Row>():null;
   if(!company)return failed(c,"COMPANY_REQUIRED","Karşılaştırılacak mevcut cari seçilmelidir.",422);
