@@ -2451,37 +2451,47 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     const lines = [
       ["Maaş", money(row.salary)],
       ["Yol", money(row.road)],
+      ["EK Ödeme (ayrı kupon)", money(row.extra)],
       ["Mesai", money(row.overtime)],
+      ["Hak Ediş", money(slip.gross)],
       ["Avans", row.advance ? `-${money(row.advance)}` : money(0)],
-      ["Kesinti", row.deduction ? `-${money(row.deduction)}` : money(0)],
+      ["Özel Kesinti", row.deduction ? `-${money(row.deduction)}` : money(0)],
       [legalTitle, row.garnishment ? `-${money(row.garnishment)}` : money(0)],
+      ["Toplam Kesinti", `-${money(slip.totalDeductions)}`],
     ];
     return `<article class="pay-slip">
       <header><div class="brand">KY ERP</div><div class="period">${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}<br><b>PERSONEL ÖDEME FİŞİ</b></div></header>
       <div class="person-block"><strong>${escapeHtml(row.employee.fullName)}</strong><span>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</span></div>
-      <div class="slip-lines">${lines.map(([label,value])=>`<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
-      <div class="pay-channels"><div><span>BANKA</span><b>${money(slip.mainBank)}</b></div><div class="cash-pay"><span>ELDEN</span><b>${money(slip.mainCash)}</b></div></div>
-      <div class="net"><span>TOPLAM ÖDEME</span><b>${money(slip.mainNet)}</b></div>
+      <div class="slip-lines">${lines.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><b>${escapeHtml(value)}</b></div>`).join("")}</div>
+      <div class="pay-channels"><div><span>BANKA · ANA</span><b>${money(slip.mainBank)}</b></div><div class="cash-pay"><span>ELDEN · ANA</span><b>${money(slip.mainCash)}</b></div></div>
+      <div class="net"><span>ANA ÖDEME (EK HARİÇ)</span><b>${money(slip.mainNet)}</b></div>
       <footer><div><span>Personel İmza</span><i></i></div><div><span>Ödeme Yapan</span><i></i></div></footer>
-      ${slip.extraCoupon > 0 ? `<div class="extra-coupon"><span>✂ EK</span><b>${money(slip.extraCoupon)}</b><small>İmza: __________________</small></div>` : ""}
+      ${slip.extraCoupon > 0 ? `<div class="extra-coupon"><span>✂ EK ÖDEME</span><b>${money(slip.extraCoupon)}</b><small>İmza: ______________<br>Banka: ${money(slip.couponBank)} · Elden: ${money(slip.couponCash)}</small></div>` : ""}
+      <div class="grand-net"><span>GENEL NET ÖDEME (EK DAHİL)</span><b>${money(slip.fullNet)}</b><small>Banka toplamı: ${money(slip.bank)} · Elden toplamı: ${money(slip.cash)} · EK yalnız bir kez dahildir.</small></div>
     </article>`;
   };
 
   const compactSlipCardHtml = (row) => {
     const slip = slipPayment(row);
-    const totalDeductions = round(num(row.advance) + num(row.deduction) + num(row.garnishment));
     return `<div class="cut-slot"><article class="compact-slip">
       <header><b>KY ERP</b><span>${escapeHtml(MONTHS[month - 1])} ${escapeHtml(year)}</span></header>
       <div class="compact-person"><strong>${escapeHtml(row.employee.fullName)}</strong><small>${escapeHtml(row.employee.code || "-")} · ${escapeHtml(row.employee.department || "Bölüm yok")}</small></div>
       <div class="compact-grid">
-        <div><span>MESAI</span><b>${money(row.overtime)}</b></div>
-        <div><span>AVANS/KESİNTİ</span><b>${money(totalDeductions)}</b></div>
-        <div><span>BANKA</span><b>${money(slip.mainBank)}</b></div>
-        <div class="cash"><span>ELDEN</span><b>${money(slip.mainCash)}</b></div>
-        <div class="total"><span>TOPLAM ÖDEME</span><b>${money(slip.mainNet)}</b></div>
+        <div><span>MAAŞ</span><b>${money(slip.salary)}</b></div>
+        <div><span>YOL</span><b>${money(slip.road)}</b></div>
+        <div><span>EK (KUPON)</span><b>${money(slip.extra)}</b></div>
+        <div><span>MESAİ</span><b>${money(slip.overtime)}</b></div>
+        <div><span>HAK EDİŞ</span><b>${money(slip.gross)}</b></div>
+        <div><span>AVANS</span><b>-${money(slip.advance)}</b></div>
+        <div><span>KESİNTİ</span><b>-${money(slip.deduction)}</b></div>
+        <div><span>İCRA/HACİZ</span><b>-${money(slip.garnishment)}</b></div>
+        <div><span>BANKA (ANA)</span><b>${money(slip.mainBank)}</b></div>
+        <div class="cash"><span>ELDEN (ANA)</span><b>${money(slip.mainCash)}</b></div>
+        <div class="sub-total"><span>ANA ÖDEME · EK HARİÇ</span><b>${money(slip.mainNet)}</b></div>
+        <div class="total"><span>GENEL NET · EK DAHİL</span><b>${money(slip.fullNet)}</b></div>
       </div>
       <footer><span>Personel İmza</span><i></i><span>Ödeme Yapan</span><i></i></footer>
-      ${slip.extraCoupon > 0 ? `<div class="compact-extra"><span>✂ EK</span><b>${money(slip.extraCoupon)}</b><small>İmza __________</small></div>` : ""}
+      ${slip.extraCoupon > 0 ? `<div class="compact-extra"><span>✂ EK</span><b>${money(slip.extraCoupon)}</b><small>B:${money(slip.couponBank)} E:${money(slip.couponCash)} · İmza ________</small></div>` : ""}
     </article></div>`;
   };
 
