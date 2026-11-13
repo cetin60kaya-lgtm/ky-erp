@@ -46,7 +46,9 @@ test("a stale net amount or unequal bank and cash is detected, never hidden by p
 });
 
 test("decimal amounts remain exact at cent precision", () => {
-  const p = payrollPresentation({ salary: 1234.5, road: 168.75, extra: 6.25, overtime: 0.5, advance: 10.01, bank: 1200, cash: 200 - 0.01 + 0.5, net: 1400.49 });
-  assert.equal(p.calculatedNet, 1400 - 0.01 + 0.5 - 0.01); // 1400.48
-  assert.equal(p.reconciled, false);
+  const p = payrollPresentation({ salary: 1234.5, road: 168.75, extra: 6.25, overtime: 0.5, advance: 10.01, bank: 1200, cash: 199.99, net: 1399.99 });
+  assert.equal(p.calculatedNet, 1399.99);
+  assert.equal(p.fullNet, 1399.99);
+  assert.equal(p.mainNet + p.extraCoupon, 1399.99);
+  assert.equal(p.reconciled, true);
 });
