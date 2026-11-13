@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 13.11.2026 — İK Kasım EK/10'lu ödeme fişi tek hesap gösterimi (PR #557)
+- Kullanıcı kararı: Yol yalnız normal hakediş satırında, EK Ödeme ayrı imzalı/kesilebilir kuponda gösterilir. Kupon genel nete ikinci kez eklenmez. Tekli ve A4 10'lu fişte Maaş, Yol, EK, Mesai, Hak Ediş, Avans, Özel Kesinti, İcra/Haciz, Ana Ödeme (EK hariç) ve Genel Net (EK dahil) ayrı okunur.
+- ikPayrollPresentation.js yalnız görünüm/çıktı hesaplar: kuruş bazında gross = salary + road + extra + overtime, net = max(0, gross - advance - deduction - garnishment); EK kupon bankadan/elden gerçekte kayıtlı dağılım korunarak ayrılır. Çıktı öncesi hesap bileşeni ve banka+elden toplamı doğrulanır; uygunsuz kayıt yanlış fiş üretmez.
+- Bordro üst kartlarına EK ayrı eklenir, Yol/EK tablodaki ayrı satırlarda kalır; dönem ödeme özetinde Yol ayrı sütun. Personel kartı, gerçek D1 kayıtları, maaş sözleşmeleri veya geçmiş bordro bu PR tarafından değiştirilmez.
+- Kasım 2026 Cuma/Ali gerçek D1 maaş/yol/EK ve hareket tutarları bu sohbetten oturumlu D1 okuma yetkisiyle henüz doğrulanamadı; kod testleri canlı iş kayıtları yerine geçmez. PR #557 CI/merge/Pages/Worker ve gerçek oturum fişi kabulü ayrıca doğrulanır.
+
+
 ## 12.11.2026 — Work'süz DESEN Chrome canlı test otomasyonu / gerçek kabul sınırı
 
 - **Kullanıcı kararı:** Work/Codex/ek ZIP/token/kurulum olmadan mevcut KY Control Hub, özel GitHub Chat Bridge ve ihtiyaç oldukça Remote Desktop Commander 0.3.1 kullanılacak. Mevcut günlük kod kontrolü ve DESEN sabah hazırlığına ek, ayrı **KY ERP Canlı Ekran Kabulü** otomasyonu etkin: `Automation_bb4ed255e0888191b5c51f1449ab8367`, Pazartesi–Cuma 09:15 Europe/Istanbul (ilk tarih 13.11.2026), salt-okunur gerçek sağlık/GUI erişim doğrulaması ve mevcut PR/testlerle karşılaştırma; gerçek müşteri işlemi otomatik yapılmaz.
