@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 13.11.2026 — Canlı e-Belge, İşNet, Outlook ve File Hub son kabul (P0)
+
+- DESEN Chrome oturumu gerçek UI Automation ile doğrulandı. KY ERP / API HTTP 200, Hub 8840 ve Mesh 8443 Windows TCP erişimi TRUE. GitHub Bridge 13.11 tarihli status yanıtında ok:true ve desktop:true, fakat hub/mesh:false (ayrı telemetri farkı); GoogleDriveFS çalışıyor ve Hakan Emp / KYERP klasörleri mevcut.
+- e-Belge → Entegrasyonlar gerçek ekranında İşNet DOĞRULANAMADI, OCR HAZIR. Yetkili firma ve sağlayıcıya doğrulanmış oturum olmadan gerçek HKN/DDM sync PASS değildir. E-posta Hesapları ekranında Henüz mail hesabı yok; Microsoft 365 OAuth ve kullanıcı yetkisi bekleniyor. File Hub/Drive bağlantı ekranı senkronizasyon hatası gösteriyor; kök klasörün varlığı bulut File Hub indeksleme kanıtı değildir.
+- PR #558 eski XML/UBL-TR VKN-cari kart kurtarma: merge 438ef477; canlı frontend Actions 43408206041 ve Worker 43408206077 SUCCESS; release f64cfb03. PR #559 eski İşNet tokenını canlı sağlayıcı sorgusu olmadan başarı sayma hatasını giderdi: merge 513145f1; CI 43410199644 SUCCESS; canlı Worker Actions 43410554074 SUCCESS; release bc8287f5. Canlı API health DESEN cihazından HTTP 200.
+- Sıradaki açık uygulama işlemleri: ERP içinde İşNet kullanıcısı ve yetkili firma seçimi + sağlayıcı doğrulaması; ERP Mail Hesapları Microsoft 365 OAuth + gönderen hesabı; Google Drive File Hub CLOUD_API bağlantısı ve MODEL_IMAGE/MODEL_SOURCE/PLACEMENT/OUTGOING_DESIGN binding/sync indeks doğrulaması; gerçek HKN/DDM XML/PDF firma-model-birim-LOT-kısmi miktar; Outlook taslak ve mükerrer gönderim kilidi; gerçek XLSX cari, DESEN PSD-BOY, İmalat ve Boyahane kabulü.
+- Bu kod/sağlık testinde resmî belge, müşteri maili, kesin cari/KDV/stok/LOT değişikliği, gerçek D1 iş verisi yazımı veya schema migration yapılmadı. Üretim CI ve sağlık PASS, bütün iş sürecinin PASS olması değildir. Gizli token/parola/posta/kimlik GitHub'a veya sohbete taşınmadı.
+
+
 ## 13.11.2026 — Gerçek ekran kabulü ve eski XML firma eşleştirme (PR #558)
 
 - **Kod:** PR #558 merge 438ef47704c84d2369c4770333638caa35302fa3. Yeni e-Belge modalı, yalnız kullanıcı tıklaması ve doğrulanmış UBL-TR XML ile eski pending belgenin kesin VKN, belge no, tarih, tür ve yön kimliği eşleşirse cari kartını bağlayabilir. Posted/Approved bloke. Frontend ve Worker CI başarılı. Gerçek müşteri kartında işlem veya mali son onay yapılmadı.
