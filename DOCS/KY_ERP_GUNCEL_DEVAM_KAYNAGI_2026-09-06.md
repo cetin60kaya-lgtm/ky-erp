@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 13.11.2026 — Gerçek ekran kabulü ve eski XML firma eşleştirme (PR #558)
+
+- **Kod:** PR #558 merge 438ef47704c84d2369c4770333638caa35302fa3. Yeni e-Belge modalı, yalnız kullanıcı tıklaması ve doğrulanmış UBL-TR XML ile eski pending belgenin kesin VKN, belge no, tarih, tür ve yön kimliği eşleşirse cari kartını bağlayabilir. Posted/Approved bloke. Frontend ve Worker CI başarılı. Gerçek müşteri kartında işlem veya mali son onay yapılmadı.
+- **DESEN:** 13.11 özel Chat Bridge requestId DESEN_KYERP_20261113_LIVE_1794563403336 status ok:true fakat hub8840/mesh8443 false; bağımsız Remote Desktop Commander 0.3.1 Windows TCP bağlantısı ikisinde de true. kyerp.net ve api.kyerp.net HTTP 200. Yerel GoogleDrive klasörü mevcut, canonical .git working copy teyit edilmedi. Chrome yetkili oturumu ve e-Belge İşNet bağlantı ekranı gerçek UI testi.
+- **İşNet:** Entegrasyonlar üzerinde Bağlantıyı Test Et çalıştırıldı, durum DOĞRULANAMADI. Provider portalından canlı HKN/DDM çekme ve resmî gönderim kabulü yok.
+- **Outlook:** E-posta Hesapları ekranında Henüz mail hesabı yok. OAuth/Graph gönderim kabulü yok. ChatGPT Outlook bağlayıcısı ayrı hata verdi.
+- **File Hub:** Google Drive Hakan Emp tarama hatası, tarama limiti, 22.541 ilişkisiz dosya, eski File Agent heartbeat ve CLOUD_API yok uyarıları devam ediyor. GoogleDriveFS yerel çalışması ve klasörün varlığı bulut API bağlantısı değildir. Orijinal dosyalar değişmedi.
+- **Kaynak önceliği:** Google Drive aramasında HKN E-FATURA ve DDM E-İRSALİYE Hakan Emp altında bulundu; kullanıcının Bilgisayarım/HKN içindeki güncel dosyaları esas alın talebi nedeniyle bu klasörler güncel asıl kaynak kabul edilmedi, bağlama öncesi doğrulanmalı.
+- **Açık canlı kabul:** İşNet yetkili şirket/oturum, Outlook OAuth, Google Drive doğrudan Cloud API, File Hub dört binding ve indeks, gerçek HKN/DDM XML/PDF ve kısmi fatura/30-60kg/LOT, haftalık cari XLSX, model PSD BOY, imalat/boyahane rol ve cihaz. Production D1 migration, gerçek belge, mail, cari veya stok mutasyonu yapılmadı.
+
 ## 13.11.2026 — Son bordro, 10'lu fiş, EK kuponu ve çalışan net dökümü (PR #557)
 - Kasım dönemi çalışanına göstermek için ortak gösterim hesabı eklendi; bordro özetindeki eksik EK toplam kartı tamamlandı, Yol ve EK ayrı; tekli önizleme, tekli fiş ve 10'lu A4 fişte maaş/yol/EK/mesai/avans/kesinti/icra/haciz/net açık biçimde bulunur.
 - Kesilebilir kupon yalnız EK içindir, Yol satırda görünür. Ana ödeme EK hariç, genel net EK dahil; kuponu ayırmak banka/elden kaynağını, hesaplanan genel neti veya D1 muhasebe kayıtlarını değiştirmez. Kuruş hassasiyetli kontrol ve uyuşmazlıkta çıktı engeli eklendi.

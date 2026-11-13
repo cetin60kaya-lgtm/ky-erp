@@ -3,20 +3,20 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "34f3288506286b1b04c0820ca21b36dc239c28e9",
-  "requestedAt": "2026-11-12",
-  "attempt": 52,
+  "sourceCommit": "438ef47704c84d2369c4770333638caa35302fa3",
+  "requestedAt": "2026-11-13",
+  "attempt": 53,
   "scope": [
-    "PR555-canonical-file-hub-variants-boy-normalization",
-    "PR556-weekly-cari-XLSX-company-HKN-group-readonly",
-    "CI-PR555-556-green",
-    "D1-full-backup-before-Worker-deploy",
-    "no-D1-migration-no-mail-send-no-business-write"
+    "PR558-verified-UBL-TR-legacy-company-link-API",
+    "PR557-payroll-presentation-in-canonical",
+    "PR558-frontend-worker-CI-success",
+    "D1-full-backup-before-deploy",
+    "no-business-write-no-mail-no-migrations"
   ],
-  "note": "12.11.2026 ikinci dalga: File Hub model/BOY normalize ve haftalık XLSX cari farkı yalnız SELECT. Worker CI PASS. D1 şeması, müşteri bakiyesi, e-posta ve gerçek üretim kaydı değiştirilmez; canlı yedek alınır.",
+  "note": "13 Kasım e-Belge doğrulanmış UBL-TR VKN ile eski belgelerin cari kartına güvenli bağlanması. D1 tam backup, test, deploy ve health; migration kapalı.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
   "approvedMigrationId": null,
-  "releaseDate": "2026-11-12"
+  "releaseDate": "2026-11-13"
 }

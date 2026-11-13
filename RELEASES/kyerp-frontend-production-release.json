@@ -3,15 +3,15 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-11-12",
+  "releaseDate": "2026-11-13",
   "scope": [
-    "PR555-canonical-PSD-multi-model-BOY-print-area-normalization",
-    "PR556-weekly-cari-XLSX-readonly-preview",
-    "CI-PR555-556-green",
-    "Pages-production-live-bundle-smoke"
+    "PR558-verified-XML-legacy-company-link-UI",
+    "PR557-payroll-presentation-in-canonical",
+    "PR558-frontend-worker-CI-success",
+    "Pages-live-smoke-required"
   ],
-  "note": "12.11.2026 ikinci dalga: PSD model/BOY tek paneli ve haftalık cari XLSX/CSV salt-okunur önizleme. Önceki haftasız yanlış NEW durumu engellendi; gerçek müşteri yükleme/kabul ayrı.",
-  "sourceCommit": "34f3288506286b1b04c0820ca21b36dc239c28e9",
-  "requestedAt": "2026-11-12",
-  "attempt": 4
+  "note": "13 Kasım e-Belge eski XML firma kartı kurtarma ekranı ve canonical İK gösterimi. Gerçek İşNet/Outlook/Drive kabulü ayrıca gerekli.",
+  "sourceCommit": "438ef47704c84d2369c4770333638caa35302fa3",
+  "requestedAt": "2026-11-13",
+  "attempt": 5
 }
