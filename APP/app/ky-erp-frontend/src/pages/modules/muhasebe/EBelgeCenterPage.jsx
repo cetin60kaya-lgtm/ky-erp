@@ -25,6 +25,7 @@ import {
   reserveEBelgePreviewTab,
   reconcileAllEBelge,
   reconcileEBelge,
+  recoverEBelgeCompanyFromXml,
   resolveEBelgeIssue,
   updateEBelge,
   uploadEBelge,
@@ -307,6 +308,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
         <section className="eb-document-toolbar">
           <button type="button" disabled={["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(detail.status)} onClick={() => setEditing(true)}><Pencil size={16} /> Belge Düzenle</button>
           {!detail.party_company_id && <button type="button" onClick={() => setCompanyOpen(true)}>Cari Eşleştir</button>}
+          {!detail.party_company_id && detail.xml_file_asset_id && !["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(detail.status) && <button type="button" disabled={Boolean(busy)} title="Asıl UBL-TR XML içindeki VKN, belge no, tarih ve yön doğrulanır; eşleşme kesin değilse kayıt değiştirilmez." onClick={() => action("xmlCompany", () => recoverEBelgeCompanyFromXml(id))}>{busy === "xmlCompany" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} XML’den Firma Oluştur / Eşleştir</button>}
           <button type="button" disabled={Boolean(busy) || ["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(detail.status)} onClick={() => action("match", () => reconcileEBelge(id))}>{busy === "match" ? <LoaderCircle className="eb-spin" size={16} /> : <Link2 size={16} />} Yeniden Kontrol</button>
           <button type="button" className="eb-primary" disabled={Boolean(busy) || ["FINALIZING","APPROVED","POSTED"].includes(detail.status)} onClick={() => { setFinalAcknowledged(false); setFinalConfirmOpen(true); }}>{busy === "final" ? <LoaderCircle className="eb-spin" size={16} /> : <FileCheck2 size={16} />} {detail.status === "FINALIZE_RETRY" ? "Kontrollü Yeniden Dene" : "Son Onay / Muhasebeleştir"}</button>
         </section>
