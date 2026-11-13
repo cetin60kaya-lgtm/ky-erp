@@ -34,7 +34,7 @@ test("monthly HR uses the professional command shell without replacing payroll r
   assert.doesNotMatch(monthly, /paidCount=/);
   assert.match(monthly, /renderBordro\(\)/);
   assert.match(monthly, /renderEvrak\(\)/);
-  assert.match(monthly, /reconcilePaymentSplit/);
+  assert.match(monthly, /payrollPresentation/);
 });
 
 test("professional shell exposes the seven canonical HR work areas", () => {
