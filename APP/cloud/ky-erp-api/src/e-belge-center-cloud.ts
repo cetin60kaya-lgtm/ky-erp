@@ -662,7 +662,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(!fileId)return c.json(error("VERIFIED_XML_REQUIRED","Bu belgede asıl XML dosyası kayıtlı değil; manuel cari kontrolü gereklidir."),409);
     try{
       const asset=await readFileHubAssetForMail(c,slug,fileId,20*1024*1024);
-      if(!/\\.xml$/i.test(text(asset.fileName))&&!/xml/i.test(text(asset.mimeType)))
+      if(!/\.xml$/i.test(text(asset.fileName))&&!/xml/i.test(text(asset.mimeType)))
         return c.json(error("VERIFIED_XML_REQUIRED","Kaynak dosya doğrulanmış UBL-TR XML değil."),409);
       const raw=parseCanonicalEBelgeUbl(new TextDecoder("utf-8",{fatal:false}).decode(asset.bytes),"INCOMING");
       const kind=isDispatch(raw.documentType)?"IRSALIYE":"FATURA";
