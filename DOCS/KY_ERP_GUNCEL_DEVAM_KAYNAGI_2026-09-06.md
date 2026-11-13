@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 13.11.2026 — Son bordro, 10'lu fiş, EK kuponu ve çalışan net dökümü (PR #557)
+- Kasım dönemi çalışanına göstermek için ortak gösterim hesabı eklendi; bordro özetindeki eksik EK toplam kartı tamamlandı, Yol ve EK ayrı; tekli önizleme, tekli fiş ve 10'lu A4 fişte maaş/yol/EK/mesai/avans/kesinti/icra/haciz/net açık biçimde bulunur.
+- Kesilebilir kupon yalnız EK içindir, Yol satırda görünür. Ana ödeme EK hariç, genel net EK dahil; kuponu ayırmak banka/elden kaynağını, hesaplanan genel neti veya D1 muhasebe kayıtlarını değiştirmez. Kuruş hassasiyetli kontrol ve uyuşmazlıkta çıktı engeli eklendi.
+- Canlı Kasım personel/maaş tutarları yetkili D1 read-only doğrulaması olmadan kesinleştirilmez. Çıktı kanıtı ve gerçek kullanıcı kabulü ayrı.
+
+
 ## 12.11.2026 — Work'süz DESEN Chrome canlı test otomasyonu / gerçek kabul sınırı
 
 - **Kullanıcı kararı:** Work/Codex/ek ZIP/token/kurulum olmadan mevcut KY Control Hub, özel GitHub Chat Bridge ve ihtiyaç oldukça Remote Desktop Commander 0.3.1 kullanılacak. Mevcut günlük kod kontrolü ve DESEN sabah hazırlığına ek, ayrı **KY ERP Canlı Ekran Kabulü** otomasyonu etkin: `Automation_bb4ed255e0888191b5c51f1449ab8367`, Pazartesi–Cuma 09:15 Europe/Istanbul (ilk tarih 13.11.2026), salt-okunur gerçek sağlık/GUI erişim doğrulaması ve mevcut PR/testlerle karşılaştırma; gerçek müşteri işlemi otomatik yapılmaz.
