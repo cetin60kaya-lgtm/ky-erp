@@ -323,19 +323,6 @@ function payrollCompensation(employee = {}, employees = []) {
   return { actualSalary, salary, extra: round(actualSalary - salary), reference };
 }
 
-function reconcilePaymentSplit(netValue, bankValue, cashValue, preferred = "cash") {
-  const net = Math.max(round(netValue), 0);
-  const bank = Math.max(round(bankValue), 0);
-  const cash = Math.max(round(cashValue), 0);
-  if (Math.abs(round(bank + cash - net)) <= 0.01) return { bank, cash, adjusted: false };
-  if (preferred === "bank") {
-    const nextBank = Math.min(bank, net);
-    return { bank: nextBank, cash: round(net - nextBank), adjusted: true };
-  }
-  const nextCash = Math.min(cash, net);
-  return { bank: round(net - nextCash), cash: nextCash, adjusted: true };
-}
-
 function paymentSplitByType(paymentType, netValue, bankValue = 0, bankDeductionsValue = 0) {
   const net = Math.max(round(netValue), 0);
   const type = upper(paymentType);
