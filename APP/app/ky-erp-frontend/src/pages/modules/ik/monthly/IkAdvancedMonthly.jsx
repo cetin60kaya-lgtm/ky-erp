@@ -2472,8 +2472,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         <div><span>AVANS</span><b>-${money(slip.advance)}</b></div>
         <div><span>KESİNTİ</span><b>-${money(slip.deduction)}</b></div>
         <div><span>İCRA/HACİZ</span><b>-${money(slip.garnishment)}</b></div>
-        <div><span>BANKA (ANA)</span><b>${money(slip.mainBank)}</b></div>
-        <div class="cash"><span>ELDEN (ANA)</span><b>${money(slip.mainCash)}</b></div>
+        <div><span>BANKA TOPLAM</span><b>${money(slip.bank)}</b></div>
+        <div class="cash"><span>ELDEN TOPLAM</span><b>${money(slip.cash)}</b></div>
         <div class="sub-total"><span>ANA ÖDEME · EK HARİÇ</span><b>${money(slip.mainNet)}</b></div>
         <div class="total"><span>GENEL NET · EK DAHİL</span><b>${money(slip.fullNet)}</b></div>
       </div>
