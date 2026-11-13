@@ -14,7 +14,11 @@ test("reference salary is printed in main payslip while detachable EK is paid on
   assert.match(monthly, /const salary = compensation\.salary/);
   assert.match(monthly, /const extra = compensation\.extra/);
   assert.match(monthly, /const slip = slipPayment\(row\)/);
-  assert.match(monthly, /const mainNet = round\(fullNet - extraCoupon\)/);
+  const presentation = readFileSync(new URL("./ikPayrollPresentation.js", import.meta.url), "utf8");
+  assert.match(monthly, /import \{ payrollPresentation \} from "\.\/ikPayrollPresentation"/);
+  assert.match(presentation, /const mainNet = net - coupon/);
+  assert.match(presentation, /const gross = salary \+ road \+ extra \+ overtime/);
+  assert.match(monthly, /GENEL NET ÖDEME \(EK DAHİL\)/);
   assert.match(monthly, /money\(slip\.mainNet\)/);
   assert.match(monthly, /money\(slip\.extraCoupon\)/);
   assert.doesNotMatch(monthly, /\["EK", money\(row\.extra\)\]/);
