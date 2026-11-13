@@ -21,10 +21,10 @@ export function accountingTenantCandidates(query: string, header: string, body: 
 
 /** Company-scoped accounting previews must never use company-admin role as a cross-tenant bypass. */
 export function accountingTenantReadAllowed(user: Row, requestedTenant: unknown): boolean {
-  const tenant = String(requestedTenant ?? "").trim().toLocaleLowerCase("tr-TR");
+  const tenant = String(requestedTenant ?? "").trim().toLowerCase();
   if (!tenant) return false;
   if (["SUPER_ADMIN", "ADMIN"].includes(code(user?.role))) return true;
   const own = String(user?.mainCompanySlug || user?.main_company_slug || user?.security?.main_company_slug || "")
-    .trim().toLocaleLowerCase("tr-TR");
+    .trim().toLowerCase();
   return Boolean(own) && own === tenant;
 }
