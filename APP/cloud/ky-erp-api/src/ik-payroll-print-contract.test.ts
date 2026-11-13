@@ -58,11 +58,17 @@ test("IK finance movement keeps the selected employee and supports legal overtim
 
 test("IK bulk slips are compact ten-up A4 cards with strong cash and total fields", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
-  assert.ok(page.includes("AVANS/KESİNTİ"));
+  assert.match(page, /<span>AVANS<\/span>/);
+  assert.match(page, /<span>KESİNTİ<\/span>/);
   assert.ok(page.includes("ELDEN"));
-  assert.ok(page.includes("TOPLAM ÖDEME"));
+  assert.ok(page.includes("GENEL NET · EK DAHİL"));
   assert.ok(page.includes("Personel İmza"));
   assert.ok(page.includes("Ödeme Yapan"));
+  assert.match(page, /<span>YOL<\/span>/);
+  assert.match(page, /<span>EK \(KUPON\)<\/span>/);
+  assert.match(page, /GENEL NET · EK DAHİL/);
+  assert.match(page, /GENEL NET ÖDEME \(EK DAHİL\)/);
+  assert.match(page, /payrollPresentation\(row\)\.reconciled/);
   assert.match(page, /index \+= 10/);
   assert.match(page, /grid-template-rows:repeat\(5,1fr\)/);
   assert.match(page, /\.compact-grid \.cash/);
@@ -112,19 +118,19 @@ test("payroll print HTML escapes employee-entered text and shows every payment c
   assert.match(page, /escapeHtml\(row\.employee\.code \|\| "-"\)/);
   assert.match(page, /escapeHtml\(row\.employee\.department \|\| "Bölüm yok"\)/);
 
-  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKA", "ELDEN", "TOPLAM ÖDEME"]) {
+  for (const label of ["Maaş", "Yol", "EK", "Mesai", "Avans", "Kesinti", "İcra/Haciz", "BANKA", "ELDEN", "GENEL NET"]) {
     assert.ok(page.includes(label), `Eksik fiş/rapor alanı: ${label}`);
   }
 });
 
-test("payroll payment balance is auto-reconciled in UI while backend keeps the hard invariant", () => {
+test("payroll print checks bank, cash and earnings without faking a balanced net", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
-  assert.match(page, /function reconcilePaymentSplit/);
+  assert.match(page, /import \{ payrollPresentation \}/);
   assert.match(page, /function paymentSplitByType\(paymentType, netValue, bankValue = 0, bankDeductionsValue = 0\)/);
   assert.match(page, /const bank = Math\.min\(Math\.max\(round\(bankPlan - bankDeductions\), 0\), net\)/);
-  assert.match(page, /const balancedSplit = reconcilePaymentSplit\(fullNet, row\.bank, row\.cash\)/);
+  assert.match(page, /const slipPayment = \(row\) => payrollPresentation\(row\)/);
   assert.match(page, /const autoBalanceFinalPayment = \(\) =>/);
   assert.match(page, /const modalPayment = paymentSplitByType\(modalDraft\.paymentType, preBaseTotals\.net, modalDraft\.bankAmount, movementBankDeductions\)/);
   assert.match(page, /const sourcePayment = paymentSplitByType\(modalDraft\.paymentType, sourcePlanEarnings, modalDraft\.bankAmount\)/);

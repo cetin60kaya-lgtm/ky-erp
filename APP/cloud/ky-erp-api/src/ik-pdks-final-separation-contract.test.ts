@@ -98,7 +98,9 @@ test("IK payment outputs keep EK visible and A4 outputs readable", () => {
   assert.match(monthly, /slip\.extraCoupon > 0 \? `<div class="extra-coupon"/);
   assert.match(monthly, /slip\.extraCoupon > 0 \? `<div class="compact-extra"/);
   assert.match(monthly, /✂ EK/);
-  assert.match(monthly, /const mainNet = round\(fullNet - extraCoupon\)/);
+  const calculation = frontend("pages/modules/ik/monthly/ikPayrollPresentation.js");
+  assert.match(calculation, /const mainNet = net - coupon/);
+  assert.match(monthly, /GENEL NET · EK DAHİL/);
   assert.match(monthly, /index \+= 10/);
   assert.match(monthly, /A4 başına 10 adet kesimli toplu ödeme fişi/);
 });
