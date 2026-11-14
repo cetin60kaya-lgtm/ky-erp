@@ -35,7 +35,7 @@ import {
 } from "../../../services/isnetBusinessSettingsApi";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./eBelgeIntegrationsWorkspace.css";
-import IntegrationFlowSteps from "../../common/IntegrationFlowSteps";
+import IntegrationFlowSteps from "../common/IntegrationFlowSteps";
 
 const SECTIONS = [
   ["connection", "Bağlantı", ShieldCheck],
