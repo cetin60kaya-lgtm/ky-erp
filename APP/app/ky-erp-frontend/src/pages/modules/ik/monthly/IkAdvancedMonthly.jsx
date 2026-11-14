@@ -1293,6 +1293,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
+  const finishMonthlyPayrollSetup = (count) => {
+    setMonthlySetup(null);
+    setModal(null);
+    setNotice(`${count} personelin aylık maaş kontrolü sırayla kaydedildi. Ödeme PAID yapılmadı; toplamları ve fişleri Bordro/Ödeme'de kontrol edin.`);
+  };
+
   const saveFinalPayrollControl = async (updatePersonnelCard = false, continueSetup = false) => {
     const editor = { ...(modalDraft.finalEditor || {}) };
     if (!modalDraft.id) return setModalDraft((old) => ({ ...old, formMessage: "Personel seçilmeden son kontrol kaydedilemez." }));
@@ -1381,9 +1387,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
           setMonthlySetup({ ...monthlySetup, reviewed });
           openPayPlan(next.employee, "FINAL", next);
         } else {
-          setMonthlySetup(null);
-          setModal(null);
-          setNotice(`${reviewed.length} personelin aylık maaş kontrolü sırayla kaydedildi. Bu işlem ödemeleri PAID yapmadı; toplu mutabakat ve çıktı kontrolü için Bordro/Ödeme listesine dönün.`);
+          finishMonthlyPayrollSetup(reviewed.length);
         }
       }
     } catch (error) {
