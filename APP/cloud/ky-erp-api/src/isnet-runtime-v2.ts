@@ -853,11 +853,17 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
   // read or returned. This checks only the public form over Worker egress.
   app.get("/api/isnet/provider-login-health", async (c) => {
     const result = await probeIsnetPublicLogin(fetch, `${PORTAL_BASE}/Account/Login`);
+    // Separate public GET diagnostics only; never send passwords to a second
+    // host as a fallback or claim that alternate reachability is a login.
+    const alternate = result.reachable ? null : await probeIsnetPublicLogin(
+      fetch, "https://efatura.isnet.net.tr/Account/Login", 5000,
+    );
     return c.json({ ok: true, success: true, data: {
       ...result,
+      alternativeStatus: alternate?.status || null,
       message: result.reachable
-        ? "İşNet'in giriş formuna KY ERP sunucusundan ulaşıldı; hesap girişi henüz doğrulanmadı."
-        : `KY ERP sunucusu İşNet giriş formunu doğrulayamadı (${result.status}${result.httpStatus ? ` / HTTP ${result.httpStatus}` : ""}). Şifrenizi değiştirmeyin veya tekrar tekrar giriş denemeyin.`,
+        ? "İşNet NetteFatura giriş formu KY ERP sunucusundan erişilebilir; oturum doğrulanmadı."
+        : `KY ERP sunucusundan NetteFatura girişine erişilemedi (${result.status}). ${alternate ? `Diğer İşNet giriş alanı: ${alternate.status}.` : ""} Şifrenizi tekrar denemeyin; sağlayıcı oturumu doğrulanmadı.`,
     } });
   });
   const getSettings = async (c: Context<AppEnv>) => {
