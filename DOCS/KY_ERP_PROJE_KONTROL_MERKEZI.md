@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 14.11.2026 — İşNet çift endpoint çakışması ve PDF/UBL indirme güvenliği (PR #564)
+
+- **Kök neden:** `isnet-live-sync` ile `isnet-runtime-v2` aynı `/api/isnet/settings` ve `/api/isnet/connection` rotalarını kaydediyordu; eski handler önce çalışıp yeni şifresiz firma kaydetme UX'ini bozuyordu. `main.ts` V2 önce çağıracak şekilde düzeltildi; eski cookie/başka firma oturumunun yanlış yeniden kullanımı engellendi.
+- **Koruma:** PDF/XML indirme gövdesi artık gerçek PDF başlığı veya UBL-TR Invoice/DespatchAdvice kökü taşımalı; HTTP 200 HTML login/JSON hata/ZIP/boş/aşırı büyük içerik arşive yazılmaz. Doküman: `DOCS/KY_ISNET_BELGE_ERISIM_KANIT_MATRISI_20261114.md`.
+- **Kanıt:** PR #564 squash merge `8f77968e08cee681f7d83917ddae51dad7ae5ab5`; tek CI run `43630029134` frontend + Worker SUCCESS; Cloudflare Worker Build `e8cae184-e7a2-4d50-b1fa-8aec59b88f74` SUCCESS. Canlı anonim HTTPS health/UI 200/200; gerçek girişli sağlayıcı senkronizasyonu PASS değildir.
+- **Açık:** İşNet portalındaki dört belge kaynağının üç nokta PDF/XML URL'leri henüz canlı oturumda incelenmedi. Kodun URL varsayımları resmî API Help ile karıştırılmayacak. TinyFish güvenli tarayıcı kurulum oturumu açılamadı; şifre, OTP, cookie, müşteri belgesi veya gizli veri alınmadı. Kullanıcı adına fatura, irsaliye, mail, mali son kayıt gönderilmedi.
+- **Kota:** yalnız bir hedefli GitHub Actions PR çalışması, yeni manuel rerun veya ek paralel deploy yok.
+
+
 ## 14.11.2026 — Muhasebe/e-Belge entegrasyon ve manuel UBL canlı yayın (PR #562)
 
 - **Amaç:** Tek kullanıcı bağlantı düzeni ve günlük belge güvenliği. İşNet ekranındaki adım bileşeni Microsoft 365/Gmail OAuth ile Google Drive/OneDrive/SharePoint servis ekranına aynı 3-adım görsel düzeniyle bağlandı. Sağlayıcıların gerçek giriş yöntemleri birbirine karıştırılmıyor; OAuth/portal ekranı veya önizleme gerçek veri senkronizasyonu PASS sayılmıyor.
