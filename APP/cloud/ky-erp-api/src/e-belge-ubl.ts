@@ -52,7 +52,7 @@ function xmlTag(xml: string, names: string[]) {
 /** Only root-level UBL basic fields can identify a document.
  * Supplier/customer PartyIdentification IDs must never become document IDs. */
 function xmlRootField(xml: string, name: "ID" | "IssueDate") {
-  const tags = /<(\\/?)(?:[A-Za-z0-9_]+:)?([A-Za-z0-9_]+)\\b[^>]*>/g;
+  const tags = /<(\/?)(?:[A-Za-z0-9_]+:)?([A-Za-z0-9_]+)\b[^>]*>/g;
   let depth = 0;
   let rootStarted = false;
   for (const tag of xml.matchAll(tags)) {
@@ -73,7 +73,7 @@ function xmlRootField(xml: string, name: "ID" | "IssueDate") {
       const match = rest.match(new RegExp(`^([^<]*)<\\/(?:[A-Za-z0-9_]+:)?${name}\\s*>`, "i"));
       if (match) return decodeXml(match[1]);
     }
-    if (!/\\/>$/.test(tag[0])) depth++;
+    if (!/\/>$/.test(tag[0])) depth++;
   }
   return "";
 }
