@@ -1114,7 +1114,7 @@ app.get("/api/health", (c) =>
 // Public read-only fixed-target diagnostic, not an authentication or SSRF endpoint.
 app.get("/api/health/isnet-egress", async (c) => {
   const cacheKey = new Request(new URL("/api/health/isnet-egress", c.req.url).toString());
-  const cache = typeof caches !== "undefined" ? caches.default : null;
+  const cache = typeof caches !== "undefined" ? await caches.open("ky-isnet-egress-health") : null;
   try {
     const hit = await cache?.match(cacheKey);
     if (hit) return hit;
