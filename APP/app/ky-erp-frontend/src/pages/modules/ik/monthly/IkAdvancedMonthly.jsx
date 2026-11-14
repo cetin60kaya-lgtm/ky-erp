@@ -2127,7 +2127,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       const previews = [];
       for (const file of unpacked.files) {
         const preset = mappings?.[file.name];
-        const result = await previewIkAdvancedSgk(file, { mainCompanyId: companyId, year, month, ...(preset ? { mapping: preset } : {}) });
+        // Stored mappings use header labels only, not an old file\'s fixed row or worksheet.
+        const mapping = preset ? { columns: preset.columns || {} } : null;
+        const result = await previewIkAdvancedSgk(file, { mainCompanyId: companyId, year, month, ...(mapping ? { mapping } : {}) });
         if (result.needsMapping) {
           setSgkMappingReview({
             fileName: file.name, sheetName: result.sheetName,
@@ -3649,7 +3651,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         : `${MONTHS[month - 1]} ${year} · Salt okunur kontrol görünümü`;
 
       return (
-        <Modal title={modalTitle} sub={modalSub} size="wide prepayroll-dialog" onClose={() => setModal(null)}>
+        <Modal title={modalTitle} sub={modalSub} size="wide prepayroll-dialog" onClose={() => { setModal(null); setMonthlySetup(null); }}>
           <div className={`payroll-final-layout ${editableMode ? "final-control-mode" : "entry-control-mode"}`}>
             <aside className="payroll-person-rail">
               <div className="payroll-person-rail-head">
