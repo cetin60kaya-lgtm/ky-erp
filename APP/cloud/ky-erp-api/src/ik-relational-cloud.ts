@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import * as XLSX from "xlsx";
+import { sgkDetectLayout, sgkOfficialRowError, sgkStrictAmount } from "./ik-sgk-flexible-columns.ts";
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 
 type Bindings = Cloudflare.Env;
@@ -2889,46 +2890,56 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
   } catch {
     return error(c, 400, "SGK_EXCEL_PARSE", "Bordro Excel dosyası okunamadı.");
   }
-  const sheetName = workbook.SheetNames[0];
-  const sheet = sheetName ? workbook.Sheets[sheetName] : null;
-  if (!sheet) return error(c, 400, "SGK_EXCEL_EMPTY", "Bordro dosyasında okunabilir sayfa bulunamadı.");
-  const matrix = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true, defval: "" }) as unknown[][];
-  if (!matrix.length) return error(c, 400, "SGK_EXCEL_EMPTY", "Bordro dosyasında satır bulunamadı.");
-
-  let headerIndex = -1;
-  for (let i = 0; i < Math.min(matrix.length, 80); i += 1) {
-    const keys = (matrix[i] || []).map(sgkHeaderKey);
-    const hasName = keys.some((value) => value.includes("ADI SOYADI") || value === "AD SOYAD" || value === "PERSONEL");
-    const hasDay = keys.some((value) => value === "GUN" || value.includes("SGK GUN"));
-    const hasNet = keys.some((value) => value.includes("NET ISTIHKAK") || value === "NET");
-    if (hasName && (hasDay || hasNet)) { headerIndex = i; break; }
+  // Preview scans every worksheet and tolerates renamed/reordered columns.
+  // Unknown headers are returned for a one-time user mapping, never guessed.
+  const sheets = workbook.SheetNames.slice(0, 20).map((sheetName) => ({
+    sheetName,
+    matrix: XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true, defval: "" }) as unknown[][],
+  }));
+  if (!sheets.some((item) => item.matrix.length)) return error(c, 400, "SGK_EXCEL_EMPTY", "Bordro dosyasında satır bulunamadı.");
+  let options: { sheetName?: string; headerRow?: number; columns?: Record<string, string> } = {};
+  if (text(body.mapping)) {
+    try {
+      const parsed = JSON.parse(text(body.mapping));
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        const row = Number(parsed.headerRow);
+        options = {
+          sheetName: typeof parsed.sheetName === "string" ? parsed.sheetName.slice(0, 100) : undefined,
+          headerRow: Number.isInteger(row) && row >= 0 && row <= 119 ? row : undefined,
+          columns: parsed.columns && typeof parsed.columns === "object" ? parsed.columns : {},
+        };
+      }
+    } catch { return error(c, 400, "SGK_MAPPING_INVALID", "Muhasebe sütun eşleştirmesi geçersiz."); }
   }
-  if (headerIndex < 0) return error(c, 400, "SGK_HEADER_NOT_FOUND", "Bordro başlık satırı bulunamadı. ADI SOYADI ve GÜN/NET sütunları kontrol edilmelidir.");
-
-  const headers = matrix[headerIndex] || [];
+  const layout = sgkDetectLayout(sheets, options);
+  if (layout.needsMapping) {
+    return okData(c, {
+      fileName, needsMapping: true, sheetName: layout.sheetName,
+      headerRow: layout.headerRow, headers: layout.headers,
+      columns: layout.columns,
+      availableSheets: sheets.map((sheet) => sheet.sheetName),
+      message: "Muhasebe formatı tanınmadı. Personel Adı ve Net İstihkak sütunlarını bir kez seçin.",
+    });
+  }
+  const sheetName = layout.sheetName;
+  const matrix = sheets.find((sheet) => sheet.sheetName === sheetName)!.matrix;
+  const headerIndex = layout.headerRow;
+  const headers = layout.headers;
   const col = {
-    name: sgkColumn(headers, ["ADI SOYADI","AD SOYAD","PERSONEL"]),
-    identity: sgkColumn(headers, ["T.C. KIMLIK NO","TC KIMLIK NO","T.C. KIMLIK","TC KIMLIK"]),
-    code: sgkColumn(headers, ["PERSONEL KODU","PERSONEL KOD","SICIL NO","SSK SICIL"]),
-    hire: sgkColumn(headers, ["GIRIS TARIHI","ISE GIRIS"]),
-    exit: sgkColumn(headers, ["CIKIS TARIHI","ISTEN CIKIS"]),
-    days: sgkColumn(headers, ["SGK GUN","GUN"]),
-    normal: sgkColumn(headers, ["NORMAL KAZANC"]),
-    other: sgkColumn(headers, ["DIGER KAZANC"]),
-    gross: sgkColumn(headers, ["TOPLAM KAZANC","BRUT KAZANC","BRUT"]),
-    base: sgkColumn(headers, ["SGK MATRAH","SSK MATRAH"]),
-    sgkPremium: sgkColumn(headers, ["SGK PRIMI","SSK PRIMI"]),
-    unemployment: sgkColumn(headers, ["ISSIZLIK PRIMI"]),
-    incomeTax: sgkColumn(headers, ["GELIR VERGISI"]),
-    stampTax: sgkColumn(headers, ["DAMGA VERGISI"]),
-    specialDeduction: sgkColumn(headers, ["OZEL KESINTI"]),
-    employerSgk: sgkColumn(headers, ["ISVEREN SGK","ISVEREN SSK"]),
-    employerUnemployment: sgkColumn(headers, ["ISVEREN ISSIZLIK"]),
-    incentive: sgkColumn(headers, ["SGK TESVIK","TESVIK"]),
-    employerCost: sgkColumn(headers, ["ISVEREN NET MALIYET","NET MALIYET"]),
-    net: sgkColumn(headers, ["NET ISTIHKAK","NET UCRET","NET"]),
+    name: layout.columns.name,
+    identity: layout.columns.identity, code: layout.columns.code,
+    hire: layout.columns.hire, exit: layout.columns.exit, days: layout.columns.days,
+    normal: layout.columns.normal, other: layout.columns.other,
+    gross: layout.columns.gross, base: layout.columns.base,
+    sgkPremium: layout.columns.sgkPremium, unemployment: layout.columns.unemployment,
+    incomeTax: layout.columns.incomeTax, stampTax: layout.columns.stampTax,
+    specialDeduction: layout.columns.specialDeduction,
+    employerSgk: layout.columns.employerSgk,
+    employerUnemployment: layout.columns.employerUnemployment,
+    incentive: layout.columns.incentive,
+    employerCost: layout.columns.employerCost, net: layout.columns.net,
   };
-  if (col.name < 0) return error(c, 400, "SGK_NAME_COLUMN_MISSING", "Bordroda personel adı sütunu bulunamadı.");
+  if (col.name < 0 || col.net < 0) return error(c, 409, "SGK_REQUIRED_COLUMN", "Personel Adı ve Net İstihkak sütunları eşlenmeden bordro alınamaz.");
 
   const people = await all(c, `SELECT e.id,e.code,e.full_name,s.identity_no,s.payroll_included
       FROM hr_monthly_employees e
@@ -2964,14 +2975,21 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
   for (let i = headerIndex + 1; i < maxRows; i += 1) {
     const source = matrix[i] || [];
     const fullName = text(source[col.name]).replace(/\s+/g, " ");
-    if (!fullName) continue;
+    if (!fullName || /^(NORMAL GUN|GUNLUK UCRET|LISTELENEN|TOPLAM|BRUT ODEMELER|NET ODEMELER)/.test(sgkHeaderKey(fullName))) continue;
     const identityNo = col.identity >= 0 ? text(source[col.identity]).replace(/\D/g, "") : "";
     const personCode = col.code >= 0 ? text(source[col.code]) : "";
     const identityMatch = identityNo ? byIdentity.get(identityNo) : null;
     const codeMatch = personCode ? byCode.get(sgkHeaderKey(personCode).replace(/\s+/g, "")) : null;
     const nameMatches = byName.get(sgkNameKey(fullName)) || [];
     const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
-    const matched = identityMatch || codeMatch || nameMatch || null;
+    const identityConflict = Boolean(identityMatch && codeMatch && text(identityMatch.id) !== text(codeMatch.id));
+    const nameConflict = Boolean((identityMatch || codeMatch) && nameMatches.length === 1 && text(nameMatch?.id) !== text((identityMatch || codeMatch)?.id));
+    const matched = identityConflict || nameConflict ? null : (identityMatch || codeMatch || nameMatch || null);
+    // Workbook captions and summary rows are not employees, even when
+    // accountants insert extra lines beneath each person.
+    if (!matched && !identityNo && !personCode && !nameMatches.length) continue;
+    const officialNet = col.net >= 0 ? sgkStrictAmount(source[col.net]) : null;
+    const invalidNet = officialNet === null || officialNet < 0;
     const payrollIncluded = matched?.payroll_included;
     const employeeId = matched && (payrollIncluded === null || payrollIncluded === undefined || flag(payrollIncluded)) ? text(matched.id) : "";
     rows.push({
@@ -2979,7 +2997,8 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
       workplace: workplaceText,
       workplaceNo: "",
       rowNumber: i + 1,
-      selected: Boolean(employeeId),
+      selected: Boolean(employeeId) && !invalidNet,
+      sheetName,
       employeeId: employeeId || null,
       fullName,
       identityNo,
@@ -3000,14 +3019,20 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
       employerUnemployment: col.employerUnemployment >= 0 ? sgkNumber(source[col.employerUnemployment]) : 0,
       sgkIncentive: col.incentive >= 0 ? sgkNumber(source[col.incentive]) : 0,
       employerNetCost: col.employerCost >= 0 ? sgkNumber(source[col.employerCost]) : 0,
-      net: col.net >= 0 ? sgkNumber(source[col.net]) : 0,
-      status: employeeId ? (identityMatch ? "TC_ESLESTI" : codeMatch ? "KOD_ESLESTI" : "AD_ESLESTI") : (nameMatches.length > 1 ? "AYNI_AD_COKLU" : "ESLESMEDI"),
+      net: officialNet,
+      status: identityConflict || nameConflict ? "KIMLIK_CELISKI" : invalidNet ? "NET_GECERSIZ"
+        : employeeId ? (identityMatch ? "TC_ESLESTI" : codeMatch ? "KOD_ESLESTI" : "AD_ESLESTI")
+        : (nameMatches.length > 1 ? "AYNI_AD_COKLU" : "ESLESMEDI"),
     });
   }
   if (!rows.length) return error(c, 400, "SGK_ROWS_EMPTY", "Bordro dosyasında personel satırı bulunamadı.");
   return okData(c, {
     fileName,
     workplace: workplaceText,
+    sheetName,
+    headerRow: headerIndex,
+    recognizedHeaders: headers,
+    mappingRequired: false,
     year: detectedYear,
     month: detectedMonth,
     periodDetected,
@@ -3030,10 +3055,30 @@ async function confirmAdvancedSgk(c: Context<AppEnv>) {
   if (locked) return locked;
   const rows = Array.isArray(body.rows) ? body.rows.filter((row: Row) => text(row.employeeId)) as Row[] : [];
   if (!rows.length) return error(c, 400, "SGK_ROWS_REQUIRED", "Aktarılacak eşleşmiş bordro satırı bulunamadı.");
+  for (const row of rows) {
+    const invalid = sgkOfficialRowError(row);
+    if (invalid) return error(c, 409, invalid, "Resmî bordroda eksik/geçersiz Net İstihkak veya SGK günü var. Dosyayı ve eşleştirmeyi kontrol edin.");
+    if (row.sourcePeriod && text(row.sourcePeriod) !== `${year}-${String(month).padStart(2, "0")}`) {
+      return error(c, 409, "SGK_PERIOD_MISMATCH", "Resmî bordro farklı bir dönemden alınmış.");
+    }
+  }
+  const sourceKeys = new Set<string>();
+  const repeated = new Map<string, number>();
+  for (const row of rows) {
+    const sourceKey = [text(row.sourceFile), text(row.sheetName), text(row.rowNumber)].join("|");
+    if (sourceKeys.has(sourceKey)) return error(c, 409, "SGK_DUPLICATE_SOURCE_ROW", "Aynı muhasebe dosyasının satırı iki kez eklenmiş.");
+    sourceKeys.add(sourceKey);
+    repeated.set(text(row.employeeId), (repeated.get(text(row.employeeId)) || 0) + 1);
+  }
+  if ([...repeated.values()].some((count) => count > 1) && body.allowMultipleWorkplaceRows !== true)
+    return error(c, 409, "SGK_MULTIPLE_WORKPLACE_CONFIRM_REQUIRED", "Aynı personele ait birden çok işyeri satırı var. Dosya tekrarını kontrol edip birleşimi ayrıca onaylayın.");
 
   const employeeIds = [...new Set(rows.map((row) => text(row.employeeId)).filter(Boolean))];
   const validRows = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
   if (validRows.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "SGK bordrosunda başka firmaya ait veya geçersiz personel var.");
+  // The month's official payroll must not change underneath a paid employee.
+  const alreadyPaid = await first(c, `SELECT id FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND status='PAID' AND employee_id IN (${employeeIds.map(() => "?").join(",")}) LIMIT 1`, [companyId, year, month, ...employeeIds]);
+  if (alreadyPaid) return error(c, 409, "SGK_PAID_PAYROLL_LOCKED", "Ödenmiş personelin resmî bordrosu sessizce değiştirilemez. Yetkili düzeltme süreci gereklidir.");
 
   const versionRow = await first(c, "SELECT MAX(version_no) AS version_no FROM ik_sgk_imports WHERE main_company_id=? AND period_year=? AND period_month=?", [companyId, year, month]);
   const versionNo = number(versionRow?.version_no) + 1;
@@ -3054,8 +3099,8 @@ async function confirmAdvancedSgk(c: Context<AppEnv>) {
       exitDate: hrDateOnly(row.exitDate),
       sources: [],
     };
-    for (const key of sums) current[key] = number(current[key]) + number(row[key]);
-    (current.sources as unknown[]).push({ sourceFile: text(row.sourceFile), workplace: text(row.workplace), rowNumber: number(row.rowNumber) });
+    for (const key of sums) current[key] = number(current[key]) + (key === "net" ? sgkStrictAmount(row.net)! : number(row[key]));
+    (current.sources as unknown[]).push({ sourceFile: text(row.sourceFile), sheetName: text(row.sheetName), workplace: text(row.workplace), rowNumber: number(row.rowNumber) });
     grouped.set(employeeId, current);
   }
 

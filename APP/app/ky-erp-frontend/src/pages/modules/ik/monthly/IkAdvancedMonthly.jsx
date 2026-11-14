@@ -36,6 +36,7 @@ import { canonicalCompanySlug } from "../../../../utils/companyIdentity";
 import { useAuth } from "../../../../context/AuthContext";
 import IkMonthlyProShell from "./IkMonthlyProShell";
 import { payrollPresentation } from "./ikPayrollPresentation";
+import { expandAccountantPayrollFiles } from "./ikPayrollZip";
 import "./ik.advanced.css";
 import "./ik.monthly.pro.css";
 
@@ -441,7 +442,18 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const livePollBusyRef = useRef(false);
   const lastSuccessfulLoadStartedAtRef = useRef(0);
   const [sgkPreview, setSgkPreview] = useState(null);
+  const [sgkUploadFiles, setSgkUploadFiles] = useState([]);
+  const [sgkMappingReview, setSgkMappingReview] = useState(null);
+  const [sgkColumnMaps, setSgkColumnMaps] = useState(() => {
+    try { return JSON.parse(window.localStorage.getItem(`kyerp.ik.sgk-maps.v1.${companyId}`) || "{}"); }
+    catch { return {}; }
+  });
+  useEffect(() => {
+    try { setSgkColumnMaps(JSON.parse(window.localStorage.getItem(`kyerp.ik.sgk-maps.v1.${companyId}`) || "{}")); }
+    catch { setSgkColumnMaps({}); }
+  }, [companyId]);
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
+  const [monthlySetup, setMonthlySetup] = useState(null);
   const documentInput = useRef(null);
   const payrollInput = useRef(null);
   const period = `${year}-${String(month).padStart(2, "0")}`;
@@ -701,6 +713,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setPayrollData(null);
     setSelectedId(readIkSelectedPerson(companyId, `${Number(nextYear)}-${String(Number(nextMonth)).padStart(2, "0")}`));
     setSelectedPayrollIds([]);
+    setMonthlySetup(null);
     setEmployeeStatusFilter("ALL");
     setSgkFilter("ALL");
     setMovementTypeFilter("ALL");
@@ -1280,7 +1293,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
-  const saveFinalPayrollControl = async (updatePersonnelCard = false) => {
+  const finishMonthlyPayrollSetup = (count) => {
+    setMonthlySetup(null);
+    setModal(null);
+    setNotice(`${count} personelin aylık maaş kontrolü sırayla kaydedildi. Ödeme PAID yapılmadı; toplamları ve fişleri Bordro/Ödeme'de kontrol edin.`);
+  };
+
+  const saveFinalPayrollControl = async (updatePersonnelCard = false, continueSetup = false) => {
     const editor = { ...(modalDraft.finalEditor || {}) };
     if (!modalDraft.id) return setModalDraft((old) => ({ ...old, formMessage: "Personel seçilmeden son kontrol kaydedilemez." }));
     const desired = {
@@ -1361,6 +1380,16 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       }));
       setNotice("");
       await load({ force: true, silent: true });
+      if (continueSetup && !updatePersonnelCard && monthlySetup?.active) {
+        const reviewed = [...new Set([...(monthlySetup.reviewed || []), modalDraft.id])];
+        const next = payrollRows.find((item) => !item.paidLocked && !reviewed.includes(item.employee.id));
+        if (next) {
+          setMonthlySetup({ ...monthlySetup, reviewed });
+          openPayPlan(next.employee, "FINAL", next);
+        } else {
+          finishMonthlyPayrollSetup(reviewed.length);
+        }
+      }
     } catch (error) {
       setModalDraft((old) => ({ ...old, formMessage: error?.message || "Son bordro kontrolü kaydedilemedi." }));
     } finally {
@@ -1406,6 +1435,17 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setLeaveRangeStep(0);
     setModalDraft({ id: plan.id, employeeId: plan.employeeId, leaveType: plan.recordType || "Yillik izin", startDate: plan.startDate, endDate: plan.returnDate || plan.endDate, status: plan.status, wageEffect: plan.effectType || "Ucretli", payrollEffect: "Yansit", documentNo: plan.documentNo || "", note: plan.note || "" });
     setModal("yillik");
+  };
+
+  const startMonthlyPayrollSetup = () => {
+    if (!payrollReady || !periodPrepared) return setNotice("Önce seçili ayın bordro bilgilerini hazırlayın.");
+    if (data.close?.isLocked) return setNotice("Ay kilitli. Sıralı kontrol yalnız açık dönemde çalışır.");
+    const reviewable = payrollRows.filter((row) => !row.paidLocked);
+    if (!reviewable.length) return setNotice("Bütün personel bordroları ödenmiş veya kilitli; değişiklik yapılmaz.");
+    setMonthlySetup({ active: true, reviewed: [], total: reviewable.length, period });
+    setSelectedId(reviewable[0].employee.id);
+    setPage("bordro");
+    openPayPlan(reviewable[0].employee, "FINAL", reviewable[0]);
   };
 
   const openPayroll = (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
@@ -2081,46 +2121,103 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
-  const previewPayrollFiles = async (fileList) => {
-    const files = Array.from(fileList || []);
-    if (!files.length) return;
+  const previewPayrollFiles = async (fileList, mappings = sgkColumnMaps) => {
+    const selectedFiles = Array.from(fileList || []);
+    if (!selectedFiles.length) return;
+    setSgkUploadFiles(selectedFiles);
     setBusy(true);
     try {
+      const unpacked = await expandAccountantPayrollFiles(selectedFiles);
       const previews = [];
-      for (const file of files) previews.push(await previewIkAdvancedSgk(file, { mainCompanyId: companyId, year, month }));
-      const undetectedPeriod = previews.find((item) => item.periodDetected === false);
-      if (undetectedPeriod) throw new Error(`${undetectedPeriod.fileName} dosyasında bordro dönemi tespit edilemedi. Dosya başlığında veya adında ay/yıl bilgisi olmalıdır.`);
-      const wrongPeriod = previews.find((item) => !item.periodMatches);
-      if (wrongPeriod) throw new Error(`${wrongPeriod.fileName} dosyası ${wrongPeriod.month}/${wrongPeriod.year} dönemine ait. Seçili dönem ${month}/${year}.`);
-      const rows = previews.flatMap((item) => safeList(item.rows));
-      setSgkPreview({ files: previews.map((item) => item.fileName), workplaces: previews.map((item) => item.workplace).filter(Boolean), rows });
+      for (const file of unpacked.files) {
+        const preset = mappings?.[file.name];
+        // Stored mappings use header labels only, not an old file\'s fixed row or worksheet.
+        const mapping = preset ? { columns: preset.columns || {} } : null;
+        const result = await previewIkAdvancedSgk(file, { mainCompanyId: companyId, year, month, ...(mapping ? { mapping } : {}) });
+        if (result.needsMapping) {
+          setSgkMappingReview({
+            fileName: file.name, sheetName: result.sheetName,
+            headerRow: result.headerRow, headers: result.headers || [],
+            availableSheets: result.availableSheets || [],
+            mapping: { sheetName: result.sheetName, headerRow: result.headerRow, columns: preset?.columns || {} },
+          });
+          setModal("sgkMapping");
+          setNotice("Muhasebe Excel'i farklı bir şablonda. Personel ve Net İstihkak sütunlarını seçin.");
+          return;
+        }
+        previews.push(result);
+      }
+      const wrong = previews.find((item) => item.periodDetected && !item.periodMatches);
+      if (wrong) throw new Error(`${wrong.fileName} dosyası ${wrong.month}/${wrong.year} dönemine ait. Seçili dönem ${month}/${year}.`);
+      const undetected = previews.filter((item) => !item.periodDetected);
+      if (undetected.length && !window.confirm(`${undetected.length} bordronun başlığında dönem yok. Bu dosyaların ${MONTHS[month-1]} ${year} dönemine ait olduğunu onaylıyor musunuz?`)) {
+        throw new Error("Dönemi bilinmeyen bordro onaylanmadı.");
+      }
+      const rows = previews.flatMap((item) => safeList(item.rows).map((row) => ({
+        ...row, sourcePeriod: `${year}-${String(month).padStart(2,"0")}`,
+      })));
+      if (!rows.length) throw new Error("Excel'de personel bordro satırı bulunamadı.");
+      const seen = new Set();
+      for (const row of rows) {
+        const key = [row.sourceFile, row.sheetName || "", row.rowNumber].join("|");
+        if (seen.has(key)) throw new Error("Aynı Excel satırı birden fazla kez eklenmiş.");
+        seen.add(key);
+      }
+      setSgkPreview({
+        files: previews.map((item) => item.fileName),
+        workplaces: previews.map((item) => item.workplace).filter(Boolean),
+        supplementalPdfs: unpacked.supplementalPdfs,
+        rows,
+      });
+      setSgkMappingReview(null);
       setModal("sgkImport");
-      setNotice(`${files.length} bordro dosyasi okundu; ${rows.filter((row) => row.employeeId).length} satir sirket personeliyle eslesti.`);
+      const bad = rows.filter((row) => row.status === "NET_GECERSIZ").length;
+      setNotice(`${previews.length} Excel bordrosu okundu. ${bad ? bad+" kişinin Net İstihkak değeri eksik/geçersiz. " : ""}PDF pusulaları kaynak ZIP'te korunuyor; aylık hesaba tekrar eklenmez.`);
     } catch (error) {
-      setNotice(error?.message || "Bordro dosyasi okunamadi.");
+      setNotice(error?.message || "Bordro dosyası okunamadı.");
     } finally {
       setBusy(false);
       if (payrollInput.current) payrollInput.current.value = "";
     }
   };
 
-  const updateSgkPreviewRow = (index, patch) => setSgkPreview((old) => ({ ...old, rows: safeList(old?.rows).map((row, rowIndex) => rowIndex === index ? { ...row, ...patch } : row) }));
+  const applySgkMapping = async () => {
+    const review = sgkMappingReview;
+    const columns = review?.mapping?.columns || {};
+    if (!columns.name || !columns.net) return setNotice("Personel Adı ve Net İstihkak sütunlarını seçin.");
+    const next = { ...sgkColumnMaps, [review.fileName]: review.mapping };
+    setSgkColumnMaps(next);
+    try { window.localStorage.setItem(`kyerp.ik.sgk-maps.v1.${companyId}`, JSON.stringify(next)); }
+    catch { /* Only column labels; current mapping stays in memory. */ }
+    await previewPayrollFiles(sgkUploadFiles, next);
+  };
+
+  const updateSgkPreviewRow = (index, patch) => setSgkPreview((old) => ({
+    ...old, rows: safeList(old?.rows).map((row,i) => i === index ? { ...row, ...patch } : row),
+  }));
 
   const confirmPayrollFiles = async () => {
     const rows = safeList(sgkPreview?.rows).filter((row) => row.selected && row.employeeId);
-    if (!rows.length) return setNotice("Aktarilacak en az bir sirket personeli secilmelidir.");
+    if (!rows.length) return setNotice("Aktarılacak eşleşmiş personel seçin.");
+    if (rows.some((row) => row.net === null || !Number.isFinite(Number(row.net)) || Number(row.net) < 0))
+      return setNotice("Resmî Net İstihkak boş veya geçersiz; aktarım durduruldu.");
+    const count = new Map();
+    rows.forEach((row) => count.set(row.employeeId, (count.get(row.employeeId)||0)+1));
+    const multiple = [...count.values()].some((value) => value > 1);
+    if (multiple && !window.confirm("Aynı kişi farklı işyeri satırlarında bulundu. Mükerrer olmadığını ve birleştirmeyi onaylıyor musunuz?")) return;
     setBusy(true);
     try {
-      const result = await confirmIkAdvancedSgk({ mainCompanyId: companyId, year, month, fileName: safeList(sgkPreview?.files).join(" + "), rows });
-      setModal(null);
-      setSgkPreview(null);
-      setNotice(`${result?.matched || rows.length} personelin resmi bordro verisi kaydedildi. Banka listesi Net Istihkak alanindan hazirlanacak.`);
+      const result = await confirmIkAdvancedSgk({
+        mainCompanyId: companyId, year, month,
+        fileName: safeList(sgkPreview?.files).join(" + "), rows,
+        allowMultipleWorkplaceRows: multiple,
+      });
+      setModal(null);setSgkPreview(null);setSgkUploadFiles([]);
+      setNotice(`${result?.matched || rows.length} kişinin resmî bordrosu kaydedildi. Ödeme durumu değiştirilmedi.`);
       await load({ force: true });
     } catch (error) {
-      setNotice(error?.message || "Bordro onayi kaydedilemedi.");
-    } finally {
-      setBusy(false);
-    }
+      setNotice(error?.message || "Bordro onayı kaydedilemedi.");
+    } finally { setBusy(false); }
   };
 
   const uploadDocument = async (file) => {
@@ -2895,6 +2992,31 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <div><span>Elden</span><b>{money(profile.cashAmount)}</b></div>
               </div>
 
+              {payrollReady && (() => {
+                const actual = payrollRows.find((row) => row.employee.id === profile.id);
+                if (!actual) return <div className="warnline">Seçili ay için personelin hazırlanmış bordrosu bulunmuyor.</div>;
+                const slip = payrollPresentation(actual);
+                return <div className="card">
+                  <div className="ch"><div><b>Aylık Maaş ve Ödeme Detayı · {MONTHS[month-1]} {year}</b><span>Kalıcı personel kartı değil; seçilen ayın salt okunur gerçek bordro hesabı. Çıktı ile aynı veriyi kullanır.</span></div></div>
+                  <div className="import-summary payment-summary">
+                    <div><span>Maaş</span><b>{money(actual.salary)}</b></div>
+                    <div><span>Yol</span><b>{money(actual.road)}</b></div>
+                    <div><span>EK</span><b>{money(actual.extra)}</b></div>
+                    <div><span>Mesai</span><b>{money(actual.overtime)}</b></div>
+                    <div><span>Hak Ediş</span><b>{money(actual.hakedis)}</b></div>
+                    <div><span>Avans</span><b>-{money(actual.advance)}</b></div>
+                    <div><span>Özel Kesinti</span><b>-{money(actual.deduction)}</b></div>
+                    <div><span>İcra / Haciz</span><b>-{money(actual.garnishment)}</b></div>
+                    <div><span>Net Ödeme</span><b>{money(actual.net)}</b></div>
+                    <div><span>Bankaya Ödenecek</span><b>{money(actual.bank)}</b></div>
+                    <div><span>Elden Ödenecek</span><b>{money(actual.cash)}</b></div>
+                  </div>
+                  <div className={`warnline ${slip.reconciled ? "ok" : "warn"}`}>{slip.reconciled
+                    ? "Banka + Elden = Net. EK ödeme nete bir kez dâhil."
+                    : "Bordro veya banka/elden farkı var. Tekli fişten önce Son Bordro Kontrolü gerekli."}</div>
+                </div>;
+              })()}
+
               <div className="ik-pro-profile-toolbar">
                 <button className="btn" onClick={() => openPayPlan(profile)}>Ücret Planı</button>
                 <button className="btn" onClick={() => openLeave("yillik", "", profile)}>İzin Gir</button>
@@ -3262,7 +3384,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         <div className="sumgrid short">{summaryBox("Ödeme listesi", filteredPayrollRows.length, "", `${payrollRows.length} toplam · ${selectedPayrollIds.length || payrollRows.length} seçili`)}{summaryBox("Maaş", money(summary.salary))}{summaryBox("Yol", money(summary.road))}{summaryBox("EK Ödeme", money(summary.extra), summary.extra ? "green" : "")}{summaryBox("Mesai", money(summary.overtime))}{summaryBox("Hak Ediş (EK dahil)", money(summary.hakedis))}{summaryBox("Avans / Kesinti", `${money(summary.advance)} / ${money(summary.deduction)}`, "orange")}{summaryBox("İcra / Haciz", money(summary.garnishment), summary.garnishment ? "orange" : "")}{summaryBox("Banka", money(summary.bank))}{summaryBox("Elden", money(summary.cash))}{summaryBox("Net Toplam", money(summary.net), balanced ? "green" : "red")}</div>
         <div className="workbar payroll-clean-actions">
           <div className="group payroll-edit-actions">
-            <button className="btn primary" disabled={busy || data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button>
+            <button className="btn primary" disabled={busy || data.close?.isLocked} onClick={startMonthlyPayrollSetup}>Bu Ayın Maaşlarını Hazırla</button>
+            <button className="btn" disabled={busy || data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button>
             <button className="btn" disabled={busy || data.close?.isLocked} onClick={savePayroll}>Ara Kaydet</button>
             <button className="btn" disabled={busy || data.close?.isLocked} onClick={() => openPayroll()}>Seçili Son Kontrol</button>
           </div>
@@ -3327,7 +3450,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       <section>
         <div className="page-head"><div><h1>SGK Bordro · Evrak · Ay Sonu</h1><p>Resmi bordro, personel evrakları ve dönem kapanışı aynı seçili ay üzerinden kontrol edilir.</p></div><div className="group"><span className={`badge ${data.sgkImport ? "green" : "orange"}`}>{data.sgkImport ? `SGK Bordro v${data.sgkImport.versionNo}` : "SGK bordro bekleniyor"}</span><span className={`badge ${data.close?.isLocked ? "red" : "blue"}`}>{data.close?.isLocked ? "Dönem Kapalı" : "Dönem Açık"}</span></div></div>
         {filters({ third: "Personel ara", fourth: "Evrak", fifth: "SGK" })}
-        <div className="workbar"><div className="group"><input ref={payrollInput} type="file" accept=".xls,.xlsx" multiple hidden onChange={(event)=>previewPayrollFiles(event.target.files)} /><button className="btn primary" disabled={busy || data.close?.isLocked} onClick={() => payrollInput.current?.click()}>Resmi Bordro XLS/XLSX</button><button className="btn" onClick={() => openDocument()}>Evrak Yükle</button><button className="btn" onClick={() => setModal("izinFis")}>İzin Formu</button><button className="btn" onClick={() => setModal("kidemCikti")}>Ayrılış Ödeme Özeti</button><button className="btn orange" disabled={busy} onClick={() => runClose("CHECK")}>Ay Sonu Kontrol</button><button className={`btn ${data.close?.isLocked ? "primary" : "red"}`} disabled={busy} onClick={() => runClose(data.close?.isLocked ? "UNLOCK" : "LOCK")}>{data.close?.isLocked ? "Kilidi Aç" : "Ayı Kilitle"}</button></div></div>
+        <div className="workbar"><div className="group"><input ref={payrollInput} type="file" accept=".xls,.xlsx,.zip" multiple hidden onChange={(event)=>previewPayrollFiles(event.target.files)} /><button className="btn primary" disabled={busy || data.close?.isLocked} onClick={() => payrollInput.current?.click()}>Resmi Bordro XLS/XLSX</button><button className="btn" onClick={() => openDocument()}>Evrak Yükle</button><button className="btn" onClick={() => setModal("izinFis")}>İzin Formu</button><button className="btn" onClick={() => setModal("kidemCikti")}>Ayrılış Ödeme Özeti</button><button className="btn orange" disabled={busy} onClick={() => runClose("CHECK")}>Ay Sonu Kontrol</button><button className={`btn ${data.close?.isLocked ? "primary" : "red"}`} disabled={busy} onClick={() => runClose(data.close?.isLocked ? "UNLOCK" : "LOCK")}>{data.close?.isLocked ? "Kilidi Aç" : "Ayı Kilitle"}</button></div></div>
         <div className="sumgrid short">{summaryBox("Bordro satiri", safeList(data.sgkRows).length)}{summaryBox("Eslesen personel", safeList(data.sgkRows).filter((row)=>row.employeeId).length,"green")}{summaryBox("SGK gun",safeList(data.sgkRows).reduce((sum,row)=>sum+num(row.sgkDays),0))}{summaryBox("Resmi net",money(safeList(data.sgkRows).reduce((sum,row)=>sum+num(row.net),0)))}{summaryBox("Yeni giris",safeList(data.sgkRows).filter((row)=>row.hireDate?.startsWith(period)).length,"orange")}{summaryBox("Cikis",safeList(data.sgkRows).filter((row)=>row.exitDate?.startsWith(period)).length,"red")}</div>
         <div className="card sgk-payroll-card"><div className="ch"><div><b>Onayli Resmi Bordro Verisi</b><span>Net Istihkak banka listesine, SGK gun puantaj kontrolune aktarilir.</span></div><button className="btn" onClick={()=>go("bordro")}>Son Bordroya Git</button></div><div className="tw"><table><thead><tr><th>Personel</th><th>TC</th><th>Giris</th><th>Cikis</th><th>SGK Gun</th><th>Normal Kazanc</th><th>Toplam Kazanc</th><th>SGK Matrah</th><th>SGK Primi</th><th>Vergi</th><th>Net Istihkak</th><th>Kaynak</th></tr></thead><tbody>{safeList(data.sgkRows).map((row)=><tr key={row.id}><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.normalEarning)}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.sgkBase)}</td><td className="money">{money(row.sgkPremium)}</td><td className="money">{money(num(row.incomeTax)+num(row.stampTax))}</td><td className="money">{money(row.net)}</td><td>{row.source?.sourceFile||data.sgkImport?.fileName||"-"}</td></tr>)}<EmptyRow show={!safeList(data.sgkRows).length} colSpan={12} text="Bu donem icin onayli bordro yok. Bir veya birden cok XLS dosyasi yukleyin." /></tbody></table></div></div>
         <div className="layout2"><div className="card"><div className="ch"><div><b>Evrak / Belge Baglantilari</b><span>Yuklenen belgeler burada listelenir.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Belge Turu</th><th>Dosya</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{filteredDocuments.map((doc) => <tr key={doc.id}><td>{employees.find((item) => item.id === doc.employeeId)?.fullName || "-"}</td><td>{doc.documentType || "-"}</td><td>{doc.fileName || "-"}</td><td>{doc.date || doc.createdAt || "-"}</td><td>{doc.note || doc.storagePath || "-"}</td><td><span className="badge green">{doc.status || "Kayitli"}</span></td><td><button className="btn" onClick={async () => { try { await downloadIkAdvancedDocument(doc.id, doc.fileName || "ik-evrak"); setNotice("Evrak indirildi."); } catch (error) { setNotice(error?.message || "Evrak indirilemedi."); } }}>İndir</button></td></tr>)}<EmptyRow show={!filteredDocuments.length} colSpan={7} text="Filtreye uygun kayıtlı evrak yok." /></tbody></table></div></div><div className="card"><div className="ch"><div><b>Eksik Evrak Kontrolu</b><span>Bordro loglari burada gorunmez.</span></div></div><div className="tw"><table><thead><tr><th>Personel</th><th>Eksik Belge</th><th>Tarih</th><th>Not</th><th>Durum</th><th>Islem</th></tr></thead><tbody>{employees.filter((employee) => visibleDocumentEmployeeIds.has(employee.id) && !docsFor(employee).length).map((employee) => <tr key={employee.id}><td>{employee.fullName}</td><td>Personel evragi</td><td>{period}</td><td>Evrak baglantisi yok</td><td><span className="badge orange">Eksik</span></td><td><button className="btn" onClick={() => openDocument(employee)}>Yukle</button></td></tr>)}<EmptyRow show={!employees.some((employee) => visibleDocumentEmployeeIds.has(employee.id) && !docsFor(employee).length)} colSpan={6} text="Filtreye uygun eksik evrak görünmüyor." /></tbody></table></div></div></div>
@@ -3490,6 +3613,38 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         }));
       };
 
+      const applyOfficialBankSuggestion = () => {
+        const employee = employees.find((item) => item.id === modalDraft.id);
+        if (!employee) return;
+        const net = calcRow({
+          salary: finalEditor.salary, road: finalEditor.road, extra: finalEditor.extra,
+          overtime: finalEditor.overtime, advance: finalEditor.advance,
+          deduction: finalEditor.deduction, garnishment: finalEditor.garnishment,
+        }).net;
+        if (employee.sgkFollow === true) {
+          if (!data.sgkImport || !employee.sgkImportVersion || employee.sgkNet === undefined || employee.sgkNet === null) {
+            setModalDraft((old) => ({ ...old, formMessage: "Onaylı resmî SGK bordrosunda bu personelin Net İstihkak değeri bulunmuyor; banka tutarı uydurulmadı." }));
+            return;
+          }
+          const official = round(num(employee.sgkNet));
+          if (official < 0 || official > net) {
+            setModalDraft((old) => ({ ...old, formMessage: "Resmî Net İstihkak KY ERP net hakedişi aşıyor veya geçersiz. Kesin ödeme kaydından önce farkı inceleyin." }));
+            return;
+          }
+          setModalDraft((old) => ({ ...old,
+            finalEditor: { ...old.finalEditor, bank: official, cash: round(net-official), paymentType: official > 0 && official < net ? "BANKA_ELDEN" : official > 0 ? "Banka" : "Elden" },
+            formMessage: "Resmî Net İstihkak banka önerisine aktarıldı; kalıcı kart henüz değişmedi. Kaydetmeden önce kontrol edin.",
+          }));
+        } else if (employee.sgkFollow === false) {
+          setModalDraft((old) => ({ ...old,
+            finalEditor: { ...old.finalEditor, bank: 0, cash: net, paymentType: "Elden" },
+            formMessage: "SGK dışı personel için banka 0 / elden net önerisi hazır. Yetkili ödeme kurallarını kontrol edip açıkça kaydedin.",
+          }));
+        } else {
+          setModalDraft((old) => ({ ...old, formMessage: "Personelin SGK durumu tanımlanmamış; ödeme dağılımı önerilmedi." }));
+        }
+      };
+
       const editor = modalDraft.movementEditor || {};
       const previewMovementAmount = editor.adjustmentType === "Mesai"
         ? overtimeAmountFor(modalDraft.id, editor.hourOrDay, editor.overtimeMultiplier)
@@ -3500,7 +3655,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         : `${MONTHS[month - 1]} ${year} · Salt okunur kontrol görünümü`;
 
       return (
-        <Modal title={modalTitle} sub={modalSub} size="wide prepayroll-dialog" onClose={() => setModal(null)}>
+        <Modal title={modalTitle} sub={modalSub} size="wide prepayroll-dialog" onClose={() => { setModal(null); setMonthlySetup(null); }}>
           <div className={`payroll-final-layout ${editableMode ? "final-control-mode" : "entry-control-mode"}`}>
             <aside className="payroll-person-rail">
               <div className="payroll-person-rail-head">
@@ -3530,7 +3685,8 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               {editableMode ? (
                 <div className="modal-section-grid payroll-control-grid final-manual-grid">
                   <div className="modal-section final-manual-card">
-                    <h3>{finalMode ? "Son Kontrol" : "Bordro Öncesi Giriş Kontrolü"} · Düzenlenebilir</h3>
+                    <h3>{monthlySetup?.active ? "Bu Ayın Maaşlarını Hazırla" : finalMode ? "Son Kontrol" : "Bordro Öncesi Giriş Kontrolü"} · Düzenlenebilir</h3>
+                    {monthlySetup?.active && <div className="warnline ok"><b>Sıralı kontrol: {(monthlySetup.reviewed || []).length} / {monthlySetup.total} personel kaydedildi.</b> Bu kişi için maaş, sabit EK, yol, mesai, avans, özel kesinti ve icra/haczi kontrol edin. Banka + Elden = Net eşleşince <b>Kaydet ve Sonraki</b> ile ilerleyin. Ödeme yapılmış sayılmaz.</div>}
                     <div className="form">
                       <Field label="Maaş"><input type="number" min="0" value={finalEditor.salary ?? ""} onChange={(event) => setFinalValue("salary", event.target.value)} /></Field>
                       <Field label="Yol"><input type="number" min="0" value={finalEditor.road ?? ""} onChange={(event) => setFinalValue("road", event.target.value)} /></Field>
@@ -3550,8 +3706,10 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     </div>
                     <div className="warnline">Bu ayın bordrosu ayrı kaydedilir. Kalıcı maaş/ödeme planını değiştirmek için alttaki ayrı düğmeyi kullanın.</div>
                     <div className="row-actions">
+                      {monthlySetup?.active && <button type="button" className="btn" disabled={busy} onClick={applyOfficialBankSuggestion}>SGK Durumuna Göre Banka / Elden Öner</button>}
                       <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
-                      <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false)}>{busy ? "Kaydediliyor" : "Yalnız Bu Ayı Kaydet"}</button>
+                      {!monthlySetup?.active && <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false)}>{busy ? "Kaydediliyor" : "Yalnız Bu Ayı Kaydet"}</button>}
+                      {monthlySetup?.active && <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false, true)}>{busy ? "Kaydediliyor" : "Kaydet ve Sonraki Personel →"}</button>}
                     </div>
                     <div className="ik-permanent-card-action">
                       <label>Personel kartı geçerlilik tarihi <input type="date" value={modalDraft.cardEffectiveDate || ""} disabled={busy} onChange={(event) => setModalDraft((old) => ({ ...old, cardEffectiveDate: event.target.value }))} /></label>
@@ -3562,6 +3720,11 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
                   <div className="modal-section payroll-smart-check final-result-card">
                     <h3>Son Bordro Sonucu</h3>
+                    {monthlySetup?.active && <div className="warnline"><b>Resmî SGK Bordrosu:</b> {employees.find((item)=>item.id===modalDraft.id)?.sgkFollow === true
+                      ? data.sgkImport && employees.find((item)=>item.id===modalDraft.id)?.sgkImportVersion
+                        ? `Muhasebe Net İstihkak: ${money(employees.find((item)=>item.id===modalDraft.id)?.sgkNet)}`
+                        : "Bu dönem onaylı resmî net bulunamadı; banka tutarını tahmin etmeyin."
+                      : "SGK dışı / resmî bordro satırı yok."}</div>}
                     <div className="import-summary payment-summary">
                       <div><span>Maaş</span><b>{money(finalEditor.salary)}</b></div>
                       <div><span>Yol</span><b>{money(finalEditor.road)}</b></div>
@@ -3749,13 +3912,44 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       </Modal>
     );
 
+    if (modal === "sgkMapping") {
+      const review = sgkMappingReview || {};
+      const mapping = review.mapping || { columns: {} };
+      const fields = [
+        ["name","Personel Adı Soyadı",true],["net","Resmî Net İstihkak",true],
+        ["identity","T.C. Kimlik No"],["code","Personel Kodu / Sicil"],
+        ["days","SGK Gün"],["gross","Toplam Kazanç / Brüt"],
+        ["normal","Normal Kazanç"],["other","Diğer Kazanç"],["base","SGK Matrahı"],
+        ["sgkPremium","SGK Primi"],["unemployment","İşsizlik Primi"],
+        ["incomeTax","Gelir Vergisi"],["stampTax","Damga Vergisi"],
+        ["specialDeduction","Özel Kesinti"],["hire","İşe Giriş Tarihi"],
+        ["exit","İşten Çıkış Tarihi"],
+      ];
+      return (
+        <Modal title="Muhasebe Excel Şablonunu Tanıt" sub="Yeni program / farklı muhasebeci · sütunları bir kez seçin, sonra aynı şablon otomatik tanınır" size="wide" onClose={() => setModal(null)}>
+          <div className="warnline warn">Dosya: {review.fileName} · Sayfa: {review.sheetName || "-"} · Başlık satırı: {Number(review.headerRow)+1}. Tahmin edilemeyen Net İstihkak ile bordro onaylanmaz.</div>
+          <div className="form">
+            {fields.map(([field,label,required]) => <Field label={label} half key={field}><select value={mapping.columns?.[field] || ""} onChange={(event)=>setSgkMappingReview((old)=>({
+              ...old, mapping: { ...old.mapping, columns: { ...old.mapping.columns, [field]: event.target.value } },
+            }))}>
+              <option value="">{required ? "Zorunlu sütunu seçin" : "Dosyada bulunmuyor"}</option>
+              {(review.headers || []).map((header,index)=>header?<option key={index} value={header}>{index+1}. {header}</option>:null)}
+            </select></Field>)}
+          </div>
+          <div className="warnline">Yalnız sütun başlıkları tarayıcıda hatırlanır. Personel adı, kimlik numarası, maaş veya tutar şablon ayarına kaydedilmez.</div>
+          <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={applySgkMapping}>Eşleştir ve Excel'i Yeniden Oku</button>} />
+        </Modal>
+      );
+    }
+
     if (modal === "sgkImport") {
       const rows = safeList(sgkPreview?.rows);
       const selectedRows = rows.filter((row) => row.selected && row.employeeId);
       return (
         <Modal title="Resmi Bordro On Analizi" sub="XLS/XLSX eslestirme - yalnizca secili sirket personeli aktarilir" size="wide" onClose={() => setModal(null)}>
           <div className="import-summary"><div><span>Dosya</span><b>{safeList(sgkPreview?.files).length}</b></div><div><span>Okunan satir</span><b>{rows.length}</b></div><div><span>Aktarilacak</span><b>{selectedRows.length}</b></div><div><span>Haric / eslesmeyen</span><b>{rows.length-selectedRows.length}</b></div><div><span>Banka toplam</span><b>{money(selectedRows.reduce((sum,row)=>sum+num(row.net),0))}</b></div></div>
-          <div className="warnline ok">Secilmeyen veya personel kartiyla eslesmeyen satirlar puantaj, bordro ve banka odemesine aktarilmaz.</div>
+          <div className="warnline ok">Seçilmeyen, eşleşmeyen veya Net İstihkak değeri geçersiz satırlar aktarılmaz. Resmî bordro verisi banka ödemesiyle daha sonra tek tek mutabıklaştırılabilir.</div>
+          {!!safeList(sgkPreview?.supplementalPdfs).length && <div className="warnline">ZIP paketinde {safeList(sgkPreview?.supplementalPdfs).length} ücret pusulası PDF'i var. PDF'ler maaş tutarı olarak tekrar sayılmadı.</div>}
           <div className="tw import-table"><table><thead><tr><th>Sec</th><th>Dosya / Isyeri</th><th>Bordrodaki Kisi</th><th>TC Kimlik</th><th>Sirket Personeli</th><th>Giris</th><th>Cikis</th><th>Gun</th><th>Toplam Kazanc</th><th>Net Istihkak</th><th>Durum</th></tr></thead><tbody>{rows.map((row,index)=><tr key={`${row.sourceFile}-${row.rowNumber}`}><td><input type="checkbox" checked={Boolean(row.selected&&row.employeeId)} disabled={!row.employeeId} onChange={(event)=>updateSgkPreviewRow(index,{selected:event.target.checked})} /></td><td><span className="person">{row.sourceFile}</span><span className="code">{row.workplaceNo||row.workplace||"-"}</span></td><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td><select value={row.employeeId||""} onChange={(event)=>updateSgkPreviewRow(index,{employeeId:event.target.value||null,selected:Boolean(event.target.value),status:event.target.value?"MANUEL_ESLESTI":"ESLESMEDI"})}><option value="">Haric / eslesmedi</option>{employees.map((employee)=><option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.employeeId?"green":"orange"}`}>{row.employeeId?"Eslesmis":"Haric"}</span></td></tr>)}</tbody></table></div>
           <ModalFooter onClose={() => setModal(null)} actions={<><button className="btn" onClick={()=>setSgkPreview((old)=>({...old,rows:safeList(old?.rows).map((row)=>({...row,selected:Boolean(row.employeeId)}))}))}>Eslesenleri Sec</button><button className="btn primary" disabled={busy} onClick={confirmPayrollFiles}>{busy?"Kaydediliyor":"Secili Personeli Aktar"}</button></>} />
         </Modal>

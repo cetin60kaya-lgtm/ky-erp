@@ -143,7 +143,7 @@ export async function previewIkAdvancedSgk(file, params = {}) {
   const form = new FormData();
   form.append("file", file);
   Object.entries(params).forEach(([key, value]) => {
-    if (value !== undefined && value !== null && value !== "") form.append(key, value);
+    if (value !== undefined && value !== null && value !== "") form.append(key, typeof value === "object" ? JSON.stringify(value) : String(value));
   });
   return unwrap(await apiUpload("/ik/advanced/sgk/preview", form));
 }
