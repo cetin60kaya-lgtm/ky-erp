@@ -12,6 +12,7 @@ import {
 } from "../../services/mailApi";
 import { useAuth } from "../../context/AuthContext";
 import "./AdminMailConnections.css";
+import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 
 const providerLabel = (value) => ({
   MICROSOFT_365: "Microsoft 365 / Outlook",
@@ -129,6 +130,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
 
   return <div className="mail-admin-page">
     <section className="mail-admin-hero"><div><small>BAĞLANTILAR & DEPOLAMA / E-POSTA HESAPLARI</small><h2>Kurumsal Mail Bağlantıları</h2><p><b>{companyName}</b> için Outlook / Microsoft 365 ve Gmail posta kutuları burada bağlanır, onaylanır ve varsayılanları seçilir. Günlük kullanım <b>Mail & Dosyalar</b> bölümündedir.</p></div><button type="button" onClick={()=>openModule?.("iletisim",{tabKey:"mail-gelen"})}>Mail Merkezini Aç</button></section>
+    <IntegrationFlowSteps kind="MAIL" stage={accounts.some((row)=>String(row.status||"").toUpperCase()==="ACTIVE" && Boolean(row.provider_connected??row.providerConnected)) ? 3 : accounts.length ? 2 : 1} />
+    <p className="mail-admin-flow-note">Outlook ve Gmail şifresi KY ERP'ye girilmez. Sağlayıcı hesabı Microsoft/Google OAuth ekranında onaylanır; ardından posta kutusunun <b>Aktif + OAuth bağlı</b> olduğu kontrol edilir. Bağlı hesap tek başına mail gönderme izni değildir.</p>
     {notice?<div className={`mail-admin-notice ${notice.startsWith("Hata:")?"bad":"ok"}`}>{notice}</div>:null}
     <section className="mail-admin-stats"><div><span>Toplam Hesap</span><strong>{stats.total}</strong><small>Kişisel + bölüm</small></div><div><span>Aktif</span><strong>{stats.active}</strong><small>Kullanıma hazır</small></div><div><span>Onay Bekleyen</span><strong>{stats.pending}</strong><small>Firma sahibi / Süper Yönetici</small></div><div><span>OAuth Bağlı</span><strong>{stats.connected}</strong><small>Provider doğrulandı</small></div></section>
 
