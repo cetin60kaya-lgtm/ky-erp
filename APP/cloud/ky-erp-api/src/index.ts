@@ -6,6 +6,7 @@ import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes
 import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
 import { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
+import { measureIsnetWorkerEgress } from "./isnet-egress-diagnostic";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -1109,6 +1110,27 @@ async function buildDispatchControl(c: Context<AppEnv>) {
 app.get("/api/health", (c) =>
   c.json({ ok: true, service: "ky-erp-api", database: "d1", release: "accounting-write-hotfix-20260923" }),
 );
+
+// Public read-only fixed-target diagnostic, not an authentication or SSRF endpoint.
+app.get("/api/health/isnet-egress", async (c) => {
+  const cacheKey = new Request(new URL("/api/health/isnet-egress", c.req.url).toString());
+  const cache = typeof caches !== "undefined" ? caches.default : null;
+  try {
+    const hit = await cache?.match(cacheKey);
+    if (hit) return hit;
+  } catch { /* Cloudflare cache is optional for local tests. */ }
+  const targets = await measureIsnetWorkerEgress(fetch);
+  const reply = new Response(JSON.stringify({
+    ok: true, source: "cloudflare-worker", credentialTested: false,
+    sessionVerified: false, observedAt: new Date().toISOString(), targets,
+  }), { status: 200, headers: {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "public, max-age=300, s-maxage=300",
+    "X-Content-Type-Options": "nosniff",
+  } });
+  try { await cache?.put(cacheKey, reply.clone()); } catch { /* best-effort */ }
+  return reply;
+});
 
 app.get("/api/health/db", async (c) => {
   const migration0046 = await ensureAccountingCanonicalReportControls0046(c.env.DB);
