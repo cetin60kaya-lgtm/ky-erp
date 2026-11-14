@@ -9,12 +9,12 @@ test("Tüm entegrasyon ekranlarında bağlantı adımları tek bileşendir",()=>
   assert.match(common,/MAIL: \["Posta hesabı tanımla"/);
   assert.match(common,/STORAGE: \["Dosya sağlayıcısını seç"/);
   assert.match(read("../muhasebe/EBelgeIntegrationsWorkspace.jsx"),/<IntegrationFlowSteps kind="ISNET"/);
-  assert.match(read("../../../admin/AdminMailConnectionsV2.jsx"),/<IntegrationFlowSteps kind="MAIL"/);
-  assert.match(read("../../../admin/AdminStorageCenter.jsx"),/<IntegrationFlowSteps kind="STORAGE"/);
+  assert.match(read("../../admin/AdminMailConnectionsV2.jsx"),/<IntegrationFlowSteps kind="MAIL"/);
+  assert.match(read("../../admin/AdminStorageCenter.jsx"),/<IntegrationFlowSteps kind="STORAGE"/);
 });
 
 test("Mail OAuth güvenliği korunur: şifre aktarımı ve sahte bağlandı etiketi yok",()=>{
- const mail=read("../../../admin/AdminMailConnectionsV2.jsx");
+ const mail=read("../../admin/AdminMailConnectionsV2.jsx");
  assert.match(mail,/startMicrosoftMailOAuth/);
  assert.match(mail,/startGoogleMailOAuth/);
  assert.match(mail,/Aktif \+ OAuth bağlı/);
