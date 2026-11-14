@@ -11,6 +11,10 @@ export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
 export const getIsnetPortalHealth = () =>
   apiGet("/isnet/provider-login-health", { timeoutMs: 14_000 }).then(unwrap);
 
+// Network diagnostics, not supplier credentials or authenticated API access.
+export const getIsnetEgressHealth = () =>
+  apiGet("/health/isnet-egress", { timeoutMs: 14_000 }).then(unwrap);
+
 export const testIsnetSettings = (payload) =>
   apiPost("/isnet/settings/test", payload, {
     suppressUnauthorized: true,
