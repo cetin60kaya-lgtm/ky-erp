@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 14.11.2026 — Sabit EK maaş ve bordro zinciri / PR #563
+
+- İK Aylık: referanslı kişide referans maaş + personel kartındaki sabit EK, referanssızda ana maaş + sabit EK. Daha önceki referanslı EK=0 fakat gerçek maaş farkı bulunan kayıtlar için geriye dönük okumada fark kurtarılır. Kart düzenlemesinde EK değiştirilebilir; hedef maaş+yol+EK için `EK ile Düzle` eylemi EK'yi hesaplayıp yalnız kullanıcı Kaydet dediğinde kalıcılaştırır.
+- Backend yeni açık ayda kaynak kart/referans daha sonra güncellenmişse eski aylık `premium_amount` bu yeni değeri gizleyemez; ödenmiş/kapalı ay immutable. Kart EK/referans geçerlilik tarihli geçmişte ayrı izlenir. Bordro override dahil tek maaş/EK hesabı.
+- Çıktı: önceki PR #557 10'lu fiş ve bordro toplamları aynı kaynak projeksiyonunu kullanır; yol normal satır, EK tek kesilebilir kupon, nete tek kez dahil.
+- Gerçek Kasım Cuma ve Ali Akkaya tutarları yetkili D1 okuması ile henüz kişi bazında teyit edilmedi; üretim kişisel verilerine migration/backfill veya yazma yapılmadı.
+
+
 ## 14.11.2026 — Muhasebe/e-Belge entegrasyon ve manuel UBL canlı yayın (PR #562)
 
 - **Amaç:** Tek kullanıcı bağlantı düzeni ve günlük belge güvenliği. İşNet ekranındaki adım bileşeni Microsoft 365/Gmail OAuth ile Google Drive/OneDrive/SharePoint servis ekranına aynı 3-adım görsel düzeniyle bağlandı. Sağlayıcıların gerçek giriş yöntemleri birbirine karıştırılmıyor; OAuth/portal ekranı veya önizleme gerçek veri senkronizasyonu PASS sayılmıyor.
