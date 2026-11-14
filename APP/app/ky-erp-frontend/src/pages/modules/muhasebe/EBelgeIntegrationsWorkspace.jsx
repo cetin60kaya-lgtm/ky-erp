@@ -37,6 +37,7 @@ import {
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./eBelgeIntegrationsWorkspace.css";
 import IntegrationFlowSteps from "../common/IntegrationFlowSteps";
+import { saveIsnetBrowserCredentials, loadIsnetBrowserCredentials } from "./isnetBrowserVault";
 
 const SECTIONS = [
   ["connection", "Bağlantı", ShieldCheck],
@@ -110,6 +111,7 @@ export default function EBelgeIntegrationsWorkspace({
   const [showPassword, setShowPassword] = useState(false);
   const [connectionTest, setConnectionTest] = useState(null);
   const [portalHealth, setPortalHealth] = useState(null);
+  const [vaultNotice, setVaultNotice] = useState(null);
   const [connection, setConnection] = useState({
     username: "",
     password: "",
@@ -238,6 +240,38 @@ export default function EBelgeIntegrationsWorkspace({
       companyId: "",
       sessionReady: key === "password" ? current.sessionReady : false,
     }));
+  }
+
+  async function saveInBrowser() {
+    if (busy) return;
+    setBusy("vault-save");
+    setVaultNotice(null);
+    try {
+      await saveIsnetBrowserCredentials(connection.username, connection.password);
+      setVaultNotice({ tone: "warning", text: "Kaydetme isteği Chrome'a iletildi. Tarayıcının parola yöneticisindeki onayı kontrol edin; İşNet bağlantısı hâlâ doğrulanmadı." });
+    } catch (error) {
+      setVaultNotice({ tone: "error", text: error?.message || "Tarayıcıya kaydetme başarısız." });
+    } finally { setBusy(""); }
+  }
+
+  async function restoreFromBrowser() {
+    if (busy) return;
+    setBusy("vault-load");
+    setVaultNotice(null);
+    try {
+      const record = await loadIsnetBrowserCredentials(connection.username);
+      if (!record) {
+        setVaultNotice({ tone: "warning", text: "Tarayıcıda kayıtlı İşNet hesabı seçilmedi." });
+        return;
+      }
+      setConnection((current) => ({ ...current, username: record.username, password: record.password,
+        companyId: "", companies: [], sessionReady: false }));
+      setConnectionTest(null);
+      setShowPassword(false);
+      setVaultNotice({ tone: "success", text: "Kayıtlı bilgiler alanlara dolduruldu; İşNet bağlantısı ayrıca doğrulanmalıdır." });
+    } catch (error) {
+      setVaultNotice({ tone: "error", text: error?.message || "Parola yöneticisinden bilgiler alınamadı." });
+    } finally { setBusy(""); }
   }
 
   async function checkPortalHealth() {
@@ -441,7 +475,7 @@ export default function EBelgeIntegrationsWorkspace({
       {section === "connection" ? <section className="ism-grid two">
         <article className="ism-card ism-connection-card">
           <div className="ism-card-head">
-            <div><h2>İşNet Portal Bağlantısı</h2><p>Bilgileri burada girin. Tek kez doğrulayın, yetkili firmayı seçip kaydedin. Şifre saklanmaz.</p></div>
+            <div><h2>İşNet Portal Bağlantısı</h2><p>Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz.</p></div>
             <span className={connectionTest?.saved ? "ready" : "warning"}>
               {connectionTest?.saved ? "Firma kaydedildi" : connectionTest ? "Giriş doğrulandı" : "Doğrulama bekliyor"}
             </span>
@@ -449,12 +483,12 @@ export default function EBelgeIntegrationsWorkspace({
           <IntegrationFlowSteps kind="ISNET" stage={connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />
           <div className="ism-form-grid">
             <Field label="Kullanıcı adı / TCKN">
-              <input value={connection.username} autoComplete="username" disabled={!!busy} onChange={(event) => updateLoginField("username", event.target.value)} />
+              <input id="isnet-user" name="isnet-account" value={connection.username} autoComplete="section-isnet username" disabled={!!busy} onChange={(event) => updateLoginField("username", event.target.value)} />
             </Field>
             <Field label="Şifre">
               <div className="ism-password-control">
-                <input type={showPassword ? "text" : "password"} value={connection.password}
-                  autoComplete="current-password" disabled={!!busy}
+                <input id="isnet-password" name="isnet-password" type={showPassword ? "text" : "password"} value={connection.password}
+                  autoComplete="section-isnet current-password" disabled={!!busy}
                   placeholder={connection.sessionReady ? "Kayıtlı API oturumuyla şifresiz test edilebilir" : "İşNet şifresi"}
                   onChange={(event) => updateLoginField("password", event.target.value)} />
                 <button type="button" className="ism-password-toggle" disabled={!!busy}
@@ -477,6 +511,18 @@ export default function EBelgeIntegrationsWorkspace({
                 {connection.companies.map((row) => <option key={row.id} value={row.id}>{row.name || row.companyName} ({row.id})</option>)}
               </select>
             </Field>
+          </div>
+          <div className="ism-browser-vault">
+            <div className="ism-actions">
+              <button type="button" disabled={!!busy || !connection.username.trim() || !connection.password} onClick={() => void saveInBrowser()}>
+                <Save size={16} /> Kullanıcı Adı ve Şifreyi Kaydet
+              </button>
+              <button type="button" disabled={!!busy} onClick={() => void restoreFromBrowser()}>
+                <Eye size={16} /> Kayıtlı Bilgileri Doldur
+              </button>
+            </div>
+            <p className="ism-connection-help">Kayıt yalnız Chrome'un parola yöneticisinde, kyerp.net altında ayrı İşNet hesabı olarak tutulur. KY ERP sunucusuna kaydedilmez. Paylaşılan cihazda kullanmayın.</p>
+            {vaultNotice ? <p className={`ism-notice ${vaultNotice.tone}`} role={vaultNotice.tone === "error" ? "alert" : "status"}>{vaultNotice.text}</p> : null}
           </div>
           <p className="ism-connection-help">
             {connection.connectionMode === "portal"
