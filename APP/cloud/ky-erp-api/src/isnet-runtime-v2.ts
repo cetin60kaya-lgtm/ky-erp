@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { probeIsnetSessionHealth, verifiedCachedIsnetSession } from "./isnet-session-health";
 import { normalizeIsnetConnectionMode, checkedIsnetCompanySave } from "./isnet-connection-flow";
+import { probeIsnetPublicLogin } from "./isnet-portal-public-health";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
@@ -289,24 +290,38 @@ async function loginPortal(username: string, password: string) {
     }
   };
 
-  const loginPaths = ["/account/login/Login", "/Account/Login", "/account/login"];
+  // Public form availability is checked before credentials reach the provider.
+  // Canonical path was independently observed as HTTP 200 with an anti-forgery
+  // field from a Windows browser on 2026-11-14. Cloudflare egress is separate.
+  const loginPaths = ["/Account/Login", "/account/login/Login"];
   let loginPath = "";
   let loginHtml = "";
   let token = "";
+  let diagnostic = "FORM_MISSING";
   for (const candidate of loginPaths) {
     try {
       const response = await request(candidate);
+      if (!response.ok) {
+        diagnostic = `HTTP_${response.status}`;
+        if (response.status === 403 || response.status === 429) break;
+        continue;
+      }
       const html = await response.text();
       const nextToken = verificationToken(html);
-      if (response.ok && nextToken) {
+      if (nextToken) {
         loginPath = candidate;
         loginHtml = html;
         token = nextToken;
         break;
       }
-    } catch { /* next */ }
+      diagnostic = "TOKEN_MISSING";
+    } catch (error: any) {
+      diagnostic = ["AbortError","TimeoutError"].includes(text(error?.name)) ? "TIMEOUT" : "NETWORK_ERROR";
+    }
   }
-  if (!loginPath || !token) throw new Error("İşNet portal giriş ekranı açılamadı.");
+  if (!loginPath || !token) {
+    throw new Error(`İşNet giriş formu KY ERP sunucusundan alınamadı (${diagnostic}). Şifre doğrulaması başlamadı.`);
+  }
   const inputNames = [...loginHtml.matchAll(/<input[^>]*name=["']([^"']+)["']/gi)].map((m) => text(m[1])).filter(Boolean);
   const usernameField = inputNames.find((name) => /(identificationnumber|vkntckn|tckn|username|user_name)/i.test(name)) || "VknTckn";
   const passwordField = inputNames.find((name) => /(password|sifre|şifre)/i.test(name)) || "Password";
@@ -834,6 +849,17 @@ function intakeCapacity(row: Row) {
 }
 
 export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
+  // Tenant/auth middleware still applies. No provider cookie or password is
+  // read or returned. This checks only the public form over Worker egress.
+  app.get("/api/isnet/provider-login-health", async (c) => {
+    const result = await probeIsnetPublicLogin(fetch, `${PORTAL_BASE}/Account/Login`);
+    return c.json({ ok: true, success: true, data: {
+      ...result,
+      message: result.reachable
+        ? "İşNet'in giriş formuna KY ERP sunucusundan ulaşıldı; hesap girişi henüz doğrulanmadı."
+        : `KY ERP sunucusu İşNet giriş formunu doğrulayamadı (${result.status}${result.httpStatus ? ` / HTTP ${result.httpStatus}` : ""}). Şifrenizi değiştirmeyin veya tekrar tekrar giriş denemeyin.`,
+    } });
+  });
   const getSettings = async (c: Context<AppEnv>) => {
     const slug = slugOf(c);
     return c.json({ ok: true, success: true, data: publicSettings(await settingsRaw(c, slug)) });

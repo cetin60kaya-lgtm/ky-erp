@@ -20,6 +20,7 @@ import { fetchCompanies } from "../../../services/muhasebeService";
 import { fetchSharedModels } from "../../../services/desenService";
 import {
   getIsnetSettings,
+  getIsnetPortalHealth,
   saveIsnetSettings,
   testIsnetSettings,
 } from "../../../services/isnetApi";
@@ -108,6 +109,7 @@ export default function EBelgeIntegrationsWorkspace({
   const [notice, setNotice] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [connectionTest, setConnectionTest] = useState(null);
+  const [portalHealth, setPortalHealth] = useState(null);
   const [connection, setConnection] = useState({
     username: "",
     password: "",
@@ -135,6 +137,7 @@ export default function EBelgeIntegrationsWorkspace({
     setLoading(true);
     setNotice(null);
     setConnectionTest(null);
+    setPortalHealth(null);
     setShowPassword(false);
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
@@ -226,6 +229,7 @@ export default function EBelgeIntegrationsWorkspace({
 
   function updateLoginField(key, value) {
     setConnectionTest(null);
+    setPortalHealth(null);
     setNotice(null);
     setConnection((current) => ({
       ...current,
@@ -234,6 +238,23 @@ export default function EBelgeIntegrationsWorkspace({
       companyId: "",
       sessionReady: key === "password" ? current.sessionReady : false,
     }));
+  }
+
+  async function checkPortalHealth() {
+    if (busy) return;
+    setBusy("probe");
+    setNotice(null);
+    try {
+      const status = await getIsnetPortalHealth();
+      setPortalHealth(status);
+      setNotice({ tone: status.reachable ? "success" : "error", text: status.message ||
+        "İşNet'in giriş sayfası erişim durumu belirlenemedi." });
+    } catch (error) {
+      setPortalHealth(null);
+      setNotice({ tone: "error", text: error?.message || "Şifresiz portal erişim kontrolü başarısız." });
+    } finally {
+      setBusy("");
+    }
   }
 
   async function testConnection() {
@@ -247,6 +268,15 @@ export default function EBelgeIntegrationsWorkspace({
     setNotice(null);
     setConnectionTest(null);
     try {
+      if (connection.connectionMode === "portal") {
+        // Do not send credentials to an unreachable Worker-to-provider form.
+        const status = await getIsnetPortalHealth();
+        setPortalHealth(status);
+        if (status?.reachable !== true) {
+          throw new Error(status?.message ||
+            "İşNet portalı KY ERP sunucusundan açılamadı. Şifre doğrulaması başlatılmadı.");
+        }
+      }
       const result = await testIsnetSettings({
         username,
         password: connection.password,
@@ -453,7 +483,16 @@ export default function EBelgeIntegrationsWorkspace({
               ? "Portal doğrulaması firma seçimini sağlar; kalıcı belge çekme için İşNet API bağlantısı ayrıca doğrulanmalıdır."
               : "API bağlantısı doğrulanırsa yetkili firma seçimi ve belge senkronizasyonu için oturum kullanılabilir."}
           </p>
+          {portalHealth ? <p className="ism-connection-help" role="status">
+            <strong>Şifresiz sunucu kontrolü:</strong> {portalHealth.reachable
+              ? "İşNet giriş formu erişilebilir; hesap henüz doğrulanmadı."
+              : `Erişim sorunu: ${portalHealth.status}${portalHealth.httpStatus ? ` (HTTP ${portalHealth.httpStatus})` : ""}`}
+          </p> : null}
           <div className="ism-actions">
+            <button type="button" disabled={!!busy} onClick={() => void checkPortalHealth()}>
+              {busy === "probe" ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}
+              Sunucu Erişimini Kontrol Et (Şifresiz)
+            </button>
             <button type="button" disabled={!!busy || !connection.username.trim() || (!connection.password && !connection.sessionReady)} onClick={testConnection}>
               {busy === "test" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
               {busy === "test" ? "İşNet doğrulanıyor..." : "1. Bağlantıyı Doğrula"}
