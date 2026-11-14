@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 14.11.2026 — İşNet KY ERP içinden tek doğrulama / firma seçimi (PR #561)
+
+- **Kullanıcı kararı:** İşNet kullanıcı adı ve şifre yalnız KY ERP e-Belge → Entegrasyonlar ekranında girilir. Ayrı portala yönlendirme, tarayıcı çerezi/OTP kopyalama ve şifreyi D1'e kaydetme yok. Akış: giriş bilgileri → sağlayıcı bağlantı testi → yetkili firma seçimi → **şifresiz, ikinci login'siz** firma kaydı. Parola göz ikonu ile isteğe bağlı göster/gizle; işlem süresince bekleme ve açık hata.
+- **Backend:** `isnet-connection-flow.ts` hesap/mod/10 dk test geçerliliği/yetkili firma doğrulaması. `isnet-runtime-v2.ts` seçilen portal veya API modunu uygular, otomatik ikinci login yapmaz; portal toplam 25 sn süre sınırı, ek OTP/MFA gerekiyorsa başarı sayılmaz. Portal firma doğrulaması API ile otomatik HKN/DDM çekiminin PASS kanıtı değildir.
+- **GitHub:** PR #561 squash merge `0fca4e9a70c32313a16c7fc893edc0d98018deaa`; CI `43615641213` Worker typecheck/unit/integration/build ve frontend lint/test/build SUCCESS. Kaynakta 6 dosya değişti (4 iş/test alanı, CSS, JSX), gizli bilgi, müşteri verisi, D1 şema/veri migrasyonu veya resmî gönderim yok.
+- **Cloudflare:** aynı committe Pages `624a8096-35a9-4abd-b350-82570aaa6be1` **success**; Worker Builds `b691118a-f140-4ba9-8e39-abfa56ea74d4` **success**, Worker Version ID `0c2ffa9b-b885-4beb-b3a0-0f69dc918fc5`. Bu, yayın kanıtıdır; gerçek İşNet hesabı sağlayıcı bağlantı testinin PASS olması değildir.
+- **Gerçek kullanıcı sekmesi:** açık Chrome /e-belge/entegrasyonlar oturumu yeni yayın sonrası henüz sayfa yenilemedi; eski `Bağlantıyı Test Et / Firmayı Seç ve Kaydet` metinleri görülüyor. Ctrl+F5 ile yeni frontend yüklenip kullanıcı şifre/oturumunu **sohbete taşımadan** bağlantıyı test etmeli. İlgili portal/kod/OTP yetkisi sağlayıcı oturumuna bağlı ve burada doğrulanmış değil.
+- **Sıradaki sınır:** Yetkili firma seçildikten sonra portal modunda yalnız firma kaydı; gerçek HKN/DDM live sync için API token ile read-only provider probe (GetRecipientList) ve 2 örnek belge karşılaştırması. Outlook OAuth, Drive File Hub binding ve mali son onay ayrı P0.
+
+
 ## 13.11.2026 — Muhasebe haftalık cari tenant koruması / PR #560
 
 - Haftalık müşteri XLSX/CSV `/api/muhasebe/weekly-cari-preview` önizleme rotasındaki `COMPANY_ADMIN` için firma eşleşmesi atlama hatası giderildi. Global `ADMIN/SUPER_ADMIN` dışında istenen tenant, yetkili kullanıcının ana firmasıyla eşleşir; ASCII firma kodu Türkçe I/ı dönüşümünden etkilenmez.
