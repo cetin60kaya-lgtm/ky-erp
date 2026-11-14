@@ -1635,10 +1635,10 @@ async function advancedMonth(c: Context<AppEnv>) {
   });
 }
 
-async function advancedPayroll(c: Context<AppEnv>) {
+async function advancedPayroll(c: Context<AppEnv>, selectedYear?: number, selectedMonth?: number) {
   const companyId = companyIdOf(c);
-  const year = number(c.req.query("year")) || new Date().getFullYear();
-  const month = number(c.req.query("month")) || new Date().getMonth() + 1;
+  const year = selectedYear || number(c.req.query("year")) || new Date().getFullYear();
+  const month = selectedMonth || number(c.req.query("month")) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
   const periodEnd = `${period}-${String(new Date(year, month, 0).getDate()).padStart(2, "0")}`;
   const [currentEmployees, saved, adjustments, cards, historyRows, closeRows, monthlyControlLogs] = await Promise.all([
@@ -2355,7 +2355,13 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   if (!updatePersonnelCard && body.allowMonthlyZeroExtra === true && desired.extra !== 0) {
     return error(c, 400, "MONTHLY_EXTRA_OVERRIDE_INVALID", "Aylık EK sıfırlama izni yalnız EK=0 olduğunda kullanılabilir.");
   }
-    const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
+  // A permanent EK cannot be silently erased by a stale month-only form.
+  // Month-only EK=0 needs the explicit confirmation flag; card editing is separate.
+  const permanentExtra = resolveReferencePay(employee.salary, referenceEmployee?.salary, currentCard?.extra_payment_amount, Boolean(referenceId)).extra;
+  if (!updatePersonnelCard && permanentExtra > 0 && desired.extra === 0 && body.allowMonthlyZeroExtra !== true) {
+    return error(c, 409, "MONTHLY_EXTRA_ZERO_CONFIRM_REQUIRED", "Personel kartında kalıcı EK vardır. Yalnız bu ay için EK=0 işlemini Son Kontrol ekranında ayrıca onaylayın.");
+  }
+  const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
   const { earnings, net } = calculatePayrollAmounts(desired);
   const paymentDiff = Math.round((desired.bank + desired.cash - net) * 100) / 100;
   if (Math.abs(paymentDiff) > 0.01) {
@@ -2681,6 +2687,58 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   });
 }
 
+// A payroll cannot become PAID from an outdated, unbalanced or already-paid
+// snapshot. Keep this pure so the same rule is verified without production D1.
+export function validatePayrollBatchTransition(savedRows: Row[], employeeIds: string[], projectionLines: Row[], targetStatus: unknown): { code: string; message: string } | null {
+  const status = upper(targetStatus);
+  if (status !== "CALCULATED" && status !== "PAID") {
+    return { code: "PAYROLL_STATUS_INVALID", message: "Bordro durumu geçersiz. Yalnız Kaydet veya Ödendi işlemini kullanın." };
+  }
+  const bySavedId = new Map(savedRows.map((row) => [text(row.employee_id), row]));
+  const byProjectionId = new Map(projectionLines.map((line) => [text(line.employeeId), line]));
+  const cents = (value: unknown) => Math.round(number(value) * 100);
+  for (const id of employeeIds) {
+    const saved = bySavedId.get(id);
+    if (!saved) return { code: "PAYROLL_NOT_FROZEN", message: "Bazı personellerin Son Kontrol kaydı eksik. Önce eksik kayıtları tamamlayın." };
+    if (upper(saved.status) === "PAID") {
+      return { code: "PAYROLL_PAID_LOCKED", message: "Ödenmiş bordro tekrar Kaydedildi/Ödendi durumuna alınamaz. Geçmiş ödeme korunuyor." };
+    }
+    if (!["OVERRIDE", "CALCULATED", "MANUAL_APPROVED"].includes(upper(saved.status))) {
+      return { code: "PAYROLL_NOT_FROZEN", message: "Bazı personellerin bordrosu Son Kontrol ile sabitlenmemiş." };
+    }
+    const projection = byProjectionId.get(id);
+    const final = projection?.final as Row | undefined;
+    if (!final || projection?.frozen === true) {
+      return { code: "PAYROLL_PROJECTION_MISSING", message: "Personelin güncel açık dönem bordrosu bulunamadı. Listeyi yenileyin." };
+    }
+    if (projection?.sourceChangedSinceSave === true) {
+      return { code: "PAYROLL_SOURCE_CHANGED", message: "Personel kartı, EK veya hareketler son bordro kaydından sonra değişmiş. Son Kontrol ile tekrar kaydedin." };
+    }
+    const canonicalNet = calculatePayrollAmounts({
+      salary: final.salaryPay, road: final.roadPay, extra: final.premiumAmount,
+      overtime: final.overtimeAmount, advance: final.advanceAmount,
+      deduction: final.deductionAmount, garnishment: final.garnishmentAmount,
+    }).net;
+    if (cents(canonicalNet) !== cents(final.total)
+      || cents(final.bank) + cents(final.cash) !== cents(final.total)) {
+      return { code: "PAYROLL_TOTAL_MISMATCH", message: "Maaş + Yol + EK + Mesai - Kesintiler veya Banka + Elden toplamı net ödemeyle eşleşmiyor." };
+    }
+    // The UI projection must also be the actual persisted snapshot being marked
+    // PAID; never freeze a stale database row merely because its status exists.
+    const columns: [unknown, unknown][] = [
+      [saved.salary, final.salaryPay], [saved.road_allowance, final.roadPay],
+      [saved.premium_amount, final.premiumAmount], [saved.overtime_amount, final.overtimeAmount],
+      [saved.advance_amount, final.advanceAmount], [saved.deduction_amount, final.deductionAmount],
+      [saved.garnishment_amount, final.garnishmentAmount], [saved.bank_amount, final.bank],
+      [saved.cash_amount, final.cash], [saved.total_amount, final.total],
+    ];
+    if (columns.some(([stored, effective]) => cents(stored) !== cents(effective))) {
+      return { code: "PAYROLL_SNAPSHOT_STALE", message: "Kaydedilen bordro güncel hesaptan farklı. Önce Son Kontrol/Kaydet yapın." };
+    }
+  }
+  return null;
+}
+
 async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
   const body = await bodyOf(c);
   const companyId = companyIdOf(c, body);
@@ -2692,14 +2750,20 @@ async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
   const employeeIds = Array.isArray(body.employeeIds) ? [...new Set(body.employeeIds.map(text).filter(Boolean))] : [];
   if (!employeeIds.length) return error(c, 400, "EMPLOYEE_REQUIRED", "Bordro kaydı için en az bir personel seçilmelidir.");
   const requested = upper(body.status || "CALCULATED");
-  const status = requested === "PAID" ? "PAID" : "CALCULATED";
-  const placeholders = employeeIds.map(() => "?").join(",");
-  const rows = await all(c, `SELECT id,employee_id,status FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id IN (${placeholders})`, [companyId, year, month, ...employeeIds]);
-  const existingIds = new Set(rows.map((row) => text(row.employee_id)));
-  const missing = employeeIds.filter((id) => !existingIds.has(id));
-  if (missing.length) {
-    return error(c, 409, "PAYROLL_NOT_FROZEN", `${missing.length} personelin bordrosu henüz sabitlenmemiş. Önce Son Kontrol/Kaydet işlemi yapılmalıdır.`);
+  if (requested !== "PAID" && requested !== "CALCULATED") {
+    return error(c, 400, "PAYROLL_STATUS_INVALID", "Bordro durumu geçersiz.");
   }
+  const status = requested;
+  const placeholders = employeeIds.map(() => "?").join(",");
+  const rows = await all(c, `SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id IN (${placeholders})`, [companyId, year, month, ...employeeIds]);
+  // One read-only, canonical server projection for the entire selected batch.
+  // Reject the whole batch before any status update when even one row is unsafe.
+  const projectionResponse = await advancedPayroll(c, year, month);
+  if (!projectionResponse.ok) return projectionResponse;
+  const projectionBody = await projectionResponse.json() as { data?: { lines?: Row[] } };
+  const lines = Array.isArray(projectionBody?.data?.lines) ? projectionBody.data.lines : [];
+  const guard = validatePayrollBatchTransition(rows, employeeIds, lines, status);
+  if (guard) return error(c, 409, guard.code, guard.message);
   const timestamp = nowIso();
   await c.env.DB.batch(rows.map((row) => c.env.DB.prepare("UPDATE hr_payrolls_v2 SET status=?,updated_at=? WHERE id=?").bind(status, timestamp, text(row.id))));
   await audit(c, {
