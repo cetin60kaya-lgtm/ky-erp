@@ -127,6 +127,23 @@ export function registerEBelgeVisualProfileRoutes(app:Hono<AppEnv>){
   });
   return c.json({ok:true,data:publicProfile(value)});
  });
+ app.post("/api/e-belge/visual-profiles/:issuer/:kind/approve",async c=>{
+  const permit=await authorize(c,"POST");
+  if(!permit.allowed)return c.json(fail("FORBIDDEN","Şablon kabul yetkisi yok."),403);
+  let key:string;
+  try{key=profileName(c.req.param("issuer"),c.req.param("kind"))}
+  catch{return c.json(fail("INVALID_PROFILE","Geçersiz firma şablonu."),400)}
+  const old=await load(c,permit.slug,key);
+  if(!old)return c.json(fail("NOT_FOUND","Henüz tanıtılmış şablon bulunamadı."),404);
+  const body=await c.req.json<Row>().catch(()=>({}));
+  if(body.visualChecked!==true || text(body.sampleDocumentNo)!==text(old.sampleDocumentNo) ||
+     Number(body.expectedRevision)!==Number(old.revision) || !old.referenceKey || !old.sourceXmlKey)
+   return c.json(fail("VISUAL_ACCEPTANCE_REQUIRED","Aynı belgeye ait orijinal ve üretilen önizlemeyi gözle karşılaştırıp güncel sürümde onaylamalısınız."),409);
+  const user=await getAuthenticatedUser(c);
+  const approved=await write(c,permit.slug,key,{...old,approved:true,visualOutputVerified:true,
+   acceptedAt:new Date().toISOString(),acceptedBy:text(user?.id),status:"VISUAL_ACCEPTED_BY_USER"});
+  return c.json({ok:true,data:publicProfile(approved)});
+ });
  app.get("/api/e-belge/visual-profiles/:issuer/:kind/reference",async c=>{
   const permit=await authorize(c,"GET");
   if(!permit.allowed)return c.json(fail("FORBIDDEN","Referans görseli görme yetkisi yok."),403);
