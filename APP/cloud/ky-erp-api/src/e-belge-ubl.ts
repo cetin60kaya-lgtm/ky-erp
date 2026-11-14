@@ -118,6 +118,13 @@ function partyDetails(block: string) {
 }
 
 export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Row {
+  // Reject entity/doctype wrappers; only real UBL Invoice and DespatchAdvice
+  // roots can enter the canonical document pipeline.
+  if (/<!DOCTYPE\b|<!ENTITY\b/i.test(xml)) {
+    throw Object.assign(new Error("UBL XML DTD/ENTITY bildirimi içeremez."), {
+      code: "UBL_TR_UNSAFE_XML",
+    });
+  }
   const invoice = /<(?:[A-Za-z0-9_]+:)?Invoice\b/i.test(xml);
   const dispatch = /<(?:[A-Za-z0-9_]+:)?DespatchAdvice\b/i.test(xml);
   if (!invoice && !dispatch) {
@@ -143,6 +150,8 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
   const supplierTaxNo = cleanTax(xmlTag(supplier, ["CompanyID", "ID"]));
   const customerName = xmlTag(customer, ["RegistrationName", "Name"]);
   const customerTaxNo = cleanTax(xmlTag(customer, ["CompanyID", "ID"]));
+  const documentNo = xmlTag(xml, ["ID"]);
+  const issueDate = xmlTag(xml, ["IssueDate"]);
   const legal = xmlBlocks(xml, "LegalMonetaryTotal")[0] || "";
   const taxTotalBlock = xmlBlocks(xml, "TaxTotal")[0] || "";
   const lineName = invoice ? "InvoiceLine" : "DespatchLine";
@@ -185,16 +194,31 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
     };
   });
 
+  // Missing essential document fields must never produce a new canonical
+  // business record with an empty identity or no invoice/despatch lines.
+  if (!documentNo || !/^\d{4}-\d{2}-\d{2}$/.test(issueDate) || !lines.length) {
+    throw Object.assign(new Error("UBL-TR belge numarası, tarihi veya kalemleri eksik; belge kaydı oluşturulmadı."), {
+      code: "UBL_TR_REQUIRED_FIELDS_MISSING",
+    });
+  }
+  // Incomplete counterparty identities remain review-only; official XML
+  // must not create a supplier/customer card based on a guessed name.
+  const qualityIssues: string[] = [];
+  if (!/^\d{10}(?:\d)?$/.test(supplierTaxNo)) qualityIssues.push("SUPPLIER_TAX_REVIEW");
+  if (!/^\d{10}(?:\d)?$/.test(customerTaxNo)) qualityIssues.push("CUSTOMER_TAX_REVIEW");
+
   const dispatchReferences = xmlBlocks(xml, "DespatchDocumentReference")
     .map((block) => xmlTag(block, ["ID"]))
     .filter(Boolean);
 
   return {
     direction,
-    documentType: documentTypeOf(invoice ? "INVOICE" : "DISPATCH", direction),
-    documentNo: xmlTag(xml, ["ID"]),
+    documentType: documentTypeOf(invoice
+      ? (xmlTag(xml, ["InvoiceTypeCode"]) || xmlTag(xml, ["ProfileID"]) || "INVOICE")
+      : "DISPATCH", direction),
+    documentNo,
     uuid: xmlTag(xml, ["UUID"]),
-    issueDate: xmlTag(xml, ["IssueDate"]),
+    issueDate,
     dueDate: xmlTag(xml, ["DueDate"]),
     currency: xmlTag(xml, ["DocumentCurrencyCode"]) || "TRY",
     supplierName,
@@ -227,7 +251,8 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
       partyPhone:counterpartyDetails.phone,
       partyEmail:counterpartyDetails.email,
       partyTaxOffice:counterpartyDetails.taxOffice,
-      ublVerified:true,
+      ublVerified:qualityIssues.length === 0,
+      ublQualityIssues:qualityIssues,
     },
   };
 }
