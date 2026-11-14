@@ -692,12 +692,25 @@ async function saveAdjustment(c: Context<AppEnv>) {
   return okData(c, mapAdjustment(saved || { id, employee_id: employeeId, date, adjustment_type: adjustmentType, hour_or_day: hourOrDay, amount, payment_method: paymentMethod, payroll_effect: payrollEffect, note, status }), current ? 200 : 201);
 }
 
+// Referans maaşı veya sabit EK güncellendiğinde bağlı personelin gerçek
+// ücret tabanı bordrodan farklı kalmasın; eski hareket tutarlarını değiştirme.
+async function currentRealSalary(c: Context<AppEnv>, companyId: string, employeeId: string) {
+  const employee = await first(c, `SELECT salary,road_allowance,overtime_hourly_base
+    FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  if (!employee) return null;
+  const card = await first(c, "SELECT base_employee_id,extra_payment_amount FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const referenceId = text(card?.base_employee_id);
+  const reference = referenceId
+    ? await first(c, "SELECT salary FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [referenceId, companyId])
+    : null;
+  const real = resolveReferencePay(employee.salary, reference?.salary, card?.extra_payment_amount, Boolean(referenceId));
+  return { ...employee, realSalary: real.actualSalary };
+}
+
 async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, hours: number, multiplierValue: unknown) {
-  const employee = await first(c, `SELECT salary,overtime_hourly_base
-    FROM hr_monthly_employees
-    WHERE id=? AND main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const employee = await currentRealSalary(c, companyId, employeeId);
   if (!employee) return 0;
-  const salary = number(employee.salary);
+  const salary = number(employee.realSalary);
   const divisor = number(employee.overtime_hourly_base) || 225;
   return calculateOvertimeAmount(salary, hours, multiplierValue, divisor);
 }
@@ -926,9 +939,9 @@ async function savePersonCardCalc(c: Context<AppEnv>, companyId: string, employe
 }
 
 async function absenceDeductionForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, mode: "DAY" | "HOUR", hoursValue: unknown): Promise<AbsenceDeductionResult> {
-  const employee = await first(c, "SELECT salary,road_allowance FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const employee = await currentRealSalary(c, companyId, employeeId);
   if (!employee) return { hours: 0, deductionDivisor: 300, salaryHourly: 0, salaryCut: 0, roadDaily: 0, roadCut: 0, total: 0 };
-  const salary = Math.max(0, number(employee.salary));
+  const salary = Math.max(0, number(employee.realSalary));
   const road = Math.max(0, number(employee.road_allowance));
   const calc = await personCardCalc(c, companyId, employeeId);
   const deductionDivisor = number(calc.deductionHourlyBase) || 300;
