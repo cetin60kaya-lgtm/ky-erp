@@ -52,6 +52,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const actionGuard = useRef(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
+  const [sendAcknowledged, setSendAcknowledged] = useState(false);
 
   const refresh = useCallback(async () => {
     if (!companySlug) return;
@@ -93,7 +94,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     setRouteForm((current) => ({ ...current, customerName: String(selectedInvoice?.party_name || current.customerName || "") }));
     setDraft(null); setSent(false); setInvoiceAssetId(""); setDeliveryAssetId("");
     setSubjectOverride(null); setBodyOverride(null); setBccText("");
-    setDispatchLocked(false); setPhase("IDLE");
+    setDispatchLocked(false); setPhase("IDLE"); setSendAcknowledged(false);
     setAcceptedDraft(null); setLinkNeedsRepair(false); setRemoteAttempt(null);
   }, [selectedInvoice]);
 
@@ -103,7 +104,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   }, [modelName, invoiceNo, deliveryNo, templateId]);
   const subject = subjectOverride === null ? suggested.subject : subjectOverride;
   const bodyText = bodyOverride === null ? suggested.bodyText : bodyOverride;
-  const invalidate = () => { setDraft(null); setSent(false); setNotice(""); setPhase("IDLE"); };
+  const invalidate = () => { setDraft(null); setSent(false); setNotice(""); setPhase("IDLE"); setSendAcknowledged(false); };
   const invalidateDocument = () => { invalidate(); setSubjectOverride(null); setBodyOverride(null); };
   useEffect(() => {
     let cancelled=false;
@@ -317,7 +318,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       mainCompanySlug: companySlug,
     }));
     if (!created?.id) throw new Error("Posta taslağı KY ERP'de doğrulanamadı.");
-    const prepared = { ...created, to, cc, bcc, subject: finalSubject, invoiceAssetId, deliveryAssetId,
+    const prepared = { ...created, to, cc, bcc, subject: finalSubject, bodyText: finalBody, invoiceAssetId, deliveryAssetId,
       invoiceNo: documentKey(invoiceNo), deliveryNo: documentKey(deliveryNo), modelId, modelName, routeId };
     setDraft(prepared);
     return prepared;
@@ -348,6 +349,10 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   // an invisible technical detail; Taslak Kaydet never initiates dispatch.
   const processMail = async (sendNow) => {
     if (actionGuard.current || working || dispatchLocked || sent) return;
+    if (sendNow && !sendAcknowledged) {
+      setError("Gönderimden önce aynı ekranda alıcıları, iki PDF ekini ve mail içeriğini kontrol edip onaylayın.");
+      return;
+    }
     actionGuard.current = true;
     let submitStarted = false;
     setWorking(true); setError(""); setNotice(""); setPhase("PREPARING");
@@ -359,6 +364,19 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
         return;
       }
       const logicalEventId = invoiceMailEventId(companySlug, invoiceNo, deliveryNo);
+      // A saved draft is NOT lasting permission to send. Re-check current
+      // account/route/model/PDF ownership and duplicate lock immediately
+      // before Graph, without creating a second draft or changing screens.
+      const verified = unwrap(await apiPost("/muhasebe/invoice-mail-preflight", {
+        mainCompanySlug: companySlug, accountId, routeId, modelId,
+        invoiceNo: prepared.invoiceNo, deliveryNo: prepared.deliveryNo,
+        invoiceAssetId: prepared.invoiceAssetId, deliveryAssetId: prepared.deliveryAssetId,
+        subject: prepared.subject, bodyText: prepared.bodyText,
+        to: prepared.to, cc: prepared.cc, bcc: prepared.bcc,
+      }));
+      if (verified?.verified !== true || verified?.logicalEventId !== logicalEventId) {
+        throw new Error("Outlook gönderim ön kontrolü değişti; mail gönderilmedi.");
+      }
       setDispatchLocked(true); setPhase("SENDING"); submitStarted = true;
       const result = unwrap(await sendMailDraft(prepared.id, logicalEventId));
       if (!["PROVIDER_ACCEPTED", "ACCEPTED"].includes(String(result?.status || "").toUpperCase()))
@@ -491,9 +509,16 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       <p>TO: {toText || "Eksik"}{ccText ? " · CC: " + ccText : ""}{bccText ? " · BCC: " + bccText : ""}</p>
       <p>Ek: {invoiceFiles.find((file) => file.id === invoiceAssetId)?.file_name || "HKN PDF seçilmedi"} / {deliveryFiles.find((file) => file.id === deliveryAssetId)?.file_name || "DDM PDF seçilmedi"}</p>
     </div>
+    <div className="imw-send-review">
+      <label><input type="checkbox" checked={sendAcknowledged} disabled={working || dispatchLocked || sent}
+        onChange={(event) => setSendAcknowledged(event.target.checked)} />
+        Alıcıları, HKN/DDM PDF eklerini, konu ve mesajı bu ekranda kontrol ettim. Gönderim onayım sadece bu hazırlık içindir.
+      </label>
+      <small>Önizleme ve taslak aynı ekranda kalır. "Taslak Kaydet" mail göndermez; "Gönder" Microsoft Graph'a açık gönderim isteğidir.</small>
+    </div>
     <div className="imw-actions">
       <button type="button" disabled={!accountId || !routeId || working || dispatchLocked || sent} onClick={() => void processMail(false)}>Taslak Kaydet</button>
-      <button type="button" disabled={!accountId || !routeId || working || dispatchLocked || sent} className="imw-send" onClick={() => void processMail(true)}>
+      <button type="button" disabled={!accountId || !routeId || !sendAcknowledged || working || dispatchLocked || sent} className="imw-send" onClick={() => void processMail(true)}>
         {phase === "PREPARING" ? "Hazırlanıyor..." : phase === "SENDING" ? "Gönderiliyor..." : phase === "ACCEPTED" ? "İstek kabul edildi" : "Gönder"}
       </button>
     </div>

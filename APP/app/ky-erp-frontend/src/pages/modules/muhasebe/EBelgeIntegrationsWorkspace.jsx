@@ -35,6 +35,7 @@ import {
 } from "../../../services/isnetBusinessSettingsApi";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./eBelgeIntegrationsWorkspace.css";
+import IntegrationFlowSteps from "../common/IntegrationFlowSteps";
 
 const SECTIONS = [
   ["connection", "Bağlantı", ShieldCheck],
@@ -415,11 +416,7 @@ export default function EBelgeIntegrationsWorkspace({
               {connectionTest?.saved ? "Firma kaydedildi" : connectionTest ? "Giriş doğrulandı" : "Doğrulama bekliyor"}
             </span>
           </div>
-          <ol className="ism-connection-steps" aria-label="İşNet bağlantı adımları">
-            <li className={!connectionTest ? "active" : "completed"}>1. Giriş bilgileri</li>
-            <li className={connectionTest && !connectionTest.saved ? "active" : connectionTest?.saved ? "completed" : ""}>2. Firma seçimi</li>
-            <li className={connectionTest?.saved ? "completed" : ""}>3. Kaydet</li>
-          </ol>
+          <IntegrationFlowSteps kind="ISNET" stage={connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />
           <div className="ism-form-grid">
             <Field label="Kullanıcı adı / TCKN">
               <input value={connection.username} autoComplete="username" disabled={!!busy} onChange={(event) => updateLoginField("username", event.target.value)} />

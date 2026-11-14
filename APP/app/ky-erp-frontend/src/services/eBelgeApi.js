@@ -69,7 +69,18 @@ export async function uploadEBelge(files, { direction = "AUTO", documentKind = "
   });
   form.set("direction", direction);
   form.set("documentKind", documentKind);
-  return unwrap(await apiUpload("/e-belge/upload", form));
+  try {
+    return unwrap(await apiUpload("/e-belge/upload", form));
+  } catch (error) {
+    // HTTP 207 reports partial success: do not disguise successfully
+    // staged documents as a fully failed upload and invite duplicates.
+    const partial = error?.payload?.data;
+    if (Number(error?.status) === 207 &&
+        Array.isArray(partial?.items) && Array.isArray(partial?.errors)) {
+      return partial;
+    }
+    throw error;
+  }
 }
 
 export const recoverEBelgeCompanyFromXml = (id) =>

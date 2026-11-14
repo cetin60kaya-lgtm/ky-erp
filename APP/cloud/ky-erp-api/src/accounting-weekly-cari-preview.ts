@@ -36,7 +36,7 @@ export function registerWeeklyCariPreviewRoutes(app:Hono<AppEnv>){
   if(previous!==undefined&&!(previous instanceof File))return failed(c,"PREVIOUS_STATEMENT_INVALID","Önceki hafta dosyası geçersiz.",422);
   try{
    const now=await parseWorkbook(current);
-   const old=previous instanceof File?await parseWorkbook(previous):{lines:[],ignoredRows:0,ambiguousRows:0,sheets:0};
+   const old=previous instanceof File?await parseWorkbook(previous):{lines:[],ignoredRows:0,ambiguousRows:0,sheets:0,missingAmountSheets:0};
    if(previous instanceof File&&!old.lines.length)return failed(c,"PREVIOUS_HKN_NOT_FOUND","Önceki ekstre HKN içermiyor; karşılaştırma yapılmadı.",422);
    if(!now.lines.length)return failed(c,"HKN_NOT_FOUND","Ekstrede HKN belge numarası bulunamadı. Sütunları ve dosya dönemini kontrol edin.",422);
    const all=[...new Set([...old.lines,...now.lines].map(x=>x.invoiceNo))];
@@ -49,7 +49,7 @@ export function registerWeeklyCariPreviewRoutes(app:Hono<AppEnv>){
    }
    const report=compareWeeklyStatements(old.lines,now.lines,matched,previous instanceof File);
    return c.json({ok:true,data:{companyId,companyName:txt(company.name),summary:report.summary,groups:report.groups,rows:report.rows,
-    source:{currentName:txt(current.name),previousName:previous instanceof File?txt(previous.name):null,currentSheets:now.sheets,previousSheets:old.sheets,currentAmbiguousRows:now.ambiguousRows,previousAmbiguousRows:old.ambiguousRows,onlyPreview:true},
+    source:{currentName:txt(current.name),previousName:previous instanceof File?txt(previous.name):null,currentSheets:now.sheets,previousSheets:old.sheets,currentAmbiguousRows:now.ambiguousRows,previousAmbiguousRows:old.ambiguousRows,currentMissingAmountSheets:now.missingAmountSheets,previousMissingAmountSheets:old.missingAmountSheets,onlyPreview:true},
     note:"Cari ekstresinde bulunmamak ödeme kanıtı değildir. Eski dönem, mahsup, toplu ödeme ve revizyonlar manuel kontrol gerektirir. Hiçbir kayıt/gönderim yapılmadı."}});
   }catch(e:any){return failed(c,"WEEKLY_STATEMENT_PARSE_FAILED",txt(e?.message)||"Belge karşılaştırılamadı.",422);}
  });
