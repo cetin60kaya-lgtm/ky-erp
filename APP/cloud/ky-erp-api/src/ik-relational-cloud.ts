@@ -3076,6 +3076,9 @@ async function confirmAdvancedSgk(c: Context<AppEnv>) {
   const employeeIds = [...new Set(rows.map((row) => text(row.employeeId)).filter(Boolean))];
   const validRows = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
   if (validRows.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "SGK bordrosunda başka firmaya ait veya geçersiz personel var.");
+  // The month's official payroll must not change underneath a paid employee.
+  const alreadyPaid = await first(c, `SELECT id FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND status='PAID' AND employee_id IN (${employeeIds.map(() => "?").join(",")}) LIMIT 1`, [companyId, year, month, ...employeeIds]);
+  if (alreadyPaid) return error(c, 409, "SGK_PAID_PAYROLL_LOCKED", "Ödenmiş personelin resmî bordrosu sessizce değiştirilemez. Yetkili düzeltme süreci gereklidir.");
 
   const versionRow = await first(c, "SELECT MAX(version_no) AS version_no FROM ik_sgk_imports WHERE main_company_id=? AND period_year=? AND period_month=?", [companyId, year, month]);
   const versionNo = number(versionRow?.version_no) + 1;
