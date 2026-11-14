@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { probeIsnetSessionHealth, verifiedCachedIsnetSession } from "./isnet-session-health";
+import { normalizeIsnetConnectionMode, checkedIsnetCompanySave } from "./isnet-connection-flow";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
@@ -210,7 +211,7 @@ function payloadMessage(payload: any, fallback = "İşNet isteği başarısız o
 
 async function loginApi(username: string, password: string) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25_000);
+  const timeout = setTimeout(() => controller.abort(), 15_000);
   try {
     const response = await fetch(`${API_BASE}/api/Account/Login`, {
       method: "POST",
@@ -263,9 +264,12 @@ function cookieHeader(jar: Map<string, string>) {
 
 async function loginPortal(username: string, password: string) {
   const jar = new Map<string, string>();
+  const deadline = Date.now() + 25_000;
   const request = async (path: string, init: RequestInit = {}) => {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new Error("İşNet portalı zaman aşımına uğradı.");
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 35_000);
+    const timeout = setTimeout(() => controller.abort(), Math.min(8_000, remaining));
     try {
       const response = await fetch(path.startsWith("http") ? path : `${PORTAL_BASE}${path}`, {
         ...init,
@@ -351,27 +355,22 @@ async function loginPortal(username: string, password: string) {
     } catch { /* next */ }
   }
   const cleanText = loginText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (/google authenticator|doğrulama kodu|iki aşamalı|tek kullanımlık|otp|2fa/i.test(cleanText)) {
+    throw new Error("İşNet ek doğrulama kodu istedi. Bu portal adımı KY ERP tarafından doğrulanamadı; bağlı gösterilmez.");
+  }
   if (/captcha|güvenlik kodu|kullanıcı adı|şifre|hatalı giriş/i.test(cleanText)) {
     throw new Error("İşNet portalı kullanıcı/TCKN veya şifre bilgisini kabul etmedi.");
   }
   throw new Error("Portal girişi açıldı ancak yetkili firma listesi alınamadı.");
 }
 
-async function loginIsnet(username: string, password: string) {
+async function loginIsnet(username: string, password: string, mode: string = "portal") {
   if (!username || !password) throw new Error("İşNet kullanıcı adı/TCKN ve şifre zorunludur.");
-  let apiMessage = "";
-  try {
-    return await loginApi(username, password);
-  } catch (error: any) {
-    apiMessage = text(error?.message) || "API bağlantısı kurulamadı.";
-  }
-  try {
-    const portal = await loginPortal(username, password);
-    return { ...portal, diagnostics: { api: apiMessage, portal: "Bağlandı" } };
-  } catch (error: any) {
-    const portalMessage = text(error?.message) || "Portal bağlantısı kurulamadı.";
-    throw new Error(`İşNet bağlantısı kurulamadı. API: ${apiMessage} Portal: ${portalMessage}`);
-  }
+  // The requested provider route is explicit. Never retry credentials silently
+  // against a different authentication endpoint (account lockout / MFA risk).
+  return normalizeIsnetConnectionMode(mode) === "api"
+    ? loginApi(username, password)
+    : loginPortal(username, password);
 }
 
 async function settingsRaw(c: Context<AppEnv>, slug: string) {
@@ -848,8 +847,9 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     const current = await settingsRaw(c, slug);
     const username = text(body.username || current.username);
     const password = text(body.password);
+    const mode = normalizeIsnetConnectionMode(body.connectionMode || current.connectionMode);
     if (!username || !password) {
-      if (current.accessToken && Array.isArray(current.companies) && current.companies.length) {
+      if (username === text(current.username) && mode === text(current.connectionMode) && current.accessToken && Array.isArray(current.companies) && current.companies.length) {
         // A previously stored API token does NOT prove that the live provider still accepts it.
         // Only the read-only recipient probe may mark the cached connection as verified.
         const checked = await verifyIsnetReadOnlySession(c, slug);
@@ -867,11 +867,15 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
       return c.json(errorBody("ISNET_CREDENTIALS_REQUIRED", "İşNet kullanıcı adı/TCKN ve şifre zorunludur."), 400);
     }
     try {
-      const result = await loginIsnet(username, password);
+      const result = await loginIsnet(username, password, mode);
+      const previousId = text(current.username) === username ? text(current.companyId) : "";
+      const selected = result.companies.find((row: Row) => text(row.id) === previousId);
       const saved = await storePut(c, SCOPE.settings, slug, {
         ...current,
         username,
         companies: result.companies,
+        companyId: selected ? previousId : "",
+        companyName: selected ? text(selected.name) : "",
         connectionMode: result.mode,
         accessToken: result.token || "",
         tokenExpiresOn: result.expiresOn,
@@ -889,6 +893,7 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
           authorizedCompanies: result.companies,
           connectionMode: result.mode,
           testedAt: saved.testedAt,
+          verificationKind: result.mode === "api" ? "API_LOGIN" : "PORTAL_LOGIN_ONLY",
           message: result.mode === "api"
             ? "İşNet API bağlantısı doğrulandı. Yetkili firmayı seçip kaydedin."
             : "NetteFatura portal girişi doğrulandı. Güvenlik nedeniyle şifre saklanmadı; otomatik senkronizasyon için API oturumu tercih edilir.",
@@ -904,42 +909,32 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
   const saveSettings = async (c: Context<AppEnv>) => {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
-    let current = await settingsRaw(c, slug);
-    if (text(body.password)) {
-      try {
-        const result = await loginIsnet(text(body.username || current.username), text(body.password));
-        current = await storePut(c, SCOPE.settings, slug, {
-          ...current,
-          username: text(body.username || current.username),
-          companies: result.companies,
-          connectionMode: result.mode,
-          accessToken: result.token || "",
-          tokenExpiresOn: result.expiresOn,
-          testedAt: nowIso(),
-          diagnostics: result.diagnostics,
-          requiresPasswordForSync: result.mode === "portal" && !result.token,
-          passwordStored: false,
-        }, slug);
-      } catch (error: any) {
-        return c.json(errorBody("ISNET_LOGIN_FAILED", text(error?.message) || "İşNet bağlantısı doğrulanamadı."), 502);
-      }
+    const current = await settingsRaw(c, slug);
+    // Login is ONLY the explicit test step. Never repeat a portal login or
+    // create a send operation when the user saves an authorized company.
+    // Legacy clients may submit password here; it is ignored and never stored.
+    const checked = checkedIsnetCompanySave(current, body);
+    if (!checked.ok) {
+      return c.json(errorBody(checked.code, checked.message), 409);
     }
-    const username = text(body.username || current.username);
-    const companyId = text(body.companyId || current.companyId);
-    const companies = Array.isArray(current.companies) ? current.companies : [];
-    const selected = companies.find((row: Row) => text(row.id) === companyId);
-    if (!username) return c.json(errorBody("ISNET_USERNAME_REQUIRED", "İşNet kullanıcı adı/TCKN zorunludur."), 400);
-    if (!companyId || !selected) return c.json(errorBody("ISNET_COMPANY_REQUIRED", "Önce bağlantıyı test edin ve yetkili firmayı seçin."), 400);
     const saved = await storePut(c, SCOPE.settings, slug, {
       ...current,
-      username,
-      companyId,
-      companyName: text(selected.name || selected.companyName),
-      connectionMode: text(current.connectionMode || body.connectionMode || "api"),
+      username: checked.username,
+      companyId: checked.companyId,
+      companyName: checked.companyName,
+      connectionMode: checked.mode,
       savedAt: nowIso(),
       passwordStored: false,
     }, slug);
-    return c.json({ ok: true, success: true, data: { ...publicSettings(saved), savedAt: saved.savedAt, message: "İşNet firması ve güvenli oturum bilgisi kaydedildi." } });
+    return c.json({
+      ok: true, success: true,
+      data: {
+        ...publicSettings(saved), savedAt: saved.savedAt,
+        message: checked.mode === "api"
+          ? "Yetkili firma kaydedildi. İşNet API oturumunun canlı durumu ayrıca doğrulanacaktır."
+          : "Yetkili firma kaydedildi. Portal girişi otomatik belge senkronizasyonu anlamına gelmez.",
+      },
+    });
   };
   app.put("/api/isnet/settings", saveSettings);
   app.put("/api/isnet/connection", saveSettings);
