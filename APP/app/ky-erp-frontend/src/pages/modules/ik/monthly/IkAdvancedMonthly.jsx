@@ -1301,6 +1301,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     desired.bank = split.bank;
     desired.cash = split.cash;
     const resolvedPaymentType = split.mode === "BANKA" ? "Banka" : split.mode === "ELDEN" ? "Elden" : "BANKA_ELDEN";
+    const permanentPerson = rawEmployees.find((item) => item.id === modalDraft.id);
+    const permanentExtra = permanentPerson ? payrollCompensation(permanentPerson, rawEmployees).extra : 0;
+    const allowMonthlyZeroExtra = !updatePersonnelCard && permanentExtra > 0 && desired.extra === 0;
+    if (allowMonthlyZeroExtra && !window.confirm("Bu personelin kalıcı EK ödemesi vardır. Yalnız seçilen ayda EK tutarını SIFIRLAMAK istediğinize emin misiniz? Diğer aylar sabit EK ile devam eder.")) return;
     if (updatePersonnelCard) {
       if (!modalDraft.cardEffectiveDate) {
         return setModalDraft((old) => ({ ...old, formMessage: "Kalıcı personel kartı için geçerlilik tarihi seçin." }));
@@ -1319,6 +1323,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
         expectedVersion: modalDraft.version || "",
         expectedPayrollVersion: modalDraft.payrollVersion || "",
         updatePersonnelCard,
+        allowMonthlyZeroExtra,
         effectiveDate: updatePersonnelCard ? modalDraft.cardEffectiveDate : undefined,
         paymentType: resolvedPaymentType,
         salary: desired.salary,
