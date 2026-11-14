@@ -3096,8 +3096,8 @@ async function confirmAdvancedSgk(c: Context<AppEnv>) {
       exitDate: hrDateOnly(row.exitDate),
       sources: [],
     };
-    for (const key of sums) current[key] = number(current[key]) + number(row[key]);
-    (current.sources as unknown[]).push({ sourceFile: text(row.sourceFile), workplace: text(row.workplace), rowNumber: number(row.rowNumber) });
+    for (const key of sums) current[key] = number(current[key]) + (key === "net" ? sgkStrictAmount(row.net)! : number(row[key]));
+    (current.sources as unknown[]).push({ sourceFile: text(row.sourceFile), sheetName: text(row.sheetName), workplace: text(row.workplace), rowNumber: number(row.rowNumber) });
     grouped.set(employeeId, current);
   }
 
