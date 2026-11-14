@@ -1703,7 +1703,10 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const monthPlan = monthlyOverride ? latestMonthPlan : null;
     const currentSalary = monthlyOverride ? number(row.salary) : salary;
     const currentRoad = monthlyOverride ? number(row.roadAllowance) : number(employee.roadAllowance);
-    const currentExtra = monthlyOverride ? number(row.premiumAmount) : extra;
+    // Eski aylık kayıttaki EK=0, kartta sabit EK>0 ise açık ayda
+    // otomatik kaynaktan düzelt. Bilerek aylık sıfırlama ayrı onaylıdır.
+    const legacyZeroShadow = Boolean(monthlyOverride && extra > 0 && number(row?.premiumAmount) <= 0 && latestMonthPlan?.allowMonthlyZeroExtra !== true);
+    const currentExtra = legacyZeroShadow ? extra : monthlyOverride ? number(row.premiumAmount) : extra;
     const currentNet = calculatePayrollAmounts({
       salary: currentSalary, road: currentRoad, extra: currentExtra,
       overtime, advance, deduction, garnishment,
@@ -2343,7 +2346,10 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   if (updatePersonnelCard && referenceEmployee && Math.abs(desired.salary - number(referenceEmployee.salary)) > 0.01) {
     return error(c, 409, "REFERENCE_BASE_MISMATCH", "Ana maaş referans maaşla eşleşmiyor. Personel referansını ve EK farkını kontrol edin.");
   }
-  const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
+  if (!updatePersonnelCard && body.allowMonthlyZeroExtra === true && desired.extra !== 0) {
+    return error(c, 400, "MONTHLY_EXTRA_OVERRIDE_INVALID", "Aylık EK sıfırlama izni yalnız EK=0 olduğunda kullanılabilir.");
+  }
+    const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
   const { earnings, net } = calculatePayrollAmounts(desired);
   const paymentDiff = Math.round((desired.bank + desired.cash - net) * 100) / 100;
   if (Math.abs(paymentDiff) > 0.01) {
@@ -2614,6 +2620,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     reason,
     scope: updatePersonnelCard ? "MONTH_AND_PERSONNEL_CARD" : "MONTH_ONLY",
     personnelEffectiveDate: updatePersonnelCard ? personnelEffectiveDate : null,
+    allowMonthlyZeroExtra: !updatePersonnelCard && desired.extra === 0 && body.allowMonthlyZeroExtra === true,
     current,
     desired,
     net,
