@@ -398,3 +398,15 @@ span.warning {
     padding: 10px;
   }
 }
+
+/* In-ERP sign in: verify first, then save one authorized company. */
+.ism-connection-steps {display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:0;margin:0 0 18px;list-style:none}
+.ism-connection-steps li {padding:9px 7px;border:1px solid #dfe6ef;border-radius:8px;background:#f8fafc;color:#586b83;font-size:12px;font-weight:700;text-align:center}
+.ism-connection-steps li.active {border-color:#759bea;color:#2457d6;background:#f1f6ff}
+.ism-connection-steps li.completed {border-color:#a6d1b8;color:#257246;background:#effaf3}
+.ism-password-control {display:flex;align-items:stretch;position:relative;min-width:0}
+.ism-password-control input {flex:1;min-width:0;padding-right:48px}
+.ism-card .ism-password-toggle {position:absolute;right:3px;top:3px;min-height:34px;width:38px;padding:0;border:0;background:transparent;color:#465974}
+.ism-connection-help {margin:0 0 14px!important;font-size:12px;line-height:1.5}
+.ism-connection-complete {display:flex;align-items:center;gap:8px;margin-top:12px!important;color:#21713f!important;font-weight:700}
+@media (max-width: 600px) {.ism-connection-steps {grid-template-columns:1fr}}
