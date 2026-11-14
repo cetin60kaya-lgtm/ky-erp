@@ -12,6 +12,7 @@ import {
   calculateOvertimeAmount,
   calculatePayrollAmounts,
   resolveReferencePay,
+  resolveMonthlyExtra,
 } from "./ik-relational-cloud.ts";
 
 test("fixed EK is monthly recurring, additional without reference and included once with reference", () => {
@@ -43,6 +44,16 @@ test("fixed EK is monthly recurring, additional without reference and included o
   assert.equal(calculatePayrollAmounts({ salary: linked.salary, extra: linked.extra, road: 1680 }).net, 49780);
   // Referans maaşı değişse bile EK tutarı sonraki ay da aynıdır.
   assert.equal(resolveReferencePay(48100, 47000, 2600, true).extra, 2600);
+});
+
+test("monthly EK includes permanent amount despite old zero row; explicit selected-month zero stays zero", () => {
+  assert.equal(resolveMonthlyExtra(2500, 0, false), 2500);
+  assert.equal(resolveMonthlyExtra(2500, 0, true), 2500);
+  assert.equal(resolveMonthlyExtra(2500, 0, true, true), 0);
+  assert.equal(resolveMonthlyExtra(2500, 1900, true), 1900);
+  assert.equal(resolveMonthlyExtra(2500, 1900, false), 2500);
+  assert.equal(resolveMonthlyExtra(0, 0, true), 0);
+  assert.equal(resolveMonthlyExtra(2500.25, 0, true), 2500.25);
 });
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
