@@ -21,6 +21,7 @@ import { fetchSharedModels } from "../../../services/desenService";
 import {
   getIsnetSettings,
   getIsnetPortalHealth,
+  getIsnetEgressHealth,
   saveIsnetSettings,
   testIsnetSettings,
 } from "../../../services/isnetApi";
@@ -38,6 +39,7 @@ import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataL
 import "./eBelgeIntegrationsWorkspace.css";
 import IntegrationFlowSteps from "../common/IntegrationFlowSteps";
 import { saveIsnetBrowserCredentials, loadIsnetBrowserCredentials } from "./isnetBrowserVault";
+import { getIsnetConnectionModePreference, saveIsnetConnectionModePreference } from "./isnetConnectionModePreference";
 
 const SECTIONS = [
   ["connection", "Bağlantı", ShieldCheck],
@@ -111,13 +113,14 @@ export default function EBelgeIntegrationsWorkspace({
   const [showPassword, setShowPassword] = useState(false);
   const [connectionTest, setConnectionTest] = useState(null);
   const [portalHealth, setPortalHealth] = useState(null);
+  const [apiNetworkStatus, setApiNetworkStatus] = useState(null);
   const [vaultNotice, setVaultNotice] = useState(null);
   const [connection, setConnection] = useState({
     username: "",
     password: "",
     companyId: "",
     companies: [],
-    connectionMode: "portal",
+    connectionMode: "api",
     sessionReady: false,
   });
   const [business, setBusiness] = useState({
@@ -160,8 +163,9 @@ export default function EBelgeIntegrationsWorkspace({
           password: "",
           companyId: connectionResult?.companyId || "",
           companies: rowsOf(connectionResult?.companies),
-          connectionMode: connectionResult?.connectionMode || "portal",
-          sessionReady: connectionResult?.sessionReady === true,
+          connectionMode: getIsnetConnectionModePreference(tenant) || connectionResult?.connectionMode || "api",
+          sessionReady: connectionResult?.sessionReady === true &&
+            (getIsnetConnectionModePreference(tenant) || connectionResult?.connectionMode || "api") === "api",
         }));
       }
       if (result.states.business.status !== "error") {
@@ -230,9 +234,13 @@ export default function EBelgeIntegrationsWorkspace({
   }
 
   function updateLoginField(key, value) {
+    if (key === "connectionMode") {
+      saveIsnetConnectionModePreference(activeMainCompany?.slug || activeMainCompany?.id, value);
+    }
     setConnectionTest(null);
     setPortalHealth(null);
     setNotice(null);
+    setVaultNotice(null);
     setConnection((current) => ({
       ...current,
       [key]: value,
@@ -241,6 +249,22 @@ export default function EBelgeIntegrationsWorkspace({
       sessionReady: key === "password" ? current.sessionReady : false,
     }));
   }
+
+  useEffect(() => {
+    if (connection.connectionMode !== "api") {
+      setApiNetworkStatus(null);
+      return undefined;
+    }
+    let active = true;
+    getIsnetEgressHealth()
+      .then((response) => {
+        if (active) setApiNetworkStatus(response?.targets?.einvoiceapi || { status: "UNKNOWN" });
+      })
+      .catch(() => {
+        if (active) setApiNetworkStatus({ status: "UNAVAILABLE" });
+      });
+    return () => { active = false; };
+  }, [connection.connectionMode]);
 
   async function saveInBrowser() {
     if (busy) return;
@@ -281,7 +305,7 @@ export default function EBelgeIntegrationsWorkspace({
     try {
       const status = await getIsnetPortalHealth();
       setPortalHealth(status);
-      setNotice({ tone: status.reachable ? "success" : "error", text: status.message ||
+      setNotice({ connectionMode: "portal", tone: status.reachable ? "success" : "error", text: status.message ||
         "İşNet'in giriş sayfası erişim durumu belirlenemedi." });
     } catch (error) {
       setPortalHealth(null);
@@ -336,6 +360,7 @@ export default function EBelgeIntegrationsWorkspace({
         saved: false,
       });
       setNotice({
+        connectionMode: verifiedMode,
         tone: verifiedMode === "api" ? "success" : "warning",
         text: result.message || (verifiedMode === "api"
           ? "İşNet hesabı doğrulandı; firma seçimini kaydedin."
@@ -343,7 +368,7 @@ export default function EBelgeIntegrationsWorkspace({
       });
     } catch (error) {
       setConnectionTest(null);
-      setNotice({ tone: "error", text: error?.message || "Bağlantı doğrulanamadı. Giriş bilgilerini ve seçilen yöntemi kontrol edin." });
+      setNotice({ connectionMode: connection.connectionMode, tone: "error", text: error?.message || "Bağlantı doğrulanamadı. Giriş bilgilerini ve seçilen yöntemi kontrol edin." });
     } finally {
       setBusy("");
     }
@@ -365,11 +390,12 @@ export default function EBelgeIntegrationsWorkspace({
       setConnection((current) => ({ ...current, password: "" }));
       setConnectionTest((current) => current ? { ...current, saved: true } : null);
       setNotice({
+        connectionMode: connection.connectionMode,
         tone: connection.connectionMode === "api" ? "success" : "warning",
         text: result.message || "Yetkili firma seçimi kaydedildi.",
       });
     } catch (error) {
-      setNotice({ tone: "error", text: error?.message || "Firma kaydı tamamlanamadı; bağlantıyı yeniden test edin." });
+      setNotice({ connectionMode: connection.connectionMode, tone: "error", text: error?.message || "Firma kaydı tamamlanamadı; bağlantıyı yeniden test edin." });
     } finally {
       setBusy("");
     }
@@ -468,14 +494,14 @@ export default function EBelgeIntegrationsWorkspace({
         <div className="ism-actions"><button type="button" onClick={openAssistant}><Bot size={16} /> Asistanla Kontrol</button><button type="button" onClick={() => void load()}><RefreshCw size={16} /> Yenile</button></div>
       </header>
 
-      {notice ? <div className={`ism-notice ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</div> : null}
+      {notice && (!notice.connectionMode || notice.connectionMode === connection.connectionMode) ? <div className={`ism-notice ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</div> : null}
 
       <nav className="ism-tabs">{SECTIONS.map(([key, label, Icon]) => <button key={key} type="button" className={section === key ? "active" : ""} onClick={() => setSection(key)}><Icon size={16} /> {label}</button>)}</nav>
 
       {section === "connection" ? <section className="ism-grid two">
         <article className="ism-card ism-connection-card">
           <div className="ism-card-head">
-            <div><h2>İşNet Portal Bağlantısı</h2><p>Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz.</p></div>
+            <div><h2>{connection.connectionMode === "api" ? "İşNet Resmî API Bağlantısı" : "İşNet Portal Bağlantısı"}</h2><p>Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz.</p></div>
             <span className={connectionTest?.saved ? "ready" : "warning"}>
               {connectionTest?.saved ? "Firma kaydedildi" : connectionTest ? "Giriş doğrulandı" : "Doğrulama bekliyor"}
             </span>
@@ -529,16 +555,23 @@ export default function EBelgeIntegrationsWorkspace({
               ? "Portal doğrulaması firma seçimini sağlar; kalıcı belge çekme için İşNet API bağlantısı ayrıca doğrulanmalıdır."
               : "API bağlantısı doğrulanırsa yetkili firma seçimi ve belge senkronizasyonu için oturum kullanılabilir."}
           </p>
-          {portalHealth ? <p className="ism-connection-help" role="status">
+          {connection.connectionMode === "portal" && portalHealth ? <p className="ism-connection-help" role="status">
             <strong>Şifresiz sunucu kontrolü:</strong> {portalHealth.reachable
               ? "İşNet giriş formu erişilebilir; hesap henüz doğrulanmadı."
               : `Erişim sorunu: ${portalHealth.status}${portalHealth.httpStatus ? ` (HTTP ${portalHealth.httpStatus})` : ""}`}
           </p> : null}
+          {connection.connectionMode === "api" && <p className="ism-connection-help" role="status">
+            <strong>Resmî API sunucu erişimi:</strong> {apiNetworkStatus?.status === "READY"
+              ? "READY — sunucu erişilebilir, kullanıcı yetkisi henüz doğrulanmadı."
+              : apiNetworkStatus?.status
+                ? `${apiNetworkStatus.status} — giriş sonucu değil, yalnız ağ kontrolü.`
+                : "Bağlantı durumu okunuyor..."}
+          </p>}
           <div className="ism-actions">
-            <button type="button" disabled={!!busy} onClick={() => void checkPortalHealth()}>
+            {connection.connectionMode === "portal" ? <button type="button" disabled={!!busy} onClick={() => void checkPortalHealth()}>
               {busy === "probe" ? <LoaderCircle className="spin" size={16} /> : <ShieldCheck size={16} />}
               Sunucu Erişimini Kontrol Et (Şifresiz)
-            </button>
+            </button> : null}
             <button type="button" disabled={!!busy || !connection.username.trim() || (!connection.password && !connection.sessionReady)} onClick={testConnection}>
               {busy === "test" ? <LoaderCircle className="spin" size={16} /> : <RefreshCw size={16} />}
               {busy === "test" ? "İşNet doğrulanıyor..." : "1. Bağlantıyı Doğrula"}
