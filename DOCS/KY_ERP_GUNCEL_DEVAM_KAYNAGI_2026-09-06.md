@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 14.11.2026 — Sabit EK maaş ve bordro zinciri / PR #563
+
+- İK Aylık: referanslı kişide referans maaş + personel kartındaki sabit EK, referanssızda ana maaş + sabit EK. Daha önceki referanslı EK=0 fakat gerçek maaş farkı bulunan kayıtlar için geriye dönük okumada fark kurtarılır. Kart düzenlemesinde EK değiştirilebilir; hedef maaş+yol+EK için `EK ile Düzle` eylemi EK'yi hesaplayıp yalnız kullanıcı Kaydet dediğinde kalıcılaştırır.
+- Backend yeni açık ayda kaynak kart/referans daha sonra güncellenmişse eski aylık `premium_amount` bu yeni değeri gizleyemez; ödenmiş/kapalı ay immutable. Kart EK/referans geçerlilik tarihli geçmişte ayrı izlenir. Bordro override dahil tek maaş/EK hesabı.
+- Çıktı: önceki PR #557 10'lu fiş ve bordro toplamları aynı kaynak projeksiyonunu kullanır; yol normal satır, EK tek kesilebilir kupon, nete tek kez dahil.
+- Gerçek Kasım Cuma ve Ali Akkaya tutarları yetkili D1 okuması ile henüz kişi bazında teyit edilmedi; üretim kişisel verilerine migration/backfill veya yazma yapılmadı.
+
+
 ## 14.11.2026 — İşNet çift endpoint çakışması ve PDF/UBL indirme güvenliği (PR #564)
 
 - **Kök neden:** `isnet-live-sync` ile `isnet-runtime-v2` aynı `/api/isnet/settings` ve `/api/isnet/connection` rotalarını kaydediyordu; eski handler önce çalışıp yeni şifresiz firma kaydetme UX'ini bozuyordu. `main.ts` V2 önce çağıracak şekilde düzeltildi; eski cookie/başka firma oturumunun yanlış yeniden kullanımı engellendi.
