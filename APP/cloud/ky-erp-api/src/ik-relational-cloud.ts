@@ -238,18 +238,31 @@ export function calculatePayrollAmounts(input: {
 }
 
 // Canonical real salary stays in hr_monthly_employees.salary. With a linked
-// reference, the base payslip salary is the reference and EK is the difference.
-// This prevents realSalary + EK double counting for every linked employee.
+// KALICI EK: Referanslı personelde kartın EK tutarı önceliklidir.
+// Eski kartlarda EK=0 olduğu hâlde gerçek maaş>referans ise tarihsel fark
+// yalnız geriye uyumluluk için kullanılır; yeni kart kaydında fark sabit EK'ye yazılır.
+// Referanssız personelde maaş ve sabit EK birbirinden bağımsız hakedişlerdir.
 export function resolveReferencePay(actualInput: unknown, referenceInput: unknown, storedExtraInput: unknown, hasReference = false) {
-  const actualSalary = Math.max(Math.round(number(actualInput) * 100) / 100, 0);
+  const real = Math.max(Math.round(number(actualInput) * 100) / 100, 0);
   const storedExtra = Math.max(Math.round(number(storedExtraInput) * 100) / 100, 0);
-  if (!hasReference) return { actualSalary, salary: actualSalary, extra: storedExtra };
+  if (!hasReference) return { actualSalary: real, salary: real, extra: storedExtra };
   if (referenceInput === undefined || referenceInput === null) {
-    const extra = Math.min(storedExtra, actualSalary);
-    return { actualSalary, salary: Math.round((actualSalary - extra) * 100) / 100, extra };
+    const extra = storedExtra > 0 ? storedExtra : 0;
+    return { actualSalary: real, salary: Math.max(0, Math.round((real - extra) * 100) / 100), extra, missingReference: true };
   }
-  const salary = Math.min(actualSalary, Math.max(Math.round(number(referenceInput) * 100) / 100, 0));
-  return { actualSalary, salary, extra: Math.round((actualSalary - salary) * 100) / 100 };
+  const salary = Math.max(Math.round(number(referenceInput) * 100) / 100, 0);
+  const legacyDifference = Math.max(0, Math.round((real - salary) * 100) / 100);
+  const extra = storedExtra > 0 ? storedExtra : legacyDifference;
+  return { actualSalary: Math.round((salary + extra) * 100) / 100, salary, extra, legacyFallback: storedExtra <= 0 && legacyDifference > 0 };
+}
+
+// Her açık ayda sabit EK vardır. Eski hatalı aylık 0 kaydı onu gizleyemez;
+// yalnız kullanıcının açıkça onayladığı aylık sıfır istisnası korunur.
+export function resolveMonthlyExtra(permanentValue: unknown, monthValue: unknown, monthlyOverride: boolean, allowMonthlyZeroExtra = false) {
+  const permanent = Math.max(0, Math.round(number(permanentValue) * 100) / 100);
+  const monthly = Math.max(0, Math.round(number(monthValue) * 100) / 100);
+  if (!monthlyOverride || (permanent > 0 && monthly === 0 && !allowMonthlyZeroExtra)) return permanent;
+  return monthly;
 }
 
 function paymentSplitByTypeAndSource(paymentTypeValue: unknown, netValue: unknown, bankPlanValue: unknown, bankDeductionsValue: unknown = 0) {
@@ -688,12 +701,25 @@ async function saveAdjustment(c: Context<AppEnv>) {
   return okData(c, mapAdjustment(saved || { id, employee_id: employeeId, date, adjustment_type: adjustmentType, hour_or_day: hourOrDay, amount, payment_method: paymentMethod, payroll_effect: payrollEffect, note, status }), current ? 200 : 201);
 }
 
+// Referans maaşı veya sabit EK güncellendiğinde bağlı personelin gerçek
+// ücret tabanı bordrodan farklı kalmasın; eski hareket tutarlarını değiştirme.
+async function currentRealSalary(c: Context<AppEnv>, companyId: string, employeeId: string) {
+  const employee = await first(c, `SELECT salary,road_allowance,overtime_hourly_base
+    FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  if (!employee) return null;
+  const card = await first(c, "SELECT base_employee_id,extra_payment_amount FROM ik_person_card_settings WHERE employee_id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const referenceId = text(card?.base_employee_id);
+  const reference = referenceId
+    ? await first(c, "SELECT salary FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [referenceId, companyId])
+    : null;
+  const real = resolveReferencePay(employee.salary, reference?.salary, card?.extra_payment_amount, Boolean(referenceId));
+  return { ...employee, realSalary: real.actualSalary };
+}
+
 async function overtimeAmountForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, hours: number, multiplierValue: unknown) {
-  const employee = await first(c, `SELECT salary,overtime_hourly_base
-    FROM hr_monthly_employees
-    WHERE id=? AND main_company_id=? LIMIT 1`, [employeeId, companyId]);
+  const employee = await currentRealSalary(c, companyId, employeeId);
   if (!employee) return 0;
-  const salary = number(employee.salary);
+  const salary = number(employee.realSalary);
   const divisor = number(employee.overtime_hourly_base) || 225;
   return calculateOvertimeAmount(salary, hours, multiplierValue, divisor);
 }
@@ -922,9 +948,9 @@ async function savePersonCardCalc(c: Context<AppEnv>, companyId: string, employe
 }
 
 async function absenceDeductionForEmployee(c: Context<AppEnv>, companyId: string, employeeId: string, mode: "DAY" | "HOUR", hoursValue: unknown): Promise<AbsenceDeductionResult> {
-  const employee = await first(c, "SELECT salary,road_allowance FROM hr_monthly_employees WHERE id=? AND main_company_id=? LIMIT 1", [employeeId, companyId]);
+  const employee = await currentRealSalary(c, companyId, employeeId);
   if (!employee) return { hours: 0, deductionDivisor: 300, salaryHourly: 0, salaryCut: 0, roadDaily: 0, roadCut: 0, total: 0 };
-  const salary = Math.max(0, number(employee.salary));
+  const salary = Math.max(0, number(employee.realSalary));
   const road = Math.max(0, number(employee.road_allowance));
   const calc = await personCardCalc(c, companyId, employeeId);
   const deductionDivisor = number(calc.deductionHourlyBase) || 300;
@@ -1226,6 +1252,8 @@ const HISTORICAL_PAYROLL_FIELDS = new Set([
   "overtimeBaseHours",
   "overtimeHourlyBase",
   "deductionHourlyBase",
+  "extraPaymentAmount",
+  "baseEmployeeId",
 ]);
 
 export function applyHistoricalEmployeeValues(employee: Row, changeRows: Row[] = [], periodEnd = "") {
@@ -1254,6 +1282,8 @@ export function applyHistoricalEmployeeValues(employee: Row, changeRows: Row[] =
       result.paymentChannel = paymentType;
       result.bankPaymentType = paymentType;
     }
+    if (field === "extraPaymentAmount") result.extraPaymentAmount = number(oldValue);
+    if (field === "baseEmployeeId") result.baseEmployeeId = text(oldValue);
   }
   return result;
 }
@@ -1618,7 +1648,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
     all(c, "SELECT employee_id,payroll_included,active_passive,exit_date FROM ik_person_card_settings WHERE main_company_id=?", [companyId]),
     all(c, "SELECT employee_id,field_name,old_value,new_value,effective_date,created_at FROM ik_employee_change_history WHERE main_company_id=? AND effective_date>? ORDER BY effective_date DESC,created_at DESC", [companyId, periodEnd]).catch(() => []),
     all(c, "SELECT is_locked FROM ik_monthly_close WHERE main_company_id=? AND period_year=? AND period_month=? LIMIT 1", [companyId, year, month]),
-    all(c, "SELECT employee_id,details_json FROM hr_monthly_audit_logs WHERE main_company_id=? AND period=? AND entity_type='BORDRO' AND action='FINAL_CONTROL' ORDER BY created_at ASC", [companyId, period]),
+    all(c, "SELECT employee_id,details_json,created_at FROM hr_monthly_audit_logs WHERE main_company_id=? AND period=? AND entity_type='BORDRO' AND action='FINAL_CONTROL' ORDER BY created_at ASC", [companyId, period]),
   ]);
   const rawEmployees = currentEmployees.map((employee) => applyHistoricalEmployeeValues(employee, historyRows, periodEnd));
   const cardsByEmployee = new Map(cards.map((row) => [text(row.employee_id), row]));
@@ -1629,7 +1659,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
   for (const row of monthlyControlLogs) {
     try {
       const details = JSON.parse(text(row.details_json) || "{}") as Row;
-      if (row.employee_id && details.bankPlan !== undefined) monthPlanByEmployee.set(text(row.employee_id), details);
+      if (row.employee_id && details.bankPlan !== undefined) monthPlanByEmployee.set(text(row.employee_id), { ...details, savedAt: text(row.created_at) });
     } catch { /* Older audit formats are kept but never used as a payment plan. */ }
   }
   const normalizeType = (value: unknown) => { const valueUpper = financeKey(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
@@ -1662,8 +1692,17 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const savedStatus = upper(row?.status);
     const hasSavedFinal = Boolean(row && ["OVERRIDE", "CALCULATED", "PAID", "MANUAL_APPROVED"].includes(savedStatus));
     const latestMonthPlan = monthPlanByEmployee.get(text(employee.id));
-    // Saving the payroll as CALCULATED does not erase a deliberate monthly override.
-    const monthlyOverride = Boolean(row && (
+    // Yeni kalıcı ücret/EK değişikliği eski açık ay kaydından sonra yapıldıysa
+    // eski premium_amount değerinin güncel kartı gizlemesine izin verme.
+    // PAID veya kilitli dönemlerin gerçek kayıtları aşağıda sabit tutulur.
+    const sourceChangedAt = [
+      text(employee.updatedAt), text(employee.cardUpdatedAt),
+      text(reference?.updatedAt), text(reference?.cardUpdatedAt),
+    ].filter(Boolean).sort().at(-1) || "";
+    const savedControlAt = text(latestMonthPlan?.savedAt || row?.updatedAt);
+    const newerPermanentSource = Boolean(row && savedControlAt && sourceChangedAt > savedControlAt);
+    // CALCULATED durumu tek başına aylık EK'yi kalıcı hâle getirmez.
+    const monthlyOverride = Boolean(row && !newerPermanentSource && (
       ["OVERRIDE", "MANUAL_APPROVED"].includes(savedStatus) ||
       (savedStatus === "CALCULATED" && latestMonthPlan)
     ));
@@ -1673,7 +1712,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const monthPlan = monthlyOverride ? latestMonthPlan : null;
     const currentSalary = monthlyOverride ? number(row.salary) : salary;
     const currentRoad = monthlyOverride ? number(row.roadAllowance) : number(employee.roadAllowance);
-    const currentExtra = monthlyOverride ? number(row.premiumAmount) : extra;
+    const currentExtra = resolveMonthlyExtra(extra, row?.premiumAmount, monthlyOverride, latestMonthPlan?.allowMonthlyZeroExtra === true);
     const currentNet = calculatePayrollAmounts({
       salary: currentSalary, road: currentRoad, extra: currentExtra,
       overtime, advance, deduction, garnishment,
@@ -1732,11 +1771,18 @@ async function savePersonCard(c: Context<AppEnv>) {
   if (baseEmployeeId && !baseEmployee) return error(c, 400, "INVALID_BASE_EMPLOYEE", "Baz personel bulunamadı.");
   const actualSalary = number(body.salary ?? current.salary);
   if (baseEmployee && actualSalary < number(baseEmployee.salary)) return error(c, 409, "REFERENCE_SALARY_EXCEEDS_REAL", "Gerçek maaş referans maaştan düşük olamaz. Referans maaşı veya gerçek maaşı düzeltin.");
+  const hasExplicitExtra = body.extraPaymentAmount !== undefined && body.extraPaymentAmount !== null && body.extraPaymentAmount !== "";
   const enteredExtra = number(body.extraPaymentAmount ?? currentCard?.extra_payment_amount);
   if (enteredExtra < 0) return error(c, 400, "EXTRA_PAYMENT_INVALID", "EK ödeme negatif olamaz.");
+  const referenceSalary = number(baseEmployee?.salary);
+  // Referanslı personelde gerçek maaş = referans maaş + kalıcı EK.
+  // EK'yi tekrar maaş farkına çevirerek kullanıcının sabit tutarını silme.
   const extraPaymentAmount = baseEmployee
-    ? resolveReferencePay(actualSalary, baseEmployee.salary, enteredExtra, true).extra
-    : enteredExtra;
+    ? (hasExplicitExtra ? Math.round(enteredExtra * 100) / 100 : Math.max(0, Math.round((actualSalary - referenceSalary) * 100) / 100))
+    : Math.round(enteredExtra * 100) / 100;
+  if (baseEmployee && Math.abs(Math.round((referenceSalary + extraPaymentAmount - actualSalary) * 100)) > 1) {
+    return error(c, 409, "REFERENCE_EXTRA_TOTAL_MISMATCH", "Referanslı personelde gerçek maaş, referans maaş + sabit EK tutarına eşit olmalıdır.");
+  }
   const legalTypeRaw = upper(body.legalDeductionType);
   const legalType = legalTypeRaw === "HACIZ" ? "HACIZ" : legalTypeRaw === "ICRA" ? "ICRA" : "YOK";
   const legalAmount = legalType === "YOK" ? 0 : number(body.garnishmentAmount);
@@ -1855,6 +1901,7 @@ async function savePersonCard(c: Context<AppEnv>) {
     ["bankAmount", number(current.bank_amount), number(updatedEmployee?.bank_amount)],
     ["cashAmount", number(current.cash_amount), number(updatedEmployee?.cash_amount)],
     ["extraPaymentAmount", number(currentCard?.extra_payment_amount), number(updatedCard?.extra_payment_amount)],
+    ["baseEmployeeId", text(currentCard?.base_employee_id), text(updatedCard?.base_employee_id)],
     ["overtimeHourlyBase", number(current.overtime_hourly_base) || 225, number(updatedEmployee?.overtime_hourly_base) || 225],
     ["deductionHourlyBase", number(currentCalc.deductionHourlyBase) || 300, deductionHourlyBase],
     ["startDate", hrDateOnly(current.hire_date), hrDateOnly(updatedEmployee?.hire_date)],
@@ -1867,7 +1914,7 @@ async function savePersonCard(c: Context<AppEnv>) {
       (id,main_company_id,employee_id,change_type,field_name,old_value,new_value,effective_date,note,actor_user_id,created_at)
       VALUES (?,?,?,?,?,?,?,?,?,?,?)`).bind(
         crypto.randomUUID(), companyId, employeeId,
-        ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount","extraPaymentAmount","overtimeHourlyBase","deductionHourlyBase"].includes(String(field)) ? "COMPENSATION" : "PERSONNEL",
+        ["salary","roadAllowance","bankPaymentType","bankAmount","cashAmount","extraPaymentAmount","baseEmployeeId","overtimeHourlyBase","deductionHourlyBase"].includes(String(field)) ? "COMPENSATION" : "PERSONNEL",
         String(field), text(before), text(after), effectiveDate,
         text(body.changeNote || body.note) || "İK personel / ücret kartı güncellendi",
         text(body.userId || body.userName) || "IK", nowIso(),
@@ -2204,8 +2251,14 @@ async function saveAdvancedPayrollOverride(c: Context<AppEnv>) {
   const employee = await first(c, `SELECT e.*, s.extra_payment_amount, s.base_employee_id FROM hr_monthly_employees e LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id WHERE e.id=? AND e.main_company_id=?`, [employeeId, companyId]);
   if (!employee) return error(c, 404, "NOT_FOUND", "Personel bulunamadı.");
   const existing = await first(c, "SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id=?", [companyId, year, month, employeeId]);
-  const salary = number(employee.salary);
-  const premium = number(employee.extra_payment_amount);
+  if (upper(existing?.status) === "PAID") return error(c, 409, "PAYROLL_PAID_LOCKED", "Ödenmiş bordro yetkili düzeltme olmadan değiştirilemez.");
+  const reference = text(employee.base_employee_id)
+    ? await first(c, "SELECT salary FROM hr_monthly_employees WHERE id=? AND main_company_id=?", [text(employee.base_employee_id), companyId])
+    : null;
+  if (text(employee.base_employee_id) && !reference) return error(c, 409, "REFERENCE_EMPLOYEE_MISSING", "Referans personel bulunamadı; EK hesaplaması güvenle yapılamaz.");
+  const compensation = resolveReferencePay(employee.salary, reference?.salary, employee.extra_payment_amount, Boolean(employee.base_employee_id));
+  const salary = compensation.salary;
+  const premium = compensation.extra;
   const allAdjustments = await adjustmentRows(c, companyId);
   const normalizeType = (value: unknown) => { const valueUpper = financeKey(value); if (valueUpper.includes("TOPLU") && valueUpper.includes("AVANS")) return "TOPLU_AVANS"; if (valueUpper.includes("AVANS")) return "AVANS"; if (valueUpper.includes("HACIZ") || valueUpper.includes("HACİZ")) return "HACIZ"; if (valueUpper.includes("ICRA") || valueUpper.includes("İCRA")) return "ICRA"; if (((valueUpper.includes("EKSIK") || valueUpper.includes("EKSİK")) && (valueUpper.includes("GUN") || valueUpper.includes("GÜN") || valueUpper.includes("SAAT"))) || valueUpper.includes("DEVAMSIZ") || valueUpper.includes("GELMEDI") || valueUpper.includes("GELMEDİ")) return "KESINTI"; if (valueUpper.includes("KESINT")) return "KESINTI"; if (valueUpper.includes("MESAI")) return "MESAI"; return valueUpper; };
   const own = allAdjustments.filter((item) => text(item.employeeId) === employeeId && text(item.date).startsWith(period) && !upper(item.payrollEffect).includes("SADECE"));
@@ -2299,7 +2352,10 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
   if (updatePersonnelCard && referenceEmployee && Math.abs(desired.salary - number(referenceEmployee.salary)) > 0.01) {
     return error(c, 409, "REFERENCE_BASE_MISMATCH", "Ana maaş referans maaşla eşleşmiyor. Personel referansını ve EK farkını kontrol edin.");
   }
-  const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
+  if (!updatePersonnelCard && body.allowMonthlyZeroExtra === true && desired.extra !== 0) {
+    return error(c, 400, "MONTHLY_EXTRA_OVERRIDE_INVALID", "Aylık EK sıfırlama izni yalnız EK=0 olduğunda kullanılabilir.");
+  }
+    const realSalaryForMaster = referenceEmployee ? Math.round((desired.salary + desired.extra) * 100) / 100 : desired.salary;
   const { earnings, net } = calculatePayrollAmounts(desired);
   const paymentDiff = Math.round((desired.bank + desired.cash - net) * 100) / 100;
   if (Math.abs(paymentDiff) > 0.01) {
@@ -2570,6 +2626,7 @@ async function saveAdvancedPayrollFinalControl(c: Context<AppEnv>) {
     reason,
     scope: updatePersonnelCard ? "MONTH_AND_PERSONNEL_CARD" : "MONTH_ONLY",
     personnelEffectiveDate: updatePersonnelCard ? personnelEffectiveDate : null,
+    allowMonthlyZeroExtra: !updatePersonnelCard && desired.extra === 0 && body.allowMonthlyZeroExtra === true,
     current,
     desired,
     net,
