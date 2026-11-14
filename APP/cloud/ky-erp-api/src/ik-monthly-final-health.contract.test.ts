@@ -196,3 +196,21 @@ test("when another user changes HR data, a modal never silently overwrites a pen
   assert.match(monthly, /expectedVersion: modalDraft\.version/);
   assert.match(monthly, /expectedPayrollVersion: modalDraft\.payrollVersion/);
 });
+
+test("permanent fixed EK wins over stale open-month override while paid and closed remain frozen", () => {
+  const api = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(api, /const sourceChangedAt = \[/);
+  assert.match(api, /text\(employee\.cardUpdatedAt\)/);
+  assert.match(api, /text\(reference\?\.updatedAt\)/);
+  assert.match(api, /const newerPermanentSource = Boolean\(row && savedControlAt && sourceChangedAt > savedControlAt\)/);
+  assert.match(api, /const monthlyOverride = Boolean\(row && !newerPermanentSource &&/);
+  assert.match(api, /const currentExtra = monthlyOverride \? number\(row\.premiumAmount\) : extra/);
+  assert.match(api, /const frozen = Boolean\(hasSavedFinal && \(closedPeriod \|\| savedStatus === "PAID"\)\)/);
+  assert.match(api, /const final = frozen \? savedFinal! : currentFinal/);
+  assert.match(api, /"extraPaymentAmount",\s*"baseEmployeeId"/);
+  assert.match(api, /REFERENCE_EXTRA_TOTAL_MISMATCH/);
+  assert.match(api, /PAYROLL_PAID_LOCKED/);
+  assert.match(page, /Sabit EK Ödeme \(her ay\)/);
+  assert.match(page, /EK ile Düzle/);
+});
