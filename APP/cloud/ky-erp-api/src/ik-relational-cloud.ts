@@ -2766,7 +2766,14 @@ async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
   const guard = validatePayrollBatchTransition(rows, employeeIds, lines, status);
   if (guard) return error(c, 409, guard.code, guard.message);
   const timestamp = nowIso();
-  await c.env.DB.batch(rows.map((row) => c.env.DB.prepare("UPDATE hr_payrolls_v2 SET status=?,updated_at=? WHERE id=?").bind(status, timestamp, text(row.id))));
+  // Optimistic status/version fence: a concurrent PAID transition is never
+  // reverted even if it occurs after our read-only batch preflight.
+  const updates = await c.env.DB.batch(rows.map((row) => c.env.DB.prepare(
+    "UPDATE hr_payrolls_v2 SET status=?,updated_at=? WHERE id=? AND main_company_id=? AND year=? AND month=? AND status!='PAID' AND updated_at=?"
+  ).bind(status, timestamp, text(row.id), companyId, year, month, text(row.updated_at))));
+  if (updates.some((result) => number(result.meta?.changes) !== 1)) {
+    return error(c, 409, "PAYROLL_CONCURRENT_CHANGE", "Bordro başka oturumda değişti; ödeme işaretlemesi durduruldu. Güncel listeyi yeniden kontrol edin.");
+  }
   await audit(c, {
     mainCompanyId: companyId,
     period,
