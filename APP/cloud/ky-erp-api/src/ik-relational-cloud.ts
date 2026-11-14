@@ -1740,6 +1740,7 @@ async function advancedPayroll(c: Context<AppEnv>, selectedYear?: number, select
       employeeId: employee.id, code: employee.code, fullName: employee.fullName, department: employee.department,
       system: systemFinal, final, status: hasSavedFinal ? savedStatus : "SYSTEM",
       paymentType, bankPlan, sourceChangedSinceSave, frozen,
+      allowMonthlyZeroExtra: Boolean(monthlyOverride && latestMonthPlan?.allowMonthlyZeroExtra === true),
       payrollVersion: text(row?.updatedAt),
     };
   });
