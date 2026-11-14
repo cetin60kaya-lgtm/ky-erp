@@ -49,6 +49,35 @@ function xmlTag(xml: string, names: string[]) {
   return "";
 }
 
+/** Only root-level UBL basic fields can identify a document.
+ * Supplier/customer PartyIdentification IDs must never become document IDs. */
+function xmlRootField(xml: string, name: "ID" | "IssueDate") {
+  const tags = /<(\\/?)(?:[A-Za-z0-9_]+:)?([A-Za-z0-9_]+)\\b[^>]*>/g;
+  let depth = 0;
+  let rootStarted = false;
+  for (const tag of xml.matchAll(tags)) {
+    const closing = Boolean(tag[1]);
+    const local = tag[2];
+    if (closing) {
+      if (rootStarted) {
+        depth--;
+        if (depth <= 0) break;
+      }
+      continue;
+    }
+    if (!rootStarted) {
+      if (local !== "Invoice" && local !== "DespatchAdvice") continue;
+      rootStarted = true;
+    } else if (depth === 1 && local.toLowerCase() === name.toLowerCase()) {
+      const rest = xml.slice((tag.index || 0) + tag[0].length);
+      const match = rest.match(new RegExp(`^([^<]*)<\\/(?:[A-Za-z0-9_]+:)?${name}\\s*>`, "i"));
+      if (match) return decodeXml(match[1]);
+    }
+    if (!/\\/>$/.test(tag[0])) depth++;
+  }
+  return "";
+}
+
 function xmlBlocks(xml: string, name: string) {
   const re = new RegExp(
     `<(?:[A-Za-z0-9_]+:)?${name}(?:\\s[^>]*)?>([\\s\\S]*?)<\\/(?:[A-Za-z0-9_]+:)?${name}>`,
@@ -150,8 +179,8 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
   const supplierTaxNo = cleanTax(xmlTag(supplier, ["CompanyID", "ID"]));
   const customerName = xmlTag(customer, ["RegistrationName", "Name"]);
   const customerTaxNo = cleanTax(xmlTag(customer, ["CompanyID", "ID"]));
-  const documentNo = xmlTag(xml, ["ID"]);
-  const issueDate = xmlTag(xml, ["IssueDate"]);
+  const documentNo = xmlRootField(xml, "ID");
+  const issueDate = xmlRootField(xml, "IssueDate");
   const legal = xmlBlocks(xml, "LegalMonetaryTotal")[0] || "";
   const taxTotalBlock = xmlBlocks(xml, "TaxTotal")[0] || "";
   const lineName = invoice ? "InvoiceLine" : "DespatchLine";
