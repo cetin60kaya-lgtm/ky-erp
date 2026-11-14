@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 14.11.2026 — İK sabit EK her ay tek kaynak ve önceki ay override önceliği (PR #563)
+
+- Kök neden: Referans personelli kayıtlarda kullanıcı girişindeki sabit EK, maaş-referans farkına zorla dönüştürülüyordu. Açık dönemde `hr_payrolls_v2.premium_amount` önceki aylık kayıttan kalıp kalıcı karttaki yeni EK'yi gizleyebiliyordu. Legacy bordro override yolu maaş ve EK'yi ayrı yanlış toplayabiliyordu. EK/referans eski ay ücret geçmişinden geri sarılmıyordu.
+- Tek kural: **Referanslı** personel = referans maaş + karttaki sabit EK; **referanssız** = ana maaş + karttaki sabit EK. Referanslı eski EK=0 kaydında önceki gerçek maaş farkı geriye uyumlulukla hesaplanır; yeni kart kaydı bu tutarı açık sabit EK olarak saklar. Kalıcı EK her ay otomatik gelir, yalnız ay için EK override ayrı tutulur.
+- Personel Kartındaki `Sabit EK Ödeme (her ay)` girişi elle değiştirilebilir. Maaş/referans tutarı tutarlı biçimde güncellenir, `EK ile Düzle` hedef sabit hakediş (maaş+yol+EK, hareketler hariç) için tek seferlik kalıcı EK hesabı sağlar.
+- Açık ayda kart veya referans kaynak versiyonu aylık son kontrolden daha yeniyse bordro yeni kaynağı kullanır; **PAID ve kilitli ay snapshot'ları değişmez**. Eski aylar için `extraPaymentAmount` ve `baseEmployeeId` etkili tarih geçmişi kullanılır. Override ekranı da aynı maaş/EK ayrımını uygular, ödenmiş satırı değiştirmez.
+- Kod/CI/publish PASS yalnız kanıtla bildirilir. Gerçek Cuma ve Ali Akkaya Kasım 2026 D1 ücret/EK tutarları oturumlu read-only erişimle henüz doğrulanmadı; bu PR herhangi bir çalışan/ücret kaydını izinsiz yazmaz veya toplu backfill yapmaz.
+
+
 ## 14.11.2026 — Muhasebe/e-Belge entegrasyon ve manuel UBL canlı yayın (PR #562)
 
 - **Amaç:** Tek kullanıcı bağlantı düzeni ve günlük belge güvenliği. İşNet ekranındaki adım bileşeni Microsoft 365/Gmail OAuth ile Google Drive/OneDrive/SharePoint servis ekranına aynı 3-adım görsel düzeniyle bağlandı. Sağlayıcıların gerçek giriş yöntemleri birbirine karıştırılmıyor; OAuth/portal ekranı veya önizleme gerçek veri senkronizasyonu PASS sayılmıyor.
