@@ -278,7 +278,7 @@ shell.use("/api/*", async (c, next) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic = path === "/api/health" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/") || path === "/api/employee-portal/companies";
+  const isPublic = path === "/api/health" || path === "/api/health/isnet-egress" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/") || path === "/api/employee-portal/companies";
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);
