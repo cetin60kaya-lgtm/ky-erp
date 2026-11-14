@@ -76,7 +76,7 @@ export default function ReconciliationPanel({ activeMainCompany, refreshKey = 0 
   };
   const weeklyLabel = (status) => ({
     CURRENT_ONLY_NOT_COMPARED:"Güncel ekstre — karşı hafta yok",NEW_ON_STATEMENT:"Yeni ekstre kaydı",MISSING_ON_CURRENT_REVIEW:"Yeni ekstrede yok — teyit",AMOUNT_CHANGED_REVIEW:"Tutar değişti — teyit",
-    DUPLICATE_REVIEW:"Mükerrer satır — teyit",GROUP_CONFLICT_REVIEW:"Grup uyuşmazlığı",PRESENT_BOTH_REVIEW:"İki ekstrede mevcut"
+    DUPLICATE_REVIEW:"Mükerrer satır — teyit",GROUP_CONFLICT_REVIEW:"Grup uyuşmazlığı",AMOUNT_UNVERIFIED_REVIEW:"Tutar sütunu doğrulanamadı",PRESENT_BOTH_REVIEW:"İki ekstrede mevcut"
   }[status] || "İncele");
 
   const requestSave = (row) => {
@@ -149,7 +149,9 @@ export default function ReconciliationPanel({ activeMainCompany, refreshKey = 0 
         </div>
         {weeklyReport ? <section className="weekly-cari-results">
           <strong>{weeklyReport.companyName} · Salt okunur karşılaştırma</strong>
-          <p>{weeklyReport.summary.inCurrent} güncel HKN · {weeklyReport.summary.notInErp} ERP'de kesin eşleşmeyen · {weeklyReport.summary.disappeared} bu hafta görünmeyen · {weeklyReport.summary.changed} tutarı değişen. Belirsiz satırlar: {weeklyReport.source.currentAmbiguousRows}.</p>
+          <p>{weeklyReport.summary.inCurrent} güncel HKN · {weeklyReport.summary.notInErp} ERP'de kesin eşleşmeyen · {weeklyReport.summary.disappeared} bu hafta görünmeyen · {weeklyReport.summary.changed} tutarı değişen. Belirsiz satırlar: {weeklyReport.source.currentAmbiguousRows}. Tutar sütunu doğrulanamayan belge: {weeklyReport.summary.amountUnverified || 0}.</p>
+          {(weeklyReport.source.currentMissingAmountSheets > 0 || weeklyReport.source.previousMissingAmountSheets > 0) ?
+            <p role="alert" className="accounting-workspace-error">Ekstrenin bazı sayfalarında borç/alacak/bakiye sütunları tanınmadı. Bu satırların tutar ve tahsilat eşleşmesini kesinleştirmeyin; Excel başlıklarını kontrol edin.</p> : null}
           <div className="weekly-cari-groups">{weeklyReport.groups.map(g=><span key={g.groupCode}>{g.groupCode}: {g.current} HKN · {g.needsReview} inceleme</span>)}</div>
           <div className="reconciliation-table-wrap"><table><thead><tr><th>HKN Fatura</th><th>Grup</th><th>Ekstre farkı</th><th>ERP kaydı</th><th>Karşı bakiye</th></tr></thead><tbody>
             {weeklyReport.rows.slice(0,200).map(item=><tr key={item.invoiceNo}><td>{item.invoiceNo}</td><td>{item.groupCode||"Belirsiz"}</td><td>{weeklyLabel(item.state)}</td><td>{item.erpPresent?"Var":"Kesin eşleşme yok"}</td><td>{item.balance==null?"Doğrulanmadı":money(item.balance)}</td></tr>)}

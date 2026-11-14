@@ -1,6 +1,6 @@
 // Weekly customer statements: deterministic preview only. Never changes paid/accounting status.
 export type StatementLine={invoiceNo:string;groupCode:string;debit:number|null;credit:number|null;balance:number|null;occurrence:number};
-export type StatementParse={lines:StatementLine[];ambiguousRows:number;ignoredRows:number;sheets:number};
+export type StatementParse={lines:StatementLine[];ambiguousRows:number;ignoredRows:number;sheets:number;missingAmountSheets:number};
 const value=(v:unknown)=>v==null?"":String(v).trim();
 const fold=(v:unknown)=>value(v).toLocaleUpperCase("tr-TR").normalize("NFD")
  .replace(/[\u0300-\u036f]/g,"").replace(/İ/g,"I").replace(/\s+/g," ").trim();
@@ -32,6 +32,9 @@ function parseOne(table:unknown[][],aggregate:StatementParse){
   const hits=[/GRUP|ALT GRUP|CARI KOD/,/BORC|DEBIT/,/ALACAK|CREDIT/,/BAKIYE|BALANCE/].filter(re=>names.some(h=>re.test(h))).length;
   if(hits>=2){headerIndex=i;cols={group:headerCol(names,/^GRUP$|ALT GRUP|CARI KOD/),debit:headerCol(names,/BORC|DEBIT/),credit:headerCol(names,/ALACAK|CREDIT/),balance:headerCol(names,/BAKIYE|BALANCE/)};break;}
  }
+ if (cols.debit < 0 && cols.credit < 0 && cols.balance < 0) {
+  aggregate.missingAmountSheets++;
+ }
  const lines:StatementLine[]=[];
  for(let i=headerIndex+1;i<table.length;i++){
   const row=Array.isArray(table[i])?table[i]:[];
@@ -50,11 +53,13 @@ function parseOne(table:unknown[][],aggregate:StatementParse){
 }
 export function parseStatementTables(tables:unknown[][][]):StatementParse{
  if(!Array.isArray(tables)||!tables.length||tables.length>10)throw new Error("Ekstre 1-10 sayfa aralığında olmalıdır.");
- const result:StatementParse={lines:[],ambiguousRows:0,ignoredRows:0,sheets:tables.length};
+ const result:StatementParse={lines:[],ambiguousRows:0,ignoredRows:0,sheets:tables.length,missingAmountSheets:0};
  for(const t of tables)result.lines.push(...parseOne(t,result));
  if(result.lines.length>3000)throw new Error("Tek karşılaştırmada en fazla 3.000 HKN satırı işlenebilir.");
  return result;
 }
+const hasComparableAmounts=(a:StatementLine,b:StatementLine)=>
+ (["debit","credit","balance"] as const).some(k=>typeof a[k]==="number" && typeof b[k]==="number");
 const comparable=(a:StatementLine,b:StatementLine)=>{
  const fields:(keyof StatementLine)[]=["debit","credit","balance"];
  return fields.some(k=>typeof a[k]==="number"&&typeof b[k]==="number"&&Math.abs(Number(a[k])-Number(b[k]))>0.009);
@@ -69,6 +74,7 @@ export function compareWeeklyStatements(previous:StatementLine[],current:Stateme
   else if(!latest.length)state="MISSING_ON_CURRENT_REVIEW";
   else if(!old.length)state="NEW_ON_STATEMENT";
   else if(old.length>1||latest.length>1)state="DUPLICATE_REVIEW";
+  else if(p&&n&&!hasComparableAmounts(p,n))state="AMOUNT_UNVERIFIED_REVIEW";
   else if(p&&n&&comparable(p,n))state="AMOUNT_CHANGED_REVIEW";
   const groups=[...new Set([...old,...latest].map(x=>x.groupCode).filter(Boolean))];
   if(groups.length>1)state="GROUP_CONFLICT_REVIEW";
@@ -85,6 +91,7 @@ export function compareWeeklyStatements(previous:StatementLine[],current:Stateme
    newlySeen:result.filter(x=>x.state==="NEW_ON_STATEMENT").length,
    disappeared:result.filter(x=>x.state==="MISSING_ON_CURRENT_REVIEW").length,
    changed:result.filter(x=>x.state==="AMOUNT_CHANGED_REVIEW").length,
+   amountUnverified:result.filter(x=>x.state==="AMOUNT_UNVERIFIED_REVIEW").length,
    duplicateOrConflict:result.filter(x=>/DUPLICATE|CONFLICT/.test(x.state)).length},
  };
 }
