@@ -256,6 +256,15 @@ export function resolveReferencePay(actualInput: unknown, referenceInput: unknow
   return { actualSalary: Math.round((salary + extra) * 100) / 100, salary, extra, legacyFallback: storedExtra <= 0 && legacyDifference > 0 };
 }
 
+// Her açık ayda sabit EK vardır. Eski hatalı aylık 0 kaydı onu gizleyemez;
+// yalnız kullanıcının açıkça onayladığı aylık sıfır istisnası korunur.
+export function resolveMonthlyExtra(permanentValue: unknown, monthValue: unknown, monthlyOverride: boolean, allowMonthlyZeroExtra = false) {
+  const permanent = Math.max(0, Math.round(number(permanentValue) * 100) / 100);
+  const monthly = Math.max(0, Math.round(number(monthValue) * 100) / 100);
+  if (!monthlyOverride || (permanent > 0 && monthly === 0 && !allowMonthlyZeroExtra)) return permanent;
+  return monthly;
+}
+
 function paymentSplitByTypeAndSource(paymentTypeValue: unknown, netValue: unknown, bankPlanValue: unknown, bankDeductionsValue: unknown = 0) {
   const net = Math.max(Math.round(number(netValue) * 100) / 100, 0);
   const type = upper(paymentTypeValue);
@@ -1703,10 +1712,7 @@ async function advancedPayroll(c: Context<AppEnv>) {
     const monthPlan = monthlyOverride ? latestMonthPlan : null;
     const currentSalary = monthlyOverride ? number(row.salary) : salary;
     const currentRoad = monthlyOverride ? number(row.roadAllowance) : number(employee.roadAllowance);
-    // Eski aylık kayıttaki EK=0, kartta sabit EK>0 ise açık ayda
-    // otomatik kaynaktan düzelt. Bilerek aylık sıfırlama ayrı onaylıdır.
-    const legacyZeroShadow = Boolean(monthlyOverride && extra > 0 && number(row?.premiumAmount) <= 0 && latestMonthPlan?.allowMonthlyZeroExtra !== true);
-    const currentExtra = legacyZeroShadow ? extra : monthlyOverride ? number(row.premiumAmount) : extra;
+    const currentExtra = resolveMonthlyExtra(extra, row?.premiumAmount, monthlyOverride, latestMonthPlan?.allowMonthlyZeroExtra === true);
     const currentNet = calculatePayrollAmounts({
       salary: currentSalary, road: currentRoad, extra: currentExtra,
       overtime, advance, deduction, garnishment,
