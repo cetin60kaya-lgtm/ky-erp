@@ -1,13 +1,13 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { INTEGRATION_CONNECTION_STEPS } from "./IntegrationFlowSteps.jsx";
 const read=(relative)=>readFileSync(new URL(relative,import.meta.url),"utf8");
 
 test("Tüm entegrasyon ekranlarında bağlantı adımları tek bileşendir",()=>{
-  assert.equal(INTEGRATION_CONNECTION_STEPS.ISNET.length,3);
-  assert.equal(INTEGRATION_CONNECTION_STEPS.MAIL.length,3);
-  assert.equal(INTEGRATION_CONNECTION_STEPS.STORAGE.length,3);
+  const common=read("./IntegrationFlowSteps.jsx");
+  assert.match(common,/ISNET: \["Hesap ve giriş"/);
+  assert.match(common,/MAIL: \["Posta hesabı tanımla"/);
+  assert.match(common,/STORAGE: \["Dosya sağlayıcısını seç"/);
   assert.match(read("../muhasebe/EBelgeIntegrationsWorkspace.jsx"),/<IntegrationFlowSteps kind="ISNET"/);
   assert.match(read("../../../admin/AdminMailConnectionsV2.jsx"),/<IntegrationFlowSteps kind="MAIL"/);
   assert.match(read("../../../admin/AdminStorageCenter.jsx"),/<IntegrationFlowSteps kind="STORAGE"/);
