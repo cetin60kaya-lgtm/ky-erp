@@ -23,7 +23,10 @@ test("reference salary is printed in main payslip while detachable EK is paid on
   assert.match(monthly, /money\(slip\.extraCoupon\)/);
   assert.doesNotMatch(monthly, /\["EK", money\(row\.extra\)\]/);
   assert.doesNotMatch(monthly, /Personel: \$\{escapeHtml\(row\.employee\.fullName\)\} · İmza/);
-  assert.match(monthly, /readOnly=\{Boolean\(modalDraft\.baseEmployeeId\)\}/);
+  assert.match(monthly, /Sabit EK Ödeme \(her ay\)/);
+  assert.match(monthly, /Gerçek Maaş \(Referans \+ EK\)/);
+  assert.match(monthly, /const sourceExtra = Math\.max\(round\(num\(modalDraft\.extraPaymentAmount\)\), 0\)/);
+  assert.doesNotMatch(monthly, /readOnly=\{Boolean\(modalDraft\.baseEmployeeId\)\}/);
 });
 
 test("monthly HR uses the professional command shell without replacing payroll rules", () => {
