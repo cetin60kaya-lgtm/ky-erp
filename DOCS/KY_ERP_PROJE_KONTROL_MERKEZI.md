@@ -1,5 +1,17 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 14.11.2026 — Muhasebe/e-Belge entegrasyon ve manuel UBL canlı yayın (PR #562)
+
+- **Amaç:** Tek kullanıcı bağlantı düzeni ve günlük belge güvenliği. İşNet ekranındaki adım bileşeni Microsoft 365/Gmail OAuth ile Google Drive/OneDrive/SharePoint servis ekranına aynı 3-adım görsel düzeniyle bağlandı. Sağlayıcıların gerçek giriş yöntemleri birbirine karıştırılmıyor; OAuth/portal ekranı veya önizleme gerçek veri senkronizasyonu PASS sayılmıyor.
+- **Manuel UBL:** UBL-TR kök fatura/irsaliye belge kimliği, zorunlu tarih ve satır, iade faturası türü, tedarikçi/alıcı VKN/TCKN kontrolü, DTD/ENTITY reddi eklendi. Eksik VKN/TCKN otomatik firma açma onayı üretmiyor. Kısmi `HTTP 207` XML/PDF yüklemesi başarıyla kaydedilenleri 'tamamen başarısız' göstermiyor; yalnız reddedilen dosyalar tekrar seçilebilir durumda ve dosya bazında hata görünür.
+- **Outlook:** Tek ekranda alıcılar, model, HKN/DDM PDF ekleri, şablon, taslak, önizleme ve gönderim. Gönderebilmek için kullanıcı son onay kutusunu işaretler; gerçek Graph isteğinden hemen önce tenant/model/mail hesabı/PDF/mükerrer gönderim koruması olan `invoice-mail-preflight` tekrar çalışır. `Taslak Kaydet` göndermez; Graph kabulü teslim kanıtı değildir, belirsiz sonuçta otomatik tekrar yapılmaz.
+- **Haftalık müşteri Excel:** Önceki/sonraki XLSX/XLS/CSV müşteri ekstrelerinde tutar başlığı bulunamazsa eşit/ödenmiş olarak sessizce yorumlanmaz; `AMOUNT_UNVERIFIED_REVIEW` ile manuel inceleme gerekir. Cari ödeme, KDV, stok, kesin muhasebe kaydı değiştirilmedi.
+- **Kod ve test:** PR #562 `0bed02c7168d3626c59fa5dc5e19b5afd0b7b8fb` son test commit'i üzerinden başarıyla squash merge edildi: `86513990fae70390fed98947f89148cd6d714c45`. GitHub Actions CI `43627253024`: **frontend lint/test/build SUCCESS, Worker typecheck/test/build SUCCESS**. Önceki başarısız CI tekrarları için gereksiz rerun yapılmadı.
+- **Yayın:** Cloudflare Pages build `491dfa86-6de2-4b77-9e88-868b859fac44` SUCCESS (2026-11-14 18:35:33 UTC); Worker build `8696bf3b-b50a-489b-b03a-386b31d2dfcb` SUCCESS (18:36:30 UTC) **aynı `86513990` commit'inde**. GitHub Pages/Workers checks SUCCESS. Production D1 migration, gerçek müşteri maili/fatura/irsaliye gönderimi veya kesin mali işlem yapılmadı.
+- **Canlı kabul sınırı:** Kullanıcı Chrome'undaki e-Belge sekmesi önceki bundle'ı tutuyor (`Bağlantıyı Test Et` eski düğmesi); gerçek yeni ekran için kullanıcı Ctrl+F5, İşNet firma bağlantı denemesi, Outlook Microsoft OAuth ve Drive File Hub binding/senkron indeks kabulü gerekir. DESEN Remote Commander bu oturumdaki kontrol sırasında OFFLINE; yerel Windows ürün/cihaz kabulü yapılmadı. Gerçek İşNet portal hesabı, Outlook gönderimi, müşteri ekstreleri ve fiziksel API smoke **ayrı onay/test bekliyor**. Şifre/OTP/token kaydedilmedi.
+- **Kota:** GitHub Actions kotası azaldığı için ara küçük commit/test döngüsü yerine toplu değişiklik + tek final CI kapısı kuralı. Yeni workflow, otomatik tekrar ve paralel deploy hattı eklenmedi.
+
+
 ## 14.11.2026 — İşNet KY ERP içinden tek doğrulama / firma seçimi (PR #561)
 
 - **Kullanıcı kararı:** İşNet kullanıcı adı ve şifre yalnız KY ERP e-Belge → Entegrasyonlar ekranında girilir. Ayrı portala yönlendirme, tarayıcı çerezi/OTP kopyalama ve şifreyi D1'e kaydetme yok. Akış: giriş bilgileri → sağlayıcı bağlantı testi → yetkili firma seçimi → **şifresiz, ikinci login'siz** firma kaydı. Parola göz ikonu ile isteğe bağlı göster/gizle; işlem süresince bekleme ve açık hata.
