@@ -1,5 +1,16 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 14.11.2026 — İşNet şifresiz çift sunucu teşhisi ve kullanıcı onaylı tarayıcı kasası (PR #567)
+
+- **Kullanıcı gözlemi:** e-Belge/Entegrasyonlar gerçek kullanıcı ekranında `İşNet giriş formuna erişim TIMEOUT`. Şifre yanlışlığı veya portal hesabı reddi kanıtı değildir. Bağımsız X Windows GET `nettefatura.isnet.net.tr` HTTP 200, buna karşılık Cloudflare Worker→İşNet giriş formu kontrolü TIMEOUT dönmüştür.
+- **İstek:** İşNet kullanıcı adı/şifresini her gün yeniden yazmamak. Güvenli karar: **şifreyi KY ERP D1/API/localStorage/GitHub'a yazma**, `isnet:` önekli ayrı hesapla Chrome/parola yöneticisinde kullanıcı eylemi ve tarayıcı onayıyla sakla; `mediation:required` ile kullanıcı seçince alanları doldur. Tarayıcı desteklemiyorsa yalancı kayıt sonucu verme. Bu tarayıcı kaydı `kyerp.net` origin'inde kalır; paylaşımlı PC'de önerilmez.
+- **UI:** `Kullanıcı Adı ve Şifreyi Kaydet`, `Kayıtlı Bilgileri Doldur`, kayıt formunda site/birim ve güvenlik açıklaması. Kayıt veya otomatik doldurma **İşNet bağlantısı PASS anlamına gelmez**. Mevcut firma/yetki durumu doldurmada yeniden doğrulama gerektirir.
+- **Ağ:** public `/api/isnet/provider-login-health`, NetteFatura TIMEOUT/HTTP hata halinde ayrıca **şifresiz** `efatura.isnet.net.tr/Account/Login` GET yapar, alternatif sonucu ayırır. Gerçek giriş bilgileri otomatik başka domaine POST edilmez; API/portal yetkilendirme, e-belge ve PDF/XML çekimi hâlâ ayrı kabul gerektirir.
+- **GitHub:** PR #567 son `6f137c525b560d9910db672a60c3d9e36e399607`; tek CI `43635823028` frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**; squash merge `1aee8063554c029b2d23b183ff6815a822822872`. `isnetBrowserVault.test.js` sadece sentetik test değerleriyle çalışır.
+- **Cloudflare kontrol anı:** Workers Builds: ky-erp-api=success; Cloudflare Pages=success. Kullanıcı gerçek Chrome parola kasası, egress alternatif test ve gerçek İşNet hesap login testleri henüz yapılmadı. Canlı kabul verilmez; başarılı Cloudflare yayını yalnız kod dağıtımıdır. D1 migration, resmî belge, mail, mali yazım veya parola/OTP alımı yok.
+- **Kota:** Kullanıcının GitHub Actions limit isteği nedeniyle tek PR CI; manuel rerun yapılmadı.
+
+
 ## 14.11.2026 — İşNet Worker portal giriş sorunu, şifresiz ağ testi (PR #566)
 
 - **Kullanıcı ekranında kanıt:** e-Belge / Entegrasyonlar'da yeni iki aşamalı İşNet ekranı yüklendi; portal test hatası `İşNet portal giriş ekranı açılamadı`. Bu hata yanlış şifre kanıtı **değildir**; V2 sunucu modülü login GET/token aşamasında tüm hata sınıflarını eski kodda gizliyordu.
