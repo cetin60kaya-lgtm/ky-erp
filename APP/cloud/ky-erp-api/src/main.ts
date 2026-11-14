@@ -223,11 +223,12 @@ registerDesenWorkflowRoutes(app);
 registerDesenPlateRoutes(app);
 registerDesenOperationRoutes(app);
 registerIsnetBusinessSettingsCloudRoutes(app);
+// Keep the audited, password-free two-stage settings handler FIRST.
+registerIsnetRuntimeV2Routes(app);
 registerIsnetLiveSyncRoutes(app);
 registerIsnetOutgoingRecoveryRoutes(app);
 registerIsnetFileRuntimeRoutes(app);
 registerIsnetInvoiceRuntimeRoutes(app);
-registerIsnetRuntimeV2Routes(app);
 registerIsnetCloudRoutes(app);
 registerIkAuditReadonlyRoutes(app);
 registerIkPdksGuardRoutes(app);

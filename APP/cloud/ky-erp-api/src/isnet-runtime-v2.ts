@@ -849,13 +849,20 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     const password = text(body.password);
     const mode = normalizeIsnetConnectionMode(body.connectionMode || current.connectionMode);
     if (!username || !password) {
-      if (username === text(current.username) && mode === text(current.connectionMode) && current.accessToken && Array.isArray(current.companies) && current.companies.length) {
+      if (mode === "api" && username === text(current.username) && mode === text(current.connectionMode) && current.accessToken && Array.isArray(current.companies) && current.companies.length) {
         // A previously stored API token does NOT prove that the live provider still accepts it.
         // Only the read-only recipient probe may mark the cached connection as verified.
         const checked = await verifyIsnetReadOnlySession(c, slug);
         if (verifiedCachedIsnetSession(current, checked)) {
+          // Revalidate the existing API token before accepting a company save.
+          // A previous testedAt is not proof of current provider authorization.
+          const fresh = await storePut(c, SCOPE.settings, slug, {
+            ...current, testedAt: nowIso(),
+            portalCookie: "", portalCompanySelected: false, portalBase: "",
+          }, slug);
           return c.json({ ok: true, success: true, data: {
-            ...publicSettings(current), companies: current.companies,
+            ...publicSettings(fresh), companies: fresh.companies,
+            testedAt: fresh.testedAt,
             verifiedAt: checked.lastVerifiedAt, providerStatus: checked.status,
             message: "Kayıtlı İşNet oturumu sağlayıcıdan salt okunur sorguyla doğrulandı.",
           } });
@@ -879,6 +886,11 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
         connectionMode: result.mode,
         accessToken: result.token || "",
         tokenExpiresOn: result.expiresOn,
+        // Portal login for listing companies is NOT a selected-company session.
+        // Clear any stale session from a different account or earlier test.
+        portalCookie: "",
+        portalCompanySelected: false,
+        portalBase: "",
         testedAt: nowIso(),
         diagnostics: result.diagnostics,
         requiresPasswordForSync: result.mode === "portal" && !result.token,
@@ -923,6 +935,10 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
       companyId: checked.companyId,
       companyName: checked.companyName,
       connectionMode: checked.mode,
+      // Do not carry over portal cookies while reassigning a company.
+      portalCookie: "",
+      portalCompanySelected: false,
+      portalBase: "",
       savedAt: nowIso(),
       passwordStored: false,
     }, slug);

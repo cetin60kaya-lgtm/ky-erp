@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { ingestProviderEBelgeXml } from "./e-belge-center-cloud";
+import { MAX_ISNET_DOCUMENT_BYTES, verifyIsnetDownloadedFile } from "./isnet-file-validation";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -760,16 +761,15 @@ async function downloadFile(base: string, cookie: string, doc: Row, format: "pdf
   const entity = doc.kind === "invoice" ? "Invoice" : "Despatch";
   const path = `/${entity}/Get${entity}${format === "pdf" ? "Pdf" : "Xml"}?InOrOut=${incoming}&${entity}Id=${encodeURIComponent(doc.sourceId)}`;
   const response = await portalRequest(base, cookie, path);
-  const buffer = await response.arrayBuffer();
-  if (!response.ok || !buffer.byteLength) {
-    throw new Error(`${doc.documentNo} ${format.toUpperCase()} indirilemedi.`);
+  const contentLength = Number(response.headers.get("content-length") || 0);
+  if (!response.ok || contentLength > MAX_ISNET_DOCUMENT_BYTES) {
+    throw new Error(`${doc.documentNo} ${format.toUpperCase()} indirme isteği reddedildi veya dosya çok büyük.`);
   }
-  return {
-    buffer,
-    contentType:
-      text(response.headers.get("content-type")) ||
-      (format === "pdf" ? "application/pdf" : "application/xml"),
-  };
+  const buffer = await response.arrayBuffer();
+  // This rejects 200 OK login HTML, JSON errors, ZIPs or wrong formats.
+  // Guessed provider paths remain unverified until live portal acceptance.
+  const contentType = verifyIsnetDownloadedFile(format, buffer, text(response.headers.get("content-type")));
+  return { buffer, contentType };
 }
 
 export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
