@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 14.11.2026 — İşNet Worker portal giriş sorunu, şifresiz ağ testi (PR #566)
+
+- **Kullanıcı ekranında kanıt:** e-Belge / Entegrasyonlar'da yeni iki aşamalı İşNet ekranı yüklendi; portal test hatası `İşNet portal giriş ekranı açılamadı`. Bu hata yanlış şifre kanıtı **değildir**; V2 sunucu modülü login GET/token aşamasında tüm hata sınıflarını eski kodda gizliyordu.
+- **Bağımsız Windows/X salt-okunur kontrolü:** İşNet `https://nettefatura.isnet.net.tr/Account/Login` ve `/account/login/Login` ile `https://efatura.isnet.net.tr/Account/Login`: HTTP **200**, form, `VknTckn`, gizli CSRF alanı mevcut; normal ve KY-ERP kullanıcı ajanıyla 200. Bu erişim **Windows ağından** alındı; Cloudflare Worker çıkışının PASS olması anlamına gelmez. Form tokenının değeri kaydedilmedi; kullanıcı kimliği/şifre/OTP kullanılmadı.
+- **Kod:** yeni `isnet-portal-public-health.ts` sabit resmî İşNet public login GET'inden yalnız `READY/HTTP_ERROR/REDIRECT/FORM_MISSING/TIMEOUT/NETWORK_ERROR` ve genel HTTP kodu döndürür; cookie/CSRF HTML/şifre/token/şirket verisi taşımaz. `GET /api/isnet/provider-login-health` existing auth+tenant guard altında. Frontend `Sunucu Erişimini Kontrol Et (Şifresiz)` ve giriş testinden önce Worker→İşNet erişim kontrolü; erişim başarısızsa portal şifreli login girişimi yapılmaz. V2 login GET başarısızlıkları artık `HTTP_403/429/TIMEOUT/NETWORK_ERROR/TOKEN_MISSING` olarak görünür; eski genel hata yerine düzeltilebilir durum sunulur.
+- **GitHub:** PR #566 son dal commit `5de4403b22c7563a85c0ee58bb496cacf1dccd2d`, tek CI `43633109272` frontend+Worker SUCCESS; squash merge `ecc0cbb643f2f9fafc6fa490c23e8dd08f4e81da`.
+- **Cloudflare:** aynı merge commitinde Pages SUCCESS (14.11.2026 19:39:21 UTC), Worker SUCCESS (19:41:10 UTC). Anonim `api.kyerp.net/api/health` HTTP 200, `/api/isnet/provider-login-health` anonim HTTP 401 (yetkili oturum kapısı). **Gerçek Worker→İşNet provider probe (authenticated) henüz çalıştırılmadı**, portal login/firma seçimi/senkronizasyon PASS değildir.
+- **Sıradaki kontrollü kabul:** kullanıcı `kyerp.net/e-belge/entegrasyonlar` Ctrl+F5 → **Sunucu Erişimini Kontrol Et (Şifresiz)** düğmesine basar; yalnız `READY` / HTTP / timeout sonuç kodunu bildirir. READY ise gerçek giriş testine geçilir; BLOCKED ise şifreyi yeniden deneme/portalı bypass yapma yok. Kullanıcı sohbete şifre veya doğrulama kodu taşımaz.
+- **Kota/güvenlik:** GitHub Actions için yalnız tek PR CI çalıştı; docs-only kayıt yeni Actions gerektirmez. D1 migration, gerçek e-belge/PDF/XML indirme, müşteriye e-posta, resmî gönderim ve mali yazım yapılmadı.
+
+
 ## 14.11.2026 — İK sabit EK her ay tek kaynak ve önceki ay override önceliği (PR #563)
 
 - Kök neden: Referans personelli kayıtlarda kullanıcı girişindeki sabit EK, maaş-referans farkına zorla dönüştürülüyordu. Açık dönemde `hr_payrolls_v2.premium_amount` önceki aylık kayıttan kalıp kalıcı karttaki yeni EK'yi gizleyebiliyordu. Legacy bordro override yolu maaş ve EK'yi ayrı yanlış toplayabiliyordu. EK/referans eski ay ücret geçmişinden geri sarılmıyordu.
