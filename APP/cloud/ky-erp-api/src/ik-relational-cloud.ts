@@ -1635,8 +1635,8 @@ async function advancedMonth(c: Context<AppEnv>) {
   });
 }
 
-async function advancedPayroll(c: Context<AppEnv>, selectedYear?: number, selectedMonth?: number) {
-  const companyId = companyIdOf(c);
+async function advancedPayroll(c: Context<AppEnv>, selectedYear?: number, selectedMonth?: number, selectedCompanyId?: string) {
+  const companyId = selectedCompanyId || companyIdOf(c);
   const year = selectedYear || number(c.req.query("year")) || new Date().getFullYear();
   const month = selectedMonth || number(c.req.query("month")) || new Date().getMonth() + 1;
   const period = `${year}-${String(month).padStart(2, "0")}`;
@@ -2758,7 +2758,7 @@ async function saveAdvancedPayrollLines(c: Context<AppEnv>) {
   const rows = await all(c, `SELECT * FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND employee_id IN (${placeholders})`, [companyId, year, month, ...employeeIds]);
   // One read-only, canonical server projection for the entire selected batch.
   // Reject the whole batch before any status update when even one row is unsafe.
-  const projectionResponse = await advancedPayroll(c, year, month);
+  const projectionResponse = await advancedPayroll(c, year, month, companyId);
   if (!projectionResponse.ok) return projectionResponse;
   const projectionBody = await projectionResponse.json() as { data?: { lines?: Row[] } };
   const lines = Array.isArray(projectionBody?.data?.lines) ? projectionBody.data.lines : [];
