@@ -391,6 +391,8 @@ test("fixed EK remains a permanent monthly personnel setting and can normalize a
   assert.match(monthly, /Sabit EK Ödeme \(her ay\)/);
   assert.match(monthly, /Hedef Sabit Hakediş \(Maaş \+ Yol \+ EK\)/);
   assert.match(monthly, /EK ile Düzle/);
+  assert.match(monthly, /allowMonthlyZeroExtra/);
+  assert.match(monthly, /Bu personelin kalıcı EK ödemesi vardır/);
   assert.match(monthly, /const planExtra = num\(modalDraft\.extraPaymentAmount\)/);
   assert.match(monthly, /const sourceExtra = Math\.max\(round\(num\(modalDraft\.extraPaymentAmount\)\), 0\)/);
   assert.match(monthly, /const compensation = payrollCompensation\(employee, allEmployees\)/);
