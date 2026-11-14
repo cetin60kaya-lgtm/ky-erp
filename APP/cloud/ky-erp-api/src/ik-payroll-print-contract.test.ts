@@ -330,7 +330,7 @@ test("payroll final control exposes every financial value and saves back to cano
 });
 
 
-test("reference-linked EK is the real-minus-reference difference, without changing the stored real salary", () => {
+test("reference-linked EK comes from permanent person card and stays in each monthly payroll", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
@@ -339,6 +339,9 @@ test("reference-linked EK is the real-minus-reference difference, without changi
   assert.match(page, /const extra = compensation\.extra/);
   assert.match(cloud, /export function resolveReferencePay/);
   assert.match(cloud, /const extraPaymentAmount = baseEmployee/);
+  assert.match(cloud, /const hasExplicitExtra = body\.extraPaymentAmount/);
+  assert.match(cloud, /REFERENCE_EXTRA_TOTAL_MISMATCH/);
+  assert.match(page, /Sabit EK Ödeme \(her ay\)/);
   assert.match(cloud, /const extra = split\.extra/);
   assert.match(cloud, /const realSalaryForMaster = referenceEmployee/);
   assert.match(cloud, /REFERENCE_BASE_MISMATCH/);
