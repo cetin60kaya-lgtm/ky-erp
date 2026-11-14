@@ -2986,6 +2986,31 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                 <div><span>Elden</span><b>{money(profile.cashAmount)}</b></div>
               </div>
 
+              {payrollReady && (() => {
+                const actual = payrollRows.find((row) => row.employee.id === profile.id);
+                if (!actual) return <div className="warnline">Seçili ay için personelin hazırlanmış bordrosu bulunmuyor.</div>;
+                const slip = payrollPresentation(actual);
+                return <div className="card">
+                  <div className="ch"><div><b>Aylık Maaş ve Ödeme Detayı · {MONTHS[month-1]} {year}</b><span>Kalıcı personel kartı değil; seçilen ayın salt okunur gerçek bordro hesabı. Çıktı ile aynı veriyi kullanır.</span></div></div>
+                  <div className="import-summary payment-summary">
+                    <div><span>Maaş</span><b>{money(actual.salary)}</b></div>
+                    <div><span>Yol</span><b>{money(actual.road)}</b></div>
+                    <div><span>EK</span><b>{money(actual.extra)}</b></div>
+                    <div><span>Mesai</span><b>{money(actual.overtime)}</b></div>
+                    <div><span>Hak Ediş</span><b>{money(actual.hakedis)}</b></div>
+                    <div><span>Avans</span><b>-{money(actual.advance)}</b></div>
+                    <div><span>Özel Kesinti</span><b>-{money(actual.deduction)}</b></div>
+                    <div><span>İcra / Haciz</span><b>-{money(actual.garnishment)}</b></div>
+                    <div><span>Net Ödeme</span><b>{money(actual.net)}</b></div>
+                    <div><span>Bankaya Ödenecek</span><b>{money(actual.bank)}</b></div>
+                    <div><span>Elden Ödenecek</span><b>{money(actual.cash)}</b></div>
+                  </div>
+                  <div className={`warnline ${slip.reconciled ? "ok" : "warn"}`}>{slip.reconciled
+                    ? "Banka + Elden = Net. EK ödeme nete bir kez dâhil."
+                    : "Bordro veya banka/elden farkı var. Tekli fişten önce Son Bordro Kontrolü gerekli."}</div>
+                </div>;
+              })()}
+
               <div className="ik-pro-profile-toolbar">
                 <button className="btn" onClick={() => openPayPlan(profile)}>Ücret Planı</button>
                 <button className="btn" onClick={() => openLeave("yillik", "", profile)}>İzin Gir</button>
@@ -3582,6 +3607,38 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
         }));
       };
 
+      const applyOfficialBankSuggestion = () => {
+        const employee = employees.find((item) => item.id === modalDraft.id);
+        if (!employee) return;
+        const net = calcRow({
+          salary: finalEditor.salary, road: finalEditor.road, extra: finalEditor.extra,
+          overtime: finalEditor.overtime, advance: finalEditor.advance,
+          deduction: finalEditor.deduction, garnishment: finalEditor.garnishment,
+        }).net;
+        if (employee.sgkFollow === true) {
+          if (!data.sgkImport || !employee.sgkImportVersion || employee.sgkNet === undefined || employee.sgkNet === null) {
+            setModalDraft((old) => ({ ...old, formMessage: "Onaylı resmî SGK bordrosunda bu personelin Net İstihkak değeri bulunmuyor; banka tutarı uydurulmadı." }));
+            return;
+          }
+          const official = round(num(employee.sgkNet));
+          if (official < 0 || official > net) {
+            setModalDraft((old) => ({ ...old, formMessage: "Resmî Net İstihkak KY ERP net hakedişi aşıyor veya geçersiz. Kesin ödeme kaydından önce farkı inceleyin." }));
+            return;
+          }
+          setModalDraft((old) => ({ ...old,
+            finalEditor: { ...old.finalEditor, bank: official, cash: round(net-official), paymentType: official > 0 && official < net ? "BANKA_ELDEN" : official > 0 ? "Banka" : "Elden" },
+            formMessage: "Resmî Net İstihkak banka önerisine aktarıldı; kalıcı kart henüz değişmedi. Kaydetmeden önce kontrol edin.",
+          }));
+        } else if (employee.sgkFollow === false) {
+          setModalDraft((old) => ({ ...old,
+            finalEditor: { ...old.finalEditor, bank: 0, cash: net, paymentType: "Elden" },
+            formMessage: "SGK dışı personel için banka 0 / elden net önerisi hazır. Yetkili ödeme kurallarını kontrol edip açıkça kaydedin.",
+          }));
+        } else {
+          setModalDraft((old) => ({ ...old, formMessage: "Personelin SGK durumu tanımlanmamış; ödeme dağılımı önerilmedi." }));
+        }
+      };
+
       const editor = modalDraft.movementEditor || {};
       const previewMovementAmount = editor.adjustmentType === "Mesai"
         ? overtimeAmountFor(modalDraft.id, editor.hourOrDay, editor.overtimeMultiplier)
@@ -3643,6 +3700,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                     </div>
                     <div className="warnline">Bu ayın bordrosu ayrı kaydedilir. Kalıcı maaş/ödeme planını değiştirmek için alttaki ayrı düğmeyi kullanın.</div>
                     <div className="row-actions">
+                      {monthlySetup?.active && <button type="button" className="btn" disabled={busy} onClick={applyOfficialBankSuggestion}>SGK Durumuna Göre Banka / Elden Öner</button>}
                       <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
                       <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false, Boolean(monthlySetup?.active))}>{busy ? "Kaydediliyor" : monthlySetup?.active ? "Kaydet ve Sonraki Personel →" : "Yalnız Bu Ayı Kaydet"}</button>
                     </div>
