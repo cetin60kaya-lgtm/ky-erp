@@ -205,7 +205,8 @@ test("permanent fixed EK wins over stale open-month override while paid and clos
   assert.match(api, /text\(reference\?\.updatedAt\)/);
   assert.match(api, /const newerPermanentSource = Boolean\(row && savedControlAt && sourceChangedAt > savedControlAt\)/);
   assert.match(api, /const monthlyOverride = Boolean\(row && !newerPermanentSource &&/);
-  assert.match(api, /const currentExtra = monthlyOverride \? number\(row\.premiumAmount\) : extra/);
+  assert.match(api, /const currentExtra = resolveMonthlyExtra\(extra, row\?\.premiumAmount, monthlyOverride/);
+  assert.match(api, /latestMonthPlan\?\.allowMonthlyZeroExtra === true/);
   assert.match(api, /const frozen = Boolean\(hasSavedFinal && \(closedPeriod \|\| savedStatus === "PAID"\)\)/);
   assert.match(api, /const final = frozen \? savedFinal! : currentFinal/);
   assert.match(api, /"extraPaymentAmount",\s*"baseEmployeeId"/);
