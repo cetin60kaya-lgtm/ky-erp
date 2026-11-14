@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 15.11.2026 — İşNet API seçiliyken eski NetteFatura TIMEOUT gösterimi giderildi (PR #570)
+
+- **Canlı kullanıcı kanıtı:** Bağlantı yönteminde `İşNet API — otomatik senkronizasyon` seçilmişti, fakat ekran hâlâ portalın şifresiz ağ `TIMEOUT` hata bandını ve `Sunucu Erişimini Kontrol Et (Şifresiz)` portal düğmesini gösteriyordu. Bunun API'de kullanıcı oturumu başarısızlığına delil olmadığı açıkça ayrıldı.
+- **Çözüm:** İşNet Entegrasyonlar ekranı bağlantı yöntemi için `api`/`portal` görünümlerini ayırır; asenkron portal hata bildirimi `connectionMode` etiketi taşır ve API modunda görünmez. Portal sağlık kontrol düğmesi yalnız portalda görünür; API modunda `GET /api/health/isnet-egress` üzerinden cache'li resmî API sunucusu erişimi otomatik salt-okunur gösterilir. `READY` sadece **ağ erişimi** anlamındadır, API login/şirket/belge senkronizasyonu PASS değildir. Başlık seçili bağlantıya göre değişir.
+- **Tercih:** Seçilen mod tarayıcıda tenant ile isim alanına ayrılmış `api|portal` değeri olarak hatırlanır; **TCKN, kullanıcı adı, şifre, token, cookie veya firma verisi bu tercihe yazılmaz**. Yeni bağlantıda güvenli varsayılan API; varsa mevcut doğrulanmış tercihe öncelik. Firma seçimi doğrulanmamış durumda kapalı kalır.
+- **Giriş API sözleşmesi:** `https://einvoiceapi.isnet.net.tr/Help/Api/POST-api-Account-Login` resmî dokümanında `IdentificationNumber`, `Password`, cevap `Token`, `CompanyList`, `ExpiresOn` alanları var; mevcut Worker `loginApi` bunlarla uyumludur. API hesabının gerçekten yetkili olduğu henüz test edilmedi ve gerçek şifre/OTP kullanılmadı. Portal TIMEOUT bağımsız sorun olarak kalır, API'yi bloklamaz.
+- **Kanıt:** PR #570 feature commit `9b3d0557a745ecc3b90599e4073bfa94928da224` ve CI `43645138850` frontend lint/test/build + Worker typecheck/test/build **SUCCESS**. Squash merge `4c5d55efc44203da91bea6954682064f1b417e1d`. Cloudflare Pages aynı committe **SUCCESS**, deploy `a0274138-4949-423d-b606-a03b2b742f75`. Worker iş kodu bu PR'da değişmedi; yeni Worker deploy bu UX değişikliği için gerekmiyor.
+- **Kalan gerçek iş:** Önce kullanıcı tarafından bir kez resmî API bağlantısı yetkili hesapla doğrulanmalı; sonra geri dönen firmalardan yetkili HKN/DDM seçilip kaydedilmeli, API GET/list ve örnek XML/PDF salt-okunur kabulü yapılmalı. Gerçek fatura/irsaliye veya mail gönderimi, kesin cari/KDV kaydı, D1 migration, paylaşılmış parola ve yeni cihaz kurulumları **yapılmadı**.
+- **Kota:** Tek PR CI; yeni manuel Actions rerun yok. Dokümantasyon kaydı tek commit.
+
+
 ## 14.11.2026 — İşNet üç sunucu Worker egress doğrudan test kanıtı (PR #568)
 
 - **Kullanıcı isteği:** İşNet bağlantı TIMEOUT'unu kullanıcıyı uygulamada tekrar tekrar düğmeye bastırmadan, ChatGPT'nin doğrudan **production Cloudflare Worker'dan** test etmesi; GitHub Actions kotası ve gizli veriler korunacak.
