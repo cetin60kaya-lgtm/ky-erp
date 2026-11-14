@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 15.11.2026 — İK Aylık muhasebe XLS/ZIP değişken şablon ve sırayla maaş kontrolü (PR #571)
+
+- **Kullanıcı örneği:** Eylül ve Ekim 2026 muhasebe ZIP paketleri: her birinde iki eski XLS bordrosu ve iki PDF ücret pusulası. 22 kolonlu, bir kişiyi takip eden yardımcı satırlı bordro düzeni gözlemlendi. Örnekler, gerçek personel/TC/maaş değerleri ve dosya içerikleri GitHub'a taşınmadı.
+- **Yeni akış:** İK Aylık → SGK / Ay Sonu içinde XLS/XLSX veya ZIP'den yalnız bordrolar açılır; çok sayfalı/satır konumu değişken şablon, esnek başlıklar ve bilinmeyen sütunda kullanıcı eşleştirmesi; onay öncesi personel–net–gün, dönem, kaynak ve mükerrer işyeri kontrolleri. PDF pusulalar parasal hesaba tekrar eklenmez, kaynak ZIP'te kalır. Eşleştirme başlıkları firma/tarayıcı kapsamında saklanır; ücret/kimlik saklanmaz.
+- **Maaş hazırlığı:** İK Aylık → Bordro / Ödeme → Bu Ayın Maaşlarını Hazırla, mevcut Son Bordro Kontrolü ekranında kişiden kişiye Kaydet ve Sonraki; kalıcı kart/aylık hesap ayrımı korunur. Resmî onaylı Net İstihkak üzerinden banka/elden önerisi; resmî net eksik veya fazla ise otomatik tutar uydurulmaz; işlem asla kendi başına PAID yapmaz. Personel Kartları sağ panelinde seçili ayın salt okunur toplam/avans/kesinti dökümü, mevcut tekli/10'lu fişle aynı hesap.
+- **GitHub kanıtı:** [PR #571](https://github.com/cetin60kaya-lgtm/ky-erp/pull/571), squash merge `66a10e67e673176c74d89e44d923c7386111c736`. Tek son CI `43648136293`: frontend lint/test/build + Worker typecheck/test/build + izole D1 smoke **PASS**.
+- **Üretim veri kabul sınırı:** Code deployment, gerçek muhasebe Excel dosyalarının yetkili oturumda D1'e alınıp kişi/fiş bazında kabul edildiği anlamına gelmez. Production D1 kişisel kayıtlarına, eski PAID/LOCKED dönemlere veya DB şemasına bu işte yazılmadı. Yeni muhasebe şablonları yalnız kullanıcı başlık eşleştirmesinden sonra onaylanır.
+
 ## 15.11.2026 — İşNet NetteFatura eski yerel indirme kanıtı ve portal otomasyonunu durdurma kararı
 
 - **Kullanıcı beyanı doğrulandı:** 25.07.2026 tarihli kullanıcı Library arşivi `KYERP-ISNET-HAM-VERI-2026-07-25T17-23-43-856Z.json` üzerinde `"completed":true`, `"pdfSaved":true`, `"xmlSaved":true` ifadelerinin her biri 156 kez görülüyor. Bunlar arşivde **başarılı olarak işaretlenen kayıtlar**; mevcut diskte 156 benzersiz dosyanın bugün hâlâ var olduğu iddiası değildir. Örneklerde 20–21.07.2026 `downloadedAt`, gelen irsaliye ve giden fatura, yerel `_ISNET_GECICI/E-FATURA|E-IRSALIYE/PDF|XML` yolları bulunuyor; bazı kayıtlar erişim hatasıyla tamamlanmamış. Özel müşteri bilgileri veya tam dosya yolları GitHub'a kopyalanmadı.
