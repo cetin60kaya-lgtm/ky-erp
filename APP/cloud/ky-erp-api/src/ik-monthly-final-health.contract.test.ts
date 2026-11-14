@@ -215,3 +215,20 @@ test("permanent fixed EK wins over stale open-month override while paid and clos
   assert.match(page, /Sabit EK Ödeme \(her ay\)/);
   assert.match(page, /EK ile Düzle/);
 });
+
+test("bulk payroll save blocks paid/locked rows and protects permanent EK from silent zero", () => {
+  const api = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  assert.match(api, /function validatePayrollBatchTransition\(/);
+  assert.match(api, /PAYROLL_PAID_LOCKED/);
+  assert.match(api, /PAYROLL_SOURCE_CHANGED/);
+  assert.match(api, /PAYROLL_SNAPSHOT_STALE/);
+  assert.match(api, /PAYROLL_TOTAL_MISMATCH/);
+  assert.match(api, /const projectionResponse = await advancedPayroll\(c, year, month, companyId\)/);
+  assert.match(api, /MONTHLY_EXTRA_ZERO_CONFIRM_REQUIRED/);
+  assert.match(page, /const protectedRows = rows\.filter/);
+  assert.match(page, /row\.paidLocked \|\| upper\(row\.saved\?\.status\) === "PAID"/);
+  assert.match(page, /row\.saved\?\.payrollVersion/);
+  assert.match(page, /allowMonthlyZeroExtra: Boolean\(row\.extra === 0 && row\.saved\?\.allowMonthlyZeroExtra === true\)/);
+  assert.match(page, /payrollPresentation\(row\)\.reconciled/);
+});

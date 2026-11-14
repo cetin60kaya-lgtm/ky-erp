@@ -2043,15 +2043,23 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   };
 
   const savePayroll = async () => {
+    if (!periodPrepared || !payrollReady) return setNotice("Bordroyu kaydetmeden önce dönemi hazırlayın ve güncel ortak hesabı yükleyin.");
     const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
     if (!rows.length) return setNotice("Kaydedilecek bordro satırı bulunamadı.");
-    const badRows = rows.filter((row) => Math.abs(num(row.diff)) > 0.01);
-    if (badRows.length) return setNotice(`${badRows.length} personelde Banka + Elden = Net eşleşmiyor. Önce Son Kontrol ile düzeltin.`);
+    // Never let a bulk action reopen an already-paid month or person.
+    // Check the entire selection before writing the first employee.
+    const protectedRows = rows.filter((row) => row.paidLocked || upper(row.saved?.status) === "PAID");
+    if (protectedRows.length) return setNotice(`${protectedRows.length} personelin bordrosu ödenmiş/kilitli. Toplu kayıt bu satırlara dokunmadan durduruldu.`);
+    const badRows = rows.filter((row) => Math.abs(num(row.diff)) > 0.01 || !payrollPresentation(row).reconciled);
+    if (badRows.length) return setNotice(`${badRows.length} personelde Maaş + Yol + EK + Mesai - Kesintiler veya Banka + Elden = Net eşleşmiyor. Önce Son Kontrol ile düzeltin.`);
     setBusy(true);
     try {
       for (const row of rows) {
         await saveIkAdvancedFinalPayrollControl({
           mainCompanyId: companyId, year, month, employeeId: row.employee.id,
+          expectedVersion: row.employee.version || "",
+          expectedPayrollVersion: row.saved?.payrollVersion || "",
+          allowMonthlyZeroExtra: Boolean(row.extra === 0 && row.saved?.allowMonthlyZeroExtra === true),
           salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime,
           advance: row.advance, deduction: row.deduction, garnishment: row.garnishment,
           bank: row.bank, cash: row.cash,
@@ -2066,7 +2074,8 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       setNotice(`${rows.length} personelin bordro ara kaydı güncellendi. Ay kilidi açık olduğu sürece düzenleme devam edebilir.`);
       await load({ force: true });
     } catch (error) {
-      setNotice(error?.message || "Bordro kaydedilemedi.");
+      setNotice(error?.message || "Bordro kaydedilemedi. Kısmi değişiklik olup olmadığını görmek için kayıtlar yeniden yükleniyor.");
+      await load({ force: true, silent: true }).catch(() => {});
     } finally {
       setBusy(false);
     }

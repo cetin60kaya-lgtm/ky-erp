@@ -13,6 +13,7 @@ import {
   calculatePayrollAmounts,
   resolveReferencePay,
   resolveMonthlyExtra,
+  validatePayrollBatchTransition,
 } from "./ik-relational-cloud.ts";
 
 test("fixed EK is monthly recurring, additional without reference and included once with reference", () => {
@@ -54,6 +55,62 @@ test("monthly EK includes permanent amount despite old zero row; explicit select
   assert.equal(resolveMonthlyExtra(2500, 1900, false), 2500);
   assert.equal(resolveMonthlyExtra(0, 0, true), 0);
   assert.equal(resolveMonthlyExtra(2500.25, 0, true), 2500.25);
+});
+
+test("paid payroll never reverts to CALCULATED or gets paid again", () => {
+  const { row, projection } = payrollBatchFixture();
+  const paid = { ...row, status: "PAID" };
+  assert.equal(validatePayrollBatchTransition([paid], ["test-employee"], [projection], "CALCULATED")?.code, "PAYROLL_PAID_LOCKED");
+  assert.equal(validatePayrollBatchTransition([paid], ["test-employee"], [projection], "PAID")?.code, "PAYROLL_PAID_LOCKED");
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [projection], "REOPEN")?.code, "PAYROLL_STATUS_INVALID");
+});
+
+function payrollBatchFixture() {
+  const row = {
+    employee_id: "test-employee", status: "OVERRIDE",
+    salary: 40000, road_allowance: 2000, premium_amount: 2500,
+    overtime_amount: 0, advance_amount: 1000, deduction_amount: 0,
+    garnishment_amount: 0, bank_amount: 25000, cash_amount: 18500,
+    total_amount: 43500,
+  };
+  const projection = {
+    employeeId: "test-employee", frozen: false, sourceChangedSinceSave: false,
+    final: {
+      salaryPay: 40000, roadPay: 2000, premiumAmount: 2500,
+      overtimeAmount: 0, advanceAmount: 1000, deductionAmount: 0,
+      garnishmentAmount: 0, bank: 25000, cash: 18500, total: 43500,
+    },
+  };
+  return { row, projection };
+}
+
+test("payroll batch refuses any stale, missing or unbalanced record before status writes", () => {
+  const { row, projection } = payrollBatchFixture();
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [projection], "CALCULATED"), null);
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [projection], "PAID"), null);
+  assert.equal(validatePayrollBatchTransition([], ["test-employee"], [projection], "PAID")?.code, "PAYROLL_NOT_FROZEN");
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [], "PAID")?.code, "PAYROLL_PROJECTION_MISSING");
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [{ ...projection, frozen: true }], "PAID")?.code, "PAYROLL_PROJECTION_MISSING");
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [{ ...projection, sourceChangedSinceSave: true }], "PAID")?.code, "PAYROLL_SOURCE_CHANGED");
+  const unbalanced = { ...projection, final: { ...projection.final, cash: 18501 } };
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [unbalanced], "PAID")?.code, "PAYROLL_TOTAL_MISMATCH");
+  const invalidNet = { ...projection, final: { ...projection.final, total: 44000 } };
+  assert.equal(validatePayrollBatchTransition([row], ["test-employee"], [invalidNet], "PAID")?.code, "PAYROLL_TOTAL_MISMATCH");
+  assert.equal(validatePayrollBatchTransition([{ ...row, premium_amount: 0 }], ["test-employee"], [projection], "PAID")?.code, "PAYROLL_SNAPSHOT_STALE");
+});
+
+test("ten-up batch checks all rows: one paid or mismatched row prevents the whole status transition", () => {
+  const { row, projection } = payrollBatchFixture();
+  const ids = Array.from({ length: 10 }, (_, index) => "employee-" + index);
+  const savedRows = ids.map((id) => ({ ...row, employee_id: id }));
+  const projections = ids.map((id) => ({ ...projection, employeeId: id }));
+  assert.equal(validatePayrollBatchTransition(savedRows, ids, projections, "CALCULATED"), null);
+  assert.equal(validatePayrollBatchTransition(savedRows, ids, projections, "PAID"), null);
+  savedRows[9] = { ...savedRows[9], status: "PAID" };
+  assert.equal(validatePayrollBatchTransition(savedRows, ids, projections, "CALCULATED")?.code, "PAYROLL_PAID_LOCKED");
+  savedRows[9] = { ...savedRows[9], status: "OVERRIDE" };
+  projections[9] = { ...projections[9], sourceChangedSinceSave: true };
+  assert.equal(validatePayrollBatchTransition(savedRows, ids, projections, "PAID")?.code, "PAYROLL_SOURCE_CHANGED");
 });
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
