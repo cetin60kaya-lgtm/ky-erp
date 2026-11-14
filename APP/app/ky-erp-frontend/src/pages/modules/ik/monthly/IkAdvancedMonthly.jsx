@@ -3815,13 +3815,44 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
       </Modal>
     );
 
+    if (modal === "sgkMapping") {
+      const review = sgkMappingReview || {};
+      const mapping = review.mapping || { columns: {} };
+      const fields = [
+        ["name","Personel Adı Soyadı",true],["net","Resmî Net İstihkak",true],
+        ["identity","T.C. Kimlik No"],["code","Personel Kodu / Sicil"],
+        ["days","SGK Gün"],["gross","Toplam Kazanç / Brüt"],
+        ["normal","Normal Kazanç"],["other","Diğer Kazanç"],["base","SGK Matrahı"],
+        ["sgkPremium","SGK Primi"],["unemployment","İşsizlik Primi"],
+        ["incomeTax","Gelir Vergisi"],["stampTax","Damga Vergisi"],
+        ["specialDeduction","Özel Kesinti"],["hire","İşe Giriş Tarihi"],
+        ["exit","İşten Çıkış Tarihi"],
+      ];
+      return (
+        <Modal title="Muhasebe Excel Şablonunu Tanıt" sub="Yeni program / farklı muhasebeci · sütunları bir kez seçin, sonra aynı şablon otomatik tanınır" size="wide" onClose={() => setModal(null)}>
+          <div className="warnline warn">Dosya: {review.fileName} · Sayfa: {review.sheetName || "-"} · Başlık satırı: {Number(review.headerRow)+1}. Tahmin edilemeyen Net İstihkak ile bordro onaylanmaz.</div>
+          <div className="form">
+            {fields.map(([field,label,required]) => <Field label={label} half key={field}><select value={mapping.columns?.[field] || ""} onChange={(event)=>setSgkMappingReview((old)=>({
+              ...old, mapping: { ...old.mapping, columns: { ...old.mapping.columns, [field]: event.target.value } },
+            }))}>
+              <option value="">{required ? "Zorunlu sütunu seçin" : "Dosyada bulunmuyor"}</option>
+              {(review.headers || []).map((header,index)=>header?<option key={index} value={header}>{index+1}. {header}</option>:null)}
+            </select></Field>)}
+          </div>
+          <div className="warnline">Yalnız sütun başlıkları tarayıcıda hatırlanır. Personel adı, kimlik numarası, maaş veya tutar şablon ayarına kaydedilmez.</div>
+          <ModalFooter onClose={() => setModal(null)} actions={<button className="btn primary" disabled={busy} onClick={applySgkMapping}>Eşleştir ve Excel'i Yeniden Oku</button>} />
+        </Modal>
+      );
+    }
+
     if (modal === "sgkImport") {
       const rows = safeList(sgkPreview?.rows);
       const selectedRows = rows.filter((row) => row.selected && row.employeeId);
       return (
         <Modal title="Resmi Bordro On Analizi" sub="XLS/XLSX eslestirme - yalnizca secili sirket personeli aktarilir" size="wide" onClose={() => setModal(null)}>
           <div className="import-summary"><div><span>Dosya</span><b>{safeList(sgkPreview?.files).length}</b></div><div><span>Okunan satir</span><b>{rows.length}</b></div><div><span>Aktarilacak</span><b>{selectedRows.length}</b></div><div><span>Haric / eslesmeyen</span><b>{rows.length-selectedRows.length}</b></div><div><span>Banka toplam</span><b>{money(selectedRows.reduce((sum,row)=>sum+num(row.net),0))}</b></div></div>
-          <div className="warnline ok">Secilmeyen veya personel kartiyla eslesmeyen satirlar puantaj, bordro ve banka odemesine aktarilmaz.</div>
+          <div className="warnline ok">Seçilmeyen, eşleşmeyen veya Net İstihkak değeri geçersiz satırlar aktarılmaz. Resmî bordro verisi banka ödemesiyle daha sonra tek tek mutabıklaştırılabilir.</div>
+          {!!safeList(sgkPreview?.supplementalPdfs).length && <div className="warnline">ZIP paketinde {safeList(sgkPreview?.supplementalPdfs).length} ücret pusulası PDF'i var. PDF'ler maaş tutarı olarak tekrar sayılmadı.</div>
           <div className="tw import-table"><table><thead><tr><th>Sec</th><th>Dosya / Isyeri</th><th>Bordrodaki Kisi</th><th>TC Kimlik</th><th>Sirket Personeli</th><th>Giris</th><th>Cikis</th><th>Gun</th><th>Toplam Kazanc</th><th>Net Istihkak</th><th>Durum</th></tr></thead><tbody>{rows.map((row,index)=><tr key={`${row.sourceFile}-${row.rowNumber}`}><td><input type="checkbox" checked={Boolean(row.selected&&row.employeeId)} disabled={!row.employeeId} onChange={(event)=>updateSgkPreviewRow(index,{selected:event.target.checked})} /></td><td><span className="person">{row.sourceFile}</span><span className="code">{row.workplaceNo||row.workplace||"-"}</span></td><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td><select value={row.employeeId||""} onChange={(event)=>updateSgkPreviewRow(index,{employeeId:event.target.value||null,selected:Boolean(event.target.value),status:event.target.value?"MANUEL_ESLESTI":"ESLESMEDI"})}><option value="">Haric / eslesmedi</option>{employees.map((employee)=><option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.employeeId?"green":"orange"}`}>{row.employeeId?"Eslesmis":"Haric"}</span></td></tr>)}</tbody></table></div>
           <ModalFooter onClose={() => setModal(null)} actions={<><button className="btn" onClick={()=>setSgkPreview((old)=>({...old,rows:safeList(old?.rows).map((row)=>({...row,selected:Boolean(row.employeeId)}))}))}>Eslesenleri Sec</button><button className="btn primary" disabled={busy} onClick={confirmPayrollFiles}>{busy?"Kaydediliyor":"Secili Personeli Aktar"}</button></>} />
         </Modal>
