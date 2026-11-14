@@ -23,7 +23,10 @@ test("reference salary is printed in main payslip while detachable EK is paid on
   assert.match(monthly, /money\(slip\.extraCoupon\)/);
   assert.doesNotMatch(monthly, /\["EK", money\(row\.extra\)\]/);
   assert.doesNotMatch(monthly, /Personel: \$\{escapeHtml\(row\.employee\.fullName\)\} · İmza/);
-  assert.match(monthly, /readOnly=\{Boolean\(modalDraft\.baseEmployeeId\)\}/);
+  assert.match(monthly, /Sabit EK Ödeme \(her ay\)/);
+  assert.match(monthly, /Gerçek Maaş \(Referans \+ EK\)/);
+  assert.match(monthly, /const sourceExtra = Math\.max\(round\(num\(modalDraft\.extraPaymentAmount\)\), 0\)/);
+  assert.doesNotMatch(monthly, /readOnly=\{Boolean\(modalDraft\.baseEmployeeId\)\}/);
 });
 
 test("monthly HR uses the professional command shell without replacing payroll rules", () => {
@@ -382,4 +385,17 @@ test("IK personnel card uses one accessible layout across narrow and wide screen
   assert.match(css, /\.personnel-card-dialog \.form/);
   assert.match(css, /@media \(max-width: 900px\)/);
   assert.match(css, /@media \(max-width: 560px\)/);
+});
+
+test("fixed EK remains a permanent monthly personnel setting and can normalize a target payout", () => {
+  assert.match(monthly, /Sabit EK Ödeme \(her ay\)/);
+  assert.match(monthly, /Hedef Sabit Hakediş \(Maaş \+ Yol \+ EK\)/);
+  assert.match(monthly, /EK ile Düzle/);
+  assert.match(monthly, /allowMonthlyZeroExtra/);
+  assert.match(monthly, /Bu personelin kalıcı EK ödemesi vardır/);
+  assert.match(monthly, /const planExtra = num\(modalDraft\.extraPaymentAmount\)/);
+  assert.match(monthly, /const sourceExtra = Math\.max\(round\(num\(modalDraft\.extraPaymentAmount\)\), 0\)/);
+  assert.match(monthly, /const compensation = payrollCompensation\(employee, allEmployees\)/);
+  assert.match(monthly, /draftPerson\(employee, rawMasterEmployees\)/);
+  assert.match(monthly, /Kaydedildi ✓ Yalnız seçili ayın bordrosu/);
 });

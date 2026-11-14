@@ -101,7 +101,9 @@ test("IK reference person stays informational while overtime uses the employee r
   assert.match(page, /baseEmployeeId \? rawEmployees\.find/);
   assert.match(page, /const employee = rawEmployees\.find/);
   assert.match(page, /const baseSalary = num\(employee\.salary\)/);
-  assert.match(cloud, /SELECT salary,overtime_hourly_base/);
+  assert.match(cloud, /async function currentRealSalary/);
+  assert.match(cloud, /SELECT base_employee_id,extra_payment_amount FROM ik_person_card_settings/);
+  assert.match(cloud, /const real = resolveReferencePay\(employee\.salary, reference\?\.salary/);
   assert.match(cloud, /return calculateOvertimeAmount\(salary, hours, multiplierValue, divisor\)/);
   assert.doesNotMatch(cloud, /new Map\(rawEmployees\.map/);
   assert.match(cloud, /text\(body\.note \?\? overtimeMetaFromNote\(current\.note\)\.note\)/);
@@ -330,7 +332,7 @@ test("payroll final control exposes every financial value and saves back to cano
 });
 
 
-test("reference-linked EK is the real-minus-reference difference, without changing the stored real salary", () => {
+test("reference-linked EK comes from permanent person card and stays in each monthly payroll", () => {
   const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
   const cloud = readFileSync(resolve(here, "ik-relational-cloud.ts"), "utf8");
 
@@ -339,6 +341,9 @@ test("reference-linked EK is the real-minus-reference difference, without changi
   assert.match(page, /const extra = compensation\.extra/);
   assert.match(cloud, /export function resolveReferencePay/);
   assert.match(cloud, /const extraPaymentAmount = baseEmployee/);
+  assert.match(cloud, /const hasExplicitExtra = body\.extraPaymentAmount/);
+  assert.match(cloud, /REFERENCE_EXTRA_TOTAL_MISMATCH/);
+  assert.match(page, /Sabit EK Ödeme \(her ay\)/);
   assert.match(cloud, /const extra = split\.extra/);
   assert.match(cloud, /const realSalaryForMaster = referenceEmployee/);
   assert.match(cloud, /REFERENCE_BASE_MISMATCH/);

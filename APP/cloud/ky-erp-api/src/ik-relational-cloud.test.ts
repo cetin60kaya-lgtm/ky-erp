@@ -12,17 +12,48 @@ import {
   calculateOvertimeAmount,
   calculatePayrollAmounts,
   resolveReferencePay,
+  resolveMonthlyExtra,
 } from "./ik-relational-cloud.ts";
 
-test("reference EK is calculated once for any employee, preserving real salary", () => {
-  assert.deepEqual(resolveReferencePay(48100, 45500, 2600, true), { actualSalary: 48100, salary: 45500, extra: 2600 });
-  assert.deepEqual(resolveReferencePay(48000, 45500, 0, true), { actualSalary: 48000, salary: 45500, extra: 2500 });
-  assert.deepEqual(resolveReferencePay(45500, 45500, 0, true), { actualSalary: 45500, salary: 45500, extra: 0 });
-  assert.deepEqual(resolveReferencePay(48100, undefined, 2600, true), { actualSalary: 48100, salary: 45500, extra: 2600 });
-  assert.deepEqual(resolveReferencePay(48100, 50000, 2600, true), { actualSalary: 48100, salary: 48100, extra: 0 });
-  assert.deepEqual(resolveReferencePay(45500, undefined, 0, false), { actualSalary: 45500, salary: 45500, extra: 0 });
-  const split = resolveReferencePay(48100, 45500, 2600, true);
-  assert.equal(calculatePayrollAmounts({ salary: split.salary, extra: split.extra, road: 1680 }).net, 49780);
+test("fixed EK is monthly recurring, additional without reference and included once with reference", () => {
+  // Referans + sabit EK: karttaki ücret dağılımı nete ikinci kez eklenmez.
+  assert.deepEqual(resolveReferencePay(48100, 45500, 2600, true), {
+    actualSalary: 48100, salary: 45500, extra: 2600, legacyFallback: false,
+  });
+  // Eski hatalı EK=0 kartı yeni aya geçerken eski maaş farkını geri kazanır.
+  assert.deepEqual(resolveReferencePay(48000, 45500, 0, true), {
+    actualSalary: 48000, salary: 45500, extra: 2500, legacyFallback: true,
+  });
+  assert.deepEqual(resolveReferencePay(45500, 45500, 0, true), {
+    actualSalary: 45500, salary: 45500, extra: 0, legacyFallback: false,
+  });
+  assert.deepEqual(resolveReferencePay(48100, undefined, 2600, true), {
+    actualSalary: 48100, salary: 45500, extra: 2600, missingReference: true,
+  });
+  // Kullanıcının sabit EK girişi referans farkından FARKLI ise kaybolmaz.
+  assert.deepEqual(resolveReferencePay(48100, 50000, 2600, true), {
+    actualSalary: 52600, salary: 50000, extra: 2600, legacyFallback: false,
+  });
+  // Referanssız maaşta EK bağımsız hakediştir: maaş + sabit EK.
+  assert.deepEqual(resolveReferencePay(45500, undefined, 2500, false), {
+    actualSalary: 45500, salary: 45500, extra: 2500,
+  });
+  const expected = calculatePayrollAmounts({ salary: 45500, extra: 2500, road: 1680, overtime: 600, deduction: 800 });
+  assert.equal(expected.net, 49480);
+  const linked = resolveReferencePay(48100, 45500, 2600, true);
+  assert.equal(calculatePayrollAmounts({ salary: linked.salary, extra: linked.extra, road: 1680 }).net, 49780);
+  // Referans maaşı değişse bile EK tutarı sonraki ay da aynıdır.
+  assert.equal(resolveReferencePay(48100, 47000, 2600, true).extra, 2600);
+});
+
+test("monthly EK includes permanent amount despite old zero row; explicit selected-month zero stays zero", () => {
+  assert.equal(resolveMonthlyExtra(2500, 0, false), 2500);
+  assert.equal(resolveMonthlyExtra(2500, 0, true), 2500);
+  assert.equal(resolveMonthlyExtra(2500, 0, true, true), 0);
+  assert.equal(resolveMonthlyExtra(2500, 1900, true), 1900);
+  assert.equal(resolveMonthlyExtra(2500, 1900, false), 2500);
+  assert.equal(resolveMonthlyExtra(0, 0, true), 0);
+  assert.equal(resolveMonthlyExtra(2500.25, 0, true), 2500.25);
 });
 
 test("mecit-hakan tenant aliases normalize to one canonical id", () => {
@@ -128,6 +159,20 @@ test("Istanbul business date does not fall back to the previous UTC day", () => 
   assert.equal(hrTodayIstanbul(new Date("2026-09-30T21:30:00.000Z")), "2026-10-01");
 });
 
+
+test("fixed EK and base reference have effective-date history independent of current payroll", () => {
+  const current = { id: "a", salary: 42000, extraPaymentAmount: 3500, baseEmployeeId: "ref-new" };
+  const changes = [
+    { employee_id: "a", field_name: "extraPaymentAmount", old_value: "1800", new_value: "3500", effective_date: "2026-11-01", created_at: "2026-11-03T10:00:00Z" },
+    { employee_id: "a", field_name: "baseEmployeeId", old_value: "ref-old", new_value: "ref-new", effective_date: "2026-11-01", created_at: "2026-11-03T10:00:01Z" },
+  ];
+  const october = applyHistoricalEmployeeValues(current, changes, "2026-10-31");
+  assert.equal(october.extraPaymentAmount, 1800);
+  assert.equal(october.baseEmployeeId, "ref-old");
+  const november = applyHistoricalEmployeeValues(current, changes, "2026-11-30");
+  assert.equal(november.extraPaymentAmount, 3500);
+  assert.equal(november.baseEmployeeId, "ref-new");
+});
 
 test("historical payroll rewinds salary and payment plan changes after the selected period", () => {
   const current = {
