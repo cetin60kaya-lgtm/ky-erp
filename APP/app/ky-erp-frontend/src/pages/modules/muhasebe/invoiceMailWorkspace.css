@@ -26,3 +26,9 @@
 .imw-form-grid .imw-wide{grid-column:1/-1}
 .imw-form-grid .imw-wide textarea{min-height:130px}
 .imw-send{font-weight:700!important}
+
+/* Stay in one ERP screen: explicit final recipient + attachment confirmation. */
+.imw-send-review{display:grid;gap:7px;border:1px solid #c9d8ee;background:#f6f9ff;border-radius:10px;padding:12px;margin:14px 0}
+.imw-send-review label{display:flex;gap:9px;align-items:flex-start;font-weight:700;line-height:1.5;cursor:pointer}
+.imw-send-review input[type=checkbox]{width:17px;height:17px;flex:0 0 17px;margin-top:3px}
+.imw-send-review small{color:#58718f;line-height:1.4}
