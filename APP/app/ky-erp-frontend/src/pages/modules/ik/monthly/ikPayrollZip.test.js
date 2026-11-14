@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { File } from "node:buffer";
+import { Buffer, File } from "node:buffer";
 import { deflateRawSync } from "node:zlib";
 import { expandAccountantPayrollFiles } from "./ikPayrollZip.js";
 
