@@ -124,11 +124,21 @@ function UploadPanel({ onUploaded }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState("success");
+  const [uploadErrors, setUploadErrors] = useState([]);
 
   const addFiles = (list) => {
-    const next = Array.from(list || []).filter((file) => /\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name));
-    setFiles((current) => [...current, ...next].slice(0, 20));
-    setMessage("");
+    const selected = Array.from(list || []);
+    const next = selected.filter((file) => /\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name) && file.size <= 20 * 1024 * 1024);
+    // Keep one entry per original file, even after drag/drop plus file-picker.
+    setFiles((current) => [...new Map([...current, ...next].map((file) =>
+      [`${file.name}|${file.size}|${file.lastModified}`, file])).values()].slice(0, 20));
+    setUploadErrors([]);
+    if (next.length !== selected.length) {
+      setTone("warning");
+      setMessage("Desteklenmeyen veya 20 MB'ı aşan dosyalar listeye eklenmedi. XML/PDF ve desteklenen görselleri seçin.");
+    } else {
+      setMessage("");
+    }
   };
 
   const send = async () => {
@@ -139,20 +149,27 @@ function UploadPanel({ onUploaded }) {
     try {
       const selectedCount = files.length;
       const result = await uploadEBelge(files);
-      const failed = result?.errors?.length || 0;
-      const accepted = result?.items?.length || Math.max(0, selectedCount - failed);
-      setFiles([]);
+      const errors = Array.isArray(result?.errors) ? result.errors : [];
+      const failed = errors.length;
+      const accepted = Array.isArray(result?.items) ? result.items.length : Math.max(0, selectedCount - failed);
+      // A 207 means some original documents now exist in the live pool.
+      // Keep ONLY rejected files queued for inspection and safe retry.
+      const rejectedNames = new Set(errors.map((entry) => String(entry?.fileName || "")));
+      setFiles((current) => failed ? current.filter((file) => rejectedNames.has(file.name)) : []);
+      setUploadErrors(errors);
       if (inputRef.current) inputRef.current.value = "";
       if (failed) {
         setTone("warning");
-        setMessage(`${accepted} dosya havuza alındı. ${failed} dosya alınamadı veya kontrol istiyor. Belge Havuzu'ndan sonucu inceleyin.`);
+        setMessage(`${accepted} dosya havuza alındı; ${failed} dosya alınamadı. Başarılı dosyaları yeniden yüklemeyin. Yalnız hata alan dosyalar seçili bırakıldı.`);
       } else {
         setMessage(`${accepted} dosya havuza alındı. Yeni kayıtlar artık Belge Havuzu'nda görünür; fatura–irsaliye eşleştirmesi yüklenen belgeler için otomatik kontrol edildi.`);
       }
       await onUploaded?.(result);
     } catch (error) {
       setTone("error");
-      setMessage(error?.message || "Belge yükleme tamamlanamadı.");
+      setUploadErrors([]);
+      setMessage((error?.message || "Belge yükleme tamamlanamadı.") +
+        " Sonuç belirsizse yeniden yüklemeden önce Belge Havuzu'nda belge numarasını kontrol edin.");
     } finally {
       setBusy(false);
     }
@@ -199,6 +216,12 @@ function UploadPanel({ onUploaded }) {
         <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><X size={15} /></button>
       </div>)}
     </div>}
+    {uploadErrors.length > 0 ? <div className="eb-inline-message warning" role="alert">
+      <strong>Alınamayan dosyalar</strong>
+      <ul>{uploadErrors.map((item, index) => <li key={`${item.fileName}-${index}`}>
+        {item.fileName}: {item.message || item.code || "Dosya kontrolü gerekli."}
+      </li>)}</ul>
+    </div> : null}
     <div className="eb-upload-footer">
       <span className={message ? `eb-inline-message ${tone}` : ""}>{message}</span>
       <button type="button" className="eb-primary" disabled={!files.length || busy} onClick={send}>

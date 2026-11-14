@@ -30,7 +30,7 @@ test("UBL-TR: belge numarası/tarih/kalem olmadan kayıt oluşturulmaz",()=>{
  for(const xml of [
    fixture().replace("<cbc:ID>HKN2026000000999</cbc:ID>","<cbc:Note>Numarasız</cbc:Note>"),
    fixture().replace("<cbc:IssueDate>2026-11-14</cbc:IssueDate>",""),
-   fixture().replace(/<cac:InvoiceLine>[\\s\\S]*?<\\/cac:InvoiceLine>/,""),
+   fixture().replace(/<cac:InvoiceLine>.*<\/cac:InvoiceLine>/,""),
  ]){
    assert.throws(()=>parseCanonicalEBelgeUbl(xml,"INCOMING"),
        (e:any)=>e.code==="UBL_TR_REQUIRED_FIELDS_MISSING");
