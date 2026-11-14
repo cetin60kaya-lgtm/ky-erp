@@ -27,6 +27,7 @@ import { registerAccountingDocumentArchiveRoutes } from "./accounting-document-a
 import { registerAccountingOperationRoutes } from "./accounting-operations";
 import { registerCanonicalDispatchControlRoutes } from "./accounting-dispatch-control-canonical";
 import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
+import { registerEBelgeVisualProfileRoutes } from "./e-belge-visual-profile-routes";
 import { registerModelFileTransferRoutes } from "./model-file-transfer.ts";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
@@ -190,6 +191,7 @@ registerAccountingCompanyProfileRoutes(app);
 registerAccountingDocumentArchiveRoutes(app);
 registerAccountingOperationRoutes(app);
 registerEBelgeCenterRoutes(app);
+registerEBelgeVisualProfileRoutes(app);
 registerModelFileTransferRoutes(app);
 registerEBelgeLineToolRoutes(app);
 registerAiCloudRoutes(app);
