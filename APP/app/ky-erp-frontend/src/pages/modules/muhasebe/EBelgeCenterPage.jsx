@@ -437,7 +437,7 @@ function DetailDrawer({ id, onClose, onChanged }) {
 }
 
 export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule, moduleActionContext }) {
-  const allowedViews = ["overview", "incoming", "outgoing", "pool", "matching", "issues", "workflow", "archive", "integrations"];
+  const allowedViews = ["overview", "incoming", "outgoing", "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates"];
   const view = allowedViews.includes(initialView) ? initialView : "overview";
   const poolViews = useMemo(() => ["incoming", "outgoing", "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
@@ -498,7 +498,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
-    if (view === "workflow") return;
+    if (view === "workflow" || view === "visual-templates") return;
     setBusy(true);
     setError("");
     try {
@@ -583,6 +583,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     workflow: ["İş Akışları", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
     archive: ["Arşiv & Çıktı", "Muhasebeleşen belgeleri, dosya eklerini ve arşiv durumunu tek kaynaktan inceleyin."],
     integrations: ["Entegrasyonlar", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
+    "visual-templates": ["Görsel Şablonlar", "Düzenleyen VKN/TCKN ve belge türüne göre XML + orijinal PDF örneğini tanıtın; şablonu düzenleyip sonraki XML'lere uygulayın."],
   }[view];
   const poolTitle = viewMeta[0];
   const poolHint = viewMeta[1];
@@ -637,7 +638,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
     {view === "pool" && <>
       <UploadPanel onUploaded={handleUploaded} />
-      <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} />
+      <div className="eb-section-title"><div><strong>PDF Görünüm Şablonu</strong><span>Firma bazlı bir kez tanıtılır, sonraki belgelerde tekrar kullanılabilir.</span></div>
+        <button type="button" onClick={() => openEBelgeTab("gorsel-sablonlar")}>Görsel Şablonlar'ı Aç</button></div>
       {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div></div>}
     </>}
 
@@ -676,6 +678,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     </>}
 
     {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} />}
+    {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 
     {view === "integrations" && <>
       <EBelgeAdapterManager activeMainCompany={activeMainCompany} openModule={openModule} providerStatuses={providers} onRefreshStatuses={loadIntegrations} />

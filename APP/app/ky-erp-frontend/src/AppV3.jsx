@@ -318,6 +318,7 @@ export default function AppV3() {
       "onay-sorunlar": "issues",
       "is-akislari": "workflow",
       "arsiv-cikti": "archive",
+      "gorsel-sablonlar": "visual-templates",
       "entegrasyonlar": "integrations",
     }[activeTab];
     if (activeModule?.key === "e-belge" && eBelgeView) return <EBelgeCenterPage {...sharedProps} initialView={eBelgeView} />;

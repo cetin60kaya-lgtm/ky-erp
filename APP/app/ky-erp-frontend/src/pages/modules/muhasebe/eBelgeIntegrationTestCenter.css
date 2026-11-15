@@ -35,3 +35,5 @@
 .itc-xml{max-height:350px;max-width:100%;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere;background:#122232;color:#e3f1ff;padding:14px;border-radius:8px;font-size:11px}
 .itc-pdf{width:100%;height:min(750px,75vh);min-height:380px;border:1px solid #d9e6f3;border-radius:9px;background:#f8fafc}
 @media(max-width:650px){.itc-period label{flex:1 1 100%}.itc-period input{width:100%;box-sizing:border-box}.itc-list>div{align-items:flex-start}.itc-list b{font-size:10px}.itc-categories button{flex:1 1 40%}}
+
+.itc .itc-visual-link{justify-self:start;background:#e6f2ff;color:#245ca8;border-color:#aac8ed;margin-top:5px}

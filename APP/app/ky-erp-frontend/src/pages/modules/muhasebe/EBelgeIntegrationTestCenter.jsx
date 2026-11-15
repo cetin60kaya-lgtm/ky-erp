@@ -2,6 +2,7 @@ import {useEffect,useState} from "react";
 import {Download,Eye,FileSearch,FileText,LoaderCircle,ShieldCheck} from "lucide-react";
 import {getIsnetSettings,queryIsnetDocumentTest,downloadIsnetReadOnlyXmlSample} from "../../../services/isnetApi";
 import {parseUblForVisualOutput,renderUblOutput} from "./visualUblOutput";
+import {getEBelgeVisualProfiles} from "../../../services/eBelgeApi";
 import "./eBelgeIntegrationTestCenter.css";
 
 const TYPES=[
@@ -16,7 +17,7 @@ const saveBlob=(blob,name)=>{
  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
  window.setTimeout(()=>URL.revokeObjectURL(url),10000);
 };
-export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,profile}){
+export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,profile,onOpenVisualStudio}){
  const key=adapter?.key||"";
  const [type,setType]=useState("incoming-invoice");
  const [dates,setDates]=useState(()=>{
@@ -99,9 +100,13 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
    if(file.type==="application/pdf"){
     setPdfUrl(URL.createObjectURL(file.blob));
    }else if(rawXml){
-    const output=await renderUblOutput(rawXml,{},"PDF");
+    const records=await getEBelgeVisualProfiles();
+    const approved=(records?.items||[]).find(p=>p.approved===true&&p.issuerTaxNo===parsed?.supplier.tax&&p.kind===parsed?.kind);
+    const output=await renderUblOutput(rawXml,approved?.layout||{},"PDF");
     setPdfUrl(URL.createObjectURL(output.blob));
-    setMessage("UBL alanlarından kontrol PDF'i üretildi. Bu, entegratörün imzalı orijinal PDF'iyle birebir eşdeğer değildir.");
+    setMessage(approved?
+      "Onaylı düzenleyen firma + belge türü şablonuyla kontrol PDF'i üretildi. Yeni XML verileri kullanıldı; resmî imzalı PDF eşdeğeri değildir.":
+      "Onaylı firma şablonu bulunamadı; varsayılan kontrol PDF'i üretildi. Firma şablonunu Görsel Şablonlar'da tanıtın.");
    }
   }catch(e){setMessage(e?.message||"PDF önizlemesi oluşturulamadı.");}
   finally{setBusy("")}
@@ -148,7 +153,10 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   {message&&<p className="itc-message" role="status">{message}</p>}
   {parsed&&<div className="itc-summary"><strong>{parsed.kind==="INVOICE"?"Fatura":"İrsaliye"} · {parsed.number}</strong>
     <span>Tarih: {parsed.date} · Kalem: {parsed.lines.length} · ETTN: {parsed.uuid||"Belirtilmedi"}</span>
-    <span>Düzenleyen: {parsed.supplier.name}</span></div>}
+    <span>Düzenleyen: {parsed.supplier.name}</span>
+   {onOpenVisualStudio&&<button type="button" className="itc-visual-link" onClick={onOpenVisualStudio}>
+     Bu Firma İçin Görsel Şablonu Aç / Düzenle
+   </button>}</div>}
   {file&&<div className="itc-actions">
    {rawXml&&<button type="button" onClick={()=>setShowXml(x=>!x)}><Eye size={15}/> {showXml?"XML'i Kapat":"XML Aç"}</button>}
    {rawXml&&<button type="button" onClick={()=>saveBlob(new Blob([rawXml],{type:"application/xml"}),file.name)}><Download size={15}/> XML İndir</button>}

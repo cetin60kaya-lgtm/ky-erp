@@ -40,6 +40,8 @@ export function normalizeAdapterProfile(key:unknown,input:unknown):AdapterProfil
     fileNamePattern.replace(/\{(?:type|number|date|direction)\}/g,"").includes("{"))
   throw new Error("INVALID_FILENAME_PATTERN");
  if(serviceUrl){
+  // URL normalizes explicit HTTPS :443; reject it before parsing to keep connection profiles canonical.
+  if(/:\/\/[^/?#]+:\d+(?:[/?#]|$)/.test(serviceUrl))throw new Error("INVALID_SERVICE_URL");
   let url:URL;
   try{url=new URL(serviceUrl)}catch{throw new Error("INVALID_SERVICE_URL")}
   const host=url.hostname.toLowerCase();

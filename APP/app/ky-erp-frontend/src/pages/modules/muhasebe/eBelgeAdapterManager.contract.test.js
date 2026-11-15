@@ -86,3 +86,12 @@ test("Firma profili yalnız güvenli kurallarla düzenlenir ve şifre içermez",
  assert.match(client,/getCompanyEBelgeAdapterProfile/);
  assert.match(client,/saveCompanyEBelgeAdapterProfile/);
 });
+
+test("Ortak belge testinde onaylı firma + tür şablonu otomatik seçilir",()=>{
+ assert.match(sharedTest,/getEBelgeVisualProfiles/);
+ assert.match(sharedTest,/p\.approved===true/);
+ assert.match(sharedTest,/p\.issuerTaxNo===parsed\?\.supplier\.tax/);
+ assert.match(sharedTest,/p\.kind===parsed\?\.kind/);
+ assert.match(sharedTest,/renderUblOutput\(rawXml,approved\?\.layout\|\|\{\},"PDF"\)/);
+ assert.match(ui,/gorsel-sablonlar/);
+});

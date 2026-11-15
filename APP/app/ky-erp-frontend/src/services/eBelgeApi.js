@@ -84,7 +84,7 @@ export async function uploadEBelge(files, { direction = "AUTO", documentKind = "
 }
 
 export const getEBelgeVisualProfiles = () =>
-  apiGet("/e-belge/visual-profiles", undefined, { timeoutMs: 30_000 }).then(unwrap);
+  apiGet("/e-belge/visual-profiles", undefined, { timeoutMs: 30_000, forceFresh: true }).then(unwrap);
 
 export async function uploadEBelgeVisualExample(sampleXml, referenceFile, { layout, outputFormat }) {
   const form = new FormData();
@@ -104,6 +104,10 @@ export const approveEBelgeVisualProfile = (issuer, kind, approval) =>
 
 export const getEBelgeVisualReference = (issuer, kind) =>
   apiFetch("/e-belge/visual-profiles/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(kind) + "/reference",
+    { responseType: "blob", timeoutMs: 30_000 });
+
+export const getEBelgeVisualSample = (issuer, kind) =>
+  apiFetch("/e-belge/visual-profiles/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(kind) + "/sample-xml",
     { responseType: "blob", timeoutMs: 30_000 });
 
 export const recoverEBelgeCompanyFromXml = (id) =>

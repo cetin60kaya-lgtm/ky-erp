@@ -50,7 +50,10 @@ function layoutOf(p={}){
  const n=(field,def,min,max)=>Number.isFinite(Number(p[field]))&&Number(p[field])>=min&&Number(p[field])<=max?Number(p[field]):def;
  return {top:n("marginTop",30,0,150),side:n("marginSide",26,0,120),
   font:n("fontSize",9,6,18),table:n("tableFontSize",8,5,16),
-  logo:n("logoWidth",135,0,240),showQr:p.showQr!==false};
+  logo:n("logoWidth",135,0,240),showQr:p.showQr!==false,
+  headerGap:n("headerGap",18,0,60),companyGap:n("companyGap",20,0,80),
+  tableGap:n("tableGap",14,0,65),totalsWidth:n("totalsWidth",190,110,280),
+  cellPadding:n("cellPadding",4,1,14),titleSize:n("titleSize",16,10,28),qrWidth:n("qrWidth",82,40,140)};
 }
 export function makeVisualPdfDefinition(d,p={}){
  const c=layoutOf(p);
@@ -61,22 +64,22 @@ export function makeVisualPdfDefinition(d,p={}){
   String(x.index),x.description,x.quantity+" "+x.unit,d.kind==="INVOICE"?money(x.price):"-",money(x.total)]));
  const pictures=[];
  if(d.images.logo&&c.logo>0)pictures.push({image:d.images.logo,width:c.logo,alignment:"right"});
- if(d.images.qr&&c.showQr)pictures.push({image:d.images.qr,width:82,alignment:"right",margin:[0,8,0,0]});
+ if(d.images.qr&&c.showQr)pictures.push({image:d.images.qr,width:c.qrWidth,alignment:"right",margin:[0,8,0,0]});
  return {pageSize:"A4",pageMargins:[c.side,c.top,c.side,32],
   defaultStyle:{font:"Roboto",fontSize:c.font},
   content:[
    {columns:[{width:"*",stack:[
-     {text:d.kind==="INVOICE"?"e-FATURA":"e-İRSALİYE",fontSize:16,bold:true},
+     {text:d.kind==="INVOICE"?"e-FATURA":"e-İRSALİYE",fontSize:c.titleSize,bold:true},
      {text:"Belge No: "+d.number},{text:"Tarih: "+d.date},
-     {text:"ETTN: "+d.uuid,fontSize:7}]},{width:"auto",stack:pictures}],margin:[0,0,0,18]},
+     {text:"ETTN: "+d.uuid,fontSize:7}]},{width:"auto",stack:pictures}],margin:[0,0,0,c.headerGap]},
    {columns:[{width:"*",stack:[{text:"DÜZENLEYEN",bold:true,color:"#34485d"}].concat(sellers)},
      {width:"*",stack:[{text:"ALICI",bold:true,color:"#34485d"}].concat(buyers)}],
-     columnGap:20,margin:[0,0,0,20]},
+     columnGap:20,margin:[0,0,0,c.companyGap]},
    {table:{headerRows:1,widths:[28,"*",64,66,70],body:rows},
-     fontSize:c.table,layout:{hLineColor:"#b7c0c8",vLineColor:"#b7c0c8",paddingLeft:()=>4,paddingRight:()=>4},
-     margin:[0,0,0,14]},
+     fontSize:c.table,layout:{hLineColor:"#b7c0c8",vLineColor:"#b7c0c8",paddingLeft:()=>c.cellPadding,paddingRight:()=>c.cellPadding,paddingTop:()=>c.cellPadding/2,paddingBottom:()=>c.cellPadding/2},
+     margin:[0,0,0,c.tableGap]},
    {columns:[{width:"*",text:d.notes,fontSize:c.font-1},
-     {width:190,stack:[
+     {width:c.totalsWidth,stack:[
        {columns:[{text:"Ara Toplam"},{text:money(d.subtotal)+" "+d.currency,alignment:"right"}]},
        {columns:[{text:"KDV"},{text:money(d.tax)+" "+d.currency,alignment:"right"}]},
        {columns:[{text:"TOPLAM",bold:true},{text:money(d.total)+" "+d.currency,alignment:"right",bold:true}]}

@@ -24,3 +24,18 @@ test("Çıktı biçimleri ve yerleşim düzenlemeleri sınırlandırılır",()=>
  assert.equal(visualLayout({marginSide:33.48}).marginSide,33.5);
  assert.throws(()=>inspectUblVisual("<!DOCTYPE Invoice><Invoice/>"));
 });
+
+test("Görsel profil ince ayarları sınırlandırılır; eski şablonlar aynı varsayılanla açılır",()=>{
+ const old=visualLayout({marginTop:32,fontSize:10});
+ assert.equal(old.headerGap,18);
+ assert.equal(old.companyGap,20);
+ assert.equal(old.tableGap,14);
+ assert.equal(old.totalsWidth,190);
+ const changed=visualLayout({headerGap:22,companyGap:25,tableGap:18,totalsWidth:220,
+  cellPadding:6,titleSize:19,qrWidth:92});
+ assert.equal(changed.headerGap,22);
+ assert.equal(changed.companyGap,25);
+ assert.equal(changed.totalsWidth,220);
+ assert.equal(visualLayout({titleSize:250}).titleSize,16);
+ assert.equal(visualLayout({cellPadding:-9}).cellPadding,4);
+});
