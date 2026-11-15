@@ -8,7 +8,7 @@ test("İşNet resmî API gelen belge kontrolü yalnız ilk sayfa sayısını dö
   const body=JSON.parse(String(init.body));
   calls.push({url,body});
   assert.equal(init.method,"POST");
-  assert.equal(init.headers?.["Authorization"],"Bearer private-test-placeholder");
+  assert.equal(new Headers(init.headers).get("Authorization"),"Bearer private-test-placeholder");
   return Response.json(url.includes("GetIncomingDespatchList")
    ?{Result:0,Despatches:[{Ettn:"PRIVATE_SHOULD_NOT_LEAK"}]}
    :{Result:0,Invoices:[{Ettn:"PRIVATE_SHOULD_NOT_LEAK"},{Ettn:"OTHER"}]});
