@@ -13,13 +13,15 @@ const service = frontend("services", "isnetApi.js");
 const integrations = frontend("pages", "modules", "muhasebe", "EBelgeIntegrationsWorkspace.jsx");
 const center = frontend("pages", "modules", "muhasebe", "EBelgeCenterPage.jsx");
 const registry = frontend("app", "moduleRegistryBase.js");
+const adapterManager = frontend("pages", "modules", "muhasebe", "EBelgeAdapterManager.jsx");
 
 test("İşNet eski ana modül değil e-Belge içindeki provider entegrasyonudur", () => {
   assert.equal(existsSync(frontendPath("pages", "modules", "isnet", "IsnetManagementCenterPage.jsx")), false);
   assert.match(registry, /key:\s*"e-belge"/);
   assert.doesNotMatch(registry, /key:\s*"isnet"/);
   assert.match(center, /view === "integrations"/);
-  assert.match(center, /<EBelgeIntegrationsWorkspace/);
+  assert.match(center, /<EBelgeAdapterManager/);
+  assert.match(adapterManager, /<EBelgeIntegrationsWorkspace/);
   assert.match(integrations, /İşNet Portal Bağlantısı/);
 });
 
