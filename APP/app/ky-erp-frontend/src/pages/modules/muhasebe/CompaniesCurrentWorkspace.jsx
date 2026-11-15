@@ -603,6 +603,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     goTab?.("finans-islemleri", queryString);
   };
 
+  const openReminders = () => {
+    const queryString = new URLSearchParams({ financeView: "obligations", companyId: String(selected?.id || ""), companyName: String(selected?.firmaAdi || selected?.companyName || selected?.name || "") }).toString();
+    goTab?.("finans-islemleri", queryString);
+  };
+
   const canUseCari = Boolean(selected?.supplierDebtTracking || selected?.customerReceivableTracking);
   const filteredMovements = useMemo(() => {
     if (movementFilter === "ALL") return movements;
@@ -659,6 +664,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 <div className="ccw-actions">
                   {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari Hareket</button> : null}
                   <button type="button" onClick={() => openFinance(selected.id)}><Landmark size={16} /> Finans</button>
+                  <button type="button" onClick={openReminders}><CircleAlert size={16} /> Ödeme Hatırlat</button>
                   <button type="button" onClick={() => setEditOpen(true)}><Pencil size={16} /> Düzenle</button>
                    <button type="button" disabled={statusSaving} onClick={changeActiveStatus}>{selected.isActive === false ? "Aktifleştir" : "Pasifleştir"}</button>
                    <button type="button" onClick={() => { setMergeOpen(true); setMergeTargetId(""); setMergePreview(null); setMergePhrase(""); setMergeError(""); }}>Birleştir</button>

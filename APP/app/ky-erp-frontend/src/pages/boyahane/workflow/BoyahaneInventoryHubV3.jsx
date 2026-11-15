@@ -12,6 +12,7 @@ import {
 } from "../../../services/boyahaneWorkflowApi";
 import AddLotModal from "./AddLotModal";
 import { ApprovedProductModal, StockMovementModal } from "./InventoryModals";
+import ChemicalDocumentsPanel from "./ChemicalDocumentsPanel";
 import { formatDate, formatKg, safeArray } from "./boyahaneFormat";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 
@@ -487,6 +488,7 @@ export default function BoyahaneInventoryHubV3({ activeMainCompany }) {
         >
           Ürünler <b>{products.length}</b>
         </button>
+        <button type="button" className={view === "documents" ? "active" : ""} onClick={() => setView("documents")}>Ürün Evrakları</button>
         <button
           type="button"
           className={view === "lots" ? "active" : ""}
@@ -586,6 +588,8 @@ export default function BoyahaneInventoryHubV3({ activeMainCompany }) {
 
       {message ? <div className="bh-notice success">{message}</div> : null}
       {error ? <div className="bh-notice danger">{error}</div> : null}
+
+      {view === "documents" ? <ChemicalDocumentsPanel activeMainCompany={activeMainCompany} products={products} onChanged={load} /> : null}
 
       {view === "products" && productView === "list" ? (
         <section className="bh-card bh-product-sheet-card">

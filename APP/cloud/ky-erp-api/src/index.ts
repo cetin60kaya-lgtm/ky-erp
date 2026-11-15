@@ -1,4 +1,5 @@
 import { writeCurrentAccount } from "./accounting-current-write.ts";
+import { registerAccountingObligationsRoutes } from "./accounting-obligations";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { getAuthenticatedUser, registerAuthManagementRoutes } from "./auth-cloud";
@@ -2629,6 +2630,7 @@ app.get("/api/files/*", async (c) => {
 });
 
 registerCanonicalAccountingReportRoutes(app);
+registerAccountingObligationsRoutes(app);
 registerAuthManagementRoutes(app);
 
 export default app;

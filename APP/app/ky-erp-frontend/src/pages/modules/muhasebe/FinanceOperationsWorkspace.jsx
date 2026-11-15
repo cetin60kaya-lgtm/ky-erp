@@ -3,8 +3,9 @@ import CekOdemeMerkeziPage from "../../muhasebe/CekOdemeMerkeziPage";
 import AccountingLedgerPanel from "./AccountingLedgerPanel";
 import FinancialAccountsPanel from "./FinancialAccountsPanel";
 import PaymentPlannerPanel from "./PaymentPlannerPanel";
+import MonthlyObligationsPanel from "./MonthlyObligationsPanel";
 
-const VIEWS = new Set(["daily", "planner", "ledger"]);
+const VIEWS = new Set(["daily", "planner", "obligations", "ledger"]);
 
 export default function FinanceOperationsWorkspace({ activeMainCompany, refreshKey = 0, reloadAll, moduleActionContext }) {
   const action = useMemo(() => {
@@ -13,6 +14,7 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
   }, [moduleActionContext]);
   const requestedView = VIEWS.has(action.financeView) ? action.financeView : "daily";
   const selectedCompanyId = action.companyId || action.financeCompanyId || "";
+  const selectedCompanyName = action.companyName || "";
   const [view, setView] = useState(requestedView);
 
   useEffect(() => {
@@ -27,6 +29,9 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
         </button>
         <button type="button" className={view === "planner" ? "active" : ""} onClick={() => setView("planner")}>
           Ödeme Planı
+        </button>
+        <button type="button" className={view === "obligations" ? "active" : ""} onClick={() => setView("obligations")}>
+          Ödemelerim & Hatırlatmalar
         </button>
         <button type="button" className={view === "ledger" ? "active" : ""} onClick={() => setView("ledger")}>
           Banka / Kasa / Defter
@@ -44,6 +49,7 @@ export default function FinanceOperationsWorkspace({ activeMainCompany, refreshK
           />
         ) : null}
         {view === "planner" ? <PaymentPlannerPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} /> : null}
+        {view === "obligations" ? <MonthlyObligationsPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} selectedCompanyId={selectedCompanyId} selectedCompanyName={selectedCompanyName} /> : null}
         {view === "ledger" ? (
           <>
             <FinancialAccountsPanel activeMainCompany={activeMainCompany} refreshKey={refreshKey} />
