@@ -232,9 +232,9 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany, ope
             </header>
             <div className="idc-drawer-body">
               <div className="accounting-inline-actions">
-                {selected.id && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-belgeler", actionContext: { documentId: selected.id } })}>Müşteri İrsaliyesini Aç</button>}
-                {selected.invoiceId && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-belgeler", actionContext: { documentId: selected.invoiceId } })}>İlişkili Faturayı Aç</button>}
-                {String(selected.invoiceNo || "").toUpperCase().startsWith("HKN") && <button type="button" onClick={() => onInvoiceMail?.({ id: selected.invoiceId || selected.id, document_no: selected.invoiceNo, model_name: selected.modelName, party_name: selected.companyName })}>HKN Faturasını Maille Gönder</button>}
+                {selected.id && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-irsaliyeler", actionContext: { documentId: selected.id } })}>Müşteri İrsaliyesini Aç</button>}
+                {selected.invoiceId && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-faturalar", actionContext: { documentId: selected.invoiceId } })}>İlişkili Faturayı Aç</button>}
+                {String(selected.invoiceNo || "").toUpperCase().startsWith("HKN") && <button type="button" onClick={() => onInvoiceMail?.({ id: selected.invoiceId || selected.id, document_no: selected.invoiceNo, delivery_no: selected.dispatchNo, model_id: selected.modelId, model_name: selected.modelName, party_name: selected.companyName })}>HKN Faturasını Maille Gönder</button>}
               </div>
               <section className="idc-detail-grid">
                 <div><span>Müşteri</span><strong>{selected.companyName || "-"}</strong></div>

@@ -4,6 +4,7 @@ import CustomerDocumentsWorkspace from "./muhasebe/CustomerDocumentsWorkspace";
 import FinanceOperationsWorkspace from "./muhasebe/FinanceOperationsWorkspace";
 import FinancialControlWorkspace from "./muhasebe/FinancialControlWorkspace";
 import MailAccountingWorkspace from "./muhasebe/MailAccountingWorkspace";
+import InvoiceMailReconciliationCenter from "./muhasebe/InvoiceMailReconciliationCenter";
 import ManagementOverviewWorkspace from "./muhasebe/ManagementOverviewWorkspace";
 import QuickCompanyCreateDialog from "./muhasebe/QuickCompanyCreateDialog";
 import SupplierDocumentsWorkspace from "./muhasebe/SupplierDocumentsWorkspace";
@@ -18,6 +19,7 @@ export const MUHASEBE_TABS = [
   { key: "firma-kartlari", title: "Firmalar & Cari", description: "Müşteri ve tedarikçi kartlarını, cari bakiyeyi ve firma muhasebe tanımlarını yönetin." },
   { key: "tedarikci-faturalar", title: "Tedarikçi / Alış Belgeleri", description: "Gelen irsaliye ve faturaları gider, KDV, stok, LOT ve cari sonucuyla yönetin." },
   { key: "musteri-belgeleri", title: "Müşteri / Satış Belgeleri", description: "Müşteri irsaliyesinden bizim irsaliye ve kesilen faturaya kadar satış zincirini izleyin." },
+  { key: "fatura-mail-mutabakat", title: "Fatura Mail & Mutabakat", description: "HKN/DDM PDF gönderimi, haftalık müşteri Excel listesi, ödemeye alınan ve eksik faturaların takibi." },
   { key: "finans-islemleri", title: "Finans İşlemleri", description: "Ödeme, tahsilat, çek, ödeme planı, banka, kasa ve defter hareketlerini yönetin." },
   { key: "mail-ekstre", title: "Ekstre & Mutabakat", description: "Cari ekstre, dönem mutabakatı, alıcı ve gönderim durumunu tek alanda yönetin." },
   { key: "mali-kontrol", title: "Mali Kontrol & Raporlar", description: "Gelir-gider, kâr-zarar, KDV ve muhasebe raporlarını tek finansal gerçekten inceleyin." },
@@ -106,6 +108,7 @@ export default function MuhasebePage({ activeTab, activeMainCompany, openModule,
   else if (current.key === "firma-kartlari") content = <CompaniesCurrentWorkspace {...pageProps} />;
   else if (current.key === "tedarikci-faturalar") content = <SupplierDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openModule={openModule} />;
   else if (current.key === "musteri-belgeleri") content = <CustomerDocumentsWorkspace activeMainCompany={activeMainCompany} refreshKey={refreshKey} openModule={openModule} moduleActionContext={moduleActionContext} />;
+  else if (current.key === "fatura-mail-mutabakat") content = <InvoiceMailReconciliationCenter activeMainCompany={activeMainCompany} refreshKey={refreshKey} moduleActionContext={moduleActionContext} openModule={openModule} />;
   else if (current.key === "finans-islemleri") content = <FinanceOperationsWorkspace {...pageProps} />;
   else if (current.key === "mail-ekstre") content = <MailAccountingWorkspace {...pageProps} />;
   else if (current.key === "mali-kontrol") content = <FinancialControlWorkspace {...pageProps} />;

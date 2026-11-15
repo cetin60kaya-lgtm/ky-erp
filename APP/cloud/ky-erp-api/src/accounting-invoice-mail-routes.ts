@@ -2,6 +2,7 @@
 // This module never sends email, changes an invoice, or posts an accounting entry.
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { registerInvoiceWeeklyReconciliationRoutes } from "./accounting-invoice-weekly-reconciliation";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -70,6 +71,7 @@ function validRow(input: Row) {
 }
 
 export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
+  registerInvoiceWeeklyReconciliationRoutes(app);
   app.get("/api/muhasebe/invoice-mail-routes", async (c) => {
     const a = await access(c);
     if (a.failure) return a.failure;

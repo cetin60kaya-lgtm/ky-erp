@@ -210,7 +210,7 @@ function withOperationalGroups(module) {
       ...module,
       groups: [
         { label: "Özet & Cari", tabs: [["yonetim-ozeti", "Yönetim Özeti", "genel-bakis"], ["firma-kartlari", "Firmalar & Cari", "firma-kartlari"]] },
-        { label: "Belge Akışı", tabs: [["tedarikci-faturalar", "Alış & Tedarikçi", "tedarikci-fatura"], ["musteri-belgeleri", "Satış & Müşteri", "file-check"]] },
+        { label: "Belge Akışı", tabs: [["tedarikci-faturalar", "Alış & Tedarikçi", "tedarikci-fatura"], ["musteri-belgeleri", "Satış & Müşteri", "file-check"], ["fatura-mail-mutabakat", "Fatura Mail & Mutabakat", "eposta"]] },
         { label: "Finans & Kontrol", tabs: [["finans-islemleri", "Finans İşlemleri", "odemeler"], ["mail-ekstre", "Ekstre & Mail", "eposta"], ["mali-kontrol", "Mali Kontrol & Raporlar", "raporlar"]] },
       ],
     };

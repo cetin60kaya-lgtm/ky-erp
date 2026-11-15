@@ -106,7 +106,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
                   <td>{row.document_no || "-"}</td>
                   <td>{sourceText(row)}</td>
                   <td>{Number(row.line_count || 0)}</td>
-                  <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-belgeler", actionContext: { documentId: row.id } })}>Belgeyi Aç</button></td>
+                  <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-irsaliyeler", actionContext: { documentId: row.id } })}>Belgeyi Aç</button></td>
                 </tr>
               ))}
             </tbody></table></div>
