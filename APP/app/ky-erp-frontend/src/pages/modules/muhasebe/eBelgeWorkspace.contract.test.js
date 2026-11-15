@@ -4,10 +4,10 @@ import { readFileSync } from "node:fs";
 
 const read = (url) => readFileSync(new URL(url, import.meta.url), "utf8");
 
-test("e-Belge merkezi dokuz canonical çalışma alanını korur", () => {
+test("e-Belge merkezi dört işletme listesi ve yönetim alanlarını korur", () => {
   const registry = read("../../../app/moduleRegistryBase.js");
   for (const key of [
-    "genel-bakis", "gelen-belgeler", "giden-belgeler", "belge-havuzu",
+    "genel-bakis", "gelen-faturalar", "gelen-irsaliyeler", "giden-irsaliyeler", "giden-faturalar", "belge-havuzu",
     "eslestirmeler", "onay-sorunlar", "is-akislari", "arsiv-cikti", "entegrasyonlar",
   ]) assert.match(registry, new RegExp(key));
   assert.doesNotMatch(registry, /key: "isnet"/);
@@ -35,13 +35,13 @@ test("Belge Havuzu scroll, düzenleme ve güvenli son onay sunar; rutin hard-del
   assert.doesNotMatch(api, /deleteEBelge/);
 });
 
-test("belge penceresi konum ve boyutunu hatırlar, LOT ikinci belgeyi bekler", () => {
+test("belge detay penceresi erişilebilir kalır, LOT ikinci belgeyi bekler", () => {
   const page = read("./EBelgeCenterPage.jsx");
   const line = read("./EBelgeLineReview.jsx");
   const css = read("./eBelgeCenter.css");
-  assert.match(page, /kyerp:ebelge:document-window/);
-  assert.match(page, /onPointerDown=\{startDrag\}/);
-  assert.match(css, /resize:both/);
+  assert.match(page, /role="dialog" aria-modal="true"/);
+  assert.match(page, /className="eb-drawer eb-document-modal"/);
+  assert.match(css, /\.eb-drawer/);
   assert.match(line, /İrsaliye \/ LOT bekleniyor/);
   assert.match(line, /hasCounterDocument/);
 });
@@ -52,7 +52,8 @@ test("Gelen ve giden belgeler backend yon parametresi ve server pagination kulla
   const css = read("./eBelgeCenter.css");
   assert.match(page, /direction = view === "incoming" \? "INCOMING"/);
   assert.match(page, /view === "outgoing" \? "OUTGOING"/);
-  assert.match(page, /pageSize: 50/);
+  assert.match(page, /pageSize:\s*50/);
+  for(const f of ["INCOMING_INVOICE","INCOMING_DISPATCH","OUTGOING_DISPATCH","OUTGOING_INVOICE"]) assert.ok(page.includes(f));
   assert.match(page, /pageCount = Math\.max/);
   assert.match(page, /pool\.total/);
   assert.match(page, /aria-label="e-Belge sayfaları"/);
@@ -70,7 +71,7 @@ test("Son Onay Muhasebelestir tek tikla finans kaydi yazmaz; ozet ve checkbox ge
   assert.match(page, /Belgenin cari, kalem, LOT ve tutar bilgilerini inceledim/);
   assert.match(page, /!finalAcknowledged/);
   assert.match(page, /finalInFlight\.current/);
-  assert.match(page, /await finalizeEBelge\(id\)/);
+  assert.match(page, /await finalizeEBelge\(id,\s*\{/);
   assert.match(page, /Onayla ve Muhasebeleştir/);
   assert.match(page, /<DetailDrawer key=\{selectedId \|\| "empty-document"\}/);
   assert.doesNotMatch(page, /onClick=\{\(\) => action\("final"/);

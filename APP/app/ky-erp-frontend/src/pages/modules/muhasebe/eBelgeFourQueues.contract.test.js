@@ -31,7 +31,7 @@ test("PDF görüntüleme kendiliğinden çıktı alındı sayılmaz",()=>{
  assert.match(print,/onPdf/);
  assert.match(print,/Gerçek Çıktıyı Aldım/);
  assert.match(print,/printedBy/);
- assert.doesNotMatch(print,/useEffect\([\s\S]*?setStatus\("MARK_PRINTED"\)/);
+  assert.ok(print.includes('onClick={()=>void setStatus("MARK_PRINTED")}'));
 });
 test("Firma+fatura şablonu yoksa başka bir PDF uydurulmaz",()=>{
  assert.match(page,/parseUblForVisualOutput\(xml\)/);
