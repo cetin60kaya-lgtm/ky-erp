@@ -6,6 +6,7 @@ import {
   Link2,
   Eye,
   EyeOff,
+  ExternalLink,
   LoaderCircle,
   Mail,
   RefreshCw,
@@ -105,6 +106,7 @@ function Field({ label, children, wide = false }) {
 export default function EBelgeIntegrationsWorkspace({
   activeMainCompany,
   openModule,
+  onOpenDocumentTest,
 }) {
   const [section, setSection] = useState("connection");
   const [loading, setLoading] = useState(true);
@@ -168,9 +170,9 @@ export default function EBelgeIntegrationsWorkspace({
           password: "",
           companyId: connectionResult?.companyId || "",
           companies: rowsOf(connectionResult?.companies),
-          connectionMode: getIsnetConnectionModePreference(tenant) || connectionResult?.connectionMode || "api",
+          connectionMode: getIsnetConnectionModePreference(tenant) || "browser",
           sessionReady: connectionResult?.sessionReady === true &&
-            (getIsnetConnectionModePreference(tenant) || connectionResult?.connectionMode || "api") === "api",
+            getIsnetConnectionModePreference(tenant) === "api",
           savedCompanyId: connectionResult?.companyId || "",
           savedCompanyName: connectionResult?.companyName || rowsOf(connectionResult?.companies).find(row=>String(row.id)===String(connectionResult?.companyId))?.name || "",
           savedAt: connectionResult?.savedAt || null,
@@ -254,9 +256,10 @@ export default function EBelgeIntegrationsWorkspace({
     setConnection((current) => ({
       ...current,
       [key]: value,
-      companies: [],
-      companyId: "",
-      sessionReady: key === "password" ? current.sessionReady : false,
+      password: key === "connectionMode" ? "" : key === "password" ? value : current.password,
+      companies: key === "connectionMode" && value === "browser" ? current.companies : [],
+      companyId: key === "connectionMode" && value === "browser" ? current.companyId : "",
+      sessionReady: key === "connectionMode" && value === "browser" ? false : key === "password" ? current.sessionReady : false,
     }));
   }
 
@@ -326,7 +329,7 @@ export default function EBelgeIntegrationsWorkspace({
   }
 
   async function testConnection() {
-    if (busy) return;
+    if (busy || connection.connectionMode === "browser") return;
     const username = connection.username.trim();
     if (!username || (!connection.password && !connection.sessionReady)) {
       setNotice({ tone: "warning", text: "Kullanıcı adı ve İşNet şifresi girin. Kayıtlı API oturumu varsa şifresiz kontrol edebilirsiniz." });
@@ -388,7 +391,8 @@ export default function EBelgeIntegrationsWorkspace({
   const savedCompany=Boolean(connection.savedCompanyId && connection.savedCompanyName);
   const selectedCompanyName=connection.savedCompanyName || connection.companies.find(row=>String(row.id)===String(connection.savedCompanyId))?.name || "";
   const lastTest=connection.testedAt && !Number.isNaN(Date.parse(connection.testedAt)) ? new Date(connection.testedAt).toLocaleString("tr-TR") : "";
-  const connectionBadge=connectionTest && !connectionTest.saved ? "Giriş testi başarılı"
+  const connectionBadge=connection.connectionMode==="browser" ? (savedCompany ? "Firma kayıtlı · Chrome oturumu" : "Chrome üzerinden giriş")
+    : connectionTest && !connectionTest.saved ? "Giriş testi başarılı"
     : savedCompany ? (connection.connectionMode==="portal" ? "Firma kayıtlı · portal bağlantısı" : "Firma kayıtlı · API kontrolü bekliyor")
     : "Doğrulama bekliyor";
 
@@ -524,18 +528,25 @@ export default function EBelgeIntegrationsWorkspace({
       {section === "connection" ? <section className="ism-grid two">
         <article className="ism-card ism-connection-card">
           <div className="ism-card-head">
-            <div><h2>{connection.connectionMode === "api" ? "İşNet Resmî API Bağlantısı" : "İşNet Portal Bağlantısı"}</h2><p>Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz.</p></div>
+            <div><h2>{connection.connectionMode === "browser" ? "NetteFatura · Chrome ile Giriş" : connection.connectionMode === "api" ? "İşNet Resmî API Bağlantısı" : "İşNet Portal Bağlantısı"}</h2><p>{connection.connectionMode==="browser" ? "Şifrenizi NetteFatura'nın kendi Chrome sekmesinde kullanın; KY ERP üzerinden giriş yapılmaz." : "Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz."}</p></div>
             <span className={savedCompany || connectionTest?.saved ? "ready" : "warning"}>{connectionBadge}</span>
           </div>
           {savedCompany && <div className="ism-saved-company" role="status">
             <CheckCircle2 size={18}/>
             <div><strong>Kayıtlı yetkili firma: {selectedCompanyName}</strong>
-              <span>Firma seçimi kayıtlı. {connection.connectionMode==="portal" ? "Portal giriş testi başarılı olabilir; otomatik XML indirimi için resmî API bağlantısı ayrıca doğrulanmalıdır." : connection.sessionReady ? "API oturum tokenı kayıtlı; sağlayıcıda güncel geçerliliği belge sorgusuyla kontrol edilir." : "API oturumu yeniden doğrulanmalıdır."}</span>
+              <span>Firma seçimi kayıtlı. {connection.connectionMode==="browser" ? "Bu firma seçimi korunuyor. Chrome portal oturumu ve API oturumu birbirinden bağımsızdır." : connection.connectionMode==="portal" ? "Portal giriş testi başarılı olabilir; otomatik XML indirimi için resmî API bağlantısı ayrıca doğrulanmalıdır." : connection.sessionReady ? "API oturum tokenı kayıtlı; sağlayıcıda güncel geçerliliği belge sorgusuyla kontrol edilir." : "API oturumu yeniden doğrulanmalıdır."}</span>
               {lastTest && <small>Son giriş testi: {lastTest} · Şifre gösterilmez veya veritabanına yazılmaz.</small>}
             </div>
           </div>}
-          <IntegrationFlowSteps kind="ISNET" stage={savedCompany || connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />
+          {connection.connectionMode!=="browser"&&<IntegrationFlowSteps kind="ISNET" stage={savedCompany || connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />}
           <div className="ism-form-grid">
+            <Field label="Bağlantı yöntemi">
+              <select value={connection.connectionMode} disabled={!!busy} onChange={(event) => updateLoginField("connectionMode", event.target.value)}>
+                <option value="browser">Chrome · NetteFatura sitesinde giriş (önerilen)</option>
+                <option value="api">İşNet API · resmî yetkiyle otomatik senkronizasyon</option>
+              </select>
+            </Field>
+            {connection.connectionMode!=="browser"&&<>
             <Field label="Kullanıcı adı / TCKN">
               <input id="isnet-user" name="isnet-account" value={connection.username} autoComplete="section-isnet username" disabled={!!busy} onChange={(event) => updateLoginField("username", event.target.value)} />
             </Field>
@@ -552,20 +563,23 @@ export default function EBelgeIntegrationsWorkspace({
                 </button>
               </div>
             </Field>
-            <Field label="Bağlantı yöntemi">
-              <select value={connection.connectionMode} disabled={!!busy} onChange={(event) => updateLoginField("connectionMode", event.target.value)}>
-                <option value="portal">NetteFatura portalı — firma doğrulama</option>
-                <option value="api">İşNet API — otomatik senkronizasyon</option>
-              </select>
-            </Field>
             <Field label="Yetkili firma">
               <select value={connection.companyId} disabled={!!busy || !connectionTest}
                 onChange={(event) => { setConnection((current) => ({ ...current, companyId: event.target.value })); setConnectionTest((current) => current ? { ...current, saved: false } : null); }}>
                 <option value="">{connectionTest ? "Yetkili firma seçin" : "Önce bağlantıyı doğrulayın"}</option>
                 {connection.companies.map((row) => <option key={row.id} value={row.id}>{row.name || row.companyName} ({row.id})</option>)}
               </select>
-            </Field>
+            </Field></>}
           </div>
+          {connection.connectionMode==="browser" ? <div className="ism-chrome-flow" role="group" aria-label="Chrome NetteFatura oturumu">
+            <strong>Chrome'da açık NetteFatura hesabıyla devam</strong>
+            <p>1. Resmî portalı Chrome'da aç. Daha önce giriş yaptıysan mevcut oturumun kullanılır.</p>
+            <p>2. Gelen/giden fatura veya irsaliyeden XML/PDF dosyasını Chrome üzerinden indir.</p>
+            <p>3. Belge Test Merkezi'ne dönüp dosyayı seç; XML okuma ve PDF önizlemesini burada test et.</p>
+            <div className="ism-actions"><a className="ism-chrome-open" href="https://nettefatura.isnet.net.tr/" target="_blank" rel="noopener noreferrer"><ExternalLink size={16}/> NetteFatura'yı Chrome'da Aç</a>
+              <button type="button" onClick={()=>onOpenDocumentTest?.()}>Belge Test Merkezine Geç</button></div>
+            <small>KY ERP, Chrome'un İşNet oturum çerezine veya şifresine erişmez. Otomatik XML çekme bu modda aktif değildir; portalda indirilen dosya açıkça seçilir.</small>
+          </div> : <>
           <div className="ism-browser-vault">
             <div className="ism-actions">
               <button type="button" disabled={!!busy || !connection.username.trim() || !connection.password} onClick={() => void saveInBrowser()}>
@@ -614,8 +628,9 @@ export default function EBelgeIntegrationsWorkspace({
             <p className="ism-connection-help" role="status">
               <strong>Firma kaydı tamam.</strong> XML indirmek için bağlantı yöntemini “İşNet API — otomatik senkronizasyon” yapıp API oturumunu da doğrulayın. Portal kaydı korunur; şifrenizi burada paylaşmanız gerekmez.
             </p>}
+          </>}
         </article>
-        <article className="ism-card explanation"><ShieldCheck size={26} /><h2>Güvenli Çalışma</h2><p>İşNet şifresi KY ERP'de saklanmaz. Doğrulama kodu veya ek onay gerektiren girişler başarılı sayılmaz. Portal firma seçimi, canlı API senkronizasyonu kanıtı değildir. Resmî irsaliye veya fatura kullanıcı onayı olmadan gönderilmez.</p></article>
+        <article className="ism-card explanation"><ShieldCheck size={26} /><h2>Güvenli Çalışma</h2><p>İşNet şifresi KY ERP'de saklanmaz. Doğrulama kodu veya ek onay gerektiren girişler başarılı sayılmaz. Chrome oturumu İşNet API senkronizasyonu kanıtı değildir. Resmî irsaliye veya fatura kullanıcı onayı olmadan gönderilmez.</p></article>
       </section> : null}
       {section === "carrier" ? <section className="ism-card"><div className="ism-card-head"><div><h2>Sabit Taşıyıcı ve Teslimat Bilgileri</h2><p>İrsaliye hazırlama modalına otomatik gelir; gerektiğinde işlem bazında değiştirilebilir.</p></div><Truck size={24} /></div><div className="ism-form-grid three"><Field label="Taşıyıcı adı"><input value={business.carrier?.carrierName || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, carrierName: event.target.value } }))} /></Field><Field label="VKN / TCKN"><input value={business.carrier?.taxNo || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, taxNo: event.target.value } }))} /></Field><Field label="Şoför adı"><input value={business.carrier?.driverName || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, driverName: event.target.value } }))} /></Field><Field label="Şoför kimlik no"><input value={business.carrier?.driverId || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, driverId: event.target.value } }))} /></Field><Field label="Araç plakası"><input value={business.carrier?.vehiclePlate || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, vehiclePlate: event.target.value.toLocaleUpperCase("tr-TR") } }))} /></Field><Field label="Dorse plakası"><input value={business.carrier?.trailerPlate || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, trailerPlate: event.target.value.toLocaleUpperCase("tr-TR") } }))} /></Field><Field label="Teslim şekli"><select value={business.carrier?.deliveryMethod || "ELDEN_TESLIM"} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, deliveryMethod: event.target.value } }))}><option value="ELDEN_TESLIM">Elden teslim</option><option value="NAKLIYE">Nakliye</option><option value="KARGO">Kargo</option></select></Field><Field label="Teslimat adresi" wide><textarea value={business.carrier?.deliveryAddress || ""} onChange={(event) => setBusiness((current) => ({ ...current, carrier: { ...current.carrier, deliveryAddress: event.target.value } }))} /></Field></div><div className="ism-actions"><button type="button" className="primary" onClick={() => saveBusinessPart({ carrier: business.carrier }, "Taşıyıcı sabitleri kaydedildi.")}><Save size={16} /> Taşıyıcıyı Kaydet</button></div></section> : null}
 

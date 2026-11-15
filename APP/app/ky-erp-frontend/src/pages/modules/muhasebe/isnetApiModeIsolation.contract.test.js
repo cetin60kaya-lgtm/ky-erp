@@ -20,8 +20,11 @@ test("Tercih yalnız mod saklar; firma/şifre/token ya da kimlik saklamaz",()=>{
  assert.equal(getIsnetConnectionModePreference("tenant-a",storage),"api");
  assert.equal(getIsnetConnectionModePreference("tenant-b",storage),null);
  assert.deepEqual([...values.values()],["api"]);
+ assert.equal(saveIsnetConnectionModePreference("tenant-a","browser",storage),true);
+ assert.equal(getIsnetConnectionModePreference("tenant-a",storage),"browser");
+ assert.equal(getIsnetConnectionModePreference("tenant-b",{getItem:()=>"portal"}),"browser");
  assert.equal(saveIsnetConnectionModePreference("tenant-a","UNKNOWN",storage),false);
- assert.equal(getIsnetConnectionModePreference("tenant-a",storage),"api");
+ assert.equal(getIsnetConnectionModePreference("tenant-a",storage),"browser");
 });
 test("API modu portal erişimini tekrar denemeden doğrudan gerçek API testine gider",()=>{
  const block=ui.slice(ui.indexOf("async function testConnection()"),ui.indexOf("async function saveConnection()"));

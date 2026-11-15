@@ -6,14 +6,14 @@ export function getIsnetConnectionModePreference(tenant, storage = globalThis?.l
     const slug = String(tenant || "").trim();
     if (!slug || !storage) return null;
     const value = storage.getItem(KEY + slug);
-    return value === "api" || value === "portal" ? value : null;
+    return value === "api" || value === "browser" ? value : value === "portal" ? "browser" : null;
   } catch {
     return null;
   }
 }
 
 export function saveIsnetConnectionModePreference(tenant, mode, storage = globalThis?.localStorage) {
-  if (mode !== "api" && mode !== "portal") return false;
+  if (mode !== "api" && mode !== "browser") return false;
   try {
     const slug = String(tenant || "").trim();
     if (!slug || !storage) return false;
