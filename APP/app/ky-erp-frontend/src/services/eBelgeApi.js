@@ -56,6 +56,16 @@ export const getEBelgeDashboard = (params = {}) =>
 export const getEBelgePool = (params = {}) =>
   apiGet("/e-belge/pool", params, { timeoutMs: 60_000 }).then(unwrap);
 
+export const getEBelgeAccountingPrintStatuses = (ids, mainCompanySlug) =>
+  apiGet("/e-belge/accounting-print-status", {
+    ids: Array.from(ids || []).join(","), mainCompanySlug,
+  }, { timeoutMs: 30_000 }).then(unwrap);
+
+export const setEBelgeAccountingPrintStatus = (id, mainCompanySlug, action, reason = "") =>
+  apiPatch(`/e-belge/documents/${encodeURIComponent(id)}/accounting-print`, {
+    mainCompanySlug, action, reason, confirmed: true,
+  }).then(unwrap);
+
 export const getEBelgeDetail = (id) =>
   apiGet(`/e-belge/documents/${encodeURIComponent(id)}`, undefined, { timeoutMs: 60_000 }).then(unwrap);
 

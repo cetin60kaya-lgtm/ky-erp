@@ -27,8 +27,10 @@ export const MODULES = [
       label: "e-Belge",
       tabs: [
         ["genel-bakis", "Genel Bakış", "dashboard"],
-        ["gelen-belgeler", "Gelen Belgeler", "dosya"],
-        ["giden-belgeler", "Giden Belgeler", "dosya"],
+        ["gelen-faturalar", "Gelen Faturalar", "dosya"],
+        ["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"],
+        ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
+        ["giden-faturalar", "Giden Faturalar", "dosya"],
         ["belge-havuzu", "Belge Havuzu", "upload"],
         ["eslestirmeler", "Eşleştirmeler", "file-check"],
         ["onay-sorunlar", "Onay & Sorunlar", "uyari"],

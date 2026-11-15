@@ -77,3 +77,14 @@
 .eb-page .eb-hero h2{color:#203a59;font-size:clamp(20px,2vw,24px)}
 .eb-page .eb-primary{background:#203d66;border-color:#203d66}
 @media(max-width:720px){.eb-page .eb-company-context{padding:0 2px}.eb-page .eb-dashboard-stats .eb-dashboard-stat-action{width:100%}}
+
+/* Four business queues share the same document IDs and accounting backend. */
+.eb-four-document-nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin:0 0 2px}
+.eb-four-document-nav button{border:1px solid #d5e1ec;border-radius:10px;background:#fff;padding:13px 10px;color:#2b496b;font-weight:750;font-size:12px;cursor:pointer;white-space:normal}
+.eb-four-document-nav button.active{border-color:#356aa9;background:#eaf3ff;color:#1e5295;box-shadow:inset 0 -2px 0 #356aa9}
+.eb-four-document-nav button:hover:not(.active){background:#f4f8fc}
+.eb-print-pending-filter{display:flex!important;flex-direction:row;align-items:center;gap:6px!important;white-space:nowrap;border:1px solid #e4d0a9;border-radius:8px;background:#fffbf2;padding:8px 10px;font-size:12px!important;color:#774e08!important}
+.eb-print-pending-filter input{width:15px;height:15px;accent-color:#9a6812}
+.eb-print-mark-yes{color:#177143;font-size:11px}.eb-print-mark-no{color:#9b6009;font-size:11px}
+@media(max-width:840px){.eb-four-document-nav{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:520px){.eb-four-document-nav button{padding:10px 6px;font-size:11px}}
