@@ -12,6 +12,8 @@ export default function InvoiceDifferenceMailDraft({activeMainCompany,customerNa
  const [accountId,setAccountId]=useState(""),[routeId,setRouteId]=useState("");
  const [subject,setSubject]=useState(""),[body,setBody]=useState("");
  const [ack,setAck]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState(""),[saved,setSaved]=useState("");
+ const missingSignature=missing.map(row=>row.documentNo).join("|");
+ const extrasSignature=extras.map(row=>row.documentNo).join("|");
  useEffect(()=>{
   let disposed=false;
   Promise.all([listMailAccounts(),apiGet("/muhasebe/invoice-mail-routes",{mainCompanySlug:tenant})])
@@ -19,12 +21,16 @@ export default function InvoiceDifferenceMailDraft({activeMainCompany,customerNa
    .catch(e=>{if(!disposed)setError(e.message||"Outlook hesap ve alıcıları okunamadı.");});
   return()=>{disposed=true;};
  },[tenant]);
- const route=useMemo(()=>routes.find(row=>String(row.id)===routeId),[routeId,routes]);
+ const matchingRoutes=useMemo(()=>{
+  const normalize=value=>String(value||"").toLocaleUpperCase("tr-TR").trim().replace(/\\s+/g," ");
+  return routes.filter(row=>normalize(row.customerName)===normalize(customerName)&&normalize(customerName));
+ },[routes,customerName]);
+ const route=useMemo(()=>matchingRoutes.find(row=>String(row.id)===routeId),[routeId,matchingRoutes]);
  useEffect(()=>{
   setRouteId("");setAck(false);setSaved("");
  },[customerName,snapshot?.id]);
  useEffect(()=>{
-  const missingNumbers=missing.map(row=>row.documentNo),extraNumbers=extras.map(row=>row.documentNo);
+  const missingNumbers=missingSignature?missingSignature.split("|"):[],extraNumbers=extrasSignature?extrasSignature.split("|"):[];
   setSubject("Haftalık fatura listesi kontrolü — "+(customerName||"Müşteri")+" — "+(snapshot?.weekDate||""));
   setBody(
    "Merhaba,\n\n"+(snapshot?.weekDate||"")+
@@ -35,7 +41,7 @@ export default function InvoiceDifferenceMailDraft({activeMainCompany,customerNa
     (extraNumbers.length?extraNumbers.join("\n"):"Yok")+
    "\n\nBunların ödeme planına alınıp alınmadığını ve varsa tutar farklılıklarını bildirmenizi rica ederiz.\n\nTeşekkürler.");
   setAck(false);setSaved("");
- },[customerName,snapshot?.id,snapshot?.weekDate,missing,extras]);
+ },[customerName,snapshot?.id,snapshot?.weekDate,missingSignature,extrasSignature]);
  const save=async()=>{
   if(!route||!accountId||!ack||busy||saved)return;
   setBusy(true);setError("");
@@ -62,10 +68,11 @@ export default function InvoiceDifferenceMailDraft({activeMainCompany,customerNa
    <label>Alıcı / müşteri grubu
     <select value={routeId} onChange={e=>{setRouteId(e.target.value);setAck(false);}}>
      <option value="">Doğru müşteri ve grubu seçin</option>
-     {routes.map(row=><option key={row.id} value={row.id}>{[row.customerName,row.groupCode,row.department].filter(Boolean).join(" / ")}</option>)}
+     {matchingRoutes.map(row=><option key={row.id} value={row.id}>{[row.customerName,row.groupCode,row.department].filter(Boolean).join(" / ")}</option>)}
     </select>
    </label>
   </div>
+  {!matchingRoutes.length&&<p className="imrc-error">Seçili müşteri için eşleşen alıcı/grup profili bulunamadı. Önce Fatura Mail Gönderimi bölümünde bu müşteri için alıcı profili oluşturun.</p>}
   <div className="imrc-mail-form">
    <label>Konu<input value={subject} maxLength={250} onChange={e=>{setSubject(e.target.value);setAck(false);}}/></label>
    <label>Mesaj<textarea value={body} rows={12} maxLength={16000} onChange={e=>{setBody(e.target.value);setAck(false);}}/></label>
