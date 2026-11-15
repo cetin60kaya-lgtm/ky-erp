@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {probeIsnetReadOnlyLists} from "./isnet-read-only-preview";
+import {probeIsnetReadOnlyLists} from "./isnet-read-only-probe.ts";
 
 test("İşNet resmî API gelen belge kontrolü yalnız ilk sayfa sayısını döndürür",async()=>{
  const calls: Array<{url:string;body:Record<string,any>}>=[];
