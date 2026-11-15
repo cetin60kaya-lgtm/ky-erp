@@ -2984,14 +2984,19 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
     const nameMatch = nameMatches.length === 1 ? nameMatches[0] : null;
     const identityConflict = Boolean(identityMatch && codeMatch && text(identityMatch.id) !== text(codeMatch.id));
     const nameConflict = Boolean((identityMatch || codeMatch) && nameMatches.length === 1 && text(nameMatch?.id) !== text((identityMatch || codeMatch)?.id));
-    const matched = identityConflict || nameConflict ? null : (identityMatch || codeMatch || nameMatch || null);
+    // Hakan Emprime staff can only match an existing KY ERP personnel card.
+    // Name similarity alone is never enough: people working at the employer's
+    // home or other workplaces may share a name with an HKN employee.
+    const matched = identityConflict || nameConflict ? null : (identityMatch || codeMatch || null);
+    const nameOnlyCandidate = !matched && nameMatches.length === 1 && !identityNo && !personCode;
     // Workbook captions and summary rows are not employees, even when
     // accountants insert extra lines beneath each person.
     if (!matched && !identityNo && !personCode && !nameMatches.length) continue;
     const officialNet = col.net >= 0 ? sgkStrictAmount(source[col.net]) : null;
     const invalidNet = officialNet === null || officialNet < 0;
     const payrollIncluded = matched?.payroll_included;
-    const employeeId = matched && (payrollIncluded === null || payrollIncluded === undefined || flag(payrollIncluded)) ? text(matched.id) : "";
+    const inHakanEmprimePayroll = matched && (payrollIncluded === null || payrollIncluded === undefined || flag(payrollIncluded));
+    const employeeId = inHakanEmprimePayroll ? text(matched.id) : "";
     rows.push({
       sourceFile: fileName,
       workplace: workplaceText,
@@ -3020,9 +3025,12 @@ async function previewAdvancedSgk(c: Context<AppEnv>) {
       sgkIncentive: col.incentive >= 0 ? sgkNumber(source[col.incentive]) : 0,
       employerNetCost: col.employerCost >= 0 ? sgkNumber(source[col.employerCost]) : 0,
       net: officialNet,
-      status: identityConflict || nameConflict ? "KIMLIK_CELISKI" : invalidNet ? "NET_GECERSIZ"
-        : employeeId ? (identityMatch ? "TC_ESLESTI" : codeMatch ? "KOD_ESLESTI" : "AD_ESLESTI")
-        : (nameMatches.length > 1 ? "AYNI_AD_COKLU" : "ESLESMEDI"),
+      status: identityConflict || nameConflict ? "KIMLIK_CELISKI"
+        : matched && !inHakanEmprimePayroll ? "HKN_BORDRO_HARIC"
+        : invalidNet ? "NET_GECERSIZ"
+        : employeeId ? (identityMatch ? "TC_ESLESTI" : "KOD_ESLESTI")
+        : nameOnlyCandidate ? "AD_DOGRULAMA_GEREKLI"
+        : (nameMatches.length > 1 ? "AYNI_AD_COKLU" : "HKN_DISI_ESLESMEDI"),
     });
   }
   if (!rows.length) return error(c, 400, "SGK_ROWS_EMPTY", "Bordro dosyasında personel satırı bulunamadı.");
@@ -3074,8 +3082,34 @@ async function confirmAdvancedSgk(c: Context<AppEnv>) {
     return error(c, 409, "SGK_MULTIPLE_WORKPLACE_CONFIRM_REQUIRED", "Aynı personele ait birden çok işyeri satırı var. Dosya tekrarını kontrol edip birleşimi ayrıca onaylayın.");
 
   const employeeIds = [...new Set(rows.map((row) => text(row.employeeId)).filter(Boolean))];
-  const validRows = await all(c, `SELECT id FROM hr_monthly_employees WHERE main_company_id=? AND id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
-  if (validRows.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "SGK bordrosunda başka firmaya ait veya geçersiz personel var.");
+  const validRows = await all(c, `SELECT e.id,e.full_name,e.code,s.identity_no,s.payroll_included
+    FROM hr_monthly_employees e
+    LEFT JOIN ik_person_card_settings s ON s.employee_id=e.id AND s.main_company_id=e.main_company_id
+    WHERE e.main_company_id=? AND e.id IN (${employeeIds.map(() => "?").join(",")})`, [companyId, ...employeeIds]);
+  if (validRows.length !== employeeIds.length) return error(c, 400, "INVALID_EMPLOYEE", "Yalnız KY ERP / Hakan Emprime personel kartında kayıtlı çalışanlar alınabilir.");
+  const validPeople = new Map(validRows.map((person) => [text(person.id), person]));
+  for (const row of rows) {
+    const employee = validPeople.get(text(row.employeeId));
+    if (!employee || (employee.payroll_included !== null && employee.payroll_included !== undefined && !flag(employee.payroll_included))) {
+      return error(c, 409, "SGK_HKN_PAYROLL_SCOPE", "Bu kişi Hakan Emprime'nin aylık bordro kapsamına dahil değil. Muhasebe dosyasında bulunması yeterli değildir.");
+    }
+    const sourceIdentity = text(row.identityNo).replace(/\D/g, "");
+    const registeredIdentity = text(employee.identity_no).replace(/\D/g, "");
+    if (sourceIdentity && registeredIdentity && sourceIdentity !== registeredIdentity) {
+      return error(c, 409, "SGK_HKN_IDENTITY_MISMATCH", "Muhasebe bordrosundaki kimlik numarası seçilen Hakan Emprime personel kartıyla uyuşmuyor. Aktarım durduruldu.");
+    }
+    const sourceName = sgkNameKey(row.fullName);
+    const registeredName = sgkNameKey(employee.full_name);
+    const sourceCode = sgkHeaderKey(row.personCode).replace(/\s+/g, "");
+    const registeredCode = sgkHeaderKey(employee.code).replace(/\s+/g, "");
+    if (sourceCode && registeredCode && sourceCode !== registeredCode && !sourceIdentity) {
+      return error(c, 409, "SGK_HKN_CODE_MISMATCH", "Bordrodaki personel kodu farklı bir Hakan Emprime çalışanına ait olabilir. Eşleştirmeyi kontrol edin.");
+    }
+    if (sourceName !== registeredName && !(sourceIdentity && registeredIdentity && sourceIdentity === registeredIdentity)
+        && !(sourceCode && registeredCode && sourceCode === registeredCode)) {
+      return error(c, 409, "SGK_HKN_NAME_MISMATCH", "Muhasebe satırı seçilen Hakan Emprime personeliyle doğrulanamıyor. Farklı işyerindeki kişi aktarılmadı.");
+    }
+  }
   // The month's official payroll must not change underneath a paid employee.
   const alreadyPaid = await first(c, `SELECT id FROM hr_payrolls_v2 WHERE main_company_id=? AND year=? AND month=? AND status='PAID' AND employee_id IN (${employeeIds.map(() => "?").join(",")}) LIMIT 1`, [companyId, year, month, ...employeeIds]);
   if (alreadyPaid) return error(c, 409, "SGK_PAID_PAYROLL_LOCKED", "Ödenmiş personelin resmî bordrosu sessizce değiştirilemez. Yetkili düzeltme süreci gereklidir.");

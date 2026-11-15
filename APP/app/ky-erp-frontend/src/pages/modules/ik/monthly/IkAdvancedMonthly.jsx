@@ -2197,8 +2197,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   }));
 
   const confirmPayrollFiles = async () => {
+    const hakanPayrollIds = new Set(employees.filter((employee) => employee.payrollIncluded !== false).map((employee) => employee.id));
     const rows = safeList(sgkPreview?.rows).filter((row) => row.selected && row.employeeId);
-    if (!rows.length) return setNotice("Aktarılacak eşleşmiş personel seçin.");
+    if (rows.some((row) => !hakanPayrollIds.has(row.employeeId))) {
+      return setNotice("Yalnız KY ERP / Hakan Emprime Çalışanı olan ve bordro kapsamına dahil kişiler aktarılabilir.");
+    }
+    if (!rows.length) return setNotice("Aktarılacak Hakan Emprime çalışanını seçin.");
     if (rows.some((row) => row.net === null || !Number.isFinite(Number(row.net)) || Number(row.net) < 0))
       return setNotice("Resmî Net İstihkak boş veya geçersiz; aktarım durduruldu.");
     const count = new Map();
@@ -3944,14 +3948,14 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
 
     if (modal === "sgkImport") {
       const rows = safeList(sgkPreview?.rows);
-      const selectedRows = rows.filter((row) => row.selected && row.employeeId);
+      const selectedRows = rows.filter((row) => row.selected && row.employeeId && employees.some((employee) => employee.id === row.employeeId && employee.payrollIncluded !== false));
       return (
-        <Modal title="Resmi Bordro On Analizi" sub="XLS/XLSX eslestirme - yalnizca secili sirket personeli aktarilir" size="wide" onClose={() => setModal(null)}>
+        <Modal title="Resmi Bordro On Analizi" sub="XLS/XLSX eşleştirme · yalnız KY ERP / Hakan Emprime Çalışanı bordroya alınır" size="wide" onClose={() => setModal(null)}>
           <div className="import-summary"><div><span>Dosya</span><b>{safeList(sgkPreview?.files).length}</b></div><div><span>Okunan satir</span><b>{rows.length}</b></div><div><span>Aktarilacak</span><b>{selectedRows.length}</b></div><div><span>Haric / eslesmeyen</span><b>{rows.length-selectedRows.length}</b></div><div><span>Banka toplam</span><b>{money(selectedRows.reduce((sum,row)=>sum+num(row.net),0))}</b></div></div>
-          <div className="warnline ok">Seçilmeyen, eşleşmeyen veya Net İstihkak değeri geçersiz satırlar aktarılmaz. Resmî bordro verisi banka ödemesiyle daha sonra tek tek mutabıklaştırılabilir.</div>
+          <div className="warnline ok">Bu SGK dosyasında işverenin evinde çalışanlar veya başka işyerleri de bulunabilir. Yalnız KY ERP'de kayıtlı, Hakan Emprime bordro kapsamına dahil personel alınır. İsim benzerliği otomatik eşleştirme değildir; dışarıda kalan kişilerin maaşları hesaplanmaz.</div>
           {!!safeList(sgkPreview?.supplementalPdfs).length && <div className="warnline">ZIP paketinde {safeList(sgkPreview?.supplementalPdfs).length} ücret pusulası PDF'i var. PDF'ler maaş tutarı olarak tekrar sayılmadı.</div>}
-          <div className="tw import-table"><table><thead><tr><th>Sec</th><th>Dosya / Isyeri</th><th>Bordrodaki Kisi</th><th>TC Kimlik</th><th>Sirket Personeli</th><th>Giris</th><th>Cikis</th><th>Gun</th><th>Toplam Kazanc</th><th>Net Istihkak</th><th>Durum</th></tr></thead><tbody>{rows.map((row,index)=><tr key={`${row.sourceFile}-${row.rowNumber}`}><td><input type="checkbox" checked={Boolean(row.selected&&row.employeeId)} disabled={!row.employeeId} onChange={(event)=>updateSgkPreviewRow(index,{selected:event.target.checked})} /></td><td><span className="person">{row.sourceFile}</span><span className="code">{row.workplaceNo||row.workplace||"-"}</span></td><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td><select value={row.employeeId||""} onChange={(event)=>updateSgkPreviewRow(index,{employeeId:event.target.value||null,selected:Boolean(event.target.value),status:event.target.value?"MANUEL_ESLESTI":"ESLESMEDI"})}><option value="">Haric / eslesmedi</option>{employees.map((employee)=><option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.employeeId?"green":"orange"}`}>{row.employeeId?"Eslesmis":"Haric"}</span></td></tr>)}</tbody></table></div>
-          <ModalFooter onClose={() => setModal(null)} actions={<><button className="btn" onClick={()=>setSgkPreview((old)=>({...old,rows:safeList(old?.rows).map((row)=>({...row,selected:Boolean(row.employeeId)}))}))}>Eslesenleri Sec</button><button className="btn primary" disabled={busy} onClick={confirmPayrollFiles}>{busy?"Kaydediliyor":"Secili Personeli Aktar"}</button></>} />
+          <div className="tw import-table"><table><thead><tr><th>Sec</th><th>Dosya / Isyeri</th><th>Bordrodaki Kisi</th><th>TC Kimlik</th><th>KY ERP / Hakan Emprime Çalışanı</th><th>Giris</th><th>Cikis</th><th>Gun</th><th>Toplam Kazanc</th><th>Net Istihkak</th><th>Durum</th></tr></thead><tbody>{rows.map((row,index)=><tr key={`${row.sourceFile}-${row.rowNumber}`}><td><input type="checkbox" checked={Boolean(row.selected&&row.employeeId)} disabled={!row.employeeId} onChange={(event)=>updateSgkPreviewRow(index,{selected:event.target.checked})} /></td><td><span className="person">{row.sourceFile}</span><span className="code">{row.workplaceNo||row.workplace||"-"}</span></td><td>{row.fullName}</td><td>{row.identityNo||"-"}</td><td><select value={row.employeeId||""} onChange={(event)=>updateSgkPreviewRow(index,{employeeId:event.target.value||null,selected:Boolean(event.target.value),status:event.target.value?"MANUEL_ESLESTI":"HKN_DISI_ESLESMEDI"})}><option value="">Hakan Emprime dışı / alma</option>{employees.filter((employee)=>employee.payrollIncluded !== false).map((employee)=><option key={employee.id} value={employee.id}>{employee.fullName}</option>)}</select></td><td>{row.hireDate||"-"}</td><td>{row.exitDate||"-"}</td><td>{row.sgkDays}</td><td className="money">{money(row.gross)}</td><td className="money">{money(row.net)}</td><td><span className={`badge ${row.employeeId?"green":"orange"}`}>{row.employeeId?"Hakan Emprime":"Hariç / kontrol"}</span></td></tr>)}</tbody></table></div>
+          <ModalFooter onClose={() => setModal(null)} actions={<><button className="btn" onClick={()=>setSgkPreview((old)=>({...old,rows:safeList(old?.rows).map((row)=>({...row,selected:Boolean(row.employeeId && employees.some((employee)=>employee.id===row.employeeId && employee.payrollIncluded !== false) && row.net !== null && Number(row.net) >= 0)}))}))}>Eslesenleri Sec</button><button className="btn primary" disabled={busy} onClick={confirmPayrollFiles}>{busy?"Kaydediliyor":"Secili Personeli Aktar"}</button></>} />
         </Modal>
       );
     }
