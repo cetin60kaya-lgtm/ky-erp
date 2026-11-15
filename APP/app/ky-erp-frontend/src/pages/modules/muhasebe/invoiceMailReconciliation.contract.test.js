@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {readFileSync} from "node:fs";
 const root=new URL(".",import.meta.url);
 const read=name=>readFileSync(new URL(name,root),"utf8");
-const menu=read("../../app/moduleRegistry.js");
+const menu=read("../../../app/moduleRegistry.js");
 const page=read("../MuhasebePage.jsx");
 const sales=read("./CustomerDocumentsWorkspace.jsx");
 const center=read("./InvoiceMailReconciliationCenter.jsx");
