@@ -290,10 +290,48 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   return {...record,reconciliation,source:"FILE_HUB_CLOUD"};
 }
 
-async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirection:string,kind:string,analysisFile:File|null=null){
+
+/** No OCR guess or financial posting: a human enters every required identity and line. */
+function prepareManualEBelgeInput(input:Row,fileName:string){
+ const kind=upper(input.documentKind),direction=explicitEBelgeDirection(input.direction);
+ const no=text(input.documentNo),date=text(input.issueDate),party=text(input.partyName),tax=cleanTax(input.partyTaxNo),currency=upper(input.currency||"TRY");
+ const invalid=(message:string)=>{throw Object.assign(new Error(message),{code:"MANUAL_DOCUMENT_INVALID"})};
+ if(!["FATURA","IRSALIYE"].includes(kind)||!["INCOMING","OUTGOING"].includes(direction))invalid("Manuel belge türünü ve gelen/giden yönünü seçin.");
+ if(no.length<3||no.length>80||!validDate(date))invalid("Geçerli belge numarası ve tarihi girilmelidir.");
+ if(party.length<2||party.length>200||(tax&&!/^[0-9]{10,11}$/.test(tax)))invalid("Karşı firma adını ve varsa geçerli VKN/TCKN bilgisini girin.");
+ if(!/^[A-Z]{3}$/.test(currency))invalid("Üç harfli para birimi girin.");
+ if(!Array.isArray(input.lines)||input.lines.length<1||input.lines.length>100)invalid("Manuel kayıt için en az bir, en fazla 100 kalem girin.");
+ const round=(v:number)=>Math.round((v+Number.EPSILON)*100)/100;
+ const lines=input.lines.map((row:Row,index:number)=>{
+  const description=text(row.description);
+  const quantity=Number(row.quantity),unitPrice=Number(row.unitPrice),taxRate=Number(row.taxRate),unitCode=upper(row.unitCode||"ADET");
+  if(description.length<2||description.length>240||!Number.isFinite(quantity)||quantity<=0||quantity>1e9||!Number.isFinite(unitPrice)||unitPrice<0||unitPrice>1e9||!Number.isFinite(taxRate)||taxRate<0||taxRate>100||unitCode.length>20)
+   invalid(`Kalem ${index+1} açıklama, miktar, birim fiyat veya KDV değeri geçersiz.`);
+  const lineTotal=round(quantity*unitPrice),taxAmount=round(lineTotal*taxRate/100);
+  return {lineNo:index+1,description,quantity,unitPrice,taxRate,unitCode,lineTotal,taxAmount};
+ });
+ const subtotal=round(lines.reduce((sum: number,line:Row)=>sum+line.lineTotal,0));
+ const taxTotal=round(lines.reduce((sum: number,line:Row)=>sum+line.taxAmount,0));
+ return {direction,documentType:documentTypeOf(kind,direction),documentNo:no,issueDate:date,
+  partyName:party,partyTaxNo:tax,currency,subtotal,taxTotal,payableTotal:round(subtotal+taxTotal),
+  lines,providerType:"MANUAL",sourceType:"MANUAL_REVIEW",extractionConfidence:0,
+  rawMetadata:{originalFileName:fileName,manualSourceVerificationRequired:true,manuallyCalculatedTotals:true}};
+}
+
+async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirection:string,kind:string,analysisFile:File|null=null,manualData:Row|null=null){
   const ext=upper(file.name.split(".").pop());
   if(!allowedExt.has(ext))throw Object.assign(new Error(`${file.name}: desteklenmeyen dosya tipi.`),{code:"UNSUPPORTED_FILE"});
   if(file.size>MAX_FILE_BYTES)throw Object.assign(new Error(`${file.name}: dosya 20 MB sınırını aşıyor.`),{code:"FILE_TOO_LARGE"});
+  if(manualData){
+    if(ext==="XML")throw Object.assign(new Error("XML için manuel tahmin yerine asıl UBL doğrulaması gerekir."),{code:"MANUAL_XML_NOT_ALLOWED"});
+    const parsed=prepareManualEBelgeInput(manualData,file.name),asset=await stageFile(c,slug,file);
+    try{
+      const record=await createDocument(c,slug,parsed,asset);
+      if(!record.duplicate)await addIssue(c,slug,record.documentId,"MANUAL_SOURCE_REVIEW_REQUIRED",
+        "Kaynak dosyadaki firma, tarih, tutar, KDV ve her kalem kullanıcı tarafından doğrulanmalıdır.","ERROR","source");
+      return {...record,manual:true};
+    }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
+  }
   const readiness=accountingDocumentIntelligenceStatus(c.env as any);
   if(ext!=="XML"&&!readiness.configured)throw Object.assign(new Error("PDF/görsel okuma servisi production ortamında hazır değil. XML yükleme kullanılabilir."),{code:"DOCINTEL_NOT_CONFIGURED",detail:{provider:readiness.provider,endpointConfigured:readiness.endpointConfigured,keyConfigured:readiness.keyConfigured,workersAiConfigured:readiness.workersAiConfigured}});
   if(ext==="PDF"&&!readiness.azureConfigured&&!(analysisFile instanceof File))throw Object.assign(new Error("PDF için tarayıcı OCR önizlemesi hazırlanamadı. Dosyayı yeniden seçin veya görsel olarak yükleyin."),{code:"PDF_OCR_PREVIEW_REQUIRED"});
@@ -538,7 +576,8 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
   return result;
 }
 
-function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%FATURA%'"};if(f==="OUTGOING_INVOICE")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%FATURA%'"};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
+const invoiceTypeSql="(d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%ARSIV%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%IADE%')";
+function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:`d.direction='INCOMING' AND ${invoiceTypeSql}`};if(f==="OUTGOING_INVOICE")return{sql:`d.direction='OUTGOING' AND ${invoiceTypeSql}`};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
 
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   app.get("/api/e-belge/dashboard",async c=>{
@@ -572,7 +611,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   });
   app.get("/api/e-belge/pool",async c=>{const slug=slugOf(c),page=safePageInt(c.req.query("page"),1,1000000),pageSize=safePageInt(c.req.query("pageSize"),50,100),q=text(c.req.query("q")),from=text(c.req.query("from")),to=text(c.req.query("to")),status=upper(c.req.query("status")),direction=upper(c.req.query("direction")),filter=poolFilter(text(c.req.query("filter"))),printStatus=upper(c.req.query("printStatus")),where=["d.main_company_slug=?","d.deleted_at IS NULL",filter.sql],args:any[]=[slug];if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))return c.json(error("INVALID_DATE_RANGE","Geçerli bir başlangıç ve bitiş tarihi seçin; bitiş başlangıçtan önce olamaz."),400);if(direction==="INCOMING"||direction==="OUTGOING"){where.push("d.direction=?");args.push(direction)}if(status&&status!=="ALL"){where.push("UPPER(COALESCE(d.status,''))=?");args.push(status)}if(q){where.push("(UPPER(COALESCE(d.document_no,'')) LIKE UPPER(?) OR UPPER(COALESCE(d.party_name,'')) LIKE UPPER(?) OR COALESCE(d.party_tax_no,'') LIKE ?)");args.push(`%${q}%`,`%${q}%`,`%${q}%`)}if(from){where.push("COALESCE(d.issue_date,d.created_at)>=?");args.push(from)}if(to){where.push("COALESCE(d.issue_date,d.created_at)<=?");args.push(`${to}T23:59:59`)}
   if(printStatus){
-    if(printStatus!=="PENDING"||filter.sql!=="d.direction='INCOMING' AND d.document_type LIKE '%FATURA%'")
+    if(printStatus!=="PENDING"||upper(c.req.query("filter"))!=="INCOMING_INVOICE")
       return c.json(error("INVALID_PRINT_STATUS_FILTER","Muhasebe çıktısı bekleyen filtresi yalnız gelen faturalara uygulanır."),400);
     where.push(`NOT EXISTS(SELECT 1 FROM json_store js
       WHERE js.id='EBELGE_ACCOUNTING_PRINT_V1:'||d.main_company_slug||':'||d.id
@@ -580,7 +619,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
       AND js.scope='EBELGE_ACCOUNTING_PRINT_V1'
       AND json_extract(CASE WHEN json_valid(js.data) THEN js.data ELSE '{}' END,'$.status')='PRINTED')`);
   }
-  const base=`FROM accounting_documents d WHERE ${where.join(" AND ")}`,count=await c.env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...args).first<Row>(),rows=await c.env.DB.prepare(`SELECT d.*,(SELECT COUNT(*) FROM accounting_document_lines l WHERE l.main_company_slug=d.main_company_slug AND l.document_id=d.id) line_count,(SELECT COUNT(*) FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')) issue_count,(SELECT status FROM accounting_document_archive_jobs a WHERE a.main_company_slug=d.main_company_slug AND a.document_id=d.id ORDER BY a.created_at DESC LIMIT 1) archive_status ${base} ORDER BY COALESCE(d.issue_date,d.created_at) DESC LIMIT ? OFFSET ?`).bind(...args,pageSize,(page-1)*pageSize).all<Row>();const stats=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN direction='INCOMING' AND document_type LIKE '%FATURA%' THEN 1 ELSE 0 END) incomingInvoices,SUM(CASE WHEN direction='OUTGOING' AND document_type LIKE '%FATURA%' THEN 1 ELSE 0 END) outgoingInvoices,SUM(CASE WHEN document_type LIKE '%IRSALIYE%' THEN 1 ELSE 0 END) dispatches,SUM(CASE WHEN status='POSTED' THEN 1 ELSE 0 END) posted FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`).bind(slug).first<Row>();return c.json({ok:true,data:{items:rows.results||[],page,pageSize,total:numberValue(count?.n),stats}})});
+  const base=`FROM accounting_documents d WHERE ${where.join(" AND ")}`,count=await c.env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...args).first<Row>(),rows=await c.env.DB.prepare(`SELECT d.*,(SELECT COUNT(*) FROM accounting_document_lines l WHERE l.main_company_slug=d.main_company_slug AND l.document_id=d.id) line_count,(SELECT COUNT(*) FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')) issue_count,(SELECT status FROM accounting_document_archive_jobs a WHERE a.main_company_slug=d.main_company_slug AND a.document_id=d.id ORDER BY a.created_at DESC LIMIT 1) archive_status ${base} ORDER BY COALESCE(d.issue_date,d.created_at) DESC LIMIT ? OFFSET ?`).bind(...args,pageSize,(page-1)*pageSize).all<Row>();const stats=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN direction='INCOMING' AND (document_type LIKE '%FATURA%' OR document_type LIKE '%ARSIV%' OR document_type LIKE '%INVOICE%' OR document_type LIKE '%IADE%') THEN 1 ELSE 0 END) incomingInvoices,SUM(CASE WHEN direction='OUTGOING' AND (document_type LIKE '%FATURA%' OR document_type LIKE '%ARSIV%' OR document_type LIKE '%INVOICE%' OR document_type LIKE '%IADE%') THEN 1 ELSE 0 END) outgoingInvoices,SUM(CASE WHEN document_type LIKE '%IRSALIYE%' THEN 1 ELSE 0 END) dispatches,SUM(CASE WHEN status='POSTED' THEN 1 ELSE 0 END) posted FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`).bind(slug).first<Row>();return c.json({ok:true,data:{items:rows.results||[],page,pageSize,total:numberValue(count?.n),stats}})});
   app.get("/api/e-belge/documents/:id",async c=>{const slug=slugOf(c),id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);const [lines,issues,relations,files,archive]=await Promise.all([c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? ORDER BY is_resolved,severity DESC,created_at DESC`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT r.*,d.document_no related_document_no,d.document_type related_document_type FROM accounting_document_relations r LEFT JOIN accounting_documents d ON d.id=r.related_document_id AND d.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.document_id=? ORDER BY r.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.preview_status,a.source_type FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_archive_jobs WHERE main_company_slug=? AND document_id=? ORDER BY created_at DESC`).bind(slug,id).all<Row>()]);let physicalOperations:Row[]=[];let physicalStatus="READY";
     try{physicalOperations=await readPhysicalDocumentStatus(c.env.DB,slug,id)}
     catch(e:any){if(text(e?.code)==="PHYSICAL_SCHEMA_APPROVAL_REQUIRED")physicalStatus="SCHEMA_APPROVAL_REQUIRED";
@@ -607,12 +646,20 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     const slug=slugOf(c),body=await c.req.parseBody({all:true}),direction=explicitEBelgeDirection(body.direction),kind=upper(body.documentKind||"AUTO");
     let rawFiles:any=body.files||body.file||[];const files=(Array.isArray(rawFiles)?rawFiles:[rawFiles]).filter((x:any)=>x instanceof File) as File[];
     if(!files.length)return c.json(error("FILES_REQUIRED","Yüklenecek XML/PDF/görsel bulunamadı."),400);
+    const manualOnly=text(body.manualOnly)==="true";
+    const manualData=manualOnly?safeJson(body.manualData):null;
+    if(manualOnly){
+      const user=await getAuthenticatedUser(c);
+      if(!user?.id)return c.json(error("UNAUTHORIZED","Manuel belge kaydı için oturum gerekli."),401);
+      if(!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Muhasebe kayıt yetkisi gerekli."),403);
+      if(files.length!==1)return c.json(error("MANUAL_ONE_FILE","Manuel kayıtta tek kaynak dosya seçin."),400);
+    }
     if(files.length>MAX_FILES)return c.json(error("TOO_MANY_FILES",`Tek seferde en fazla ${MAX_FILES} dosya yüklenebilir.`),413);
     const previews=files.map((_,index)=>{const raw=(body as any)[`preview_${index}`];return (Array.isArray(raw)?raw[0]:raw) instanceof File?(Array.isArray(raw)?raw[0]:raw) as File:null});
     const total=files.reduce((s,f)=>s+f.size,0)+previews.reduce((s,f)=>s+(f?.size||0),0);
     if(total>MAX_REQUEST_BYTES)return c.json(error("REQUEST_TOO_LARGE","Toplam yükleme ve OCR önizleme boyutu 80 MB sınırını aşıyor."),413);
     const items=[],errors=[];
-    for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index])})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
+    for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index],manualData)})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
     const autoReconcile=[],reconcileIds=new Set<string>();
     const uploadedIds=[...new Set(items.map((item:any)=>text(item.documentId)).filter(Boolean))];
     for(const documentId of uploadedIds){
@@ -701,8 +748,25 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     }
   });
   app.post("/api/e-belge/documents/:id/reconcile",async c=>{try{return c.json({ok:true,data:await reconcileOne(c,slugOf(c),c.req.param("id"))})}catch(e:any){return c.json(error(text(e.code)||"RECONCILE_FAILED",text(e.message)||"Eşleştirme tamamlanamadı."),text(e.code)==="NOT_FOUND"?404:409)}});
-  app.post("/api/e-belge/reconcile-all",async c=>{const slug=slugOf(c),rows=(await c.env.DB.prepare(`SELECT id FROM accounting_documents WHERE main_company_slug=? AND document_type LIKE '%FATURA%' AND deleted_at IS NULL AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED') ORDER BY COALESCE(issue_date,created_at) DESC LIMIT 500`).bind(slug).all<Row>()).results||[],results=[];for(const row of rows){try{results.push(await reconcileOne(c,slug,text(row.id)))}catch(e:any){results.push({documentId:row.id,status:"ERROR",message:text(e.message)})}}return c.json({ok:true,data:{total:results.length,results}})});
-  app.post("/api/e-belge/documents/:id/issues/:issueId/resolve",async c=>{const slug=slugOf(c),id=c.req.param("id"),issueId=c.req.param("issueId");await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE id=? AND main_company_slug=? AND document_id=?`).bind(now(),issueId,slug,id).run();return c.json({ok:true,data:{issueId,resolved:true}})});
+  app.post("/api/e-belge/reconcile-all",async c=>{const slug=slugOf(c),rows=(await c.env.DB.prepare(`SELECT id FROM accounting_documents WHERE main_company_slug=? AND (document_type LIKE '%FATURA%' OR document_type LIKE '%ARSIV%' OR document_type LIKE '%INVOICE%' OR document_type LIKE '%IADE%') AND deleted_at IS NULL AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED') ORDER BY COALESCE(issue_date,created_at) DESC LIMIT 500`).bind(slug).all<Row>()).results||[],results=[];for(const row of rows){try{results.push(await reconcileOne(c,slug,text(row.id)))}catch(e:any){results.push({documentId:row.id,status:"ERROR",message:text(e.message)})}}return c.json({ok:true,data:{total:results.length,results}})});
+  app.post("/api/e-belge/documents/:id/issues/:issueId/resolve",async c=>{
+    const slug=slugOf(c),id=c.req.param("id"),issueId=c.req.param("issueId");
+    const issue=await c.env.DB.prepare(`SELECT i.issue_code,d.status,d.posted_at FROM accounting_document_issues i
+      JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug
+      WHERE i.id=? AND i.document_id=? AND i.main_company_slug=? AND d.deleted_at IS NULL LIMIT 1`)
+      .bind(issueId,id,slug).first<Row>();
+    if(!issue)return c.json(error("ISSUE_NOT_FOUND","Kontrol kaydı bulunamadı."),404);
+    if(issue.issue_code==="MANUAL_SOURCE_REVIEW_REQUIRED"){
+      const user=await getAuthenticatedUser(c),b=await c.req.json<Row>().catch(()=>({}));
+      if(!user?.id||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Manuel belge doğrulaması için muhasebe yetkisi gerekir."),403);
+      if(b.confirmed!==true)return c.json(error("MANUAL_CONFIRM_REQUIRED","Belge ve kalemleri kontrol ettiğinizi açıkça onaylayın."),400);
+      if(issue.posted_at||["POSTED","FINALIZING","APPROVED","FINALIZE_RETRY"].includes(upper(issue.status)))
+        return c.json(error("DOCUMENT_LOCKED","Kesinleşen belge üzerinde kontrol değiştirilemez."),409);
+    }
+    await c.env.DB.prepare(`UPDATE accounting_document_issues SET is_resolved=1,resolved_at=? WHERE id=? AND main_company_slug=? AND document_id=?`)
+      .bind(now(),issueId,slug,id).run();
+    return c.json({ok:true,data:{issueId,resolved:true}});
+  });
   app.post("/api/e-belge/documents/:id/finalize",async c=>{
     const slug=slugOf(c),id=c.req.param("id"),b=await c.req.json<Row>().catch(()=>({}));
     const user=await getAuthenticatedUser(c);

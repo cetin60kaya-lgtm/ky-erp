@@ -69,7 +69,7 @@ export const setEBelgeAccountingPrintStatus = (id, mainCompanySlug, action, reas
 export const getEBelgeDetail = (id) =>
   apiGet(`/e-belge/documents/${encodeURIComponent(id)}`, undefined, { timeoutMs: 60_000 }).then(unwrap);
 
-export async function uploadEBelge(files, { direction = "AUTO", documentKind = "AUTO" } = {}) {
+export async function uploadEBelge(files, { direction = "AUTO", documentKind = "AUTO", manualOnly = false, manualData = null } = {}) {
   const selected = Array.from(files || []);
   const form = new FormData();
   selected.forEach((file) => form.append("files", file));
@@ -79,6 +79,7 @@ export async function uploadEBelge(files, { direction = "AUTO", documentKind = "
   });
   form.set("direction", direction);
   form.set("documentKind", documentKind);
+  if(manualOnly){form.set("manualOnly","true");form.set("manualData",JSON.stringify(manualData||{}));}
   try {
     return unwrap(await apiUpload("/e-belge/upload", form));
   } catch (error) {
@@ -136,8 +137,8 @@ export const updateEBelge = (id, payload) =>
 export const finalizeEBelge = (id, payload = {}) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/finalize`, payload, { timeoutMs: 120_000 }).then(unwrap);
 
-export const resolveEBelgeIssue = (id, issueId) =>
-  apiPost(`/e-belge/documents/${encodeURIComponent(id)}/issues/${encodeURIComponent(issueId)}/resolve`, {}).then(unwrap);
+export const resolveEBelgeIssue = (id, issueId, confirmed = false) =>
+  apiPost(`/e-belge/documents/${encodeURIComponent(id)}/issues/${encodeURIComponent(issueId)}/resolve`, {confirmed}).then(unwrap);
 
 export const getEBelgeCompanySuggestions = (q = "") =>
   apiGet("/e-belge/company-suggestions", { q }, { timeoutMs: 30_000 }).then(unwrap);

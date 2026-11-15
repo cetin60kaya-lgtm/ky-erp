@@ -45,7 +45,7 @@ export function registerEBelgeAccountingPrintRoutes(app:Hono<Env>){
        || d.main_company_slug || ':' || d.id
        AND j.scope=? AND j.main_company_slug=d.main_company_slug
     WHERE d.main_company_slug=? AND d.deleted_at IS NULL
-    AND d.direction='INCOMING' AND d.document_type LIKE '%FATURA%'
+    AND d.direction='INCOMING' AND (d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%ARSIV%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%IADE%')
     AND d.id IN (${placeholders})`)
    .bind(SCOPE+":",SCOPE,slug,...ids).all<Row>()).results||[];
   const statuses:Row={};
