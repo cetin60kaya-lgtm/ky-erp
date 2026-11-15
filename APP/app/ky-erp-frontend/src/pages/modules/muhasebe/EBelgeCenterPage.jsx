@@ -31,6 +31,7 @@ import {
   uploadEBelge,
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
+import VisualProfileStudio from "./VisualProfileStudio";
 import EBelgeAdapterManager from "./EBelgeAdapterManager";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import "./eBelgeCenter.css";
@@ -636,6 +637,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
     {view === "pool" && <>
       <UploadPanel onUploaded={handleUploaded} />
+      <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} />
       {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div></div>}
     </>}
 
