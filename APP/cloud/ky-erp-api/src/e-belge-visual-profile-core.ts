@@ -1,7 +1,7 @@
 export type VisualKind = "INVOICE"|"DISPATCH";
 export type VisualOutput = "PDF"|"JPEG"|"PNG";
-export type VisualLayout = { marginTop:number; marginSide:number; fontSize:number; tableFontSize:number; logoWidth:number; showQr:boolean };
-export const defaultVisualLayout: VisualLayout = { marginTop:30, marginSide:26, fontSize:9, tableFontSize:8, logoWidth:135, showQr:true };
+export type VisualLayout = { marginTop:number; marginSide:number; fontSize:number; tableFontSize:number; logoWidth:number; showQr:boolean; headerGap:number; companyGap:number; tableGap:number; totalsWidth:number; cellPadding:number; titleSize:number; qrWidth:number };
+export const defaultVisualLayout: VisualLayout = { marginTop:30, marginSide:26, fontSize:9, tableFontSize:8, logoWidth:135, showQr:true, headerGap:18, companyGap:20, tableGap:14, totalsWidth:190, cellPadding:4, titleSize:16, qrWidth:82 };
 const s = "(?:[A-Za-z_][\\w.-]*:)?";
 const digits = (v:unknown) => String(v??"").replace(/\D/g,"");
 export function visualProfileKey(issuerTaxNo:string,kind:VisualKind) {
@@ -23,7 +23,10 @@ export function visualLayout(value:unknown):VisualLayout {
  };
  return {marginTop:clamp("marginTop",0,150),marginSide:clamp("marginSide",0,120),
   fontSize:clamp("fontSize",6,18),tableFontSize:clamp("tableFontSize",5,16),
-  logoWidth:clamp("logoWidth",0,240),showQr:v.showQr!==false};
+  logoWidth:clamp("logoWidth",0,240),showQr:v.showQr!==false,
+  headerGap:clamp("headerGap",0,60),companyGap:clamp("companyGap",0,80),tableGap:clamp("tableGap",0,65),
+  totalsWidth:clamp("totalsWidth",110,280),cellPadding:clamp("cellPadding",1,14),
+  titleSize:clamp("titleSize",10,28),qrWidth:clamp("qrWidth",40,140)};
 }
 function field(xml:string,name:string){
  const re=new RegExp("<"+s+name+"\\b[^>]*>([\\s\\S]*?)<\\/"+s+name+"\\s*>","i");

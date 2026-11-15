@@ -17,7 +17,12 @@ export function registerIsnetReadOnlyXmlDownloadRoutes(app:Hono<Env>){
   if(!tenant||!user||!accountingTenantReadAllowed(user,tenant)||!accountingAccess(user,"GET",c.req.path))
    return c.json(fail("FORBIDDEN","Bu firma için İşNet XML okuma yetkiniz yok."),403);
   const kind=c.req.query("kind")==="invoice"?"invoice":c.req.query("kind")==="despatch"?"despatch":null;
-  if(!kind)return c.json(fail("INVALID_KIND","Gelen fatura veya gelen irsaliye seçin."),400);
+  if(!kind)return c.json(fail("INVALID_KIND","Fatura veya irsaliye türü seçin."),400);
+  const direction=c.req.query("direction")==="outgoing"?"outgoing":c.req.query("direction")==="incoming"||!c.req.query("direction")?"incoming":null;
+  if(!direction)return c.json(fail("INVALID_DIRECTION","Gelen veya giden belge yönü seçin."),400);
+  const ettn=text(c.req.query("ettn"));
+  if(ettn&&!/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(ettn))
+   return c.json(fail("INVALID_ETTN","Belge kimliği geçersiz."),400);
   const today=new Date().toISOString().slice(0,10);
   const week=new Date(Date.parse(today+"T00:00:00Z")-7*86400000).toISOString().slice(0,10);
   const from=text(c.req.query("from"))||week,to=text(c.req.query("to"))||today;
@@ -42,10 +47,10 @@ export function registerIsnetReadOnlyXmlDownloadRoutes(app:Hono<Env>){
   if(settings.tokenExpiresOn&&!Number.isNaN(Date.parse(text(settings.tokenExpiresOn)))&&Date.parse(text(settings.tokenExpiresOn))<=Date.now())
    return c.json(fail("ISNET_API_SESSION_EXPIRED","API tokenının süresi dolmuş; bağlantıyı yeniden doğrulayın."),409);
   try{
-   const file=await fetchOneIsnetXmlReadOnly(fetch,token,Number(companyId),kind,from,to);
+   const file=await fetchOneIsnetXmlReadOnly(fetch,token,Number(companyId),kind,from,to,direction,ettn);
    return new Response(file.bytes,{headers:{
     "Content-Type":"application/xml; charset=utf-8",
-    "Content-Disposition":'attachment; filename="isnet-gelen-'+(kind==="invoice"?"fatura":"irsaliye")+'-ornek.xml"',
+    "Content-Disposition":'attachment; filename="isnet-'+(direction==="outgoing"?"giden":"gelen")+'-'+(kind==="invoice"?"fatura":"irsaliye")+'-ornek.xml"',
     "Cache-Control":"private, no-store",
     "X-Content-Type-Options":"nosniff",
    }});

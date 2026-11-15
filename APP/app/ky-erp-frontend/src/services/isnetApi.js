@@ -29,7 +29,10 @@ export const getIsnetReadOnlyPreview = (from="",to="") =>
   apiGet("/isnet/api-read-only-preview", {from,to}, {timeoutMs:20000,forceFresh:true}).then(unwrap);
 // A deliberate user click downloads only ONE validated XML to their browser.
 // No R2/D1 write, no accounting write and no official document submission.
-export const downloadIsnetReadOnlyXmlSample = (kind,from="",to="") =>
+export const downloadIsnetReadOnlyXmlSample = (kind,from="",to="",direction="incoming",ettn="") =>
   apiFetch("/isnet/api-read-only-xml-sample",{
-    method:"GET",params:{kind,from,to},responseType:"blob",timeoutMs:35000,
+    method:"GET",params:{kind,from,to,direction,ettn},responseType:"blob",timeoutMs:35000,
   });
+
+export const queryIsnetDocumentTest = (type,from,to) =>
+ apiGet("/isnet/document-test",{type,from,to},{forceFresh:true,timeoutMs:25000}).then(unwrap);

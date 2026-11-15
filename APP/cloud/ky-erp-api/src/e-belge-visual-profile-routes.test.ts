@@ -19,3 +19,12 @@ test("XML/PDF referansları GitHub değil private R2 ve onay olmadan müşteri g
  assert.doesNotMatch(source,/autoSend:true|sendInvoice|postAccountingDocument/);
  assert.match(app,/registerEBelgeVisualProfileRoutes\(app\)/);
 });
+
+test("Önceden onaylanan örnek XML, yalnız aynı tenant yetkisiyle yeniden açılabilir",()=>{
+ assert.match(source,/visual-profiles\/\:issuer\/\:kind\/sample-xml/);
+ assert.match(source,/await authorize\(c,"GET"\)/);
+ assert.match(source,/profile\.sourceXmlKey/);
+ assert.match(source,/c\.env\.FILES\.get\(text\(profile\.sourceXmlKey\)\)/);
+ assert.match(source,/Cache-Control":"private, no-store"/);
+ assert.doesNotMatch(source,/referenceHash.*sendInvoice/);
+});

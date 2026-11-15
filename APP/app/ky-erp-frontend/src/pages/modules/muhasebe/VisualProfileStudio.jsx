@@ -1,18 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   getEBelgeVisualProfiles, uploadEBelgeVisualExample, updateEBelgeVisualProfile,
-  approveEBelgeVisualProfile, getEBelgeVisualReference,
+  approveEBelgeVisualProfile, getEBelgeVisualReference, getEBelgeVisualSample,
 } from "../../../services/eBelgeApi";
 import { parseUblForVisualOutput, renderUblOutput } from "./visualUblOutput";
+import { suggestVisualLayoutFromPdfText } from "./visualReferenceLayoutSuggestion";
 import "./VisualProfileStudio.css";
 
-const initial={marginTop:30,marginSide:26,fontSize:9,tableFontSize:8,logoWidth:135,showQr:true};
+const initial={marginTop:30,marginSide:26,fontSize:9,tableFontSize:8,logoWidth:135,showQr:true,
+ headerGap:18,companyGap:20,tableGap:14,totalsWidth:190,cellPadding:4,titleSize:16,qrWidth:82};
 const editable=[
  ["marginTop","Üst boşluk",0,150],
  ["marginSide","Yan boşluk",0,120],
  ["fontSize","Yazı boyutu",6,18],
  ["tableFontSize","Tablo yazısı",5,16],
  ["logoWidth","Logo genişliği",0,240],
+];
+const advancedEditable=[
+ ["titleSize","Başlık yazı boyutu",10,28],
+ ["headerGap","Başlık sonrası boşluk",0,60],
+ ["companyGap","Firma bilgileri sonrası",0,80],
+ ["tableGap","Tablo sonrası boşluk",0,65],
+ ["totalsWidth","Toplam alanı genişliği",110,280],
+ ["cellPadding","Tablo hücresi boşluğu",1,14],
+ ["qrWidth","QR genişliği",40,140],
 ];
 const formatName=(kind)=>kind==="INVOICE"?"Fatura":"İrsaliye";
 const download=(blob,name)=>{
@@ -21,15 +32,16 @@ const download=(blob,name)=>{
  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
  setTimeout(()=>URL.revokeObjectURL(url),12000);
 };
-export default function VisualProfileStudio(){
+export default function VisualProfileStudio({standalone=false}){
  const [profiles,setProfiles]=useState([]);
  const [xml,setXml]=useState(null),[xmlText,setXmlText]=useState("");
+ const [savedReferenceBlob,setSavedReferenceBlob]=useState(null);
  const [parsed,setParsed]=useState(null),[reference,setReference]=useState(null);
  const [referenceUrl,setReferenceUrl]=useState(""),[previewUrl,setPreviewUrl]=useState("");
  const [layout,setLayout]=useState(initial),[format,setFormat]=useState("PDF");
  const [previewReady,setPreviewReady]=useState(false),[visualChecked,setVisualChecked]=useState(false),[sameChecked,setSameChecked]=useState(false);
  const [busy,setBusy]=useState(false),[notice,setNotice]=useState("");
- const refUrlRef=useRef(""),previewUrlRef=useRef("");
+ const refUrlRef=useRef(""),previewUrlRef=useRef(""),sampleRequestSeq=useRef(0);
  const pick=(data)=>data?.items||[];
  const load=useCallback(async()=>{
   try{const data=await getEBelgeVisualProfiles();setProfiles(pick(data))}
@@ -49,8 +61,51 @@ export default function VisualProfileStudio(){
   const url=URL.createObjectURL(blob);refUrlRef.current=url;setReferenceUrl(url);
  };
  const resetAcceptance=()=>{setPreviewReady(false);setVisualChecked(false);if(previewUrlRef.current){URL.revokeObjectURL(previewUrlRef.current);previewUrlRef.current="";setPreviewUrl("")}};
+
+ const openSaved=async saved=>{
+  if(busy||!saved?.hasOriginalXml||!saved?.hasReference)return;
+  const request=++sampleRequestSeq.current;
+  setBusy(true);setNotice("");
+  try{
+   const [xmlBlob,refBlob]=await Promise.all([
+    getEBelgeVisualSample(saved.issuerTaxNo,saved.kind),
+    getEBelgeVisualReference(saved.issuerTaxNo,saved.kind)
+   ]);
+   const text=await xmlBlob.text(),details=parseUblForVisualOutput(text);
+   if(request!==sampleRequestSeq.current)return;
+   if(details.supplier.tax!==saved.issuerTaxNo||details.kind!==saved.kind||
+     details.number!==saved.sampleDocumentNo)throw Error("Arşiv örneğinin düzenleyen VKN'si, belge türü veya numarası şablonla eşleşmiyor.");
+   resetAcceptance();
+   setXml(null);setReference(null);setSameChecked(false);
+   setXmlText(text);setParsed(details);setLayout({...initial,...saved.layout});
+   setFormat(saved.outputFormat||"PDF");setSavedReferenceBlob(refBlob);
+   switchReference(refBlob);
+   setNotice("Kayıtlı orijinal XML ve referans dosyası açıldı. Konumları değiştirip önizlemeyi yeniden karşılaştırın; eski onay değişiklikte geçerli olmaz.");
+  }catch(e){if(request===sampleRequestSeq.current)setNotice(e?.message||"Kayıtlı örnek açılamadı.")}
+  finally{if(request===sampleRequestSeq.current)setBusy(false)}
+ };
+ const proposeFromPdf=async()=>{
+  const file=reference||savedReferenceBlob;
+  if(!file||busy||!(file.type==="application/pdf"||/\.pdf$/i.test(file.name||"")))return;
+  setBusy(true);setNotice("");
+  try{
+   const [pdfModule,workerModule]=await Promise.all([
+    import("pdfjs-dist/build/pdf.mjs"),import("pdfjs-dist/build/pdf.worker.min.mjs?url")
+   ]);
+   const pdfjs=pdfModule.default||pdfModule;
+   pdfjs.GlobalWorkerOptions.workerSrc=workerModule.default;
+   const document=await pdfjs.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;
+   const page=await document.getPage(1),texts=await page.getTextContent();
+   const suggested=suggestVisualLayoutFromPdfText(texts.items,page.view[3]-page.view[1]);
+   setLayout(current=>({...current,...suggested}));
+   resetAcceptance();
+   setNotice("Referans PDF'nin okunabilen metinlerinden ilk ölçüler önerildi. Tarama/karmaşık tasarımlarda yanılabilir; orijinali yan yana görüp manuel düzeltin.");
+  }catch(e){setNotice(e?.message||"PDF'den konum ölçüleri çıkarılamadı; değerleri elle ayarlayın.")}
+  finally{setBusy(false)}
+ };
  const pickXml=async file=>{
-  setXml(file||null);resetAcceptance();setNotice("");setSameChecked(false);setReference(null);
+  ++sampleRequestSeq.current;
+  setXml(file||null);resetAcceptance();setNotice("");setSameChecked(false);setReference(null);setSavedReferenceBlob(null);
   if(refUrlRef.current){URL.revokeObjectURL(refUrlRef.current);refUrlRef.current="";setReferenceUrl("")}
   if(!file){setParsed(null);setXmlText("");return}
   try{
@@ -59,14 +114,14 @@ export default function VisualProfileStudio(){
    const matched=profiles.find(p=>p.issuerTaxNo===details.supplier.tax&&p.kind===details.kind);
    if(matched){setLayout(matched.layout||initial);setFormat(matched.outputFormat||"PDF");
     if(matched.hasReference){
-     try{const blob=await getEBelgeVisualReference(details.supplier.tax,details.kind);switchReference(blob)}
+     try{const blob=await getEBelgeVisualReference(details.supplier.tax,details.kind);setSavedReferenceBlob(blob);switchReference(blob)}
      catch{/* The current sample can still be previewed without reference. */}
     }
    }else{setLayout(initial);setFormat("PDF")}
   }catch(e){setParsed(null);setXmlText("");setNotice(e?.message||"XML okunamadı.")}
  };
  const pickReference=file=>{
-  setReference(file||null);setSameChecked(false);resetAcceptance();
+  setReference(file||null);setSavedReferenceBlob(null);setSameChecked(false);resetAcceptance();
   if(file)switchReference(file);
   else if(refUrlRef.current){URL.revokeObjectURL(refUrlRef.current);refUrlRef.current="";setReferenceUrl("")}
  };
@@ -119,12 +174,22 @@ export default function VisualProfileStudio(){
   }catch(e){setNotice(e?.message||"Belge çıktısı alınamadı.")}
   finally{setBusy(false)}
  };
- return <details className="eb-visual-studio">
+ return <details className="eb-visual-studio" open={standalone}>
   <summary><strong>Firma Bazlı Belge Görünümü</strong><span>Bir kere XML + orijinal PDF/JPEG/PNG tanıt, düzenle, kaydet · sonra aynı firmanın XML'ini dönüştür</span></summary>
   <div className="eb-visual-content">
    <div className="eb-visual-intro">
     <strong>Tek kaynak XML.</strong> Firma ve belge türüne göre görsel şablon kaydedilir. Referans eski belgeye ait olduğu için eski QR, fatura numarası ve tutar yeni belgeye kopyalanmaz. Çıktı yalnız seçili XML'den hazırlanır.
    </div>
+   {profiles.length>0&&<section className="eb-visual-saved">
+    <div><strong>Kaydedilen firma şablonları</strong><small>Şablon düzenleyen VKN/TCKN + belge türüne bağlıdır. Firmanın birden çok düzeni varsa ilgili tür ayrıca tanıtılır.</small></div>
+    <div className="eb-visual-saved-list">{profiles.map(p=><button key={p.profileKey||p.issuerTaxNo+":"+p.kind} type="button" disabled={busy||!p.hasOriginalXml||!p.hasReference}
+      className={parsed?.supplier.tax===p.issuerTaxNo&&parsed?.kind===p.kind?"selected":""}
+      onClick={()=>void openSaved(p)}>
+       <strong>{p.issuerTaxNo} · {formatName(p.kind)}</strong>
+       <small>{p.sampleDocumentNo} · Sürüm {p.revision} · {p.approved?"Onaylı":"Görsel onay bekliyor"}</small>
+       <span>Kayıtlı örneği aç / düzenle</span>
+      </button>)}</div>
+   </section>}
    <div className="eb-visual-file-grid">
     <label>Örnek / yeni XML<input type="file" accept=".xml,application/xml,text/xml" disabled={busy} onChange={e=>void pickXml(e.target.files?.[0])}/></label>
     <label>Firma referansı (ilk kayıtta aynı belge)<input type="file" accept=".pdf,.png,.jpg,.jpeg" disabled={busy} onChange={e=>pickReference(e.target.files?.[0])}/></label>
@@ -142,6 +207,20 @@ export default function VisualProfileStudio(){
       <option value="PDF">PDF (önerilen)</option><option value="JPEG">JPEG</option><option value="PNG">PNG</option></select></label>
     <label className="eb-visual-flag"><input type="checkbox" checked={layout.showQr} disabled={busy}
        onChange={e=>updateField("showQr",e.target.checked)}/> XML'deki belgeye özel QR'ı göster</label>
+   </div>
+   <details className="eb-visual-advanced">
+    <summary>İnce Konum ve Tablo Ayarları (Başlık / Firma / Boşluk / Toplam)</summary>
+    <div className="eb-visual-controls">
+      {advancedEditable.map(([key,label,min,max])=><label key={key}>{label}
+       <input type="number" step="0.5" min={min} max={max} value={layout[key]} disabled={busy}
+          onChange={e=>updateField(key,e.target.value)}/></label>)}
+    </div>
+   </details>
+   <div className="eb-visual-actions">
+     <button type="button" disabled={busy||!(reference||savedReferenceBlob)||
+      (reference||savedReferenceBlob)?.type!=="application/pdf"} onClick={()=>void proposeFromPdf()}>
+      Referans PDF'den Ölçü Öner
+     </button>
    </div>
    <div className="eb-visual-actions">
      <button type="button" disabled={busy||!parsed} onClick={()=>void preview()}>PDF Önizleme Oluştur / Yenile</button>

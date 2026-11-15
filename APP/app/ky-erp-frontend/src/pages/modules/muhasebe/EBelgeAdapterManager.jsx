@@ -1,6 +1,8 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {Activity,AlertTriangle,CheckCircle2,ChevronDown,FileCode2,FolderOpen,Layers3,Plus,RefreshCw,Search,ShieldCheck,LockKeyhole,PauseCircle,PlayCircle,Settings2,X,Trash2} from "lucide-react";
-import {getCompanyEBelgeAdapters,setCompanyEBelgeAdapter} from "../../../services/eBelgeAdapterApi";
+import {getCompanyEBelgeAdapters,setCompanyEBelgeAdapter,getCompanyEBelgeAdapterProfile} from "../../../services/eBelgeAdapterApi";
+import EBelgeIntegrationTestCenter from "./EBelgeIntegrationTestCenter";
+import EBelgeIntegrationProfileEditor from "./EBelgeIntegrationProfileEditor";
 import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
 import "./eBelgeAdapterManager.css";
 
@@ -24,6 +26,9 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const owner=useMemo(()=>({slug:tenant}),[tenant]);
  const [data,setData]=useState({mainCompanySlug:"",systemCatalog:[],companyAdapters:[]});
  const [selected,setSelected]=useState("");
+ const [panel,setPanel]=useState("connection");
+ const [profile,setProfile]=useState(null);
+ const [profileError,setProfileError]=useState("");
  const [showCatalog,setShowCatalog]=useState(false);
  const [query,setQuery]=useState("");
  const [busy,setBusy]=useState("");
@@ -63,6 +68,14 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const status=adapter=>connectionStatus(adapter,provider(adapter),choice(adapter.key));
  const connected=installed.filter(x=>x.key==="ISNET"&&choice(x.key)?.enabled!==false&&provider(x)?.connected===true).length;
  const canEdit=!busy&&!loading&&!error;
+ useEffect(()=>{
+  let live=true;
+  setProfile(null);setProfileError("");
+  if(!selected||!tenant)return()=>{live=false};
+  getCompanyEBelgeAdapterProfile(owner,selected).then(p=>{if(live)setProfile(p)})
+   .catch(e=>{if(live)setProfileError(e?.message||"Entegrasyon ayarı alınamadı.")});
+  return()=>{live=false};
+ },[owner,selected,tenant]);
 
  const change=async(adapter,add,activate=true)=>{
   if(busy)return;
@@ -101,7 +114,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     <label htmlFor="eam-company-integration">Firma Entegrasyonları</label>
     <div className="eam-select-wrap">
      <Layers3 size={17}/>
-     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
+     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setPanel(e.target.value==="ISNET"?"connection":"test");setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
       <option value="">{loading?"Entegrasyonlar yükleniyor...":installed.length?"Entegrasyon seçin":"Henüz entegrasyon seçilmemiş"}</option>
       {installed.map(adapter=><option key={adapter.key} value={adapter.key}>{adapter.label}{choice(adapter.key)?.enabled===false?" (Pasif)":""}</option>)}
      </select><ChevronDown size={16}/>
@@ -130,7 +143,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
   {notice&&<div className="eam-ok" role="status"><CheckCircle2 size={16}/>{notice}</div>}
   <section className="eam-detail-pane" aria-label="Seçili entegrasyon ayarları">
    {active?<><div className="eam-detail">
-     <div><small>ENTEGRASYON AYARLARI · {active.key}</small><h3>{active.label}</h3><p>{status(active)}</p></div>
+     <div><small>ENTEGRASYON AYARLARI · {active.key}</small><h3>{profile?.displayName||active.label}</h3><p>{status(active)}</p></div>
      <div className="eam-detail-actions">
       <button type="button" disabled={!canEdit} onClick={()=>void change(active,true,choice(active.key)?.enabled===false)}>
        {choice(active.key)?.enabled===false?<PlayCircle size={16}/>:<PauseCircle size={16}/>}
@@ -146,9 +159,17 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     </div>}
     {choice(active.key)?.enabled===false&&<div className="eam-paused"><PauseCircle size={18}/> Bu entegrasyon firma için pasif. Ayarlar korunur, devam etmek için Etkinleştir'e basın.</div>}
     <div className="eam-service"><ShieldCheck size={18}/><div><strong>{providerService(active.key).title}</strong>
-     {providerService(active.key).url&&<code>{providerService(active.key).url}</code>}
+     {profile?.serviceUrl&&<code>{profile.serviceUrl}</code>}
      <p>{providerService(active.key).description}</p></div></div>
-    {active.key==="ISNET"?<div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule}/></div>:
+    <div className="eam-tabs" role="tablist" aria-label="Entegrasyon çalışma alanları">
+     <button type="button" role="tab" aria-selected={panel==="connection"} className={panel==="connection"?"active":""} onClick={()=>setPanel("connection")}>Bağlantı ve İş Kuralları</button>
+     <button type="button" role="tab" aria-selected={panel==="test"} className={panel==="test"?"active":""} onClick={()=>setPanel("test")}>Belge Test Merkezi</button>
+     <button type="button" role="tab" aria-selected={panel==="profile"} className={panel==="profile"?"active":""} onClick={()=>setPanel("profile")}>Entegrasyonu Düzenle</button>
+    </div>
+    {profileError&&<div className="eam-alert" role="alert">{profileError}</div>}
+    {panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
+     panel==="profile"?<EBelgeIntegrationProfileEditor key={tenant+":"+active.key} adapter={active} company={owner} profile={profile} onSaved={setProfile}/>:
+     active.key==="ISNET"?<div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule}/></div>:
      active.key==="MANUAL"?<div className="eam-detail-body"><div className="eam-instruction"><FileCode2 size={23}/><div><strong>Manuel XML / PDF Belge Havuzu</strong><p>UBL-TR XML asıl kaynaktır. PDF/JPEG/PNG görüntü ve kontrol içindir.</p></div></div>
       <button className="eam-main-button" type="button" disabled={choice(active.key)?.enabled===false} onClick={()=>openModule?.("e-belge",{tabKey:"belge-havuzu"})}><FolderOpen size={16}/> Belge Havuzunu Aç</button>
      </div>:<div className="eam-detail-body"><div className="eam-instruction"><LockKeyhole size={23}/><div><strong>Bağlayıcı motoru henüz hazır değil</strong><p>Logo, Mikro ve Paraşüt şu an kataloğa eklenebilir; gerçek API sürücüsü olmadan servis URL'si veya sahte giriş formu ile bağlantı kurulamaz.</p></div></div></div>}

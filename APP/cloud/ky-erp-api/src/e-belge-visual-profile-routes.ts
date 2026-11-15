@@ -147,6 +147,23 @@ export function registerEBelgeVisualProfileRoutes(app:Hono<AppEnv>){
    acceptedAt:new Date().toISOString(),acceptedBy:text(user?.id),status:"VISUAL_ACCEPTED_BY_USER"});
   return c.json({ok:true,data:publicProfile(approved)});
  });
+ app.get("/api/e-belge/visual-profiles/:issuer/:kind/sample-xml",async c=>{
+  const permit=await authorize(c,"GET");
+  if(!permit.allowed)return c.json(fail("FORBIDDEN","Bu firmanın kayıtlı örnek XML'ini okuma yetkisi yok."),403);
+  let key:string;
+  try{key=profileName(c.req.param("issuer"),c.req.param("kind"))}
+  catch{return c.json(fail("INVALID_PROFILE","Firma ve belge türü geçersiz."),400)}
+  const profile=await load(c,permit.slug,key);
+  if(!profile?.sourceXmlKey)return c.json(fail("NOT_FOUND","Kayıtlı örnek XML bulunamadı."),404);
+  const blob=await c.env.FILES.get(text(profile.sourceXmlKey));
+  if(!blob)return c.json(fail("NOT_FOUND","Kayıtlı orijinal XML arşivden okunamadı."),404);
+  return new Response(blob.body,{headers:{
+   "Content-Type":"application/xml; charset=utf-8",
+   "Cache-Control":"private, no-store",
+   "X-Content-Type-Options":"nosniff",
+   "Content-Disposition":"inline; filename=sample.xml"
+  }});
+ });
  app.get("/api/e-belge/visual-profiles/:issuer/:kind/reference",async c=>{
   const permit=await authorize(c,"GET");
   if(!permit.allowed)return c.json(fail("FORBIDDEN","Referans görseli görme yetkisi yok."),403);
