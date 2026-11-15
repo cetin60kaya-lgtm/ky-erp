@@ -7,7 +7,6 @@ import "./invoiceMailReconciliationCenter.css";
 
 const unpack=payload=>payload?.data?.data??payload?.data??payload??{};
 const listOf=value=>Array.isArray(value)?value:Array.isArray(value?.items)?value.items:Array.isArray(value?.rows)?value.rows:[];
-const number=value=>String(value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
 const money=(amount,currency)=>Number(amount||0).toLocaleString("tr-TR",{style:"currency",currency:currency||"TRY"});
 const tabs=[["send","PDF Mail Gönderimi"],["import","Haftalık Excel & Kontrol"],["listed","Ödemeye Alınanlar"],["missing","Ödemeye Alınmayanlar"],["differences","Eksik / Fazla & İtiraz"]];
 const outcomeLabel={
@@ -37,8 +36,17 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
  const [busy,setBusy]=useState(false),[loading,setLoading]=useState(false);
  const [error,setError]=useState(""),[notice,setNotice]=useState("");
  const [selectedMail,setSelectedMail]=useState(()=>moduleActionContext||null);
+ const handoffDocument=moduleActionContext?.document_no||"";
+ const handoffDelivery=moduleActionContext?.delivery_no||"";
+ const handoffModelId=moduleActionContext?.model_id||"";
+ const handoffModelName=moduleActionContext?.model_name||"";
+ const handoffParty=moduleActionContext?.party_name||"";
  const [reloadToken,setReloadToken]=useState(0);
- useEffect(()=>{setTab(moduleActionContext?.document_no?"send":"import");setSelectedMail(moduleActionContext||null);},[moduleActionContext?.document_no,moduleActionContext?.delivery_no,moduleActionContext?.model_id,moduleActionContext?.model_name,moduleActionContext?.party_name]);
+ useEffect(()=>{
+  setTab(handoffDocument?"send":"import");
+  setSelectedMail(handoffDocument||handoffDelivery||handoffModelId||handoffModelName||handoffParty
+   ?{document_no:handoffDocument,delivery_no:handoffDelivery,model_id:handoffModelId,model_name:handoffModelName,party_name:handoffParty}:null);
+ },[handoffDocument,handoffDelivery,handoffModelId,handoffModelName,handoffParty]);
  useEffect(()=>{setCustomerId("");setRows([]);setExtras([]);setSnapshot(null);setError("");setNotice("");setCompanies([]);},[tenant]);
  useEffect(()=>{
   if(!tenant)return;
@@ -73,7 +81,7 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
   setBusy(true);setError("");
   try{
    await apiPost("/muhasebe/invoice-weekly-reconciliations/"+encodeURIComponent(snapshot.id)+"/manual",{
-    mainCompanySlug:tenant,companyId,documentNo:row.documentNo,choice,
+    mainCompanySlug:tenant,companyId:customerId,documentNo:row.documentNo,choice,
    });
    setNotice(row.documentNo+" kontrol durumu kaydedildi. Cari/tahsilat kaydı değişmedi.");
    setReloadToken(n=>n+1);
