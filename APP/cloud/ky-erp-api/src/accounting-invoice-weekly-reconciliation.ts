@@ -43,8 +43,8 @@ async function invoiceRows(c:Context<AppEnv>,tenant:string,companyId:string){
 async function snapshot(c:Context<AppEnv>,tenant:string,companyId:string,id=""){
  const result=id
  ?await c.env.DB.prepare("SELECT id,file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? LIMIT 1").bind(SCOPE,tenant,id).first<Row>()
- :await c.env.DB.prepare("SELECT id,file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND main_company_slug=? ORDER BY created_at DESC LIMIT 100").bind(SCOPE,tenant).all<Row>();
- const candidates=id?[result]:(result as any)?.results||[];
+ :await c.env.DB.prepare("SELECT id,file_name,data,created_at,updated_at FROM json_store WHERE scope=? AND main_company_slug=? AND json_extract(data,'$.companyId')=? ORDER BY created_at DESC LIMIT 1").bind(SCOPE,tenant,companyId).first<Row>();
+ const candidates=[result];
  for(const row of candidates){if(!row)continue;try{const value=JSON.parse(str(row.data));if(value.companyId!==companyId)continue;
   return {...value,id:row.file_name,updatedAt:row.updated_at};
  }catch{/* Ignore malformed historic snapshot without touching it. */}}
@@ -57,7 +57,7 @@ function compare(invoices:Row[],record:Row|null){
  const rows=invoices.map(row=>{
   const manual=overrides[row.documentNo];
   const outcome=manual==="MANUAL_INCLUDED"||manual==="MANUAL_EXCLUDED"||manual==="REVIEW_REQUIRED"
-    ?manual:(listed.has(row.documentNo)?"CUSTOMER_LISTED":"NOT_LISTED");
+    ?manual:!record?"AWAITING_EXCEL":listed.has(row.documentNo)?"CUSTOMER_LISTED":"NOT_LISTED";
   return {...row,outcome,listed:listed.has(row.documentNo),manual:Boolean(manual),sourceFile:record?.sourceFile||""};
  });
  const extras=[...listed].filter(no=>!own.has(no)).sort().map(documentNo=>({documentNo,outcome:"EXTRA_IN_CUSTOMER_LIST"}));
@@ -80,8 +80,8 @@ async function readWorkbook(file:File){
   for(const row of rows){
    rowCount++;if(rowCount>15000)throw Object.assign(new Error("Excel çok büyük. En fazla 15.000 satır kabul edilir."),{status:413});
    for(const raw of Array.isArray(row)?row:[]){
-    const value=str(raw);
-    for(const found of value.toUpperCase().match(/HKN[0-9]{8,18}/g)||[]){
+    const value=str(raw).toUpperCase().replace(/\\s+/g,"");
+    for(const found of value.match(/HKN[0-9]{8,18}(?![0-9])/g)||[]){
       if(numbers.has(found))duplicates.add(found);
       numbers.add(found);
     }
