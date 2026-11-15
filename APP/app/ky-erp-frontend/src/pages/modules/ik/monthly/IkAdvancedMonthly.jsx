@@ -20,7 +20,6 @@ import {
   saveIkAdvancedLeaveCashRequest,
   cancelIkAdvancedLeave,
   saveIkAdvancedFinanceMovement,
-  saveIkAdvancedPayrollLines,
   saveIkAdvancedFinalPayrollControl,
   saveIkAdvancedPersonCard,
   saveIkAdvancedBulkCompensation,
@@ -2082,45 +2081,6 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
   };
 
-  const savePayroll = async () => {
-    if (!periodPrepared || !payrollReady) return setNotice("Bordroyu kaydetmeden önce dönemi hazırlayın ve güncel ortak hesabı yükleyin.");
-    const rows = payrollRows.filter((row) => !selectedPayrollIds.length || selectedPayrollIds.includes(row.employee.id));
-    if (!rows.length) return setNotice("Kaydedilecek bordro satırı bulunamadı.");
-    // Never let a bulk action reopen an already-paid month or person.
-    // Check the entire selection before writing the first employee.
-    const protectedRows = rows.filter((row) => row.paidLocked || upper(row.saved?.status) === "PAID");
-    if (protectedRows.length) return setNotice(`${protectedRows.length} personelin bordrosu ödenmiş/kilitli. Toplu kayıt bu satırlara dokunmadan durduruldu.`);
-    const badRows = rows.filter((row) => Math.abs(num(row.diff)) > 0.01 || !payrollPresentation(row).reconciled);
-    if (badRows.length) return setNotice(`${badRows.length} personelde Maaş + Yol + EK + Mesai - Kesintiler veya Banka + Elden = Net eşleşmiyor. Önce Son Kontrol ile düzeltin.`);
-    setBusy(true);
-    try {
-      for (const row of rows) {
-        await saveIkAdvancedFinalPayrollControl({
-          mainCompanyId: companyId, year, month, employeeId: row.employee.id,
-          expectedVersion: row.employee.version || "",
-          expectedPayrollVersion: row.saved?.payrollVersion || "",
-          allowMonthlyZeroExtra: Boolean(row.extra === 0 && row.saved?.allowMonthlyZeroExtra === true),
-          salary: row.salary, road: row.road, extra: row.extra, overtime: row.overtime,
-          advance: row.advance, deduction: row.deduction, garnishment: row.garnishment,
-          bank: row.bank, cash: row.cash,
-          advanceSource: row.advanceSource || "Elden",
-          deductionSource: row.deductionSource || "Elden",
-          garnishmentSource: row.garnishmentSource === "ELDEN" ? "Elden" : "Banka",
-          legalType: row.legalType === "HACIZ" ? "HACIZ" : "ICRA",
-          reason: "Aylık bordro sabitleme",
-        });
-      }
-      await saveIkAdvancedPayrollLines({ mainCompanyId: companyId, year, month, employeeIds: rows.map((row) => row.employee.id), status: "CALCULATED", reason: "Bordro kaydı" });
-      setNotice(`${rows.length} personelin bordro ara kaydı güncellendi. Ay kilidi açık olduğu sürece düzenleme devam edebilir.`);
-      await load({ force: true });
-    } catch (error) {
-      setNotice(error?.message || "Bordro kaydedilemedi. Kısmi değişiklik olup olmadığını görmek için kayıtlar yeniden yükleniyor.");
-      await load({ force: true, silent: true }).catch(() => {});
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const previewPayrollFiles = async (fileList, mappings = sgkColumnMaps) => {
     const selectedFiles = Array.from(fileList || []);
     if (!selectedFiles.length) return;
@@ -3390,7 +3350,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
           <div className="group payroll-edit-actions">
             <button className="btn primary" disabled={busy || data.close?.isLocked} onClick={startMonthlyPayrollSetup}>Bu Ayın Maaşlarını Hazırla</button>
             <button className="btn" disabled={busy || data.close?.isLocked} onClick={refreshPayroll}>Yeniden Hesapla</button>
-            <button className="btn" disabled={busy || data.close?.isLocked} onClick={savePayroll}>Ara Kaydet</button>
+            
             <button className="btn" disabled={busy || data.close?.isLocked} onClick={() => openPayroll()}>Seçili Son Kontrol</button>
           </div>
           <div className="group payroll-output-actions">

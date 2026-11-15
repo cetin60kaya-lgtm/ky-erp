@@ -226,9 +226,26 @@ test("bulk payroll save blocks paid/locked rows and protects permanent EK from s
   assert.match(api, /PAYROLL_TOTAL_MISMATCH/);
   assert.match(api, /const projectionResponse = await advancedPayroll\(c, year, month, companyId\)/);
   assert.match(api, /MONTHLY_EXTRA_ZERO_CONFIRM_REQUIRED/);
-  assert.match(page, /const protectedRows = rows\.filter/);
-  assert.match(page, /row\.paidLocked \|\| upper\(row\.saved\?\.status\) === "PAID"/);
-  assert.match(page, /row\.saved\?\.payrollVersion/);
-  assert.match(page, /allowMonthlyZeroExtra: Boolean\(row\.extra === 0 && row\.saved\?\.allowMonthlyZeroExtra === true\)/);
+  // Full-month saving is deliberately serial: each person is reviewed
+  // before a server-atomic final control, never a partially committed loop.
+  assert.match(page, /const startMonthlyPayrollSetup = \(\) =>/);
+  assert.match(page, /const reviewable = payrollRows\.filter\(\(row\) => !row\.paidLocked\)/);
+  assert.match(page, /expectedPayrollVersion: modalDraft\.payrollVersion/);
+  assert.match(page, /allowMonthlyZeroExtra,/);
   assert.match(page, /payrollPresentation\(row\)\.reconciled/);
+});
+
+test("month cannot lock while any required check fails, and no bulk partial-save path remains", () => {
+  const relational = cloud("ik-relational-cloud.ts");
+  const page = frontend("pages/modules/ik/monthly/IkAdvancedMonthly.jsx");
+  const start = relational.indexOf("async function advancedMonthClose");
+  const end = relational.indexOf("async function auditLogs", start);
+  const close = relational.slice(start >= 0 ? start : relational.indexOf("const checks = [", relational.indexOf("function advancedMonthClose")), end);
+  assert.match(close, /const blocking = checks\.filter\(\(item\) => !item\.ok\)/);
+  assert.match(close, /if \(blocking\.length\) \{\s*return error\(c, 409, "IK_MONTH_CLOSE_BLOCKED"/);
+  assert.ok(close.indexOf("if (blocking.length)") < close.indexOf('if (body.lock === true)') + close.slice(close.indexOf('if (body.lock === true)')).indexOf("await c.env.DB.batch(["));
+  assert.doesNotMatch(page, /const savePayroll = async/);
+  assert.doesNotMatch(page, /onClick=\{savePayroll\}/);
+  assert.match(page, /Bu Ayın Maaşlarını Hazırla/);
+  assert.match(page, /Kaydet ve Sonraki Personel/);
 });
