@@ -284,7 +284,7 @@ export default function ModelFilesPanel({ modelId, modelName = "", activeMainCom
       )}
       {error && <p className="ky-model-files-error" role="alert">{error}</p>}
       {notice && <p className="ky-model-files-success" role="status">{notice}</p>}
-      <details className="ky-model-files-list" open={false}>
+      <details className="ky-model-files-list" defaultOpen>
         <summary>Bağlı Dosyalar ({files.length})</summary>
         {!files.length ? <p>Henüz bu kartla ilişkilendirilen Drive dosyası yok.</p> :
           <ul>{files.map((f) => <li key={f.id}>
