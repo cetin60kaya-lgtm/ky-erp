@@ -5,6 +5,8 @@ import{AuthProvider,useAuth}from"../context/AuthContext";
 import{installPersistedAuthBootstrap}from"../context/authBootstrap";
 import{installAndroidRuntimeBridge}from"../utils/installAndroidRuntimeBridge";
 import{MODULES,getModuleTabs}from"../app/moduleRegistry";
+import{getVisibleModuleTabs}from"../app/moduleRegistry";
+import{ActiveCompanyProvider,useActiveCompany}from"../context/ActiveCompanyContext";
 import LoginPage from"../pages/LoginPage";
 import SecurityCenter from"./SecurityCenter";
 import "../App.css";
@@ -21,9 +23,8 @@ const LazyWorkspace=React.lazy(async()=>{
     import("../app/pdksModuleRegistryPatch"),
     import("../app/applicationSettingsModulePatch"),
   ]);
-  const [{default:AppV3},{ActiveCompanyProvider},{installAuthenticatedAssetBridge},{installMuhasebeDocumentSanitizer},{installCanonicalDialogSizing}]=await Promise.all([
+  const [{default:AppV3},{installAuthenticatedAssetBridge},{installMuhasebeDocumentSanitizer},{installCanonicalDialogSizing}]=await Promise.all([
     import("../AppV3.jsx"),
-    import("../context/ActiveCompanyContext"),
     import("../utils/installAuthenticatedAssetBridge"),
     import("../utils/installMuhasebeDocumentSanitizer"),
     import("../utils/installCanonicalDialogSizing")
@@ -31,7 +32,7 @@ const LazyWorkspace=React.lazy(async()=>{
   installAuthenticatedAssetBridge();
   installMuhasebeDocumentSanitizer();
   installCanonicalDialogSizing();
-  return{default:function FullErpWorkspace(){return <ActiveCompanyProvider><AppV3/></ActiveCompanyProvider>}};
+  return{default:function FullErpWorkspace(){return <AppV3/>}};
 });
 
 function goModule(module,tab){
@@ -49,7 +50,7 @@ function ModuleChooser({opened,onClose,allowed}){
    if(!opened&&dialog.open)dialog.close();
  },[opened]);
  const groups=useMemo(()=>allowed.map(module=>({
-    module,tabs:getModuleTabs(module).filter(tab=>Array.isArray(tab)&&tab[0]),
+    module,tabs:getVisibleModuleTabs(module).filter(tab=>Array.isArray(tab)&&tab[0]),
   })).filter(row=>row.tabs.length),[allowed]);
  const filtered=groups.map(row=>({...row,tabs:row.tabs.filter(tab=>(
    !search||`${row.module.label} ${tab[1]}`.toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR"))
@@ -72,11 +73,12 @@ function ModuleChooser({opened,onClose,allowed}){
 
 function ProHome({onSecurity}){
  const {user,hasModule}=useAuth();
+ const {companies,activeCompany,activeCompanySlug,setActiveCompanySlug}=useActiveCompany();
  const [search,setSearch]=useState("");
  const owner=OWNER_ROLES.has(String(user?.role||"").toUpperCase());
  const allowed=MODULES.filter(m=>owner||Boolean(hasModule(m.permissionKey||m.key.toUpperCase())));
  const visible=allowed.filter(m=>String(m.label||"").toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
- const fullCount=allowed.reduce((sum,m)=>sum+getModuleTabs(m).length,0);
+ const fullCount=allowed.reduce((sum,m)=>sum+getVisibleModuleTabs(m).length,0);
  return <main className="ky-pro-home" aria-label="KY ERP PRO ana sayfa">
    <section className="ky-pro-home-hero">
     <div className="ky-pro-home-top"><span>KY ERP PRO 4.2.1</span><ShieldCheck size={21}/></div>
@@ -84,14 +86,21 @@ function ProHome({onSecurity}){
     <p>{owner?"Bütün firmaların yetkili yönetim ve operasyon ekranları.":"Hesabınıza tanımlı ERP modülleri ve günlük işlemler."}</p>
     <div className="ky-pro-home-stats"><strong>{allowed.length} modül</strong><span>·</span><strong>{fullCount} işlem</strong><span>·</span><span>Tek telefon uygulaması</span></div>
    </section>
+   <section className="ky-pro-active-company" aria-label="Aktif firma seçimi">
+     <label htmlFor="ky-pro-company-select">Aktif Firma</label>
+     {companies.length>1?<select id="ky-pro-company-select" value={activeCompanySlug} onChange={e=>setActiveCompanySlug(e.target.value)}>
+       {companies.map(company=><option key={company.slug} value={company.slug}>{company.name}</option>)}
+     </select>:<strong>{activeCompany?.name||"Yetkili firma yükleniyor"}</strong>}
+     <small>{companies.length>1?"Seçim ERP modülleriyle ortak; yalnız yetkili firmalar listelenir.":"Bu hesabın yetkili firma kapsamı."}</small>
+   </section>
    <div className="ky-pro-home-tools">
     <button type="button" onClick={onSecurity}><ShieldCheck size={22}/><span><b>Güvenlik Onayları</b><small>Giriş, cihaz, oturum ve kod</small></span><ChevronRight size={17}/></button>
-    <button type="button" onClick={()=>{const m=allowed.find(x=>x.key==="muhasebe");const t=m&&getModuleTabs(m)[0];if(m&&t)goModule(m.key,t[0])}}><ChartNoAxesCombined size={22}/><span><b>Genel Yönetim</b><small>Muhasebe ve operasyon</small></span><ChevronRight size={17}/></button>
+    <button type="button" onClick={()=>{const m=allowed.find(x=>x.key==="muhasebe");const t=m&&getModuleTabs(m)[0];if(m&&t)goModule(m.key,t[0])}}><ChartNoAxesCombined size={22}/><span><b>ERP Çalışma Alanı</b><small>Bu uygulamada muhasebe ve operasyon</small></span><ChevronRight size={17}/></button>
    </div>
    <div className="ky-pro-home-title"><div><span>TÜM ERİŞİLEBİLİR MODÜLLER</span><h2>Çalışma Alanları</h2></div><LayoutGrid size={20}/></div>
    <label className="ky-pro-search ky-pro-home-search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Modül ara..." aria-label="Modüllerde ara"/></label>
    <div className="ky-pro-home-modules">{visible.map((m,index)=>{
-     const tabs=getModuleTabs(m),first=tabs[0];return <button key={m.key} type="button" style={{"--pro-card-shade":index%5}} onClick={()=>first&&goModule(m.key,first[0])}>
+     const tabs=getVisibleModuleTabs(m),first=tabs[0];return <button key={m.key} type="button" style={{"--pro-card-shade":index%5}} onClick={()=>first&&goModule(m.key,first[0])}>
        <span className="ky-pro-home-module-icon"><LayoutGrid size={22}/></span><span><b>{m.label}</b><small>{tabs.length} gerçek ERP işlemi</small></span><ChevronRight size={18}/>
      </button>;
    })}</div>
@@ -118,7 +127,7 @@ function ProWorkspaceToolbar(){
  const moduleKey=rawModule?decodeURIComponent(rawModule):"";
  const tabKey=rawTab?decodeURIComponent(rawTab):"";
  const module=allowed.find(item=>item.key===moduleKey);
- const tabs=module?getModuleTabs(module).filter(tab=>Array.isArray(tab)&&tab[0]):[];
+ const tabs=module?getVisibleModuleTabs(module).filter(tab=>Array.isArray(tab)&&tab[0]):[];
  const currentTab=tabs.find(tab=>tab[0]===tabKey)||tabs[0];
  if(!module||!currentTab)return null;
  return <nav className="ky-pro-module-context" data-module={module.key} aria-label="Mobil modül sekmeleri">
@@ -132,7 +141,7 @@ function ProWorkspaceToolbar(){
  </nav>;
 }
 
-function ProDock({onSecurity,securityActive,onHomeSelected}){
+function ProDock({onSecurity,securityActive,securityPending,onHomeSelected}){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
  const [currentPath,setCurrentPath]=useState(location.pathname);
@@ -160,7 +169,7 @@ function ProDock({onSecurity,securityActive,onHomeSelected}){
     <button type="button" className="ky-pro-header-action" onClick={security}><ShieldCheck size={18}/>Güvenlik</button></header>
    <nav className="ky-pro-dock" aria-label="KY ERP PRO telefon gezinmesi">
      <button type="button" onClick={onHome}><House size={23}/><span>Ana Sayfa</span></button>
-     <button type="button" className={securityActive?"is-active":""} onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span></button>
+     <button type="button" className={securityActive?"is-active":""} onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span>{securityPending?<i className="ky-pro-security-wake" aria-label="Yeni güvenlik bildirimi">Yeni</i>:null}</button>
      <button type="button" className="ky-pro-dock-main" onClick={()=>setMenuOpen(true)} aria-haspopup="dialog"><LayoutGrid size={24}/><span>Modüller</span></button>
      <button type="button" className={isAnalytic?"is-active":""} onClick={onAnalysis}><ChartNoAxesCombined size={23}/><span>Analiz</span></button>
      <button type="button" onClick={()=>setMenuOpen(true)}><UserRound size={23}/><span>Menü</span></button>
@@ -169,10 +178,13 @@ function ProDock({onSecurity,securityActive,onHomeSelected}){
    <div className="ky-pro-sr-only" role="status" aria-live="polite">İşlemler mevcut KY ERP rol ve firma yetkileriyle korunur.</div>
  </>;
 }
-function ProApplication(){
+function ProApplication(){return <ActiveCompanyProvider><ProApplicationContent/></ActiveCompanyProvider>}
+function ProApplicationContent(){
  const {user,isAuthenticated,loading}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
  const [securityOpen,setSecurityOpen]=useState(()=>new URLSearchParams(location.search).get("security")==="1");
+ const [securityWakePending,setSecurityWakePending]=useState(false);
+ const openSecurity=useCallback(()=>{setSecurityWakePending(false);setSecurityOpen(true)},[]);
  const [loginRequested,setLoginRequested]=useState(false);
  const [loginEverOpened,setLoginEverOpened]=useState(false);
  const wasAuthenticated=useRef(isAuthenticated);
@@ -188,7 +200,7 @@ function ProApplication(){
  useEffect(()=>{if(!home)setWorkspaceMounted(true)},[home]);
  useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  useEffect(()=>{
-   const onPush=(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")setSecurityOpen(true)};
+   const onPush=(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")setSecurityWakePending(true)};
    navigator.serviceWorker?.addEventListener?.("message",onPush);
    if(location.search.includes("security=1"))history.replaceState(history.state,"",location.pathname);
    return()=>navigator.serviceWorker?.removeEventListener?.("message",onPush);
@@ -206,7 +218,7 @@ function ProApplication(){
     <button type="button" className={loginRequested?"is-active":""} onClick={()=>setLoginRequested(true)}><House size={24}/><span>ERP'ye Giriş</span></button>
    </nav>
   </div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||home}><ProWorkspaceToolbar/></div>:null}{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={openSecurity}/></div>{workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||home}><ProWorkspaceToolbar/></div>:null}{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={openSecurity} securityActive={securityOpen} securityPending={securityWakePending} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();

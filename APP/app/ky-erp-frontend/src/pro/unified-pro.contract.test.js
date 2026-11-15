@@ -61,3 +61,31 @@ test("owner and restricted company roles use canonical module RBAC and no client
  assert.match(read("src/context/AuthContext.jsx"),/MODULE_KEYS/);
  assert.match(read("src/AppV3.jsx"),/visibleModules/);
 });
+
+test("KY ERP PRO signed critical approvals stay on the trusted phone",()=>{
+ const client=read("src/pro/SecurityCenter.jsx");
+ const signer=read("src/pro/securityDevice.js");
+ assert.match(client,/auth\/security-actions\/device\/pending/);
+ assert.match(client,/decideTrustedSecurityAction/);
+ assert.match(client,/PIN ile Onayla/);
+ assert.match(signer,/KYERP-DECISION-V1/);
+ assert.match(signer,/SECURITY_ACTION/);
+ assert.match(signer,/criticalRoute/);
+ assert.doesNotMatch(signer,/localStorage\.setItem/);
+});
+test("KY ERP PRO shares the company selector with canonical workspace",()=>{
+ const main=read("src/pro/main.jsx");
+ assert.match(main,/<ActiveCompanyProvider><ProApplicationContent\/><\/ActiveCompanyProvider>/);
+ assert.match(main,/getVisibleModuleTabs/);
+ assert.match(main,/setActiveCompanySlug/);
+ assert.match(main,/history\.pushState/);
+});
+
+test("push notifications never navigate away from an in-progress ERP form",()=>{
+ const main=read("src/pro/main.jsx");
+ const center=read("src/pro/SecurityCenter.jsx");
+ assert.match(main,/setSecurityWakePending\(true\)/);
+ assert.match(main,/securityPending=\{securityWakePending\}/);
+ assert.match(center,/KYERP_SECURITY_PUSH_WAKE/);
+ assert.doesNotMatch(main,/const onPush=\(event\)=>\{if\(event\.data\?\.type==="KYERP_SECURITY_PUSH_WAKE"\)setSecurityOpen\(true\)/);
+});

@@ -31,7 +31,9 @@ async function saveTrustedDevice(record){
   })}finally{db.close()}
 }
 export async function getSignedSecurityResponse(path,{method="GET",body}={}){
-  if(!/^\/auth\/push\/device\/[a-z0-9/%-]+(?:\?[a-z0-9&=%._-]+)?$/.test(path))throw new Error("Güvenlik API yolu geçersiz.");
+  const pushRoute=/^\/auth\/push\/device\/[a-z0-9/%-]+(?:\?[a-z0-9&=%._-]+)?$/;
+  const criticalRoute=/^\/auth\/security-actions\/device\/(?:pending|decision)$/;
+  if(!pushRoute.test(path)&&!criticalRoute.test(path))throw new Error("Güvenlik API yolu geçersiz.");
   const device=await getTrustedDevice();
   if(!device?.deviceId||!device?.deviceToken||!device?.signingPrivateKey)throw new Error("Bu telefonda güvenilir KY Güvenlik cihaz kaydı bulunamadı.");
   const verb=method.toUpperCase(),now=String(Date.now());
@@ -90,6 +92,18 @@ export async function decideTrustedApproval(item,decision,matchNumber=""){
   const signature=toB64Url(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},
     device.signingPrivateKey,new TextEncoder().encode(payload)));
   return getSignedSecurityResponse("/auth/push/device/decision",{method:"POST",body:{kind,id,decision:choice,matchNumber:match,signature}});
+}
+
+/** The existing server checks this same-device ECDSA signature and one-time action state. */
+export async function decideTrustedSecurityAction(item,decision){
+  const choice=String(decision||"").toUpperCase();
+  const id=String(item?.id||"").trim();
+  if(!id||!["APPROVED","DENIED"].includes(choice))throw new Error("Kritik güvenlik kararı geçersiz.");
+  const device=await unlockTrustedDevice();
+  if(!device?.deviceId||!device?.signingPrivateKey)throw new Error("Güvenilir cihaz imza anahtarı bulunamadı.");
+  const message=new TextEncoder().encode("KYERP-DECISION-V1|"+device.deviceId+"|SECURITY_ACTION|"+id+"|"+choice);
+  const signature=toB64Url(await crypto.subtle.sign({name:"ECDSA",hash:"SHA-256"},device.signingPrivateKey,message));
+  return getSignedSecurityResponse("/auth/security-actions/device/decision",{method:"POST",body:{id,decision:choice,signature}});
 }
 
 export async function closeTrustedSession(session){

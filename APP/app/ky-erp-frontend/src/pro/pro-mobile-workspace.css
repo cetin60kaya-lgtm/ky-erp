@@ -153,3 +153,13 @@
  .ky-pro-app .dsg-filter-grid > .dsg-filter-disclosure > .dsg-filter-extra{display:grid!important}
  .ky-pro-app .dsg-filter-grid > .dsg-filter-disclosure:not([open]) > .dsg-filter-extra{display:none!important}
 }
+
+/* Unified KY ERP PRO company selector and critical-action status. */
+.ky-pro-active-company{display:grid;gap:7px;margin:12px 0;padding:14px;border:1px solid #cbd9e7;border-radius:15px;background:#fff;color:#1e293b}
+.ky-pro-active-company label{font-size:11px;font-weight:800;letter-spacing:.04em;color:#475569}
+.ky-pro-active-company select,.ky-pro-active-company strong{min-height:43px;width:100%;box-sizing:border-box;border:1px solid #cbd9e7;border-radius:9px;padding:10px 12px;background:#f8fafc;font-size:15px;color:#0f172a;font-weight:750}
+.ky-pro-active-company small{font-size:11px;color:#64748b;line-height:1.5}
+.ky-pro-critical-label{display:block;font-size:10px;color:#b45309;letter-spacing:.07em;font-weight:800}
+
+/* A new push never steals an in-progress ERP form; show an actionable indicator. */
+.ky-pro-security-wake{display:inline-flex;align-items:center;justify-content:center;min-width:26px;padding:1px 5px;font-style:normal;font-size:9px;line-height:1.3;border-radius:999px;background:#fef3c7;color:#92400e;font-weight:850}
