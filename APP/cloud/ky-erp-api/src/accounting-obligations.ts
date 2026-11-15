@@ -79,6 +79,34 @@ const SETTLEMENT = "MUHASEBE_OBLIGATION_STATUS_V1";
 const REMINDERS = "MUHASEBE_REMINDER_RULE_V1";
 
 export function registerAccountingObligationsRoutes(app: Hono<Env>) {
+  app.get("/api/boyahane/chemical-document-link/:productId/:assetId", async c => {
+    const auth = await contextOf(c);
+    if (auth.error) return auth.error;
+    const slug = auth.slug!;
+    const productId = text(c.req.param("productId"));
+    const assetId = text(c.req.param("assetId"));
+    if (!productId || !assetId) return c.json(fail("INVALID_DOCUMENT", "Ürün ve PDF kimliği zorunludur."), 400);
+    const found = await c.env.DB.prepare(`
+      SELECT a.id, a.extension, a.mime_type, a.status, l.provider_file_id,
+             l.is_available, co.provider_type
+      FROM file_hub_assets a
+      JOIN file_hub_relations r ON r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug
+      JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY'
+      JOIN file_hub_connections co ON co.id=l.storage_connection_id AND co.main_company_slug=a.main_company_slug
+      WHERE a.main_company_slug=? AND a.id=? AND r.entity_type='BOYAHANE_PRODUCT' AND r.entity_id=?
+      LIMIT 1
+    `).bind(slug, assetId, productId).first<Row>();
+    if (!found || text(found.status).toUpperCase() === "MISSING" || Number(found.is_available) !== 1 ||
+        (text(found.mime_type) !== "application/pdf" && text(found.extension).toUpperCase() !== "PDF")) {
+      return c.json(fail("PDF_UNAVAILABLE", "Bu ürünle ilişkilendirilmiş erişilebilir PDF bulunamadı."), 404);
+    }
+    const providerId = text(found.provider_file_id);
+    if (text(found.provider_type) !== "GOOGLE_DRIVE" || !/^[A-Za-z0-9_-]{15,}$/.test(providerId)) {
+      return c.json({ok:true,data:{url:null,provider:text(found.provider_type),status:"PROVIDER_LINK_UNAVAILABLE"}});
+    }
+    return c.json({ok:true,data:{url:"https://drive.google.com/file/d/"+encodeURIComponent(providerId)+"/view",provider:"GOOGLE_DRIVE",status:"AVAILABLE"}});
+  });
+
   app.get("/api/muhasebe/obligations/overview", async c => {
     const auth = await contextOf(c); if (auth.error) return auth.error;
     const slug = auth.slug!;
