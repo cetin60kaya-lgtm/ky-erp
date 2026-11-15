@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {CheckCircle2,ChevronLeft,ChevronRight,FileCode2,FolderOpen,Layers3,Plus,RefreshCw,Search,ShieldCheck,Trash2,Building2,AlertTriangle,LockKeyhole} from "lucide-react";
 import {getCompanyEBelgeAdapters,setCompanyEBelgeAdapter} from "../../../services/eBelgeAdapterApi";
 import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
@@ -22,32 +22,43 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const [error,setError]=useState("");
  const [notice,setNotice]=useState("");
  const [loading,setLoading]=useState(true);
+ const requestSeq=useRef(0);
  const load=useCallback(async()=>{
-  if(!tenant){setData({systemCatalog:[],companyAdapters:[]});setLoading(false);return}
+  const seq=++requestSeq.current;
+  setData({mainCompanySlug:tenant,systemCatalog:[],companyAdapters:[]});
+  if(!tenant){setLoading(false);return}
   setLoading(true);setError("");
   try{
    const result=await getCompanyEBelgeAdapters(owner);
-   setData({systemCatalog:result.systemCatalog||[],companyAdapters:result.companyAdapters||[]});
-  }catch(e){setError(e?.message||"Firmanın adaptörleri alınamadı.")}
-  finally{setLoading(false)}
+   if(seq!==requestSeq.current)return;
+   if(String(result.mainCompanySlug||"").toLowerCase()!==String(tenant).toLowerCase())
+    throw new Error("Firma adaptör yanıtının şirket kapsamı eşleşmiyor.");
+   setData({mainCompanySlug:tenant,systemCatalog:result.systemCatalog||[],companyAdapters:result.companyAdapters||[]});
+  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firmanın adaptörleri alınamadı.")}
+  finally{if(seq===requestSeq.current)setLoading(false)}
  },[tenant,owner]);
- useEffect(()=>{setSelected("");setShowCatalog(false);setQuery("");setNotice("");void load()},[load]);
- const enabled=useMemo(()=>new Set(data.companyAdapters.filter(x=>x.selected).map(x=>x.key)),[data.companyAdapters]);
- const installed=data.systemCatalog.filter(x=>enabled.has(x.key));
- const available=data.systemCatalog.filter(x=>!enabled.has(x.key)&&String(x.label+" "+x.description).toLocaleLowerCase("tr-TR").includes(query.toLocaleLowerCase("tr-TR")));
+ useEffect(()=>{setSelected("");setShowCatalog(false);setQuery("");setNotice("");setBusy("");void load()},[load]);
+ const visibleData=data.mainCompanySlug===tenant?data:{systemCatalog:[],companyAdapters:[]};
+ const enabled=useMemo(()=>new Set(visibleData.companyAdapters.filter(x=>x.selected).map(x=>x.key)),[visibleData.companyAdapters]);
+ const installed=visibleData.systemCatalog.filter(x=>enabled.has(x.key));
+ const available=visibleData.systemCatalog.filter(x=>!enabled.has(x.key)&&String(x.label+" "+x.description).toLocaleLowerCase("tr-TR").includes(query.toLocaleLowerCase("tr-TR")));
  const change=async(adapter,add)=>{
+  const seq=++requestSeq.current,operationTenant=tenant;
   setBusy(adapter.key);setError("");setNotice("");
   try{
    await setCompanyEBelgeAdapter(owner,adapter.key,add);
    const next=await getCompanyEBelgeAdapters(owner);
-   setData({systemCatalog:next.systemCatalog||[],companyAdapters:next.companyAdapters||[]});
+   if(seq!==requestSeq.current)return;
+   if(String(next.mainCompanySlug||"").toLowerCase()!==String(operationTenant).toLowerCase())
+    throw new Error("Adaptör güncellemesinin firma kapsamı eşleşmiyor.");
+   setData({mainCompanySlug:operationTenant,systemCatalog:next.systemCatalog||[],companyAdapters:next.companyAdapters||[]});
    if(!add&&selected===adapter.key)setSelected("");
    if(add){setShowCatalog(false);setSelected(adapter.key)}
    setNotice(add?"Adaptör firma listesine eklendi; gerçek bağlantısı ayrıca doğrulanacaktır.":"Adaptör yalnız firmanın seçim listesinden çıkarıldı. Belgeler ve ayarlar korunur.");
-  }catch(e){setError(e?.message||"Firma adaptör seçimi güncellenemedi.")}
-  finally{setBusy("")}
+  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firma adaptör seçimi güncellenemedi.")}
+  finally{if(seq===requestSeq.current)setBusy("")}
  };
- const active=data.systemCatalog.find(x=>x.key===selected&&enabled.has(x.key));
+ const active=visibleData.systemCatalog.find(x=>x.key===selected&&enabled.has(x.key));
  const status=(adapter)=>installedStatus(adapter,providerStatuses.find(x=>String(x.key).toUpperCase()===adapter.key));
  if(!tenant)return <div className="eam-alert">Önce ana firma seçin.</div>;
  return <main className="eam">
@@ -72,8 +83,8 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
   </> : <>
    <section className="eam-section">
     <div className="eam-section-title"><div><h3>Bu Firmanın Adaptörleri</h3><p>Yalnız bu firma için ekledikleriniz görünür. Birine tıklayınca kendi ayarları açılır.</p></div>
-     <button className="eam-main-button" type="button" onClick={()=>{setShowCatalog(x=>!x);setQuery("")}}><Plus size={16}/>{showCatalog?"Kataloğu Kapat":"Adaptör Ekle"}</button></div>
-    {loading?<div className="eam-empty">Adaptörler yükleniyor...</div>:installed.length===0?
+     <button className="eam-main-button" type="button" disabled={Boolean(busy)||loading||Boolean(error)} onClick={()=>{setShowCatalog(x=>!x);setQuery("")}}><Plus size={16}/>{showCatalog?"Kataloğu Kapat":"Adaptör Ekle"}</button></div>
+    {loading?<div className="eam-empty">Adaptörler yükleniyor...</div>:error?<div className="eam-empty">Firma adaptörleri yüklenemedi. Yenile düğmesiyle tekrar deneyin.</div>:installed.length===0?
      <div className="eam-empty"><Layers3 size={25}/><strong>Henüz adaptör seçilmemiş.</strong><p>İhtiyacınız olanları sistem kataloğundan ekleyin.</p></div>:
      <div className="eam-list">{installed.map(adapter=>{
       const Icon=ICONS[adapter.key]||Layers3;
