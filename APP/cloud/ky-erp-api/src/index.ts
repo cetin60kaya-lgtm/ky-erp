@@ -1810,6 +1810,17 @@ app.get("/api/muhasebe/accounting/fixed-expenses", async (c) => {
 });
 app.post("/api/muhasebe/accounting/fixed-expenses", async (c) => {
   const body = await requestBody(c);
+  if (body.recurring === true) {
+    const startMonth = databaseText(body.startMonth);
+    const endMonth = databaseText(body.endMonth);
+    const amount = Number(body.amount);
+    const monthRe = /^\d{4}-(0[1-9]|1[0-2])$/;
+    const monthsBetween = (a: string, b: string) =>
+      (Number(b.slice(0, 4)) - Number(a.slice(0, 4))) * 12 + Number(b.slice(5)) - Number(a.slice(5)) + 1;
+    if (!monthRe.test(startMonth) || !monthRe.test(endMonth) || endMonth < startMonth || monthsBetween(startMonth, endMonth) > 120 || !Number.isFinite(amount) || amount <= 0 || Math.abs(Math.round(amount * 100) - amount * 100) > 1e-7) {
+      return c.json(jsonError("INVALID_MONTHLY_PLAN", "Aylık gider planı için geçerli ay aralığı ve pozitif tutar zorunludur."), 400);
+    }
+  }
   const id = databaseText(body.id || crypto.randomUUID());
   const data = await jsonStorePut(c, "MUHASEBE_FIXED_EXPENSE", id, {
     ...body,

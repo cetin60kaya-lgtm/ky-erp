@@ -3,6 +3,7 @@ import { CirclePlus, RefreshCcw, Search, X } from "lucide-react";
 import { apiGet, apiPost } from "../../../utils/api";
 import "./profitLossWorkspace.css";
 import { reviewExpense } from "./expenseReview";
+import { monthlyPeriods, nextMonth, totalMinor, validateMonthlyPlan } from "./monthlyObligations";
 
 const CATEGORIES = [
   "Boya",
@@ -15,6 +16,15 @@ const CATEGORIES = [
   "Personel",
   "Yemek",
   "Kira",
+  "İSG / İş Güvenliği",
+  "SGK / Personel",
+  "Doğalgaz",
+  "Bakım / Servis",
+  "Temizlik",
+  "Sigorta",
+  "Yazılım / Lisans",
+  "Aidat",
+  "Ek Giderler",
   "Elektrik",
   "Su",
   "İnternet",
@@ -56,6 +66,8 @@ function emptyForm() {
     recordType: "RESMI",
     description: "",
     recurring: false,
+    startMonth: new Date().toISOString().slice(0,7),
+    endMonth: nextMonth(new Date().toISOString().slice(0,7),11),
   };
 }
 
@@ -134,10 +146,14 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
 
   const summary = state.data?.summary || {};
   const templates = Array.isArray(state.data?.fixedExpenseTemplates) ? state.data.fixedExpenseTemplates : [];
+  const plannedRows = useMemo(() => monthlyPeriods(form), [form]);
+  const plannedTotal = totalMinor(plannedRows) / 100;
 
   const requestExpenseSave = () => {
     if (saving || savingLock.current) return;
     const review = reviewExpense(form, params);
+    const monthlyError = form.recurring ? validateMonthlyPlan(form) : "";
+    if (monthlyError) { setNotice(monthlyError); return; }
     if (review.error) { setNotice(review.error); return; }
     setNotice("");
     setPendingExpense(review);
@@ -156,7 +172,7 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
           name: review.payload.description || review.payload.category,
           active: true,
         });
-        setNotice("Sabit gider şablonu kaydedildi. Şablon tek başına muhasebe toplamına yazılmaz.");
+        setNotice("Aylık plan kaydedildi. Bu plan kesin gider, cari borç veya ödendi kaydı oluşturmaz.");
       } else {
         await apiPost("/muhasebe/accounting/manual-expenses", review.payload);
         setNotice("Gider kaydı döneme işlendi.");
@@ -264,7 +280,7 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
         <div>
           {templates.length ? templates.map((item) => (
             <article key={item.id || item.fileName}>
-              <div><strong>{item.name || item.category || "Sabit gider"}</strong><span>{item.category || "Diğer"}</span></div>
+              <div><strong>{item.name || item.category || "Sabit gider"}</strong><span>{item.category || "Diğer"} · {item.startMonth && item.endMonth ? `${item.startMonth} – ${item.endMonth}` : "Eski şablon / dönem tanımsız"}</span></div>
               <strong>{money(item.amount)}</strong>
             </article>
           )) : <div className="plw-template-empty">Sabit gider şablonu tanımlanmamış.</div>}
@@ -286,15 +302,19 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
               <label>KDV<input type="number" min="0" step="0.01" value={form.vatAmount} onChange={(event) => setForm((current) => ({ ...current, vatAmount: event.target.value }))} /></label>
               <label>Kayıt türü<select value={form.recordType} onChange={(event) => setForm((current) => ({ ...current, recordType: event.target.value }))}><option value="RESMI">Resmî</option><option value="GAYRI_RESMI">Gayri resmî</option></select></label>
               <label className="wide">Not<textarea rows="4" value={form.description} onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))} /></label>
-              <label className="plw-checkbox wide"><input type="checkbox" checked={form.recurring} onChange={(event) => setForm((current) => ({ ...current, recurring: event.target.checked }))} /> Bunu sabit gider şablonu olarak kaydet</label>
-              <div className="plw-form-note wide">Sabit gider şablonu yalnız tanım oluşturur; gerçek döneme yazılması için ayrıca gider kaydı gerekir.</div>
+              <label className="plw-checkbox wide"><input type="checkbox" checked={form.recurring} onChange={(event) => setForm((current) => ({ ...current, recurring: event.target.checked }))} /> Aylık sabit gider planı olarak kaydet</label>
+              {form.recurring ? <>
+                <label>Başlangıç ayı<input type="month" value={form.startMonth} onChange={(event) => setForm((current) => ({ ...current, startMonth: event.target.value }))}/></label>
+                <label>Bitiş ayı<input type="month" value={form.endMonth} onChange={(event) => setForm((current) => ({ ...current, endMonth: event.target.value }))}/></label>
+                <div className="plw-form-note wide" role="status">{validateMonthlyPlan(form) || `${plannedRows.length} ay · toplam plan ${money(plannedTotal)}`}. Ay bazında plan; ödeme ve tahakkuk ayrı kaydedilir.</div>
+              </> : <div className="plw-form-note wide">Bu işlem tek dönemlik gider kaydı oluşturur.</div>}
             </fieldset>
             {pendingExpense ? <section className="plw-expense-confirm" aria-label="Gider kayıt önizlemesi" role="status">
               <h3>Kaydı Onayla</h3>
-              <p><strong>{pendingExpense.templateOnly ? "Yalnız sabit gider şablonu" : "Gerçek gider kaydı"}</strong> oluşturulacak. {pendingExpense.templateOnly ? "Bu işlem henüz muhasebe giderine yazılmaz." : "Bu işlem muhasebe dönemine kayıt oluşturur."}</p>
+              <p><strong>{pendingExpense.templateOnly ? "Aylık sabit gider planı" : "Gerçek gider kaydı"}</strong> oluşturulacak. {pendingExpense.templateOnly ? `${plannedRows.length} ay, toplam ${money(plannedTotal)}. Plan ödenmiş sayılmaz ve kesin muhasebe gideri oluşturmaz.` : "Bu işlem muhasebe dönemine kayıt oluşturur."}</p>
               <dl>
                 <div><dt>Firma / Açıklama</dt><dd>{pendingExpense.name}</dd></div>
-                <div><dt>Tarih / Kategori</dt><dd>{pendingExpense.payload.date} · {pendingExpense.payload.category}</dd></div>
+                <div><dt>Tarih / Kategori</dt><dd>{pendingExpense.templateOnly ? `${form.startMonth} – ${form.endMonth}` : pendingExpense.payload.date} · {pendingExpense.payload.category}</dd></div>
                 <div><dt>Tutar / KDV</dt><dd>{money(pendingExpense.payload.amount)} · {money(pendingExpense.payload.vatAmount)}</dd></div>
                 <div><dt>Kayıt türü</dt><dd>{pendingExpense.payload.recordType === "RESMI" ? "Resmî" : "Gayri resmî"}</dd></div>
               </dl>
