@@ -1,4 +1,4 @@
-import {getEBELGEAdapter} from "./e-belge-adapter-registry";
+import {getEBELGEAdapter} from "./e-belge-adapter-registry.ts";
 
 export type AdapterProfile={
  key:string;displayName:string;serviceUrl:string;defaultDays:number;
