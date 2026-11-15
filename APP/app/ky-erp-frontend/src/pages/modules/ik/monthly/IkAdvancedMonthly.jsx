@@ -455,6 +455,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
   const [monthlySetup, setMonthlySetup] = useState(null);
   const [autoSetupPending, setAutoSetupPending] = useState(false);
+  const startMonthlyPayrollSetupRef = useRef(null);
   const documentInput = useRef(null);
   const payrollInput = useRef(null);
   const period = `${year}-${String(month).padStart(2, "0")}`;
@@ -1451,12 +1452,13 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setModal("yillik");
   };
 
-  const startMonthlyPayrollSetup = async () => {
+  const startMonthlyPayrollSetup = () => {
     if (data.close?.isLocked) return setNotice("Ay kilitli. Sıralı kontrol yalnız açık dönemde çalışır.");
     if (!periodPrepared) {
       setAutoSetupPending(true);
-      const prepared = await preparePeriod();
-      if (!prepared) setAutoSetupPending(false);
+      preparePeriod().then((prepared) => {
+        if (!prepared) setAutoSetupPending(false);
+      });
       return;
     }
     if (!payrollReady) return setNotice("Ortak bordro verisi henüz yüklenmedi; sayfayı yenileyip tekrar deneyin.");
@@ -1471,6 +1473,10 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   // A new month is prepared at the server first, then the one-person review
   // opens after the canonical payroll projection has actually reloaded.
   useEffect(() => {
+    startMonthlyPayrollSetupRef.current = startMonthlyPayrollSetup;
+  });
+
+  useEffect(() => {
     if (!autoSetupPending || busy) return;
     if (periodCheckFailed || (periodPrepared && !payrollReady)) {
       setAutoSetupPending(false);
@@ -1479,9 +1485,9 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     }
     if (periodPrepared && payrollReady) {
       setAutoSetupPending(false);
-      startMonthlyPayrollSetup();
+      startMonthlyPayrollSetupRef.current?.();
     }
-  }, [autoSetupPending, busy, periodCheckFailed, periodPrepared, payrollReady, startMonthlyPayrollSetup]);
+  }, [autoSetupPending, busy, periodCheckFailed, periodPrepared, payrollReady]);
 
   const openPayroll = (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
     if (!row) return setNotice("Personel seçilmeden son bordro kontrolü açılamaz.");
