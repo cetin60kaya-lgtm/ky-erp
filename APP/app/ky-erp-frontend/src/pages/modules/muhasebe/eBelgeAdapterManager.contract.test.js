@@ -32,3 +32,15 @@ test("Firma geçişi sırasında eski istek ekranı güncellemez ve liste önbel
  assert.match(ui,/Firma adaptörleri yüklenemedi/);
  assert.match(client,/forceFresh:true/);
 });
+
+test("Adaptör seçimi, etkin/pasif ve kaldırma ayrı güvenli işlemler olarak gösterilir",()=>{
+ assert.match(ui,/Bu Firmanın Adaptörleri/);
+ assert.match(ui,/Sistem Adaptör Kataloğu/);
+ assert.match(ui,/enabled===false/);
+ assert.match(ui,/Etkinleştir/);
+ assert.match(ui,/Pasife Al/);
+ assert.match(ui,/Listeden Çıkar/);
+ assert.match(ui,/İşNet'i Ekle/);
+ assert.match(ui,/setCompanyEBelgeAdapter\(owner,adapter.key,add,activate\)/);
+ assert.match(parent,/view !== "integrations"/);
+});
