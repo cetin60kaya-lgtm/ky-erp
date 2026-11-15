@@ -1000,6 +1000,18 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
   app.post("/api/isnet/full-sync", async (c) => {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
+    // A paused/removed company adapter may not launch a provider synchronization.
+    // A tenant without a selection row keeps its legacy connection until onboarded.
+    const adapterRow = await c.env.DB.prepare(
+      "SELECT data FROM json_store WHERE scope='EBELGE_TENANT_ADAPTER_SELECTION_V1' AND main_company_slug=? AND file_name='ISNET' "+
+      "ORDER BY CASE WHEN id LIKE 'EBELGE_ADAPTER_SELECTION_V1:%' THEN 0 ELSE 1 END,updated_at DESC,id DESC LIMIT 1"
+    ).bind(slug).first<Row>();
+    if(adapterRow){
+      let adapterState:Row={};
+      try{adapterState=JSON.parse(text(adapterRow.data))}catch{adapterState={selected:false}}
+      if(adapterState?.selected!==true||adapterState?.enabled===false)
+        return c.json(err("ISNET_ADAPTER_INACTIVE","İşNet adaptörü bu firma için pasif veya listeden kaldırılmış. Önce etkinleştirin."),409);
+    }
     const settings = (await storeGet(c, SETTINGS_SCOPE, slug, slug)) || {};
     const cookie = text(settings.portalCookie);
     const base = text(settings.portalBase) || PORTAL_BASES[0];
