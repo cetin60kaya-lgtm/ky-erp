@@ -23,3 +23,7 @@ export const testIsnetSettings = (payload) =>
 
 export const saveIsnetSettings = (payload) =>
   apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
+
+// Actual authenticated provider list probe; returns only first-page counts, never document content.
+export const getIsnetReadOnlyPreview = () =>
+  apiGet("/isnet/api-read-only-preview", {}, {timeoutMs:20000,forceFresh:true}).then(unwrap);
