@@ -418,3 +418,11 @@ span.warning {
 .ism-acceptance-results{display:flex;flex-wrap:wrap;gap:10px;border-top:1px solid #d7e4f1;padding-top:10px}
 .ism-acceptance-results p{width:100%;margin:0}
 .ism-acceptance-results span{font-size:12px;padding:7px 10px;border:1px solid #d7e4f1;border-radius:7px;background:white}
+
+/* Kayıtlı firma ile doğrulanmış canlı API oturumunu ayrı göster. */
+.ism-saved-company{display:flex;align-items:flex-start;gap:10px;margin:0 0 13px;padding:11px 13px;background:#eff8f2;border:1px solid #b7dfc2;border-radius:10px;color:#215f3c}
+.ism-saved-company>svg{flex:none;margin-top:2px}
+.ism-saved-company>div{display:grid;gap:4px;min-width:0}
+.ism-saved-company strong{font-size:13px;overflow-wrap:anywhere}
+.ism-saved-company span{font-size:11px;line-height:1.5;color:#47745a}
+.ism-saved-company small{font-size:10px;color:#627e6b}
