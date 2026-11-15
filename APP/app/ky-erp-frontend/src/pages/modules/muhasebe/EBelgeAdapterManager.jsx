@@ -40,6 +40,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
    if(String(result.mainCompanySlug||"").toLowerCase()!==String(tenant).toLowerCase())
     throw new Error("Firma adaptör yanıtının şirket kapsamı eşleşmiyor.");
    setData({mainCompanySlug:tenant,systemCatalog:result.systemCatalog||[],companyAdapters:result.companyAdapters||[]});
+   setSelected(current=>current||result.companyAdapters?.find(x=>x.key==="ISNET"&&x.selected)?.key||result.companyAdapters?.find(x=>x.selected)?.key||"");
   }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firmanın adaptörleri alınamadı.")}
   finally{if(seq===requestSeq.current)setLoading(false)}
  },[tenant,owner]);
@@ -113,7 +114,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
        </button>
        <div className="eam-item-tools">
         <button type="button" className={isActive?"eam-state-control active":"eam-state-control"} disabled={!canEdit} title={isActive?"Firma için pasife al":"Firma için etkinleştir"}
-         onClick={()=>void change(adapter,true,!isActive)}>{isActive?<PauseCircle size={14}/>:<PlayCircle size={14}/>} {isActive?"Etkin":"Pasif"}</button>
+         onClick={()=>void change(adapter,true,!isActive)}>{isActive?<PauseCircle size={14}/>:<PlayCircle size={14}/>} {isActive?"Pasife Al":"Etkinleştir"}</button>
         <button className="eam-remove" type="button" disabled={!canEdit} onClick={()=>setRemoveKey(removeKey===adapter.key?"":adapter.key)} title="Yalnız bu firmanın seçiminden kaldırır"><Trash2 size={14}/> Kaldır</button>
        </div>
        {removeKey===adapter.key&&<div className="eam-remove-confirm" role="group" aria-label="Adaptörü kaldırmayı onayla">
@@ -149,7 +150,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
      {active.key==="ISNET" ? <div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule}/></div> :
       active.key==="MANUAL" ? <div className="eam-detail-body">
        <div className="eam-instruction"><FileCode2 size={24}/><div><strong>Manuel XML / PDF Belge Havuzu</strong><p>UBL-TR XML asıl kaynaktır. PDF/JPEG/PNG yalnız sunum ve kontrol içindir. OCR hazır değilse belge kesin kayıt yapılmaz.</p></div></div>
-       <button className="eam-main-button" type="button" onClick={()=>openModule?.("e-belge",{tabKey:"belge-havuzu"})}><FolderOpen size={16}/> Belge Havuzunu Aç</button>
+       <button className="eam-main-button" type="button" disabled={choice(active.key)?.enabled===false} onClick={()=>openModule?.("e-belge",{tabKey:"belge-havuzu"})}><FolderOpen size={16}/> Belge Havuzunu Aç</button>
       </div>:
       <div className="eam-detail-body"><div className="eam-instruction"><LockKeyhole size={24}/><div><strong>Bağlayıcı motoru henüz hazır değil</strong><p>Logo, Mikro veya Paraşüt için sahte giriş ekranı ya da çalışıyor bilgisi verilmez. Gerçek sürücü geliştirilmeden yalnız katalog seçimi yapılabilir.</p></div></div><div className="eam-planned"><span>Sağlayıcı oturumu <b>Bekliyor</b></span><span>XML sorgu / indirme <b>Bekliyor</b></span></div></div>}
     </>:
