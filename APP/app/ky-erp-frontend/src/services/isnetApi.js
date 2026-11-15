@@ -6,7 +6,7 @@ function unwrap(payload) {
     : payload;
 }
 
-export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
+export const getIsnetSettings = () => apiGet("/isnet/settings", {}, {forceFresh:true}).then(unwrap);
 
 export const getIsnetPortalHealth = () =>
   apiGet("/isnet/provider-login-health", { timeoutMs: 14_000 }).then(unwrap);
