@@ -34,6 +34,8 @@ import {
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
 import EBelgeAccountingPrint from "./EBelgeAccountingPrint";
+import EBelgeManualFallback from "./EBelgeManualFallback";
+import {eBelgeFileKey,splitEBelgeUploadQueue} from "./eBelgeUploadQueue";
 import {parseUblForVisualOutput,renderUblOutput} from "./visualUblOutput";
 import VisualProfileStudio from "./VisualProfileStudio";
 import EBelgeAdapterManager from "./EBelgeAdapterManager";
@@ -141,54 +143,69 @@ function UploadPanel({ onUploaded }) {
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState("success");
   const [uploadErrors, setUploadErrors] = useState([]);
+  const [manualFileKey,setManualFileKey]=useState("");
+  const [progress,setProgress]=useState("");
 
-  const addFiles = (list) => {
-    const selected = Array.from(list || []);
-    const next = selected.filter((file) => /\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name) && file.size <= 20 * 1024 * 1024);
-    // Keep one entry per original file, even after drag/drop plus file-picker.
-    setFiles((current) => [...new Map([...current, ...next].map((file) =>
-      [`${file.name}|${file.size}|${file.lastModified}`, file])).values()].slice(0, 20));
+  const addFiles=(list)=>{
+    if(busy)return;
+    const selected=Array.from(list||[]);
+    const next=selected.filter(file=>/\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name)&&file.size<=20*1024*1024);
+    setFiles(old=>[...new Map([...old,...next].map(file=>[eBelgeFileKey(file),file])).values()]);
     setUploadErrors([]);
-    if (next.length !== selected.length) {
-      setTone("warning");
-      setMessage("Desteklenmeyen veya 20 MB'ı aşan dosyalar listeye eklenmedi. XML/PDF ve desteklenen görselleri seçin.");
-    } else {
-      setMessage("");
-    }
+    if(next.length!==selected.length){setTone("warning");setMessage("Desteklenmeyen veya 20 MB dosya sınırını aşan dosyalar eklenmedi.")}
+    else setMessage("");
   };
-
-  const send = async () => {
-    if (!files.length || busy) return;
-    setBusy(true);
-    setMessage("");
-    setTone("success");
-    try {
-      const selectedCount = files.length;
-      const result = await uploadEBelge(files);
-      const errors = Array.isArray(result?.errors) ? result.errors : [];
-      const failed = errors.length;
-      const accepted = Array.isArray(result?.items) ? result.items.length : Math.max(0, selectedCount - failed);
-      // A 207 means some original documents now exist in the live pool.
-      // Keep ONLY rejected files queued for inspection and safe retry.
-      const rejectedNames = new Set(errors.map((entry) => String(entry?.fileName || "")));
-      setFiles((current) => failed ? current.filter((file) => rejectedNames.has(file.name)) : []);
-      setUploadErrors(errors);
-      if (inputRef.current) inputRef.current.value = "";
-      if (failed) {
-        setTone("warning");
-        setMessage(`${accepted} dosya havuza alındı; ${failed} dosya alınamadı. Başarılı dosyaları yeniden yüklemeyin. Yalnız hata alan dosyalar seçili bırakıldı.`);
-      } else {
-        setMessage(`${accepted} dosya havuza alındı. Yeni kayıtlar artık Belge Havuzu'nda görünür; fatura–irsaliye eşleştirmesi yüklenen belgeler için otomatik kontrol edildi.`);
+  const send=async()=>{
+    if(!files.length||busy)return;
+    setBusy(true);setMessage("");setTone("success");setUploadErrors([]);setManualFileKey("");
+    const batches=splitEBelgeUploadQueue(files),acceptedItems=[],errors=[],failedFiles=[];
+    let index=0;
+    try{
+      for(const batch of batches){
+        setProgress(`Parti ${index+1}/${batches.length} · ${acceptedItems.length} belge alındı`);
+        let result;
+        try{result=await uploadEBelge(batch)}
+        catch(err){
+          // Transport failures have unknown outcomes; never auto-retry or drop affected files.
+          setFiles([...failedFiles,...batches.slice(index).flat()]);
+          setUploadErrors(errors);setTone("warning");
+          setMessage(`${acceptedItems.length} belge kabul edildi. Parti ${index+1} sonucu belirsiz: ${err?.message||"Sunucu yanıtı alınamadı"}. Tekrar göndermeden önce Belge Havuzu'nu kontrol edin.`);
+          if(acceptedItems.length)await onUploaded?.({items:acceptedItems,errors,total:files.length});
+          return;
+        }
+        const accepted=Array.isArray(result?.items)?result.items:[],rejected=Array.isArray(result?.errors)?result.errors:[];
+        if(accepted.length+rejected.length!==batch.length){
+          setFiles([...failedFiles,...batches.slice(index).flat()]);setTone("warning");
+          setMessage("Parti yanıtı eksik; aynı dosya otomatik yeniden gönderilmedi. Belge Havuzu'nu kontrol edin.");
+          if(acceptedItems.length)await onUploaded?.({items:acceptedItems,errors,total:files.length});
+          return;
+        }
+        acceptedItems.push(...accepted);errors.push(...rejected);
+        const counts=new Map();
+        rejected.forEach(row=>counts.set(String(row.fileName||""),(counts.get(String(row.fileName||""))||0)+1));
+        for(const file of batch){
+          const count=counts.get(file.name)||0;
+          if(count>0){failedFiles.push(file);counts.set(file.name,count-1);}
+        }
+        index+=1;
       }
-      await onUploaded?.(result);
-    } catch (error) {
-      setTone("error");
-      setUploadErrors([]);
-      setMessage((error?.message || "Belge yükleme tamamlanamadı.") +
-        " Sonuç belirsizse yeniden yüklemeden önce Belge Havuzu'nda belge numarasını kontrol edin.");
-    } finally {
-      setBusy(false);
-    }
+      setFiles(failedFiles);setUploadErrors(errors);
+      if(inputRef.current)inputRef.current.value="";
+      setTone(errors.length?"warning":"success");
+      setMessage(errors.length?
+        `${acceptedItems.length} belge havuza alındı, ${errors.length} dosya alınamadı. Yalnız hatalılar kuyrukta kaldı; PDF/görseli elle girebilirsiniz.`:
+        `${acceptedItems.length} belge havuza alındı; güvenli partiler tamamlandı.`);
+      await onUploaded?.({items:acceptedItems,errors,total:files.length});
+    }finally{setProgress("");setBusy(false)}
+  };
+  const manualFile=files.find(file=>eBelgeFileKey(file)===manualFileKey);
+  const onManualSaved=async(result,file)=>{
+    setFiles(old=>old.filter(row=>eBelgeFileKey(row)!==eBelgeFileKey(file)));
+    setManualFileKey("");
+    setUploadErrors(old=>old.filter(row=>row.fileName!==file.name));
+    setTone("success");
+    setMessage(`${file.name} kontrol bekleyen manuel belge olarak alındı. Belge ve kalemlerin son kontrolü gerekiyor.`);
+    await onUploaded?.(result);
   };
 
   return <section className="eb-upload-card">
@@ -214,7 +231,7 @@ function UploadPanel({ onUploaded }) {
     >
       <Upload size={28} />
       <strong>Dosyaları sürükle veya seç</strong>
-      <span>XML · PDF · JPG · PNG · WEBP · BMP · TIFF — en fazla 20 dosya, dosya başına 20 MB</span>
+      <span>XML · PDF · JPG · PNG · WEBP · BMP · TIFF — sınırsız seçim kuyruğu · dosya başına 20 MB · güvenli partiler</span>
     </button>
     <input
       ref={inputRef}
@@ -224,14 +241,19 @@ function UploadPanel({ onUploaded }) {
       hidden
       onChange={(event) => addFiles(event.target.files)}
     />
-    {files.length > 0 && <div className="eb-file-queue">
-      {files.map((file, index) => <div key={`${file.name}-${index}`}>
-        <FileText size={16} />
-        <span>{file.name}</span>
-        <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
-        <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><X size={15} /></button>
+    {files.length>0&&<div className="eb-file-queue">
+      <strong>{files.length} dosya sırada · {splitEBelgeUploadQueue(files).length} güvenli parti</strong>
+      {files.slice(0,80).map(file=><div key={eBelgeFileKey(file)}>
+        <FileText size={16}/><span>{file.name}</span>
+        <small>{(file.size/1024/1024).toFixed(2)} MB</small>
+        {!/\.xml$/i.test(file.name)&&<button type="button" disabled={busy} onClick={()=>setManualFileKey(eBelgeFileKey(file))}>Elle Gir</button>}
+        <button type="button" disabled={busy} aria-label={`${file.name} kuyruktan kaldır`}
+          onClick={()=>setFiles(old=>old.filter(row=>eBelgeFileKey(row)!==eBelgeFileKey(file)))}><X size={15}/></button>
       </div>)}
+      {files.length>80&&<small>İlk 80 dosya gösteriliyor; kalan {files.length-80} dosya da işleme dahil.</small>}
     </div>}
+    {manualFile&&<EBelgeManualFallback key={manualFileKey} file={manualFile} onSaved={onManualSaved} onCancel={()=>setManualFileKey("")}/>}
+    {progress&&<p role="status" className="eb-inline-message">{progress}</p>}
     {uploadErrors.length > 0 ? <div className="eb-inline-message warning" role="alert">
       <strong>Alınamayan dosyalar</strong>
       <ul>{uploadErrors.map((item, index) => <li key={`${item.fileName}-${index}`}>
@@ -242,7 +264,7 @@ function UploadPanel({ onUploaded }) {
       <span className={message ? `eb-inline-message ${tone}` : ""}>{message}</span>
       <button type="button" className="eb-primary" disabled={!files.length || busy} onClick={send}>
         {busy ? <LoaderCircle className="eb-spin" size={17} /> : <Upload size={17} />}
-        {busy ? "Okunuyor ve eşleştiriliyor" : "Havuza Al ve Eşleştir"}
+        {busy ? "Partiler işleniyor" : "Sırayı Havuza Al ve Eşleştir"}
       </button>
     </div>
   </section>;
