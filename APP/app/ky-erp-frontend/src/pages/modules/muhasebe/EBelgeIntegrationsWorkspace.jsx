@@ -124,6 +124,11 @@ export default function EBelgeIntegrationsWorkspace({
     companies: [],
     connectionMode: "api",
     sessionReady: false,
+    savedCompanyId: "",
+    savedCompanyName: "",
+    savedAt: null,
+    testedAt: null,
+    tokenExpiresOn: null,
   });
   const [business, setBusiness] = useState({
     carrier: {},
@@ -169,6 +174,11 @@ export default function EBelgeIntegrationsWorkspace({
           connectionMode: getIsnetConnectionModePreference(tenant) || connectionResult?.connectionMode || "api",
           sessionReady: connectionResult?.sessionReady === true &&
             (getIsnetConnectionModePreference(tenant) || connectionResult?.connectionMode || "api") === "api",
+          savedCompanyId: connectionResult?.companyId || "",
+          savedCompanyName: connectionResult?.companyName || rowsOf(connectionResult?.companies).find(row=>String(row.id)===String(connectionResult?.companyId))?.name || "",
+          savedAt: connectionResult?.savedAt || null,
+          testedAt: connectionResult?.testedAt || null,
+          tokenExpiresOn: connectionResult?.tokenExpiresOn || null,
         }));
       }
       if (result.states.business.status !== "error") {
@@ -355,6 +365,7 @@ export default function EBelgeIntegrationsWorkspace({
           ? current.companyId : available.length === 1 ? String(available[0].id) : "",
         connectionMode: verifiedMode,
         sessionReady: result.sessionReady === true,
+        testedAt: result.testedAt || new Date().toISOString(),
       }));
       setShowPassword(false);
       setConnectionTest({
@@ -376,6 +387,14 @@ export default function EBelgeIntegrationsWorkspace({
       setBusy("");
     }
   }
+
+  const savedCompany=Boolean(connection.savedCompanyId && connection.savedCompanyName);
+  const selectedCompanyName=connection.savedCompanyName || connection.companies.find(row=>String(row.id)===String(connection.savedCompanyId))?.name || "";
+  const lastTest=connection.testedAt && !Number.isNaN(Date.parse(connection.testedAt)) ? new Date(connection.testedAt).toLocaleString("tr-TR") : "";
+  const connectionBadge=readOnlyCheck?.verified ? "API belge listesi doğrulandı"
+    : connectionTest && !connectionTest.saved ? "Giriş testi başarılı"
+    : savedCompany ? (connection.connectionMode==="portal" ? "Firma kayıtlı · portal bağlantısı" : "Firma kayıtlı · API kontrolü bekliyor")
+    : "Doğrulama bekliyor";
 
   async function checkDocumentLists(){
     if(busy)return;
@@ -405,7 +424,12 @@ export default function EBelgeIntegrationsWorkspace({
         companyId: connection.companyId,
         connectionMode: connection.connectionMode,
       });
-      setConnection((current) => ({ ...current, password: "" }));
+      const savedName=connection.companies.find(row=>String(row.id)===String(connection.companyId))?.name || result.companyName || "";
+      setConnection((current) => ({ ...current, password: "",
+        savedCompanyId: result.companyId || current.companyId,
+        savedCompanyName: result.companyName || savedName,
+        savedAt: result.savedAt || new Date().toISOString(),
+      }));
       setConnectionTest((current) => current ? { ...current, saved: true } : null);
       setNotice({
         connectionMode: connection.connectionMode,
@@ -520,11 +544,16 @@ export default function EBelgeIntegrationsWorkspace({
         <article className="ism-card ism-connection-card">
           <div className="ism-card-head">
             <div><h2>{connection.connectionMode === "api" ? "İşNet Resmî API Bağlantısı" : "İşNet Portal Bağlantısı"}</h2><p>Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz.</p></div>
-            <span className={connectionTest?.saved ? "ready" : "warning"}>
-              {readOnlyCheck?.verified ? "Belge listesi doğrulandı" : connectionTest?.saved ? "Firma kaydedildi" : connectionTest ? "Giriş doğrulandı" : connection.companyId ? "Kayıtlı firma · oturum bekliyor" : "Doğrulama bekliyor"}
-            </span>
+            <span className={savedCompany || connectionTest?.saved ? "ready" : "warning"}>{connectionBadge}</span>
           </div>
-          <IntegrationFlowSteps kind="ISNET" stage={connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />
+          {savedCompany && <div className="ism-saved-company" role="status">
+            <CheckCircle2 size={18}/>
+            <div><strong>Kayıtlı yetkili firma: {selectedCompanyName}</strong>
+              <span>Firma seçimi kayıtlı. {connection.connectionMode==="portal" ? "Portal giriş testi başarılı olabilir; otomatik XML indirimi için resmî API bağlantısı ayrıca doğrulanmalıdır." : connection.sessionReady ? "API oturum tokenı kayıtlı; sağlayıcıda güncel geçerliliği belge sorgusuyla kontrol edilir." : "API oturumu yeniden doğrulanmalıdır."}</span>
+              {lastTest && <small>Son giriş testi: {lastTest} · Şifre gösterilmez veya veritabanına yazılmaz.</small>}
+            </div>
+          </div>}
+          <IntegrationFlowSteps kind="ISNET" stage={savedCompany || connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />
           <div className="ism-form-grid">
             <Field label="Kullanıcı adı / TCKN">
               <input id="isnet-user" name="isnet-account" value={connection.username} autoComplete="section-isnet username" disabled={!!busy} onChange={(event) => updateLoginField("username", event.target.value)} />
@@ -599,7 +628,7 @@ export default function EBelgeIntegrationsWorkspace({
               {busy === "save-connection" ? "Firma kaydediliyor..." : "2. Firmayı Kaydet"}
             </button>
           </div>
-          {connectionTest?.saved && <p className="ism-connection-complete"><CheckCircle2 size={16} /> Seçili firma kaydedildi. Yeni giriş için bilgiler tekrar doğrulanır.</p>}
+          {(connectionTest?.saved || savedCompany) && <p className="ism-connection-complete"><CheckCircle2 size={16} /> Firma seçimi korunuyor. Otomatik belge senkronizasyonu yalnız API doğrulamasıyla aktif sayılır.</p>}
           {connection.connectionMode==="api"&&<div className="ism-readonly-acceptance">
             <div><strong>3. Gerçek belge listesi kontrolü (salt okunur)</strong><p>Yetkili İşNet hesabıyla gelen e-Fatura ve e-İrsaliye listelerinin ilk 25 kaydını sınar. Belge indirimi, mali kayıt ve resmî gönderim yapmaz.</p></div>
             <button type="button" disabled={!!busy||!connection.companyId||!connection.sessionReady} onClick={()=>void checkDocumentLists()}>
