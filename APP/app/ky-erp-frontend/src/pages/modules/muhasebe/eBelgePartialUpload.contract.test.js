@@ -8,12 +8,14 @@ const page = readFileSync(new URL("./EBelgeCenterPage.jsx", import.meta.url), "u
 test("HTTP 207 kısmi başarı tekrar belge yüklemeye zorlamaz", () => {
   assert.match(api, /Number\(error\?\.status\) === 207/);
   assert.match(api, /Array\.isArray\(partial\?\.items\)/);
-  assert.match(page, /setFiles\(\(current\) => failed \? current\.filter/);
-  assert.match(page, /Başarılı dosyaları yeniden yüklemeyin/);
+  assert.match(page, /acceptedItems\.push\(\.\.\.accepted\)/);
+  assert.match(page, /setFiles\(failedFiles\)/);
+  assert.match(page, /Yalnız hatalılar kuyrukta kaldı/);
 });
 test("Yükleme hataları dosya bazında görünür; belirsiz sonuç tekrar otomatik gönderilmez", () => {
   assert.match(page, /setUploadErrors\(errors\)/);
   assert.match(page, /uploadErrors\.map/);
-  assert.match(page, /Sonuç belirsizse yeniden yüklemeden önce Belge Havuzu/);
-  assert.match(page, /file\.name\}\|\$\{file\.size\}\|\$\{file\.lastModified\}/);
+  assert.match(page, /Tekrar göndermeden önce Belge Havuzu/);
+  assert.match(page, /eBelgeFileKey\(file\)/);
+  assert.match(page, /batches\.slice\(index\)\.flat\(\)/);
 });

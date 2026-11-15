@@ -34,6 +34,8 @@ import {
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
 import EBelgeAccountingPrint from "./EBelgeAccountingPrint";
+import EBelgeManualFallback from "./EBelgeManualFallback";
+import {eBelgeFileKey,splitEBelgeUploadQueue} from "./eBelgeUploadQueue";
 import {parseUblForVisualOutput,renderUblOutput} from "./visualUblOutput";
 import VisualProfileStudio from "./VisualProfileStudio";
 import EBelgeAdapterManager from "./EBelgeAdapterManager";
@@ -92,6 +94,7 @@ const sourceLabel = (value) => ({
   ISNET_DIRECT: "İşNet",
   PARASUT: "Paraşüt",
   MANUAL: "Manuel",
+  MANUAL_REVIEW: "Manuel Giriş",
 }[String(value || "").toUpperCase()] || value || "-");
 
 const statusLabel = (value) => ({
@@ -141,54 +144,69 @@ function UploadPanel({ onUploaded }) {
   const [message, setMessage] = useState("");
   const [tone, setTone] = useState("success");
   const [uploadErrors, setUploadErrors] = useState([]);
+  const [manualFileKey,setManualFileKey]=useState("");
+  const [progress,setProgress]=useState("");
 
-  const addFiles = (list) => {
-    const selected = Array.from(list || []);
-    const next = selected.filter((file) => /\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name) && file.size <= 20 * 1024 * 1024);
-    // Keep one entry per original file, even after drag/drop plus file-picker.
-    setFiles((current) => [...new Map([...current, ...next].map((file) =>
-      [`${file.name}|${file.size}|${file.lastModified}`, file])).values()].slice(0, 20));
+  const addFiles=(list)=>{
+    if(busy)return;
+    const selected=Array.from(list||[]);
+    const next=selected.filter(file=>/\.(xml|pdf|jpe?g|png|webp|bmp|tiff?)$/i.test(file.name)&&file.size<=20*1024*1024);
+    setFiles(old=>[...new Map([...old,...next].map(file=>[eBelgeFileKey(file),file])).values()]);
     setUploadErrors([]);
-    if (next.length !== selected.length) {
-      setTone("warning");
-      setMessage("Desteklenmeyen veya 20 MB'ı aşan dosyalar listeye eklenmedi. XML/PDF ve desteklenen görselleri seçin.");
-    } else {
-      setMessage("");
-    }
+    if(next.length!==selected.length){setTone("warning");setMessage("Desteklenmeyen veya 20 MB dosya sınırını aşan dosyalar eklenmedi.")}
+    else setMessage("");
   };
-
-  const send = async () => {
-    if (!files.length || busy) return;
-    setBusy(true);
-    setMessage("");
-    setTone("success");
-    try {
-      const selectedCount = files.length;
-      const result = await uploadEBelge(files);
-      const errors = Array.isArray(result?.errors) ? result.errors : [];
-      const failed = errors.length;
-      const accepted = Array.isArray(result?.items) ? result.items.length : Math.max(0, selectedCount - failed);
-      // A 207 means some original documents now exist in the live pool.
-      // Keep ONLY rejected files queued for inspection and safe retry.
-      const rejectedNames = new Set(errors.map((entry) => String(entry?.fileName || "")));
-      setFiles((current) => failed ? current.filter((file) => rejectedNames.has(file.name)) : []);
-      setUploadErrors(errors);
-      if (inputRef.current) inputRef.current.value = "";
-      if (failed) {
-        setTone("warning");
-        setMessage(`${accepted} dosya havuza alındı; ${failed} dosya alınamadı. Başarılı dosyaları yeniden yüklemeyin. Yalnız hata alan dosyalar seçili bırakıldı.`);
-      } else {
-        setMessage(`${accepted} dosya havuza alındı. Yeni kayıtlar artık Belge Havuzu'nda görünür; fatura–irsaliye eşleştirmesi yüklenen belgeler için otomatik kontrol edildi.`);
+  const send=async()=>{
+    if(!files.length||busy)return;
+    setBusy(true);setMessage("");setTone("success");setUploadErrors([]);setManualFileKey("");
+    const batches=splitEBelgeUploadQueue(files),acceptedItems=[],errors=[],failedFiles=[];
+    let index=0;
+    try{
+      for(const batch of batches){
+        setProgress(`Parti ${index+1}/${batches.length} · ${acceptedItems.length} belge alındı`);
+        let result;
+        try{result=await uploadEBelge(batch)}
+        catch(err){
+          // Transport failures have unknown outcomes; never auto-retry or drop affected files.
+          setFiles([...failedFiles,...batches.slice(index).flat()]);
+          setUploadErrors(errors);setTone("warning");
+          setMessage(`${acceptedItems.length} belge kabul edildi. Parti ${index+1} sonucu belirsiz: ${err?.message||"Sunucu yanıtı alınamadı"}. Tekrar göndermeden önce Belge Havuzu'nu kontrol edin.`);
+          if(acceptedItems.length)await onUploaded?.({items:acceptedItems,errors,total:files.length});
+          return;
+        }
+        const accepted=Array.isArray(result?.items)?result.items:[],rejected=Array.isArray(result?.errors)?result.errors:[];
+        if(accepted.length+rejected.length!==batch.length){
+          setFiles([...failedFiles,...batches.slice(index).flat()]);setTone("warning");
+          setMessage("Parti yanıtı eksik; aynı dosya otomatik yeniden gönderilmedi. Belge Havuzu'nu kontrol edin.");
+          if(acceptedItems.length)await onUploaded?.({items:acceptedItems,errors,total:files.length});
+          return;
+        }
+        acceptedItems.push(...accepted);errors.push(...rejected);
+        const counts=new Map();
+        rejected.forEach(row=>counts.set(String(row.fileName||""),(counts.get(String(row.fileName||""))||0)+1));
+        for(const file of batch){
+          const count=counts.get(file.name)||0;
+          if(count>0){failedFiles.push(file);counts.set(file.name,count-1);}
+        }
+        index+=1;
       }
-      await onUploaded?.(result);
-    } catch (error) {
-      setTone("error");
-      setUploadErrors([]);
-      setMessage((error?.message || "Belge yükleme tamamlanamadı.") +
-        " Sonuç belirsizse yeniden yüklemeden önce Belge Havuzu'nda belge numarasını kontrol edin.");
-    } finally {
-      setBusy(false);
-    }
+      setFiles(failedFiles);setUploadErrors(errors);
+      if(inputRef.current)inputRef.current.value="";
+      setTone(errors.length?"warning":"success");
+      setMessage(errors.length?
+        `${acceptedItems.length} belge havuza alındı, ${errors.length} dosya alınamadı. Yalnız hatalılar kuyrukta kaldı; PDF/görseli elle girebilirsiniz.`:
+        `${acceptedItems.length} belge havuza alındı; güvenli partiler tamamlandı.`);
+      await onUploaded?.({items:acceptedItems,errors,total:files.length});
+    }finally{setProgress("");setBusy(false)}
+  };
+  const manualFile=files.find(file=>eBelgeFileKey(file)===manualFileKey);
+  const onManualSaved=async(result,file)=>{
+    setFiles(old=>old.filter(row=>eBelgeFileKey(row)!==eBelgeFileKey(file)));
+    setManualFileKey("");
+    setUploadErrors(old=>old.filter(row=>row.fileName!==file.name));
+    setTone("success");
+    setMessage(`${file.name} kontrol bekleyen manuel belge olarak alındı. Belge ve kalemlerin son kontrolü gerekiyor.`);
+    await onUploaded?.(result);
   };
 
   return <section className="eb-upload-card">
@@ -214,7 +232,7 @@ function UploadPanel({ onUploaded }) {
     >
       <Upload size={28} />
       <strong>Dosyaları sürükle veya seç</strong>
-      <span>XML · PDF · JPG · PNG · WEBP · BMP · TIFF — en fazla 20 dosya, dosya başına 20 MB</span>
+      <span>XML · PDF · JPG · PNG · WEBP · BMP · TIFF — sınırsız seçim kuyruğu · dosya başına 20 MB · güvenli partiler</span>
     </button>
     <input
       ref={inputRef}
@@ -224,14 +242,19 @@ function UploadPanel({ onUploaded }) {
       hidden
       onChange={(event) => addFiles(event.target.files)}
     />
-    {files.length > 0 && <div className="eb-file-queue">
-      {files.map((file, index) => <div key={`${file.name}-${index}`}>
-        <FileText size={16} />
-        <span>{file.name}</span>
-        <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
-        <button type="button" onClick={() => setFiles((current) => current.filter((_, i) => i !== index))}><X size={15} /></button>
+    {files.length>0&&<div className="eb-file-queue">
+      <strong>{files.length} dosya sırada · {splitEBelgeUploadQueue(files).length} güvenli parti</strong>
+      {files.slice(0,80).map(file=><div key={eBelgeFileKey(file)}>
+        <FileText size={16}/><span>{file.name}</span>
+        <small>{(file.size/1024/1024).toFixed(2)} MB</small>
+        {!/\.xml$/i.test(file.name)&&<button type="button" disabled={busy} onClick={()=>setManualFileKey(eBelgeFileKey(file))}>Elle Gir</button>}
+        <button type="button" disabled={busy} aria-label={`${file.name} kuyruktan kaldır`}
+          onClick={()=>setFiles(old=>old.filter(row=>eBelgeFileKey(row)!==eBelgeFileKey(file)))}><X size={15}/></button>
       </div>)}
+      {files.length>80&&<small>İlk 80 dosya gösteriliyor; kalan {files.length-80} dosya da işleme dahil.</small>}
     </div>}
+    {manualFile&&<EBelgeManualFallback key={manualFileKey} file={manualFile} onSaved={onManualSaved} onCancel={()=>setManualFileKey("")}/>}
+    {progress&&<p role="status" className="eb-inline-message">{progress}</p>}
     {uploadErrors.length > 0 ? <div className="eb-inline-message warning" role="alert">
       <strong>Alınamayan dosyalar</strong>
       <ul>{uploadErrors.map((item, index) => <li key={`${item.fileName}-${index}`}>
@@ -242,7 +265,7 @@ function UploadPanel({ onUploaded }) {
       <span className={message ? `eb-inline-message ${tone}` : ""}>{message}</span>
       <button type="button" className="eb-primary" disabled={!files.length || busy} onClick={send}>
         {busy ? <LoaderCircle className="eb-spin" size={17} /> : <Upload size={17} />}
-        {busy ? "Okunuyor ve eşleştiriliyor" : "Havuza Al ve Eşleştir"}
+        {busy ? "Partiler işleniyor" : "Sırayı Havuza Al ve Eşleştir"}
       </button>
     </div>
   </section>;
@@ -257,6 +280,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
   const [finalAcknowledged, setFinalAcknowledged] = useState(false);
   const [finalPhysicalReceived, setFinalPhysicalReceived] = useState(false);
+  const [manualSourceConfirmed,setManualSourceConfirmed] = useState(false);
   const finalInFlight = useRef(false);
   const [editForm, setEditForm] = useState({ documentNo: "", issueDate: "", dueDate: "", currency: "TRY", direction: "INCOMING", documentType: "FATURA", note: "" });
   const [companyQuery, setCompanyQuery] = useState("");
@@ -281,7 +305,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
       setError(e?.message || "Belge detayı alınamadı.");
     }
   }, [id]);
-  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); setFinalPhysicalReceived(false); }, [id]);
+  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); setFinalPhysicalReceived(false); setManualSourceConfirmed(false); }, [id]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!companyOpen || companyQuery.trim().length < 2) { setCompanies([]); return undefined; }
@@ -414,7 +438,17 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
             </details>
             <details className="eb-fold" open={openIssues.length > 0}>
               <summary><strong>Kontroller</strong><span>{openIssues.length} açık</span></summary>
-              <div className="eb-fold-body">{openIssues.length ? <div className="eb-issues">{openIssues.map((issue) => <div key={issue.id}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}</div>
+              <div className="eb-fold-body">{openIssues.length ? <div className="eb-issues">{openIssues.map((issue) => <div key={issue.id}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{issue.issue_code==="MANUAL_SOURCE_REVIEW_REQUIRED"&&<>
+                  <label className="eb-manual-ack"><input type="checkbox" checked={manualSourceConfirmed}
+                    onChange={e=>setManualSourceConfirmed(e.target.checked)}/>
+                    Orijinal belgeyi, kalemleri, KDV'yi ve toplamı tek tek kontrol ettim.
+                  </label>
+                  <button type="button" disabled={!manualSourceConfirmed||Boolean(busy)}
+                    onClick={()=>action(`issue-${issue.id}`,()=>resolveEBelgeIssue(id,issue.id,true))}>
+                    Manuel Kaynağı Doğrula
+                  </button>
+                </>}
+                {issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}</div>
             </details>
             <details className="eb-fold">
               <summary><strong>Fatura – İrsaliye Bağı</strong><span>{relationCount}</span></summary>
@@ -492,6 +526,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [lastUpload, setLastUpload] = useState(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [statusFilter,setStatusFilter] = useState("ALL");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -511,9 +546,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
    view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?"HISTORY":view==="pool"?filter:"ALL");
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
-    filter:effectiveFilter,direction,q:query,from,to,page,pageSize:50,
+    filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,
     ...(view==="incoming-invoices"&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view]);
+  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
 
   const loadPool = useCallback(async () => {
@@ -583,6 +618,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
   useEffect(() => {
     setPage(1);
+    setStatusFilter("ALL");
     setMatchingConfirmOpen(false);
     setMatchingApproved(false);
   }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
@@ -684,6 +720,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           className={view===key?"active":""} aria-current={view===key?"page":undefined}
           onClick={()=>openEBelgeTab(tabKey)}>{title}</button>)}
       </nav>
+          {view!=="pool"&&<button type="button" onClick={()=>openEBelgeTab("belge-havuzu")}><Upload size={17}/> Belge Yükle</button>}
           <button type="button" onClick={loadPool} disabled={busy}><RefreshCw size={17} /> Güncelle</button>
           {(view === "matching" || view === "pool") && <button type="button" className="eb-primary" onClick={() => { setMatchingApproved(false); setMatchingConfirmOpen(true); }} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>}
         </>}
@@ -739,6 +776,11 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
               onChange={e=>{setOnlyPrintPending(e.target.checked);setPage(1)}}/>
             Yalnız Çıktı Bekleyenler
           </label>}
+          <label>Durum<select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1);}}>
+            <option value="ALL">Tüm Durumlar</option><option value="INGESTED">Yeni</option>
+            <option value="REVIEW_REQUIRED">Kontrol Bekliyor</option><option value="READY_FOR_APPROVAL">Onaya Hazır</option>
+            <option value="APPROVED">Onaylandı</option><option value="POSTED">Muhasebeleşti</option>
+          </select></label>
           {view === "pool" && <label>Göster<select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>}
           <label>Başlangıç<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} /></label>
           <label>Bitiş<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPage(1); }} /></label>
