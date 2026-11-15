@@ -22,6 +22,7 @@ import {
   getIsnetSettings,
   getIsnetPortalHealth,
   getIsnetEgressHealth,
+  getIsnetReadOnlyPreview,
   saveIsnetSettings,
   testIsnetSettings,
 } from "../../../services/isnetApi";
@@ -113,6 +114,7 @@ export default function EBelgeIntegrationsWorkspace({
   const [showPassword, setShowPassword] = useState(false);
   const [connectionTest, setConnectionTest] = useState(null);
   const [portalHealth, setPortalHealth] = useState(null);
+  const [readOnlyCheck,setReadOnlyCheck]=useState(null);
   const [apiNetworkStatus, setApiNetworkStatus] = useState(null);
   const [vaultNotice, setVaultNotice] = useState(null);
   const [connection, setConnection] = useState({
@@ -143,6 +145,7 @@ export default function EBelgeIntegrationsWorkspace({
     setNotice(null);
     setConnectionTest(null);
     setPortalHealth(null);
+    setReadOnlyCheck(null);
     setShowPassword(false);
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
@@ -374,6 +377,21 @@ export default function EBelgeIntegrationsWorkspace({
     }
   }
 
+  async function checkDocumentLists(){
+    if(busy)return;
+    setBusy("read-only-lists");setReadOnlyCheck(null);
+    try{
+      const response=await getIsnetReadOnlyPreview();
+      setReadOnlyCheck(response);
+      setNotice({tone:response.verified?"success":"warning",connectionMode:"api",
+        text:response.message||"Gelen fatura/irsaliye listesi doğrulanamadı."});
+    }catch(error){
+      setReadOnlyCheck(null);
+      setNotice({tone:"error",connectionMode:"api",
+        text:error?.message||"İşNet belge listesi okunamadı. Oturumu ve firma yetkisini kontrol edin."});
+    }finally{setBusy("")}
+  }
+
   async function saveConnection() {
     if (busy || !connectionTest || connectionTest.saved || !connection.companyId ||
         connectionTest.username !== connection.username.trim() ||
@@ -503,7 +521,7 @@ export default function EBelgeIntegrationsWorkspace({
           <div className="ism-card-head">
             <div><h2>{connection.connectionMode === "api" ? "İşNet Resmî API Bağlantısı" : "İşNet Portal Bağlantısı"}</h2><p>Giriş bilgilerini tarayıcı parola yöneticisinde hatırlatabilirsiniz. KY ERP şifreyi veritabanında saklamaz.</p></div>
             <span className={connectionTest?.saved ? "ready" : "warning"}>
-              {connectionTest?.saved ? "Firma kaydedildi" : connectionTest ? "Giriş doğrulandı" : "Doğrulama bekliyor"}
+              {readOnlyCheck?.verified ? "Belge listesi doğrulandı" : connectionTest?.saved ? "Firma kaydedildi" : connectionTest ? "Giriş doğrulandı" : connection.companyId ? "Kayıtlı firma · oturum bekliyor" : "Doğrulama bekliyor"}
             </span>
           </div>
           <IntegrationFlowSteps kind="ISNET" stage={connectionTest?.saved ? 3 : connectionTest ? 2 : 1} />
@@ -582,6 +600,18 @@ export default function EBelgeIntegrationsWorkspace({
             </button>
           </div>
           {connectionTest?.saved && <p className="ism-connection-complete"><CheckCircle2 size={16} /> Seçili firma kaydedildi. Yeni giriş için bilgiler tekrar doğrulanır.</p>}
+          {connection.connectionMode==="api"&&<div className="ism-readonly-acceptance">
+            <div><strong>3. Gerçek belge listesi kontrolü (salt okunur)</strong><p>Yetkili İşNet hesabıyla gelen e-Fatura ve e-İrsaliye listelerinin ilk 25 kaydını sınar. Belge indirimi, mali kayıt ve resmî gönderim yapmaz.</p></div>
+            <button type="button" disabled={!!busy||!connection.companyId||!connection.sessionReady} onClick={()=>void checkDocumentLists()}>
+              {busy==="read-only-lists"?<LoaderCircle className="spin" size={16}/>:<ShieldCheck size={16}/>}
+              Gelen Listeleri Doğrula
+            </button>
+            {readOnlyCheck&&<div className="ism-acceptance-results" role="status">
+              <p>{readOnlyCheck.verified?"İşNet gerçek API liste sorgusu doğrulandı.":"Liste sorgusu eksik; senkronizasyon başarılı sayılmaz."}</p>
+              <span>Gelen faturalar: {readOnlyCheck.results?.incomingInvoices?.status==="VERIFIED_READ_ONLY"?readOnlyCheck.results.incomingInvoices.firstPageCount+" (ilk sayfa)":readOnlyCheck.results?.incomingInvoices?.status||"Doğrulanamadı"}</span>
+              <span>Gelen irsaliyeler: {readOnlyCheck.results?.incomingDespatches?.status==="VERIFIED_READ_ONLY"?readOnlyCheck.results.incomingDespatches.firstPageCount+" (ilk sayfa)":readOnlyCheck.results?.incomingDespatches?.status||"Doğrulanamadı"}</span>
+            </div>}
+          </div>}
         </article>
         <article className="ism-card explanation"><ShieldCheck size={26} /><h2>Güvenli Çalışma</h2><p>İşNet şifresi KY ERP'de saklanmaz. Doğrulama kodu veya ek onay gerektiren girişler başarılı sayılmaz. Portal firma seçimi, canlı API senkronizasyonu kanıtı değildir. Resmî irsaliye veya fatura kullanıcı onayı olmadan gönderilmez.</p></article>
       </section> : null}
