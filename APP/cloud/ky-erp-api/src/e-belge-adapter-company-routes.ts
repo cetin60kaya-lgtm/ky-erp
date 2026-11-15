@@ -19,12 +19,42 @@ async function permit(c:Context<Env>,method:"GET"|"PUT",body:Row={}) {
  if(!user||!tenant||!accountingTenantReadAllowed(user,tenant)||!accountingAccess(user,method,c.req.path))return {ok:false,tenant:""};
  return {ok:true,tenant};
 }
-async function selections(c:Context<Env>,tenant:string):Promise<Record<string,boolean>> {
+async function selections(c:Context<Env>,tenant:string):Promise<{selected:Record<string,boolean>;enabled:Record<string,boolean>}> {
  const rows=await c.env.DB.prepare(
   "SELECT id,file_name,data FROM json_store WHERE scope=? AND main_company_slug=? "+
   "ORDER BY CASE WHEN id LIKE 'EBELGE_ADAPTER_SELECTION_V1:%' THEN 0 ELSE 1 END, updated_at DESC, id DESC"
  ).bind(SCOPE,tenant).all<Row>();
- return decodeEBelgeSelections(rows.results||[]);
+ const list=rows.results||[];
+ const selected=decodeEBelgeSelections(list);
+ const enabled:Record<string,boolean>={};
+ const seen=new Set<string>();
+ for(const row of list){
+  const adapter=getEBELGEAdapter(row.file_name);
+  if(!adapter||seen.has(adapter.key))continue;
+  try{
+   const data=JSON.parse(clean(row.data));
+   if(data&&typeof data==="object"){
+    enabled[adapter.key]=data.selected===true && data.enabled!==false;
+    seen.add(adapter.key);
+   }
+  }catch{/* Corrupt legacy rows do not override a valid record. */}
+ }
+ // Backward-compatible onboarding: an existing company-scoped İşNet configuration
+ // is visible without creating an unapproved D1 business record.
+ // An explicit selected:false always takes priority.
+ if(!Object.prototype.hasOwnProperty.call(selected,"ISNET")){
+  const existing=await c.env.DB.prepare(
+   "SELECT data FROM json_store WHERE scope='ISNET_SETTINGS' AND main_company_slug=? ORDER BY updated_at DESC LIMIT 1"
+  ).bind(tenant).first<Row>();
+  try{
+   const settings=JSON.parse(clean(existing?.data));
+   if(clean(settings?.username)||clean(settings?.companyId)){
+    selected.ISNET=true;
+    enabled.ISNET=true;
+   }
+  }catch{/* No configured legacy connection. */}
+ }
+ return {selected,enabled};
 }
 /** Company enabled state changes ONLY selection; never deletes documents,
  * provider credentials, system adapter code, archives or saved settings.
@@ -33,12 +63,14 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
  app.get("/api/e-belge/adapters",async c=>{
   const access=await permit(c,"GET");
   if(!access.ok)return c.json(error("FORBIDDEN","Bu firma için entegrasyon kataloğuna erişim yetkiniz yok."),403);
-  const selected=await selections(c,access.tenant);
+  const selection=await selections(c,access.tenant);
+  const selected=selection.selected;
   return c.json({ok:true,data:{
    mainCompanySlug:access.tenant,
    systemCatalog:EBELGE_ADAPTERS,
    companyAdapters:EBELGE_ADAPTERS.map(adapter=>({
     key:adapter.key,selected:selected[adapter.key]===true,
+    enabled:selected[adapter.key]===true && selection.enabled[adapter.key]!==false,
     ...classifyAdapterInstallation(adapter.key,selected[adapter.key]===true),
    })),
   }});
@@ -51,11 +83,16 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
   if(!adapter)return c.json(error("UNKNOWN_ADAPTER","Adaptör sistem kataloğunda kayıtlı değil."),404);
   if(typeof body.selected!=="boolean")
    return c.json(error("INVALID_SELECTION","Adaptörü eklemek veya kaldırmak için açık seçim gerekir."),400);
+  if(body.enabled!==undefined && typeof body.enabled!=="boolean")
+   return c.json(error("INVALID_ACTIVATION","Aktif/Pasif seçimi geçersiz."),400);
   const ts=new Date().toISOString();
   // Stable primary key prevents concurrent first-time PUTs from creating duplicate rows.
   // Historical UUID rows remain untouched; reads prefer the new canonical row.
   const stableId=`EBELGE_ADAPTER_SELECTION_V1:${access.tenant}:${adapter.key}`;
-  const state={key:adapter.key,selected:body.selected,updatedAt:ts,
+  const previous=await selections(c,access.tenant);
+  const state={key:adapter.key,selected:body.selected,
+    enabled:body.selected && (typeof body.enabled==="boolean" ? body.enabled : previous.enabled[adapter.key]!==false),
+    updatedAt:ts,
     updatedBy:(await getAuthenticatedUser(c))?.id||null};
   await c.env.DB.prepare(
     "INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) "+

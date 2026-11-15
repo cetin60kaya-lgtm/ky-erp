@@ -28,10 +28,12 @@ import { registerAccountingOperationRoutes } from "./accounting-operations";
 import { registerCanonicalDispatchControlRoutes } from "./accounting-dispatch-control-canonical";
 import { registerEBelgeCenterRoutes } from "./e-belge-center-cloud";
 import { registerEBelgeAdapterCompanyRoutes } from "./e-belge-adapter-company-routes";
+import { registerIsnetReadOnlyPreviewRoutes } from "./isnet-read-only-preview";
 import { registerModelFileTransferRoutes } from "./model-file-transfer.ts";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
 import { enforceFileHubTenant } from "./file-hub-tenant-guard";
+import { enforceIsnetAdapterActivation } from "./isnet-adapter-activation-guard";
 import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerComplianceCenterRoutes } from "./compliance-center-cloud";
 import { registerComplianceConfigRoutes } from "./compliance-config-cloud";
@@ -192,6 +194,7 @@ registerAccountingDocumentArchiveRoutes(app);
 registerAccountingOperationRoutes(app);
 registerEBelgeCenterRoutes(app);
 registerEBelgeAdapterCompanyRoutes(app);
+registerIsnetReadOnlyPreviewRoutes(app);
 registerModelFileTransferRoutes(app);
 registerEBelgeLineToolRoutes(app);
 registerAiCloudRoutes(app);
@@ -353,6 +356,7 @@ for (const productionRoute of [
 shell.use("/api/file-hub/*", enforceFileHubTenant);
 
 shell.use("/api/isnet/*", enforceIsnetTenant);
+shell.use("/api/isnet/*", enforceIsnetAdapterActivation);
 
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
 shell.use("/api/e-belge/*", enforceAccountingTenant);

@@ -591,7 +591,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   return <section className="eb-page">
     <div className="eb-company-context" aria-label={`Belge sahibi: ${companyName}`}><span>Belge sahibi</span><strong>{companyName}</strong></div>
 
-    <div className="eb-hero">
+    {view !== "integrations" && <div className="eb-hero">
       <div>
         <span className="eb-kicker">e-Belge · Tek Canonical Havuz</span>
         <h2>{viewMeta[0]}</h2>
@@ -608,7 +608,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         </>}
         {view === "integrations" && <button type="button" onClick={loadIntegrations} disabled={busy}><RefreshCw size={17} /> Durumu Yenile</button>}
       </div>
-    </div>
+    </div>}
 
     {error && <div className="eb-error"><AlertTriangle size={18} />{error}</div>}
     {notice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Kontrol tamamlandı</strong><span>{notice}</span></div></div>}
@@ -676,7 +676,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} />}
 
     {view === "integrations" && <>
-      <EBelgeAdapterManager activeMainCompany={activeMainCompany} openModule={openModule} providerStatuses={providers} />
+      <EBelgeAdapterManager activeMainCompany={activeMainCompany} openModule={openModule} providerStatuses={providers} onRefreshStatuses={loadIntegrations} />
 
     </>}
 

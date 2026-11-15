@@ -38,5 +38,18 @@ test("Aynı adaptörün birden fazla eski satırında öncelikli tek kayıt beli
  const route=readFileSync(new URL("./e-belge-adapter-company-routes.ts",import.meta.url),"utf8");
  assert.match(route,/ON CONFLICT\(id\) DO UPDATE/);
  assert.match(route,/ORDER BY CASE WHEN id LIKE/);
- assert.match(route,/decodeEBelgeSelections\(rows.results/);
+ assert.match(route,/decodeEBelgeSelections\(list\)/);
+});
+
+test("Firma adaptörleri seçili ve etkin durumlarını ayrı taşır; eski İşNet ayarı yalnız firma kapsamındadır",()=>{
+ const route=readFileSync(new URL("./e-belge-adapter-company-routes.ts",import.meta.url),"utf8");
+ const guard=readFileSync(new URL("./isnet-adapter-activation-guard.ts",import.meta.url),"utf8");
+ const main=readFileSync(new URL("./main.ts",import.meta.url),"utf8");
+ assert.match(route,/enabled:body.selected/);
+ assert.match(route,/scope='ISNET_SETTINGS' AND main_company_slug=\?/);
+ assert.match(route,/!Object\.prototype\.hasOwnProperty\.call\(selected,"ISNET"\)/);
+ assert.match(route,/enabled:selected\[adapter.key\]===true/);
+ assert.match(guard,/ISNET_ADAPTER_INACTIVE/);
+ assert.match(guard,/configuredPath\(path\)/);
+ assert.match(main,/shell\.use\("\/api\/isnet\/\*", enforceIsnetAdapterActivation\)/);
 });
