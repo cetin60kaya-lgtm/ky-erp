@@ -82,21 +82,19 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, onInvoiceMail, r
 
 export default function CustomerDocumentsWorkspace({ activeMainCompany, openModule, moduleActionContext, refreshKey = 0 }) {
   const [view,setView]=useState("chain");
-  const openMail=(row)=>openModule?.("muhasebe",{tabKey:"fatura-mail-mutabakat",actionContext:{
+  const openMail=useCallback((row)=>openModule?.("muhasebe",{tabKey:"fatura-mail-mutabakat",actionContext:{
     document_no:row?.document_no||row?.invoiceNo||"",
     delivery_no:row?.delivery_no||row?.deliveryNo||"",
     model_id:row?.model_id||row?.modelId||"",
     model_name:row?.model_name||row?.modelName||"",
     party_name:row?.party_name||row?.companyName||"",
-  }});
+  }}),[openModule]);
   useEffect(()=>{
     if(moduleActionContext?.mailModelName)openMail({
       model_id:moduleActionContext.mailModelId,model_name:moduleActionContext.mailModelName,
       party_name:moduleActionContext.mailCompanyName,
     });
-    // One-time navigation handoff when a model asks to send a document.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[moduleActionContext?.mailModelId,moduleActionContext?.mailModelName,moduleActionContext?.mailCompanyName]);
+  },[moduleActionContext?.mailModelId,moduleActionContext?.mailModelName,moduleActionContext?.mailCompanyName,openMail]);
   return <section className="accounting-composite-workspace">
     <div className="accounting-subbar" role="tablist" aria-label="Müşteri satış görünümü">
       <button type="button" className={view==="chain"?"active":""} onClick={()=>setView("chain")}>İrsaliye / Fatura Zinciri</button>
