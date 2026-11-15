@@ -24,6 +24,7 @@ import { apiUrl, apiFetch, downloadFile } from "../../utils/api";
 import DesenImage from "./DesenImage";
 import KyRecordDialog from "../../components/shared/KyRecordDialog";
 import ModelFilesPanel from "../../components/shared/ModelFilesPanel";
+import ModelDocumentCenter from "../../components/shared/ModelDocumentCenter";
 import { safeModelLogRows } from "./desenModelLogs";
 import {
   createDesignOperation,
@@ -1484,14 +1485,14 @@ export function ModelDetailModal({
   onFilesUpdated,
   onInvoiceMail,
 }) {
-  const [tab, setTab] = useState("general");
+  const [tab, setTab] = useState("files");
   const logRows = safeModelLogRows(model?.logs);
   const tabs = [
     ["general", "Genel"],
     ["areas", "Baskı Bölgeleri"],
     ["channels", "Kanallar"],
     ["colors", "Renk Grupları"],
-    ["files", "Dosyalar"],
+    ["files", "Tüm Dosyalar"],
     ["dyehouse", "Boyahane Durumu"],
     ["logs", "İşlem Logları"],
   ];
@@ -1683,6 +1684,8 @@ export function ModelDetailModal({
       )}
       {tab === "files" && (
         <div className="dsg-file-groups">
+          {activeMainCompany && <ModelDocumentCenter key={(activeMainCompany?.slug||activeMainCompany?.id||"")+":"+model.id}
+            modelId={model.id} modelName={model.modelName} activeMainCompany={activeMainCompany} models={models} />}
           {activeMainCompany && <ModelFilesPanel modelId={model.id} modelName={model.modelName}
             activeMainCompany={activeMainCompany} models={models} onUploaded={onFilesUpdated} />}
           {groupDesignFiles(model.files).map((group) => (

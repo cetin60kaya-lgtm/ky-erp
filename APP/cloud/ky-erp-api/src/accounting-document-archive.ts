@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { archiveFileToCloudConnection } from "./file-hub-cloud-oauth";
+import { buildEBelgeArchiveRelativePath } from "./e-belge-model-archive-path";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string; AZURE_DOCUMENT_INTELLIGENCE_ENDPOINT?: string; AZURE_DOCUMENT_INTELLIGENCE_KEY?: string; KYERP_DOCINTEL_ENDPOINT?: string; KYERP_DOCINTEL_KEY?: string; KYERP_DOCINTEL_INVOICE_MODEL?: string; KYERP_DOCINTEL_DISPATCH_MODEL?: string; KYERP_DOCINTEL_API_VERSION?: string };
 type Variables = { requestId: string };
@@ -50,11 +51,33 @@ async function chooseCloudTarget(c:Context<AppEnv>,slug:string,purposeCode:strin
      LIMIT 1`).bind(slug).first<Row>();
   return row||null;
 }
-function archiveRelative(job:Row,target:Row,ts:string){
-  const date=text(job.issue_date)||text(job.document_created_at).slice(0,10)||ts.slice(0,10);
-  const ym=/^\d{4}-\d{2}/.test(date)?date.slice(0,7):ts.slice(0,7);
-  const party=safePart(job.party_name,"ESLESMEYEN-FIRMA"),docNo=safePart(job.document_no,text(job.document_id).slice(0,8)),fileName=safePart(job.file_name,"belge");
-  return joinRel(text(target.root_path),ym,party,`${docNo} - ${fileName}`);
+async function archiveModelNames(c:Context<AppEnv>,slug:string,job:Row){
+  let meta:Row={};try{meta=JSON.parse(text(job.raw_metadata)||"{}")}catch{}
+  const ids=new Set<string>((Array.isArray(meta.modelIds)?meta.modelIds:[])
+    .map(text).filter(id=>/^[a-zA-Z0-9_-]{8,72}$/.test(id)));
+  // Explicit user-confirmed model links are the same logical document, not copied files.
+  const links=await c.env.DB.prepare(`SELECT data FROM json_store
+   WHERE main_company_slug=? AND scope='EBELGE_MODEL_DOCUMENT_LINK_V1'
+   AND json_extract(CASE WHEN json_valid(data) THEN data ELSE '{}' END,'$.documentId')=? LIMIT 32`)
+   .bind(slug,job.document_id).all<Row>();
+  for(const row of links.results||[]){
+   try{const p=JSON.parse(text(row.data));if(/^[a-zA-Z0-9_-]{8,72}$/.test(text(p.modelId)))ids.add(text(p.modelId))}
+   catch{}
+  }
+  if(!ids.size)return[];
+  const checked=[...ids].slice(0,20),sql=checked.map(()=>"?").join(",");
+  const models=(await c.env.DB.prepare(`SELECT id,model_name FROM model_records
+   WHERE main_company_slug=? AND id IN (${sql}) AND deleted_at IS NULL ORDER BY model_name`)
+   .bind(slug,...checked).all<Row>()).results||[];
+  return models.map(m=>text(m.model_name)).filter(Boolean);
+}
+async function archiveRelative(c:Context<AppEnv>,slug:string,job:Row,target:Row,ts:string){
+ const date=text(job.issue_date)||text(job.document_created_at).slice(0,10)||ts.slice(0,10);
+ return buildEBelgeArchiveRelativePath({
+   root:text(target.root_path),date,party:job.party_name,direction:job.direction,
+   documentType:job.document_type,documentNo:job.document_no||text(job.document_id).slice(0,8),
+   modelNames:await archiveModelNames(c,slug,job),originalFileName:job.file_name,
+ });
 }
 async function completeCloudLocation(c:Context<AppEnv>,slug:string,job:Row,target:Row,result:Row,relative:string,ts:string){
   const connectionId=text(target.storage_connection_id),providerFileId=text(result.id);
@@ -78,7 +101,7 @@ async function completeCloudLocation(c:Context<AppEnv>,slug:string,job:Row,targe
 export async function processCloudArchiveJobs(c:Context<AppEnv>,slug:string,options:{documentId?:string;limit?:number}={}){
   const limit=Math.min(20,Math.max(1,Number(options.limit||5))),documentId=text(options.documentId),where=["j.main_company_slug=?","(j.status IN ('PENDING','RETRY') OR (j.status='CLAIMED' AND j.claimed_at<?))","j.attempts<8"],args:any[]=[slug,new Date(Date.now()-CLAIM_LEASE_MS).toISOString()];
   if(documentId){where.push("j.document_id=?");args.push(documentId)}
-  const rows=await c.env.DB.prepare(`SELECT j.*,d.document_no,d.document_type,d.party_name,d.issue_date,d.created_at document_created_at,a.file_name,a.mime_type,a.size_bytes,a.preview_storage_key,a.metadata
+  const rows=await c.env.DB.prepare(`SELECT j.*,d.document_no,d.document_type,d.direction,d.raw_metadata,d.party_name,d.issue_date,d.created_at document_created_at,a.file_name,a.mime_type,a.size_bytes,a.preview_storage_key,a.metadata
       FROM accounting_document_archive_jobs j
       JOIN accounting_documents d ON d.id=j.document_id AND d.main_company_slug=j.main_company_slug
       JOIN file_hub_assets a ON a.id=j.file_asset_id AND a.main_company_slug=j.main_company_slug
@@ -88,14 +111,14 @@ export async function processCloudArchiveJobs(c:Context<AppEnv>,slug:string,opti
   for(const job of rows.results||[]){
     const target=await chooseCloudTarget(c,slug,text(job.purpose_code));
     if(!target){results.push({jobId:job.id,status:"NO_CLOUD_TARGET"});continue}
-    const ts=now(),relative=archiveRelative(job,target,ts);
+    const ts=now(),relative=await archiveRelative(c,slug,job,target,ts);
     const changed=await c.env.DB.prepare(`UPDATE accounting_document_archive_jobs SET status='CLAIMED',storage_connection_id=?,relative_path=?,claimed_by='CLOUD_API',claimed_at=?,attempts=attempts+1,updated_at=? WHERE id=? AND main_company_slug=? AND (status IN ('PENDING','RETRY') OR (status='CLAIMED' AND claimed_at<?))`).bind(target.storage_connection_id,relative,ts,ts,job.id,slug,new Date(Date.now()-CLAIM_LEASE_MS).toISOString()).run();
     if(Number(changed.meta?.changes||0)===0){results.push({jobId:job.id,status:"SKIPPED_ALREADY_CLAIMED"});continue}
     try{
       const key=text(job.preview_storage_key);if(!key)throw Object.assign(new Error("Geçici belge R2 anahtarı bulunamadı."),{code:"STAGING_MISSING"});
       const object=await c.env.FILES.get(key);if(!object)throw Object.assign(new Error("Geçici belge R2 kaydı bulunamadı."),{code:"STAGING_MISSING"});
       const bytes=await object.arrayBuffer();
-      const uploaded=await archiveFileToCloudConnection(c,slug,text(target.storage_connection_id),{relativePath:relative,fileName:text(job.file_name)||"belge",mimeType:text(job.mime_type)||object.httpMetadata?.contentType||"application/octet-stream",bytes});
+      const uploaded=await archiveFileToCloudConnection(c,slug,text(target.storage_connection_id),{relativePath:relative,fileName:text(job.file_name)||"belge",mimeType:text(job.mime_type)||object.httpMetadata?.contentType||"application/octet-stream",bytes,noOverwrite:upper(target.provider_type)==="GOOGLE_DRIVE"});
       results.push(await completeCloudLocation(c,slug,job,target,uploaded,relative,now()));
     }catch(error:any){
       const attempts=Number(job.attempts||0)+1,status=attempts>=8?"FAILED":"RETRY",message=text(error?.message)||"Bulut arşivleme başarısız.";
@@ -141,11 +164,11 @@ export function registerAccountingDocumentArchiveRoutes(app: Hono<AppEnv>) {
   app.post("/api/auth/file-hub-agent/accounting-archive/claim", async c => {
     if(!agentAllowed(c)) return c.json(err("AGENT_UNAUTHORIZED","Agent anahtarı geçersiz."),401);
     const b=await bodyOf(c), slug=slugOf(c,b), device=text(b.deviceName)||"windows", ts=now(), leaseCutoff=new Date(Date.now()-CLAIM_LEASE_MS).toISOString();
-    const candidates=await c.env.DB.prepare(`SELECT j.*,d.document_no,d.document_type,d.party_name,d.issue_date,d.created_at document_created_at,a.file_name,a.mime_type,a.size_bytes,a.preview_storage_key FROM accounting_document_archive_jobs j JOIN accounting_documents d ON d.id=j.document_id AND d.main_company_slug=j.main_company_slug JOIN file_hub_assets a ON a.id=j.file_asset_id AND a.main_company_slug=j.main_company_slug WHERE j.main_company_slug=? AND (j.status IN ('PENDING','RETRY') OR (j.status='CLAIMED' AND j.claimed_at<?)) AND j.attempts<8 ORDER BY j.created_at ASC LIMIT 20`).bind(slug,leaseCutoff).all<Row>();
+    const candidates=await c.env.DB.prepare(`SELECT j.*,d.document_no,d.document_type,d.direction,d.raw_metadata,d.party_name,d.issue_date,d.created_at document_created_at,a.file_name,a.mime_type,a.size_bytes,a.preview_storage_key FROM accounting_document_archive_jobs j JOIN accounting_documents d ON d.id=j.document_id AND d.main_company_slug=j.main_company_slug JOIN file_hub_assets a ON a.id=j.file_asset_id AND a.main_company_slug=j.main_company_slug WHERE j.main_company_slug=? AND (j.status IN ('PENDING','RETRY') OR (j.status='CLAIMED' AND j.claimed_at<?)) AND j.attempts<8 ORDER BY j.created_at ASC LIMIT 20`).bind(slug,leaseCutoff).all<Row>();
     for(const job of candidates.results||[]){
       const target=await chooseTarget(c,slug,text(job.purpose_code));
       if(!target) continue;
-      const date=text(job.issue_date)||text(job.document_created_at).slice(0,10)||ts.slice(0,10), ym=/^\d{4}-\d{2}/.test(date)?date.slice(0,7):ts.slice(0,7), party=safePart(job.party_name,"ESLESMEYEN-FIRMA"), docNo=safePart(job.document_no,text(job.document_id).slice(0,8)), fileName=safePart(job.file_name,"belge.pdf"), relative=joinRel(text(target.root_path),ym,party,`${docNo} - ${fileName}`);
+      const relative=await archiveRelative(c,slug,job,target,ts);
       const changed=await c.env.DB.prepare(`UPDATE accounting_document_archive_jobs SET status='CLAIMED',storage_connection_id=?,relative_path=?,claimed_by=?,claimed_at=?,attempts=attempts+1,updated_at=? WHERE id=? AND main_company_slug=? AND (status IN ('PENDING','RETRY') OR (status='CLAIMED' AND claimed_at<?))`).bind(target.storage_connection_id,relative,device,ts,ts,job.id,slug,leaseCutoff).run();
       if(Number(changed.meta?.changes||0)===0) continue;
       return c.json({ok:true,data:{jobId:job.id,documentId:job.document_id,fileAssetId:job.file_asset_id,fileName:job.file_name,mimeType:job.mime_type,sizeBytes:Number(job.size_bytes||0),storageConnectionId:target.storage_connection_id,providerType:target.provider_type,relativePath:relative,downloadUrl:`/api/auth/file-hub-agent/accounting-archive/${encodeURIComponent(job.id)}/download`}});
