@@ -15,8 +15,9 @@ test("e-Belge merkezi dört işletme listesi ve yönetim alanlarını korur", ()
 
 test("Belge Havuzu yüklemeyi canonical e-Belge API üzerinden yapar", () => {
   const page = read("./EBelgeCenterPage.jsx");
-  const send = page.slice(page.indexOf("const send = async"), page.indexOf("return <section className=\"eb-upload-card\""));
-  assert.match(send, /uploadEBelge\(files\)/);
+  const send = page.slice(page.indexOf("const send=async"), page.indexOf("return <section className=\"eb-upload-card\""));
+  assert.match(send, /splitEBelgeUploadQueue\(files\)/);
+  assert.match(send, /uploadEBelge\(batch\)/);
   assert.doesNotMatch(send, /reconcileAllEBelge/);
   assert.match(page, /getEBelgeDashboard/);
   assert.match(page, /initialView = "overview"/);
