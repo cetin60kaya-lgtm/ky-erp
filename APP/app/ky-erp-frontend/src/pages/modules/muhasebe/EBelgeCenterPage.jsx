@@ -31,10 +31,9 @@ import {
   uploadEBelge,
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
-import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
+import EBelgeAdapterManager from "./EBelgeAdapterManager";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import "./eBelgeCenter.css";
-import { providerDisplayStatus } from "./eBelgeProviderDisplay";
 
 const today = () => {
   const date = new Date();
@@ -677,18 +676,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} />}
 
     {view === "integrations" && <>
-      <section className="eb-modules-panel">
-        <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Provider bağımsız belge gerçeği</strong><span>İşNet yalnız bir e-Belge sağlayıcısıdır. İşNet, manuel XML/PDF ve diğer sağlayıcılar aynı canonical belge havuzuna kayıt üretir.</span></div></div>
-        <div className="eb-module-grid">
-          {providers.map((provider) => {
-            const key = String(provider.key || provider.label || "").toUpperCase();
-            const health = providerDisplayStatus(provider);
-            const active = health.active;
-            return <article key={key || provider.label} className={`eb-module-card ${active ? "active" : ""}`}><div><strong>{provider.label || key}</strong><span className={`eb-module-status ${active ? "active" : "idle"}`}>{health.label}</span></div><p>{key === "ISNET" ? "İşNet bağlantısı, firma seçimi ve iş kuralları aşağıdaki entegrasyon ayarlarından yönetilir." : "Bu kaynak aynı canonical e-Belge havuzuna belge üretir."}</p><small>Sistem durumu: {provider.status || "-"}{provider.lastVerifiedAt ? ` · Son sağlık kontrolü: ${new Date(provider.lastVerifiedAt).toLocaleString("tr-TR")}` : ""}{provider.sourceError ? ` · Hata: ${provider.sourceError}` : ""}</small></article>;
-          })}
-        </div>
-      </section>
-      <EBelgeIntegrationsWorkspace activeMainCompany={activeMainCompany} openModule={openModule} />
+      <EBelgeAdapterManager activeMainCompany={activeMainCompany} openModule={openModule} providerStatuses={providers} />
+
     </>}
 
     {matchingConfirmOpen ? <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.currentTarget === event.target && !matching) setMatchingConfirmOpen(false); }}>
