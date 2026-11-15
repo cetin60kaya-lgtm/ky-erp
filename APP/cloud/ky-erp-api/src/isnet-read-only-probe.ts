@@ -42,12 +42,14 @@ export async function probeIsnetReadOnlyLists(fetcher:typeof fetch,token:string,
  */
 export async function fetchOneIsnetXmlReadOnly(
  fetcher:typeof fetch, token:string, companyId:number,
- kind:"invoice"|"despatch", from:string, to:string
+ kind:"invoice"|"despatch", from:string, to:string,
+ direction:"incoming"|"outgoing"="incoming",preferredEttn=""
 ):Promise<{bytes:ArrayBuffer;kind:"invoice"|"despatch"}> {
  const isInvoice=kind==="invoice";
- const listPath=isInvoice?"/api/Invoice/GetIncomingEInvoiceList":"/api/Invoice/GetIncomingDespatchList";
+ const listPath=isInvoice?(direction==="incoming"?"/api/Invoice/GetIncomingEInvoiceList":"/api/Invoice/GetSentStagingInvoiceList"):
+  (direction==="incoming"?"/api/Invoice/GetIncomingDespatchList":"/api/Invoice/GetSentStagingDespatchList");
  const listBody=isInvoice
-  ?{CompanyId:companyId,FirstInvoiceDate:from,LastInvoiceDate:to,PageIndex:0,PageSize:25,IsArchiveIncluded:true}
+  ?{CompanyId:companyId,FirstInvoiceDate:from,LastInvoiceDate:to,PageIndex:0,PageSize:25,IsArchiveIncluded:true,...(direction==="outgoing"?{IsSended:true}:{})}
   :{CompanyId:companyId,FirstDespatchDate:from,LastDespatchDate:to,PageIndex:0,PageSize:25};
  const headers={Accept:"application/json","Content-Type":"application/json",Authorization:"Bearer "+token,Token:token};
  const providerPost=async (path:string,body:Record<string,unknown>)=>{
@@ -66,12 +68,15 @@ export async function fetchOneIsnetXmlReadOnly(
  const listed=await providerPost(listPath,listBody);
  const rows=listed[isInvoice?"Invoices":"Despatches"];
  if(!Array.isArray(rows))throw new Error("ISNET_LIST_NOT_VERIFIED");
- const selected=rows.find(row=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(String(row?.Ettn||"")));
+ const acceptedRows=rows.filter((row:Row)=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(String(row?.Ettn||"")));
+ const selected=preferredEttn
+  ?acceptedRows.find((row:Row)=>String(row.Ettn).toLowerCase()===preferredEttn.toLowerCase())
+  :acceptedRows.sort((a:Row,b:Row)=>String(b[isInvoice?"InvoiceDate":"DespatchDate"]||"").localeCompare(String(a[isInvoice?"InvoiceDate":"DespatchDate"]||"")))[0];
  if(!selected)throw new Error("ISNET_NO_XML_SAMPLE");
  // Official IsNet values: InvoiceDirection.GelenFatura=1;
  // InvoiceDocumentType.EInvoice=1 / Despatch=4.
  const meta=await providerPost("/api/Invoice/GetInvoiceExternalXmlUrl",{
-  Ettn:String(selected.Ettn),InvoiceDirection:1,InvoiceDocumentType:isInvoice?1:4,
+  Ettn:String(selected.Ettn),InvoiceDirection:direction==="incoming"?1:2,InvoiceDocumentType:isInvoice?1:4,
  });
  const raw=String(meta.ExternalLink||"");
  let target:URL;
