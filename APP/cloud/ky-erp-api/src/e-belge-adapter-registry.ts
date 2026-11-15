@@ -26,3 +26,19 @@ export function classifyAdapterInstallation(key:unknown,installed:boolean) {
  if(adapter.driver===null)return {status:"DRIVER_PENDING",canConnect:false};
  return {status:"SELECTED_VERIFICATION_REQUIRED",canConnect:false};
 }
+
+/** The caller orders records by canonical-id priority and newest timestamp.
+ * One row per adapter wins; malformed legacy rows cannot overwrite a valid choice.
+ */
+export function decodeEBelgeSelections(rows: ReadonlyArray<{file_name?:unknown;data?:unknown}>) {
+ const selected:Record<string,boolean>={};
+ for(const row of rows){
+  const adapter=getEBELGEAdapter(row.file_name);
+  if(!adapter||Object.prototype.hasOwnProperty.call(selected,adapter.key))continue;
+  try {
+   const value=typeof row.data==="string"?JSON.parse(row.data):row.data;
+   if(value&&typeof value==="object")selected[adapter.key]=value.selected===true;
+  }catch{/* Skip a corrupt legacy record. */}
+ }
+ return selected;
+}

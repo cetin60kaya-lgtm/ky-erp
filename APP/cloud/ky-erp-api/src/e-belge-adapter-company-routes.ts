@@ -1,7 +1,7 @@
 import type { Context,Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { accountingAccess,accountingTenantReadAllowed,accountingTenantCandidates } from "./accounting-access-policy";
-import { EBELGE_ADAPTERS,getEBELGEAdapter,classifyAdapterInstallation } from "./e-belge-adapter-registry";
+import { EBELGE_ADAPTERS,getEBELGEAdapter,classifyAdapterInstallation,decodeEBelgeSelections } from "./e-belge-adapter-registry";
 
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -20,17 +20,11 @@ async function permit(c:Context<Env>,method:"GET"|"PUT",body:Row={}) {
  return {ok:true,tenant};
 }
 async function selections(c:Context<Env>,tenant:string):Promise<Record<string,boolean>> {
- const rows=await c.env.DB.prepare("SELECT file_name,data FROM json_store WHERE scope=? AND main_company_slug=?").bind(SCOPE,tenant).all<Row>();
- const out:Record<string,boolean>={};
- for(const row of rows.results||[]){
-  const adapter=getEBELGEAdapter(row.file_name);
-  if(!adapter)continue;
-  try{
-   const data=JSON.parse(clean(row.data));
-   out[adapter.key]=data.selected===true;
-  }catch{/* Invalid legacy row is never an installed adapter. */}
- }
- return out;
+ const rows=await c.env.DB.prepare(
+  "SELECT id,file_name,data FROM json_store WHERE scope=? AND main_company_slug=? "+
+  "ORDER BY CASE WHEN id LIKE 'EBELGE_ADAPTER_SELECTION_V1:%' THEN 0 ELSE 1 END, updated_at DESC, id DESC"
+ ).bind(SCOPE,tenant).all<Row>();
+ return decodeEBelgeSelections(rows.results||[]);
 }
 /** Company enabled state changes ONLY selection; never deletes documents,
  * provider credentials, system adapter code, archives or saved settings.
@@ -58,15 +52,15 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
   if(typeof body.selected!=="boolean")
    return c.json(error("INVALID_SELECTION","Adaptörü eklemek veya kaldırmak için açık seçim gerekir."),400);
   const ts=new Date().toISOString();
-  const current=await c.env.DB.prepare("SELECT id FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? ORDER BY updated_at DESC LIMIT 1").bind(SCOPE,access.tenant,adapter.key).first<Row>();
+  // Stable primary key prevents concurrent first-time PUTs from creating duplicate rows.
+  // Historical UUID rows remain untouched; reads prefer the new canonical row.
+  const stableId=`EBELGE_ADAPTER_SELECTION_V1:${access.tenant}:${adapter.key}`;
   const state={key:adapter.key,selected:body.selected,updatedAt:ts,
     updatedBy:(await getAuthenticatedUser(c))?.id||null};
-  if(current?.id){
-   await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=?").bind(JSON.stringify(state),ts,current.id,SCOPE,access.tenant).run();
-  }else{
-   await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)")
-    .bind(crypto.randomUUID(),SCOPE,access.tenant,adapter.key,JSON.stringify(state),ts,ts).run();
-  }
+  await c.env.DB.prepare(
+    "INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) "+
+    "VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at"
+  ).bind(stableId,SCOPE,access.tenant,adapter.key,JSON.stringify(state),ts,ts).run();
   return c.json({ok:true,data:{...state,...classifyAdapterInstallation(adapter.key,body.selected),
    message:body.selected
     ? "Adaptör firma listesine eklendi. Gerçek bağlantı ve yetki ayrıca doğrulanır."

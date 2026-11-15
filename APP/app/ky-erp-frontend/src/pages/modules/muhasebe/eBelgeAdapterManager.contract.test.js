@@ -23,3 +23,12 @@ test("Adaptöre tıklama sağlayıcı ayar ekranına gider ve sahte PASS veya ev
  assert.doesNotMatch(ui,/DELETE FROM|hardDeleteDocument|deleteInvoice/);
  assert.match(client,/\/e-belge\/adapters/);
 });
+
+test("Firma geçişi sırasında eski istek ekranı güncellemez ve liste önbellekten okunmaz",()=>{
+ assert.match(ui,/const requestSeq=useRef\(0\)/);
+ assert.match(ui,/seq!==requestSeq.current/);
+ assert.match(ui,/next.mainCompanySlug/);
+ assert.match(ui,/data.mainCompanySlug===tenant/);
+ assert.match(ui,/Firma adaptörleri yüklenemedi/);
+ assert.match(client,/forceFresh:true/);
+});
