@@ -80,7 +80,7 @@ async function readWorkbook(file:File){
   for(const row of rows){
    rowCount++;if(rowCount>15000)throw Object.assign(new Error("Excel çok büyük. En fazla 15.000 satır kabul edilir."),{status:413});
    for(const raw of Array.isArray(row)?row:[]){
-    const value=str(raw).toUpperCase().replace(/\\s+/g,"");
+    const value=str(raw).toUpperCase().replace(/\s+/g,"");
     for(const found of value.match(/HKN[0-9]{8,18}(?![0-9])/g)||[]){
       if(numbers.has(found))duplicates.add(found);
       numbers.add(found);
