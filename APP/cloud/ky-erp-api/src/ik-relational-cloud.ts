@@ -3319,6 +3319,9 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
   }
   if (body.lock === true) {
     const blocking = checks.filter((item) => !item.ok);
+    if (blocking.length) {
+      return error(c, 409, "IK_MONTH_CLOSE_BLOCKED", `Ay sonu kilitlenemedi. Önce şu kontrolleri tamamlayın: ${blocking.map((item) => item.title).join(", ")}.`);
+    }
     const timestamp = nowIso();
     const id = crypto.randomUUID();
     await c.env.DB.batch([
