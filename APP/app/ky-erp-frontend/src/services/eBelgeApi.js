@@ -77,7 +77,12 @@ export async function uploadEBelge(files, { direction = "AUTO", documentKind = "
   const selected = Array.from(files || []);
   const form = new FormData();
   selected.forEach((file) => form.append("files", file));
-  const previews = await Promise.all(selected.map((file) => buildPdfOcrPreview(file)));
+  // A manual fallback must not depend on the PDF parser/OCR that just failed.
+  // If a particular PDF preview is unavailable, the backend keeps the original
+  // out of automatic posting and returns a per-file review error instead.
+  const previews = manualOnly ? [] : await Promise.all(selected.map(async (file) => {
+    try { return await buildPdfOcrPreview(file); } catch { return null; }
+  }));
   previews.forEach((preview, index) => {
     if (preview) form.append("preview_" + index, preview);
   });
