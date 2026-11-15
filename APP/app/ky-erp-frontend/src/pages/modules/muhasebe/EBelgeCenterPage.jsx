@@ -94,6 +94,7 @@ const sourceLabel = (value) => ({
   ISNET_DIRECT: "İşNet",
   PARASUT: "Paraşüt",
   MANUAL: "Manuel",
+  MANUAL_REVIEW: "Manuel Giriş",
 }[String(value || "").toUpperCase()] || value || "-");
 
 const statusLabel = (value) => ({
@@ -525,6 +526,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [lastUpload, setLastUpload] = useState(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
+  const [statusFilter,setStatusFilter] = useState("ALL");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -544,9 +546,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
    view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?"HISTORY":view==="pool"?filter:"ALL");
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
-    filter:effectiveFilter,direction,q:query,from,to,page,pageSize:50,
+    filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,
     ...(view==="incoming-invoices"&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view]);
+  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
 
   const loadPool = useCallback(async () => {
@@ -616,6 +618,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
   useEffect(() => {
     setPage(1);
+    setStatusFilter("ALL");
     setMatchingConfirmOpen(false);
     setMatchingApproved(false);
   }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
@@ -717,6 +720,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           className={view===key?"active":""} aria-current={view===key?"page":undefined}
           onClick={()=>openEBelgeTab(tabKey)}>{title}</button>)}
       </nav>
+          {view!=="pool"&&<button type="button" onClick={()=>openEBelgeTab("belge-havuzu")}><Upload size={17}/> Belge Yükle</button>}
           <button type="button" onClick={loadPool} disabled={busy}><RefreshCw size={17} /> Güncelle</button>
           {(view === "matching" || view === "pool") && <button type="button" className="eb-primary" onClick={() => { setMatchingApproved(false); setMatchingConfirmOpen(true); }} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>}
         </>}
@@ -772,6 +776,11 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
               onChange={e=>{setOnlyPrintPending(e.target.checked);setPage(1)}}/>
             Yalnız Çıktı Bekleyenler
           </label>}
+          <label>Durum<select value={statusFilter} onChange={e=>{setStatusFilter(e.target.value);setPage(1);}}>
+            <option value="ALL">Tüm Durumlar</option><option value="INGESTED">Yeni</option>
+            <option value="REVIEW_REQUIRED">Kontrol Bekliyor</option><option value="READY_FOR_APPROVAL">Onaya Hazır</option>
+            <option value="APPROVED">Onaylandı</option><option value="POSTED">Muhasebeleşti</option>
+          </select></label>
           {view === "pool" && <label>Göster<select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>}
           <label>Başlangıç<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} /></label>
           <label>Bitiş<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPage(1); }} /></label>

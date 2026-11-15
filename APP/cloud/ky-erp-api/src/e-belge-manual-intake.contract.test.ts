@@ -6,7 +6,7 @@ const print=readFileSync(new URL("./e-belge-accounting-print-routes.ts",import.m
 test("e-Arsiv is included in invoice queue, pending print and print-status query",()=>{
  assert.match(pool,/invoiceTypeSql=.*ARSIV/);
  assert.match(pool,/const invoiceTypeSql/);
- assert.match(pool,/upper\(c\.req\.query\("filter"\)\)==="INCOMING_INVOICE"/);
+ assert.match(pool,/upper\(c\.req\.query\("filter"\)\)!=="INCOMING_INVOICE"/);
  assert.match(print,/document_type LIKE '%ARSIV%'/);
 });
 test("Manually transcribed OCR failure is review only and requires documented source confirmation",()=>{
