@@ -9,7 +9,7 @@ const sections=[
 ];
 const rowsOf=value=>Array.isArray(value)?value:Array.isArray(value?.items)?value.items:[];
 const labelOf=item=>(item.direction==="OUTGOING"?"Giden ":"Gelen ")+(item.kind==="IRSALIYE"?"İrsaliye":"Fatura");
-const suffixOf=(value,kind)=>String(value||"BELGE").replace(/[\\/:*?"<>|\u0000-\u001f]/g,"-").trim()+"."+kind.toLowerCase();
+const suffixOf=(value,kind)=>String(value||"BELGE").replace(/[\\/:*?"<>|]/g,"-").split("").map(ch=>ch.charCodeAt(0)<32?"-":ch).join("").trim()+"."+kind.toLowerCase();
 
 export default function ModelDocumentCenter({modelId,modelName,activeMainCompany,models=[]}){
  const slug=String(activeMainCompany?.slug||activeMainCompany?.id||"").trim();

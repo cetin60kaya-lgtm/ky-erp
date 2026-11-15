@@ -124,7 +124,7 @@ export function registerModelDocumentCenterRoutes(app:Hono<Env>){
       outgoingDispatches:rows.filter(r=>r.direction==="OUTGOING"&&r.kind==="IRSALIYE").length},
     source:"D1_ACCOUNTING_DOCUMENTS_AND_FILE_HUB",copied:0
    }});
-  }catch(e:any){return c.json(fail(clean(e.code)||"DOCUMENT_CENTER_FAILED",clean(e.message)),Number(e.status)||409)}
+  }catch(e:any){return c.json(fail(clean(e.code)||"DOCUMENT_CENTER_FAILED",clean(e.message)),([400,403,404,409].includes(Number(e.status))?Number(e.status):500) as 400|403|404|409|500)}
  });
  app.get("/api/model-files/:modelId/document-candidates",async c=>{
   try{
@@ -139,7 +139,7 @@ export function registerModelDocumentCenterRoutes(app:Hono<Env>){
    return c.json({ok:true,data:rows.filter(r=>isDocType(r.document_type)&&sameCompany(model,r)).map(r=>({
     id:r.id,number:r.document_no,type:r.document_type,direction:r.direction,party:r.party_name,date:r.issue_date,status:r.status
    }))});
-  }catch(e:any){return c.json(fail(clean(e.code)||"SEARCH_FAILED",clean(e.message)),Number(e.status)||409)}
+  }catch(e:any){return c.json(fail(clean(e.code)||"SEARCH_FAILED",clean(e.message)),([400,403,404,409].includes(Number(e.status))?Number(e.status):500) as 400|403|404|409|500)}
  });
  app.post("/api/model-files/:modelId/documents/:documentId/link",async c=>{
   const body:Row=await c.req.json<Row>().catch(():Row=>({}));
@@ -161,7 +161,7 @@ export function registerModelDocumentCenterRoutes(app:Hono<Env>){
    await c.env.DB.batch(stmts);
    return c.json({ok:true,data:{documentId:id,modelIds:models.map(m=>clean(m.id)),copied:0,
     message:"Belge tek kayıt olarak seçilen modellere bağlandı. PDF/XML taşınmadı ve muhasebe kaydı değiştirilmedi."}});
-  }catch(e:any){return c.json(fail(clean(e.code)||"LINK_FAILED",clean(e.message)),Number(e.status)||409)}
+  }catch(e:any){return c.json(fail(clean(e.code)||"LINK_FAILED",clean(e.message)),([400,403,404,409].includes(Number(e.status))?Number(e.status):500) as 400|403|404|409|500)}
  });
  app.get("/api/model-files/:modelId/documents/:documentId/file/:kind",async c=>{
   try{
@@ -180,6 +180,6 @@ export function registerModelDocumentCenterRoutes(app:Hono<Env>){
    return new Response(file.bytes,{headers:{"Content-Type":type,
     "Content-Disposition":"attachment; filename*=UTF-8''"+encodeURIComponent(clean(doc.document_no)||"BELGE")+"."+kind.toLowerCase(),
     "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"}});
-  }catch(e:any){return c.json(fail(clean(e.code)||"FILE_READ_FAILED",clean(e.message)),Number(e.status)||409)}
+  }catch(e:any){return c.json(fail(clean(e.code)||"FILE_READ_FAILED",clean(e.message)),([400,403,404,409].includes(Number(e.status))?Number(e.status):500) as 400|403|404|409|500)}
  });
 }
