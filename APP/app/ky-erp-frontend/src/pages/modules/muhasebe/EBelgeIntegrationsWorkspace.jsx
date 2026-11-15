@@ -23,6 +23,7 @@ import {
   getIsnetPortalHealth,
   getIsnetEgressHealth,
   getIsnetReadOnlyPreview,
+  downloadIsnetReadOnlyXmlSample,
   saveIsnetSettings,
   testIsnetSettings,
 } from "../../../services/isnetApi";
@@ -115,6 +116,11 @@ export default function EBelgeIntegrationsWorkspace({
   const [connectionTest, setConnectionTest] = useState(null);
   const [portalHealth, setPortalHealth] = useState(null);
   const [readOnlyCheck,setReadOnlyCheck]=useState(null);
+  const [xmlDownloadNotice,setXmlDownloadNotice]=useState("");
+  const [period,setPeriod]=useState(()=>{
+    const now=new Date(),today=now.toISOString().slice(0,10);
+    return {from:new Date(now.getTime()-7*86400000).toISOString().slice(0,10),to:today};
+  });
   const [apiNetworkStatus, setApiNetworkStatus] = useState(null);
   const [vaultNotice, setVaultNotice] = useState(null);
   const [connection, setConnection] = useState({
@@ -151,6 +157,7 @@ export default function EBelgeIntegrationsWorkspace({
     setConnectionTest(null);
     setPortalHealth(null);
     setReadOnlyCheck(null);
+    setXmlDownloadNotice("");
     setShowPassword(false);
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
@@ -400,7 +407,7 @@ export default function EBelgeIntegrationsWorkspace({
     if(busy)return;
     setBusy("read-only-lists");setReadOnlyCheck(null);
     try{
-      const response=await getIsnetReadOnlyPreview();
+      const response=await getIsnetReadOnlyPreview(period.from,period.to);
       setReadOnlyCheck(response);
       setNotice({tone:response.verified?"success":"warning",connectionMode:"api",
         text:response.message||"Gelen fatura/irsaliye listesi doğrulanamadı."});
@@ -409,6 +416,25 @@ export default function EBelgeIntegrationsWorkspace({
       setNotice({tone:"error",connectionMode:"api",
         text:error?.message||"İşNet belge listesi okunamadı. Oturumu ve firma yetkisini kontrol edin."});
     }finally{setBusy("")}
+  }
+
+
+  async function downloadXmlSample(kind){
+    if(busy||connection.connectionMode!=="api"||!connection.sessionReady||!savedCompany)return;
+    setBusy("download-xml-"+kind);setXmlDownloadNotice("");
+    try{
+      const blob=await downloadIsnetReadOnlyXmlSample(kind,period.from,period.to);
+      if(!(blob instanceof Blob)||blob.size===0)throw new Error("XML dosyası boş döndü.");
+      const url=URL.createObjectURL(blob);
+      try{
+        const anchor=document.createElement("a");
+        anchor.href=url;
+        anchor.download=kind==="invoice"?"isnet-gelen-fatura-ornek.xml":"isnet-gelen-irsaliye-ornek.xml";
+        document.body.appendChild(anchor);anchor.click();anchor.remove();
+      }finally{window.setTimeout(()=>URL.revokeObjectURL(url),10000)}
+      setXmlDownloadNotice("Gerçek XML tarayıcıya indirildi. Orijinal dosyayı PDF önizlemesi için Belge Havuzu'nda kullanabiliriz; D1/R2 verisi değiştirilmedi.");
+    }catch(e){setXmlDownloadNotice(e?.message||"Gerçek XML doğrulanamadı. İndirme yapılmadı.");}
+    finally{setBusy("")}
   }
 
   async function saveConnection() {
@@ -629,12 +655,32 @@ export default function EBelgeIntegrationsWorkspace({
             </button>
           </div>
           {(connectionTest?.saved || savedCompany) && <p className="ism-connection-complete"><CheckCircle2 size={16} /> Firma seçimi korunuyor. Otomatik belge senkronizasyonu yalnız API doğrulamasıyla aktif sayılır.</p>}
+          {connection.connectionMode==="portal"&&savedCompany&&
+            <p className="ism-connection-help" role="status">
+              <strong>Firma kaydı tamam.</strong> XML indirmek için bağlantı yöntemini “İşNet API — otomatik senkronizasyon” yapıp API oturumunu da doğrulayın. Portal kaydı korunur; şifrenizi burada paylaşmanız gerekmez.
+            </p>}
           {connection.connectionMode==="api"&&<div className="ism-readonly-acceptance">
-            <div><strong>3. Gerçek belge listesi kontrolü (salt okunur)</strong><p>Yetkili İşNet hesabıyla gelen e-Fatura ve e-İrsaliye listelerinin ilk 25 kaydını sınar. Belge indirimi, mali kayıt ve resmî gönderim yapmaz.</p></div>
-            <button type="button" disabled={!!busy||!connection.companyId||!connection.sessionReady} onClick={()=>void checkDocumentLists()}>
+            <div><strong>3. Gerçek belge / XML kontrolü (salt okunur)</strong><p>Yetkili firma, tarih aralığı ve resmî İşNet API oturumuyla önce gelen e-Fatura/e-İrsaliye listelerini doğrulayın; ardından yalnız bir gerçek XML örneği indirin. Mali kayıt ve resmî gönderim yapılmaz.</p></div>
+            <div className="ism-readonly-period">
+              <label>Başlangıç <input type="date" value={period.from} max={period.to} disabled={!!busy}
+                onChange={e=>{setPeriod(p=>({...p,from:e.target.value}));setReadOnlyCheck(null);setXmlDownloadNotice("");}}/></label>
+              <label>Bitiş <input type="date" value={period.to} min={period.from} max={new Date().toISOString().slice(0,10)} disabled={!!busy}
+                onChange={e=>{setPeriod(p=>({...p,to:e.target.value}));setReadOnlyCheck(null);setXmlDownloadNotice("");}}/></label>
+              <small>En fazla 31 gün; yalnız gelen belgeler. Kayıtlı belgeler silinmez.</small>
+            </div>
+            <button type="button" disabled={!!busy||!savedCompany||!connection.companyId||!connection.sessionReady||!period.from||!period.to} onClick={()=>void checkDocumentLists()}>
               {busy==="read-only-lists"?<LoaderCircle className="spin" size={16}/>:<ShieldCheck size={16}/>}
               Gelen Listeleri Doğrula
             </button>
+            {readOnlyCheck?.verified&&<div className="ism-xml-download-actions">
+              <button type="button" disabled={!!busy||!savedCompany||!connection.sessionReady} onClick={()=>void downloadXmlSample("invoice")}>
+                {busy==="download-xml-invoice"?<LoaderCircle className="spin" size={16}/>:<Save size={16}/>} Bir Gelen Fatura XML İndir
+              </button>
+              <button type="button" disabled={!!busy||!savedCompany||!connection.sessionReady} onClick={()=>void downloadXmlSample("despatch")}>
+                {busy==="download-xml-despatch"?<LoaderCircle className="spin" size={16}/>:<Save size={16}/>} Bir Gelen İrsaliye XML İndir
+              </button>
+            </div>}
+            {xmlDownloadNotice&&<p className="ism-connection-help" role="status">{xmlDownloadNotice}</p>}
             {readOnlyCheck&&<div className="ism-acceptance-results" role="status">
               <p>{readOnlyCheck.verified?"İşNet gerçek API liste sorgusu doğrulandı.":"Liste sorgusu eksik; senkronizasyon başarılı sayılmaz."}</p>
               <span>Gelen faturalar: {readOnlyCheck.results?.incomingInvoices?.status==="VERIFIED_READ_ONLY"?readOnlyCheck.results.incomingInvoices.firstPageCount+" (ilk sayfa)":readOnlyCheck.results?.incomingInvoices?.status||"Doğrulanamadı"}</span>
