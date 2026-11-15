@@ -50,7 +50,7 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
   }});
  });
  app.put("/api/e-belge/adapters/:adapterKey",async c=>{
-  const body=await c.req.json<Row>().catch(()=>({}));
+  const body:Row=await c.req.json<Row>().catch(():Row=>({}));
   const access=await permit(c,"PUT",body);
   if(!access.ok)return c.json(error("FORBIDDEN","Bu firma için adaptör ekleme/kaldırma yetkiniz yok."),403);
   const adapter=getEBELGEAdapter(c.req.param("adapterKey"));
