@@ -1,5 +1,8 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+> **16.11.2026 — ORTAK ARAÇ/KOTA KARARI (GÜNCEL):** KY ERP canonical ve bütün yan projeler, [tek özel maliyet/erişim kaynağını](https://github.com/cetin60kaya-lgtm/kyerp/blob/main/CONTROL/KY_TUM_PROJELER_ARAC_VE_KOTA_ANA_KURALI.md) izler. **Actions aylık 5 USD ek kullanım hesabın tüm depolarında ortak**, diğer GitHub bütçeleri **0 USD**; Actions limitte durdurma/uyarı açıktır. Kod işi doğrudan GitHub bağlayıcısı; yerel DESEN/X işlemlerinde önce mevcut KY Control Hub/Chat Bridge/Drive; Remote Desktop Commander yalnız kullanıcı isteğiyle gerçekten zorunlu Windows işleminde asgari çağrı. Eski 0 USD Actions ifadeleri tarihîdir. Bu belge canlı erişimi, üretim yayını veya eski sohbetlere otomatik talimat güncellemesini kanıtlamaz.
+
+
 ## 15.11.2026 — İK Aylık manuel banka ve tek seferlik maaş kontrolü (PR #585)
 
 - **Kullanıcı kararı:** Muhasebecinin XLS/XLSX/ZIP bordro dosyası maaş hazırlamak için zorunlu değildir. İK Aylık → Bordro & Ödeme → Bu Ayın Maaşlarını Hazırla, seçili KY ERP / Hakan Emprime bordro kapsamındaki personeli sıra ile getirir. Maaş, yol, sabit EK, mesai, avans, kesinti, icra/haciz sistemden gelir; kullanıcının o ay için **elle girdiği banka tutarı** temel alınır, elden kalanı **net − banka** hesaplanır. Banka ve elden tutarı birlikte ayrı ayrı girilmez; girilen banka neti aşıyorsa sessiz kısma yok, hata vardır.
@@ -1464,7 +1467,7 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## GitHub maliyet / Actions tek düzen — 04.10.2026
 
-- GitHub ek kullanım bütçeleri 0 USD ve limitte kullanım durdurma yaklaşımı korunur.
+- **16.11.2026 maliyet güncellemesi:** Actions için hesap geneline ortak 5 USD/ay ek bütçe vardır; Packages/Git LFS/AI Credits/Codespaces 0 USD kalır. 04.10 tarihi 0 USD Actions politikası geçersizdir.
 - Copilot Free varsayılandır; ücretli Copilot/ek kredi/ücretli GitHub servisi kullanıcı açıkça istemedikçe açılmaz.
 - Otomatik CI için tek canonical kapı: `.github/workflows/ui-canonical-acceptance.yml`; normal geliştirmede yalnız hedef PR değişikliklerinde çalışır ve aynı işin eski koşusunu iptal eder.
 - PDKS Windows/native build, PDKS web kontrolü, Muhasebe geniş kabul, production smoke, security deploy ve günlük operasyon deploy akışları varsayılan olarak `workflow_dispatch` ile manuel çalıştırılır.
