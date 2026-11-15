@@ -6,6 +6,6 @@ const tenantParams=(company)=>{
 };
 const unwrap=(payload)=>payload?.ok===true&&Object.prototype.hasOwnProperty.call(payload,"data")?payload.data:payload;
 export const getCompanyEBelgeAdapters=(company)=>
- apiGet("/e-belge/adapters",tenantParams(company),{timeoutMs:30000}).then(unwrap);
+ apiGet("/e-belge/adapters",tenantParams(company),{timeoutMs:30000,forceFresh:true}).then(unwrap);
 export const setCompanyEBelgeAdapter=(company,key,selected)=>
  apiPut("/e-belge/adapters/"+encodeURIComponent(key),{...tenantParams(company),selected},{timeoutMs:30000}).then(unwrap);
