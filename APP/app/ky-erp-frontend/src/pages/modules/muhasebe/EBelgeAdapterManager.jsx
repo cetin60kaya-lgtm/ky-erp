@@ -1,12 +1,11 @@
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
-import {Activity,AlertTriangle,CheckCircle2,ChevronRight,FileCode2,FolderOpen,Layers3,Plus,RefreshCw,Search,ShieldCheck,Trash2,Building2,LockKeyhole,PauseCircle,PlayCircle,Settings2,XCircle} from "lucide-react";
+import {Activity,AlertTriangle,CheckCircle2,ChevronDown,FileCode2,FolderOpen,Layers3,Plus,RefreshCw,Search,ShieldCheck,LockKeyhole,PauseCircle,PlayCircle,Settings2,X,Trash2} from "lucide-react";
 import {getCompanyEBelgeAdapters,setCompanyEBelgeAdapter} from "../../../services/eBelgeAdapterApi";
 import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
 import "./eBelgeAdapterManager.css";
 
-const ICONS={ISNET:ShieldCheck,MANUAL:FileCode2,LOGO:Building2,MIKRO:Layers3,PARASUT:FolderOpen};
 const connectionStatus=(adapter,provider,entry)=>{
- if(adapter.driver===null)return "Bağlantı motoru geliştirme bekliyor";
+ if(adapter.driver===null)return "Bağlayıcı henüz hazır değil";
  if(entry?.enabled===false)return "Firma için pasif";
  if(adapter.key==="MANUAL")return "XML yükleme kullanılabilir";
  if(provider?.connected===true)return "İşNet sağlayıcı oturumu doğrulandı";
@@ -14,6 +13,11 @@ const connectionStatus=(adapter,provider,entry)=>{
  if(provider?.status==="NOT_CONFIGURED")return "İşNet firma bağlantısı kurulmadı";
  return "Sağlayıcı bağlantısı doğrulanmadı";
 };
+const providerService=(key)=>key==="ISNET"
+ ?{title:"Resmî İşNet API",url:"https://einvoiceapi.isnet.net.tr",description:"Servis adresi güvenlik nedeniyle sistemde sabittir. Portal veya API giriş yöntemi aşağıdaki İşNet bağlantı ayarlarından seçilir."}
+ :key==="MANUAL"
+ ?{title:"Yerel belge kaynağı",description:"Manuel UBL-TR XML / PDF yüklemesi için dış servis URL'si gerekmez."}
+ :{title:"Henüz entegre edilmedi",description:"Bu sağlayıcının doğrulanmış bağlantı sürücüsü yok. Rastgele servis URL'si eklemek bağlantı açmaz; bağlantı ayarları sürücü hazırlandığında gösterilir."};
 
 export default function EBelgeAdapterManager({activeMainCompany,openModule,providerStatuses=[],onRefreshStatuses}){
  const tenant=activeMainCompany?.slug||activeMainCompany?.mainCompanySlug||activeMainCompany?.id||activeMainCompany?.mainCompanyId||"";
@@ -38,10 +42,12 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
    const result=await getCompanyEBelgeAdapters(owner);
    if(seq!==requestSeq.current)return;
    if(String(result.mainCompanySlug||"").toLowerCase()!==String(tenant).toLowerCase())
-    throw new Error("Firma adaptör yanıtının şirket kapsamı eşleşmiyor.");
-   setData({mainCompanySlug:tenant,systemCatalog:result.systemCatalog||[],companyAdapters:result.companyAdapters||[]});
-   setSelected(current=>current||result.companyAdapters?.find(x=>x.key==="ISNET"&&x.selected)?.key||result.companyAdapters?.find(x=>x.selected)?.key||"");
-  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firmanın adaptörleri alınamadı.")}
+    throw new Error("Firma entegrasyon yanıtının şirket kapsamı eşleşmiyor.");
+   const companyAdapters=result.companyAdapters||[];
+   setData({mainCompanySlug:tenant,systemCatalog:result.systemCatalog||[],companyAdapters});
+   setSelected(current=>companyAdapters.some(x=>x.key===current&&x.selected)
+    ?current:companyAdapters.find(x=>x.key==="ISNET"&&x.selected)?.key||companyAdapters.find(x=>x.selected)?.key||"");
+  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firma entegrasyonları alınamadı.")}
   finally{if(seq===requestSeq.current)setLoading(false)}
  },[tenant,owner]);
  useEffect(()=>{setSelected("");setShowCatalog(false);setQuery("");setNotice("");setBusy("");setRemoveKey("");void load();return()=>{requestSeq.current+=1}},[load]);
@@ -50,11 +56,11 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const enabled=useMemo(()=>new Set(visibleData.companyAdapters.filter(x=>x.selected).map(x=>x.key)),[visibleData.companyAdapters]);
  const installed=visibleData.systemCatalog.filter(x=>enabled.has(x.key));
  const available=visibleData.systemCatalog.filter(x=>!enabled.has(x.key)&&String(x.label+" "+x.description).toLocaleLowerCase("tr-TR").includes(query.toLocaleLowerCase("tr-TR")));
- const choice=(key)=>visibleData.companyAdapters.find(x=>x.key===key);
+ const choice=key=>visibleData.companyAdapters.find(x=>x.key===key);
  const active=visibleData.systemCatalog.find(x=>x.key===selected&&enabled.has(x.key));
  const activeCount=installed.filter(x=>choice(x.key)?.enabled!==false).length;
- const provider=(adapter)=>providerStatuses.find(x=>String(x.key||"").toUpperCase()===adapter.key);
- const status=(adapter)=>connectionStatus(adapter,provider(adapter),choice(adapter.key));
+ const provider=adapter=>providerStatuses.find(x=>String(x.key||"").toUpperCase()===adapter.key);
+ const status=adapter=>connectionStatus(adapter,provider(adapter),choice(adapter.key));
  const connected=installed.filter(x=>x.key==="ISNET"&&choice(x.key)?.enabled!==false&&provider(x)?.connected===true).length;
  const canEdit=!busy&&!loading&&!error;
 
@@ -67,98 +73,89 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
    const next=await getCompanyEBelgeAdapters(owner);
    if(seq!==requestSeq.current)return;
    if(String(next.mainCompanySlug||"").toLowerCase()!==String(operationTenant).toLowerCase())
-    throw new Error("Adaptör güncellemesinin firma kapsamı eşleşmiyor.");
+    throw new Error("Entegrasyon güncellemesinin firma kapsamı eşleşmiyor.");
    setData({mainCompanySlug:operationTenant,systemCatalog:next.systemCatalog||[],companyAdapters:next.companyAdapters||[]});
-   setRemoveKey("");
-   if(!add&&selected===adapter.key)setSelected("");
-   if(add&&!enabled.has(adapter.key)){setShowCatalog(false);setSelected(adapter.key)}
-   if(!add)setNotice("Adaptör yalnız firmanın seçim listesinden çıkarıldı. Belgeler ve ayarlar korunur.");
-   else setNotice(activate?"Adaptör firma için etkinleştirildi; gerçek bağlantısı ayrıca doğrulanacaktır.":"Adaptör firma için pasife alındı; geçmiş ve ayarlar korunur.");
-  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firma adaptör seçimi güncellenemedi.")}
+   setRemoveKey("");setShowCatalog(false);
+   setSelected(current=>{
+    const stillPresent=next.companyAdapters?.some(x=>x.key===current&&x.selected);
+    if(add&&!enabled.has(adapter.key))return adapter.key;
+    if(stillPresent)return current;
+    return next.companyAdapters?.find(x=>x.key==="ISNET"&&x.selected)?.key||next.companyAdapters?.find(x=>x.selected)?.key||"";
+   });
+   if(!add)setNotice("Entegrasyon yalnız bu firmanın listesinden kaldırıldı. Belgeler ve ayarlar korunur.");
+   else setNotice(activate?"Entegrasyon firma için etkinleştirildi; gerçek bağlantısı ayrıca doğrulanacaktır.":"Entegrasyon firma için pasife alındı; geçmiş ve ayarlar korunur.");
+  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firma entegrasyonu güncellenemedi.")}
   finally{if(seq===requestSeq.current)setBusy("")}
  };
-
- const refresh=async()=>{await load();if(typeof onRefreshStatuses==="function")try{await onRefreshStatuses()}catch{/* Main page reports its error. */}};
+ const refresh=async()=>{await load();if(typeof onRefreshStatuses==="function")try{await onRefreshStatuses()}catch{/* Parent page handles its own errors. */}};
  const isnetOption=visibleData.systemCatalog.find(x=>x.key==="ISNET");
  if(!tenant)return <div className="eam-alert">Önce ana firma seçin.</div>;
 
  return <main className="eam">
   <header className="eam-head">
-   <div><small>e-BELGE / FİRMA BAZLI ENTEGRASYONLAR</small><h2>Entegrasyon Merkezi</h2><p>Firmanın kullandığı adaptörler solda, seçilen bağlantının ayarları sağda. Platform kataloğu ayrı tutulur.</p></div>
+   <div><small>e-BELGE / ENTEGRASYONLAR</small><h2>Entegrasyon Merkezi</h2><p>Firmanın seçili entegrasyonunu açın, bağlantısını ve ayarlarını tek ekranda yönetin.</p></div>
    <button type="button" disabled={Boolean(busy)||loading} onClick={()=>void refresh()}><RefreshCw size={16}/> Yenile</button>
   </header>
-  <div className="eam-summary" aria-label="Firma adaptör özeti">
-   <span><Layers3 size={17}/> <b>{installed.length}</b> seçili</span>
-   <span><PlayCircle size={17}/> <b>{activeCount}</b> etkin</span>
-   <span><Activity size={17}/> <b>{connected}</b> oturumu doğrulanan</span>
+  <div className="eam-toolbar">
+   <div className="eam-selector">
+    <label htmlFor="eam-company-integration">Firma Entegrasyonları</label>
+    <div className="eam-select-wrap">
+     <Layers3 size={17}/>
+     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
+      <option value="">{loading?"Entegrasyonlar yükleniyor...":installed.length?"Entegrasyon seçin":"Henüz entegrasyon seçilmemiş"}</option>
+      {installed.map(adapter=><option key={adapter.key} value={adapter.key}>{adapter.label}{choice(adapter.key)?.enabled===false?" (Pasif)":""}</option>)}
+     </select><ChevronDown size={16}/>
+    </div>
+   </div>
+   <div className="eam-add-area">
+    <button type="button" className="eam-main-button" disabled={!canEdit} aria-expanded={showCatalog} aria-controls="eam-catalog-popup"
+     onClick={()=>{setShowCatalog(x=>!x);setQuery("");setRemoveKey("")}}><Plus size={16}/> Entegrasyon Ekle <ChevronDown size={15}/></button>
+    {showCatalog&&<section id="eam-catalog-popup" className="eam-catalog-popup" aria-label="Sistem Entegrasyon Kataloğu">
+     <div className="eam-popup-head"><div><strong>Sistem Entegrasyon Kataloğu</strong><small>Yalnız bu firmaya eklenir</small></div>
+      <button type="button" aria-label="Entegrasyon eklemeyi kapat" onClick={()=>setShowCatalog(false)}><X size={18}/></button>
+     </div>
+     <label className="eam-search"><Search size={16}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="İşNet, Logo, Mikro..." aria-label="Entegrasyon ara"/></label>
+     <div className="eam-catalog-list">{available.length===0?<p className="eam-empty">Eklenebilecek başka entegrasyon bulunamadı.</p>:available.map(adapter=><div className="eam-catalog-item" key={adapter.key}>
+      <div><strong>{adapter.label}</strong><p>{adapter.description}</p><small>{adapter.driver===null?"Bağlayıcı geliştirme bekliyor":adapter.key==="MANUAL"?"URL gerektirmez":"Servis ve giriş ayarları eklendikten sonra açılır"}</small></div>
+      <button type="button" disabled={!canEdit} onClick={()=>void change(adapter,true,adapter.driver!==null)}><Plus size={15}/> Ekle</button>
+     </div>)}</div>
+    </section>}
+   </div>
+   <div className="eam-summary" aria-label="Firma entegrasyon özeti">
+    <span><b>{installed.length}</b> seçili</span><span><b>{activeCount}</b> etkin</span>
+    <span><Activity size={15}/><b>{connected}</b> oturumu doğrulanan</span>
+   </div>
   </div>
   {error&&<div className="eam-alert" role="alert"><AlertTriangle size={16}/>{error}</div>}
   {notice&&<div className="eam-ok" role="status"><CheckCircle2 size={16}/>{notice}</div>}
-  <div className="eam-workspace">
-   <aside className="eam-sidebar" aria-label="Bu firmanın adaptörleri">
-    <div className="eam-side-heading"><div><h3>Bu Firmanın Adaptörleri</h3><small>Yalnız bu firmada seçilenler</small></div>
-     <button type="button" className="eam-main-button" disabled={!canEdit} onClick={()=>{setShowCatalog(x=>!x);setQuery("");setRemoveKey("")}}><Plus size={16}/> Adaptör Ekle</button>
-    </div>
-    {loading?<div className="eam-empty">Adaptörler yükleniyor...</div>:error?<div className="eam-empty">Firma adaptörleri yüklenemedi. Yenile düğmesiyle tekrar deneyin.</div>:installed.length===0?
-     <div className="eam-empty"><Layers3 size={25}/><strong>Henüz adaptör seçilmemiş.</strong>
-      <p>Mevcut İşNet bağlantınızı kullanmak için ekleyin veya sistem kataloğunu açın.</p>
-      {isnetOption&&<button type="button" className="eam-main-button" disabled={!canEdit} onClick={()=>void change(isnetOption,true,true)}>İşNet'i Ekle ve Ayarla</button>}
-     </div>:
-     <div className="eam-list">{installed.map(adapter=>{
-      const Icon=ICONS[adapter.key]||Layers3;
-      const entry=choice(adapter.key),isActive=entry?.enabled!==false;
-      return <div key={adapter.key} className={"eam-item "+(selected===adapter.key?"selected":"")}>
-       <button className="eam-item-main" type="button" aria-current={selected===adapter.key?"page":undefined} onClick={()=>{setSelected(adapter.key);setRemoveKey("");setShowCatalog(false)}}>
-        <span className="eam-item-icon"><Icon size={20}/></span>
-        <span className="eam-item-caption"><strong>{adapter.label}</strong><small>{status(adapter)}</small></span><ChevronRight size={16}/>
-       </button>
-       <div className="eam-item-tools">
-        <button type="button" className={isActive?"eam-state-control active":"eam-state-control"} disabled={!canEdit} title={isActive?"Firma için pasife al":"Firma için etkinleştir"}
-         onClick={()=>void change(adapter,true,!isActive)}>{isActive?<PauseCircle size={14}/>:<PlayCircle size={14}/>} {isActive?"Pasife Al":"Etkinleştir"}</button>
-        <button className="eam-remove" type="button" disabled={!canEdit} onClick={()=>setRemoveKey(removeKey===adapter.key?"":adapter.key)} title="Yalnız bu firmanın seçiminden kaldırır"><Trash2 size={14}/> Kaldır</button>
-       </div>
-       {removeKey===adapter.key&&<div className="eam-remove-confirm" role="group" aria-label="Adaptörü kaldırmayı onayla">
-        <p>Yalnız bu firmanın listesinden kaldırılır. Eski belgeler ve kayıtlı ayarlar silinmez.</p>
-        <button type="button" onClick={()=>void change(adapter,false,false)} disabled={!canEdit}>Listeden Çıkar</button>
-        <button type="button" onClick={()=>setRemoveKey("")}>Vazgeç</button>
-       </div>}
-      </div>;
-     })}</div>}
-    {showCatalog&&<section className="eam-catalog">
-     <div className="eam-section-title"><div><h3>Sistem Adaptör Kataloğu</h3><p>Kurulu adaptörleri seçili firmaya ekleyin.</p></div>
-      <button type="button" title="Kataloğu kapat" onClick={()=>setShowCatalog(false)}><XCircle size={17}/></button></div>
-     <label className="eam-search"><Search size={15}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Adaptör ara" aria-label="Adaptör ara"/></label>
-     <div className="eam-grid">{available.map(adapter=>{
-      const Icon=ICONS[adapter.key]||Layers3;
-      return <article className="eam-option" key={adapter.key}><Icon size={21}/><div><strong>{adapter.label}</strong><p>{adapter.description}</p><small>{adapter.driver===null?"Henüz bağlayıcı motoru yok":"Gerçek bağlantı ve yetki ayrıca doğrulanır"}</small></div>
-       <button type="button" disabled={!canEdit} onClick={()=>void change(adapter,true,true)}><Plus size={15}/> Bu Firmaya Ekle</button>
-      </article>
-     })}{available.length===0&&<div className="eam-empty">Başka adaptör bulunamadı.</div>}</div>
-    </section>}
-   </aside>
-   <section className="eam-detail-pane" aria-label="Seçili adaptör ayarları">
-    {active?<><div className="eam-detail">
-      <div><small>ADAPTÖR AYARLARI · {active.key}</small><h3>{active.label}</h3><p>{active.description}</p></div>
-      <div className="eam-detail-actions"><span className="eam-state">{status(active)}</span>
-       <button type="button" disabled={!canEdit} onClick={()=>void change(active,true,choice(active.key)?.enabled===false)}>
-        {choice(active.key)?.enabled===false?<PlayCircle size={15}/>:<PauseCircle size={15}/>}
-        {choice(active.key)?.enabled===false?"Etkinleştir":"Pasife Al"}
-       </button>
-      </div>
+  <section className="eam-detail-pane" aria-label="Seçili entegrasyon ayarları">
+   {active?<><div className="eam-detail">
+     <div><small>ENTEGRASYON AYARLARI · {active.key}</small><h3>{active.label}</h3><p>{status(active)}</p></div>
+     <div className="eam-detail-actions">
+      <button type="button" disabled={!canEdit} onClick={()=>void change(active,true,choice(active.key)?.enabled===false)}>
+       {choice(active.key)?.enabled===false?<PlayCircle size={16}/>:<PauseCircle size={16}/>}
+       {choice(active.key)?.enabled===false?"Etkinleştir":"Pasife Al"}
+      </button>
+      <button type="button" className="eam-remove" disabled={!canEdit} onClick={()=>{setRemoveKey(removeKey===active.key?"":active.key);setShowCatalog(false)}}><Trash2 size={15}/> Kaldır</button>
      </div>
-     {choice(active.key)?.enabled===false&&<div className="eam-paused"><PauseCircle size={18}/> Bu adaptör firma için pasif. Ayarlar korunur; yeniden kullanmak için Etkinleştir'e basın.</div>}
-     {active.key==="ISNET" ? <div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule}/></div> :
-      active.key==="MANUAL" ? <div className="eam-detail-body">
-       <div className="eam-instruction"><FileCode2 size={24}/><div><strong>Manuel XML / PDF Belge Havuzu</strong><p>UBL-TR XML asıl kaynaktır. PDF/JPEG/PNG yalnız sunum ve kontrol içindir. OCR hazır değilse belge kesin kayıt yapılmaz.</p></div></div>
-       <button className="eam-main-button" type="button" disabled={choice(active.key)?.enabled===false} onClick={()=>openModule?.("e-belge",{tabKey:"belge-havuzu"})}><FolderOpen size={16}/> Belge Havuzunu Aç</button>
-      </div>:
-      <div className="eam-detail-body"><div className="eam-instruction"><LockKeyhole size={24}/><div><strong>Bağlayıcı motoru henüz hazır değil</strong><p>Logo, Mikro veya Paraşüt için sahte giriş ekranı ya da çalışıyor bilgisi verilmez. Gerçek sürücü geliştirilmeden yalnız katalog seçimi yapılabilir.</p></div></div><div className="eam-planned"><span>Sağlayıcı oturumu <b>Bekliyor</b></span><span>XML sorgu / indirme <b>Bekliyor</b></span></div></div>}
-    </>:
-    <div className="eam-detail-placeholder"><Settings2 size={32}/><h3>Bağlantı ayarlarını açın</h3><p>Soldan bir adaptör seçin; yalnız o adaptörün bağlantı, firma ve otomasyon kuralları gösterilir.</p>
-     {installed.length===0&&isnetOption&&<button className="eam-main-button" disabled={!canEdit} type="button" onClick={()=>void change(isnetOption,true,true)}><Plus size={16}/> İşNet'i Ekle</button>}
+    </div>
+    {removeKey===active.key&&<div className="eam-remove-confirm" role="group" aria-label="Entegrasyonu kaldırmayı onayla">
+      <p>Yalnız bu firmanın listesinden kaldırılır. Mevcut belgeler, İşNet şifresi ve entegrasyon ayarları silinmez.</p>
+      <button type="button" disabled={!canEdit} onClick={()=>void change(active,false,false)}>Listeden Çıkar</button>
+      <button type="button" onClick={()=>setRemoveKey("")}>Vazgeç</button>
     </div>}
-   </section>
-  </div>
-  <p className="eam-foot"><ShieldCheck size={16}/> Kaldırma yalnız firma seçimini değiştirir. Geçmiş faturalar, XML/PDF, İşNet ayarları ve sistem adaptörleri silinmez.</p>
+    {choice(active.key)?.enabled===false&&<div className="eam-paused"><PauseCircle size={18}/> Bu entegrasyon firma için pasif. Ayarlar korunur, devam etmek için Etkinleştir'e basın.</div>}
+    <div className="eam-service"><ShieldCheck size={18}/><div><strong>{providerService(active.key).title}</strong>
+     {providerService(active.key).url&&<code>{providerService(active.key).url}</code>}
+     <p>{providerService(active.key).description}</p></div></div>
+    {active.key==="ISNET"?<div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule}/></div>:
+     active.key==="MANUAL"?<div className="eam-detail-body"><div className="eam-instruction"><FileCode2 size={23}/><div><strong>Manuel XML / PDF Belge Havuzu</strong><p>UBL-TR XML asıl kaynaktır. PDF/JPEG/PNG görüntü ve kontrol içindir.</p></div></div>
+      <button className="eam-main-button" type="button" disabled={choice(active.key)?.enabled===false} onClick={()=>openModule?.("e-belge",{tabKey:"belge-havuzu"})}><FolderOpen size={16}/> Belge Havuzunu Aç</button>
+     </div>:<div className="eam-detail-body"><div className="eam-instruction"><LockKeyhole size={23}/><div><strong>Bağlayıcı motoru henüz hazır değil</strong><p>Logo, Mikro ve Paraşüt şu an kataloğa eklenebilir; gerçek API sürücüsü olmadan servis URL'si veya sahte giriş formu ile bağlantı kurulamaz.</p></div></div></div>}
+   </>:<div className="eam-detail-placeholder"><Settings2 size={28}/><h3>Entegrasyon seçin</h3><p>Yukarıdaki açılır alandan seçili entegrasyonu açın. İşNet bağlantısı ve diğer servis ayarları burada tam genişlikte görünür.</p>
+    {installed.length===0&&isnetOption&&<button className="eam-main-button" type="button" disabled={!canEdit} onClick={()=>void change(isnetOption,true,true)}><Plus size={16}/> İşNet'i Ekle</button>}
+   </div>}
+  </section>
+  <p className="eam-foot"><ShieldCheck size={15}/> Entegrasyonu kaldırmak geçmiş belgeleri, XML/PDF dosyalarını veya platform bağlantı motorunu silmez.</p>
  </main>;
 }
