@@ -11,6 +11,7 @@ const number=value=>String(value||"").toUpperCase().replace(/[^A-Z0-9]/g,"");
 const money=(amount,currency)=>Number(amount||0).toLocaleString("tr-TR",{style:"currency",currency:currency||"TRY"});
 const tabs=[["send","PDF Mail Gönderimi"],["import","Haftalık Excel & Kontrol"],["listed","Ödemeye Alınanlar"],["missing","Ödemeye Alınmayanlar"],["differences","Eksik / Fazla & İtiraz"]];
 const outcomeLabel={
+  AWAITING_EXCEL:"Haftalık Excel bekleniyor",
   CUSTOMER_LISTED:"Müşterinin haftalık listesinde",
   NOT_LISTED:"Müşteri listesinde yok",
   MANUAL_INCLUDED:"Manuel: listede var",
