@@ -1,6 +1,7 @@
 import {useEffect,useState} from "react";
 import {Save,Settings2,ShieldAlert} from "lucide-react";
 import {saveCompanyEBelgeAdapterProfile} from "../../../services/eBelgeAdapterApi";
+import "./eBelgeIntegrationProfileEditor.css";
 
 const defaults={defaultDays:7,workflow:"READ_ONLY",output:"XML",fileNamePattern:"{direction}-{type}-{number}"};
 export default function EBelgeIntegrationProfileEditor({adapter,company,profile,onSaved}){
