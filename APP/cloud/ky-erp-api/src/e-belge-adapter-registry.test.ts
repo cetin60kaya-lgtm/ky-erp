@@ -1,0 +1,21 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { EBELGE_ADAPTERS,getEBELGEAdapter,classifyAdapterInstallation } from "./e-belge-adapter-registry.ts";
+test("Katalog ile firmada seçilen adaptör ayrıdır ve hazır olmayan sürücüler PASS alamaz",()=>{
+ assert.deepEqual(EBELGE_ADAPTERS.map(x=>x.key),["ISNET","MANUAL","LOGO","MIKRO","PARASUT"]);
+ assert.equal(classifyAdapterInstallation("LOGO",true).canConnect,false);
+ assert.equal(classifyAdapterInstallation("ISNET",true).status,"SELECTED_VERIFICATION_REQUIRED");
+ assert.equal(classifyAdapterInstallation("MIKRO",false).status,"NOT_SELECTED");
+ assert.equal(getEBELGEAdapter("untrusted"),null);
+});
+test("Firma kaldırma hiçbir belge, şifre veya platform adaptörünü silmez",()=>{
+ const route=readFileSync(new URL("./e-belge-adapter-company-routes.ts",import.meta.url),"utf8");
+ assert.match(route,/main_company_slug=\?/);
+ assert.match(route,/accountingTenantReadAllowed/);
+ assert.match(route,/accountingAccess/);
+ assert.match(route,/typeof body.selected!=="boolean"/);
+ assert.doesNotMatch(route,/DELETE FROM|delete.*accounting_documents|DROP TABLE|credentials\s*:/i);
+ const main=readFileSync(new URL("./main.ts",import.meta.url),"utf8");
+ assert.match(main,/registerEBelgeAdapterCompanyRoutes\(app\)/);
+});
