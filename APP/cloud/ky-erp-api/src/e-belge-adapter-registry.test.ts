@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { EBELGE_ADAPTERS,getEBELGEAdapter,classifyAdapterInstallation } from "./e-belge-adapter-registry.ts";
+import { accountingTenantCandidates } from "./accounting-access-policy.ts";
+import { EBELGE_ADAPTERS,getEBELGEAdapter,classifyAdapterInstallation,decodeEBelgeSelections } from "./e-belge-adapter-registry.ts";
 test("Katalog ile firmada seçilen adaptör ayrıdır ve hazır olmayan sürücüler PASS alamaz",()=>{
  assert.deepEqual(EBELGE_ADAPTERS.map(x=>x.key),["ISNET","MANUAL","LOGO","MIKRO","PARASUT"]);
  assert.equal(classifyAdapterInstallation("LOGO",true).canConnect,false);
@@ -18,4 +19,24 @@ test("Firma kaldırma hiçbir belge, şifre veya platform adaptörünü silmez",
  assert.doesNotMatch(route,/DELETE FROM|delete.*accounting_documents|DROP TABLE|credentials\s*:/i);
  const main=readFileSync(new URL("./main.ts",import.meta.url),"utf8");
  assert.match(main,/registerEBelgeAdapterCompanyRoutes\(app\)/);
+});
+
+test("İki firma veya çelişen tenant istemleri ayrı kalır, sessizce tek firmaya düşmez",()=>{
+ assert.deepEqual(accountingTenantCandidates("firma-a","firma-b",{mainCompanySlug:"firma-a"}),["firma-a","firma-b"]);
+ assert.deepEqual(accountingTenantCandidates("Firma-A","firma-a",{mainCompanySlug:"firma-a"}),["firma-a"]);
+});
+test("Aynı adaptörün birden fazla eski satırında öncelikli tek kayıt belirleyicidir",()=>{
+ const rows=[
+  {file_name:"ISNET",data:JSON.stringify({selected:false})},
+  {file_name:"ISNET",data:JSON.stringify({selected:true})},
+  {file_name:"MANUAL",data:JSON.stringify({selected:true})},
+  {file_name:"LOGO",data:"not-json"},
+  {file_name:"LOGO",data:JSON.stringify({selected:false})},
+  {file_name:"OTHER",data:JSON.stringify({selected:true})}
+ ];
+ assert.deepEqual(decodeEBelgeSelections(rows),{ISNET:false,MANUAL:true,LOGO:false});
+ const route=readFileSync(new URL("./e-belge-adapter-company-routes.ts",import.meta.url),"utf8");
+ assert.match(route,/ON CONFLICT\(id\) DO UPDATE/);
+ assert.match(route,/ORDER BY CASE WHEN id LIKE/);
+ assert.match(route,/decodeEBelgeSelections\(rows.results/);
 });
