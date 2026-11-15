@@ -35,3 +35,68 @@ export async function probeIsnetReadOnlyLists(fetcher:typeof fetch,token:string,
  return {results,verified:Object.values(results).every(x=>x.status==="VERIFIED_READ_ONLY")};
 }
 
+
+/** Explicit user-initiated one-file XML acceptance. No R2/D1 write, no outbound invoice.
+ * Only provider-documented IsNet list + external XML URL APIs are used.
+ * The external URL must remain on an IsNet HTTPS host (SSRF fail closed).
+ */
+export async function fetchOneIsnetXmlReadOnly(
+ fetcher:typeof fetch, token:string, companyId:number,
+ kind:"invoice"|"despatch", from:string, to:string
+):Promise<{bytes:ArrayBuffer;kind:"invoice"|"despatch"}> {
+ const isInvoice=kind==="invoice";
+ const listPath=isInvoice?"/api/Invoice/GetIncomingEInvoiceList":"/api/Invoice/GetIncomingDespatchList";
+ const listBody=isInvoice
+  ?{CompanyId:companyId,FirstInvoiceDate:from,LastInvoiceDate:to,PageIndex:0,PageSize:25,IsArchiveIncluded:true}
+  :{CompanyId:companyId,FirstDespatchDate:from,LastDespatchDate:to,PageIndex:0,PageSize:25};
+ const headers={Accept:"application/json","Content-Type":"application/json",Authorization:"Bearer "+token,Token:token};
+ const providerPost=async (path:string,body:Record<string,unknown>)=>{
+  const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),9000);
+  try{
+   const res=await fetcher(API_BASE+path,{method:"POST",headers,body:JSON.stringify(body),signal:ctrl.signal,redirect:"manual"});
+   if(!res.ok)throw new Error("ISNET_PROVIDER_HTTP_ERROR");
+   if(!(res.headers.get("content-type")||"").toLowerCase().includes("json"))
+    throw new Error("ISNET_PROVIDER_NON_JSON");
+   const payload:Row=await res.json();
+   if(![0,"0","Success","success",true].includes(payload?.Result??payload?.result))
+    throw new Error("ISNET_PROVIDER_REJECTED");
+   return payload;
+  }finally{clearTimeout(timer)}
+ };
+ const listed=await providerPost(listPath,listBody);
+ const rows=listed[isInvoice?"Invoices":"Despatches"];
+ if(!Array.isArray(rows))throw new Error("ISNET_LIST_NOT_VERIFIED");
+ const selected=rows.find(row=>/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i.test(String(row?.Ettn||"")));
+ if(!selected)throw new Error("ISNET_NO_XML_SAMPLE");
+ // Official IsNet values: InvoiceDirection.GelenFatura=1;
+ // InvoiceDocumentType.EInvoice=1 / Despatch=4.
+ const meta=await providerPost("/api/Invoice/GetInvoiceExternalXmlUrl",{
+  Ettn:String(selected.Ettn),InvoiceDirection:1,InvoiceDocumentType:isInvoice?1:4,
+ });
+ const raw=String(meta.ExternalLink||"");
+ let target:URL;
+ try{target=new URL(raw)}catch{throw new Error("ISNET_XML_URL_INVALID")}
+ const host=target.hostname.toLowerCase();
+ if(target.protocol!=="https:"||target.port||target.username||target.password||
+    !(host==="isnet.net.tr"||host.endsWith(".isnet.net.tr")))
+  throw new Error("ISNET_XML_URL_NOT_ALLOWLISTED");
+ const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),13000);
+ try{
+  const res=await fetcher(target.toString(),{method:"GET",signal:ctrl.signal,redirect:"manual",headers:{Accept:"application/xml,text/xml,application/octet-stream"}});
+  if(!res.ok)throw new Error("ISNET_XML_DOWNLOAD_HTTP_ERROR");
+  const length=Number(res.headers.get("content-length")||0);
+  if(length>20*1024*1024)throw new Error("ISNET_XML_TOO_LARGE");
+  const type=(res.headers.get("content-type")||"").toLowerCase();
+  if(/text\/html|application\/json|javascript/.test(type))throw new Error("ISNET_XML_NON_XML_RESPONSE");
+  const bytes=await res.arrayBuffer();
+  if(!bytes.byteLength||bytes.byteLength>20*1024*1024)throw new Error("ISNET_XML_INVALID_SIZE");
+  const head=new TextDecoder("utf-8").decode(new Uint8Array(bytes).subarray(0,4096));
+  const normalized=head.replace(/^\uFEFF/,"").trimStart();
+  if(/<!DOCTYPE\b|<!ENTITY\b/i.test(head)||
+   !/^(?:<\?xml\b[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:[A-Za-z0-9_.-]+:)?(?:Invoice|DespatchAdvice)\b/i.test(normalized))
+   throw new Error("ISNET_XML_NOT_UBL");
+  const root=/^(?:<\?xml\b[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:[A-Za-z0-9_.-]+:)?(Invoice|DespatchAdvice)\b/i.exec(normalized)?.[1];
+  if(root!==(isInvoice?"Invoice":"DespatchAdvice"))throw new Error("ISNET_XML_WRONG_DOCUMENT_TYPE");
+  return {bytes,kind};
+ }finally{clearTimeout(timer)}
+}
