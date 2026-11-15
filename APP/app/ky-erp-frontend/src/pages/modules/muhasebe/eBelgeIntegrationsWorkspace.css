@@ -434,3 +434,10 @@ span.warning {
 .ism-xml-download-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px}
 .ism-xml-download-actions button{background:#eff6ff;border-color:#b9d3f4;color:#22558c}
 @media(max-width:600px){.ism-readonly-period label{flex:1 1 100%}.ism-xml-download-actions button{width:100%}}
+
+/* İşNet Chrome portal modu: NetteFatura oturumu ayrı origin içinde kalır. */
+.ism-chrome-flow{display:grid;gap:9px;margin-top:9px;border:1px solid #bdd6ee;border-radius:10px;background:#f3f8ff;padding:15px;font-size:12px;line-height:1.45;color:#274a70}
+.ism-chrome-flow>strong{font-size:14px;color:#234a78}
+.ism-chrome-flow p{margin:0}.ism-chrome-flow small{color:#5a718d;line-height:1.5}
+.ism-chrome-flow .ism-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ism-chrome-open{display:inline-flex;align-items:center;gap:6px;padding:9px 12px;text-decoration:none;background:#225fc7;color:white!important;border:1px solid #225fc7;border-radius:8px;font-size:12px;font-weight:700}

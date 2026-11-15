@@ -3,6 +3,7 @@ import {Download,Eye,FileSearch,FileText,LoaderCircle,ShieldCheck} from "lucide-
 import {getIsnetSettings,queryIsnetDocumentTest,downloadIsnetReadOnlyXmlSample} from "../../../services/isnetApi";
 import {parseUblForVisualOutput,renderUblOutput} from "./visualUblOutput";
 import {getEBelgeVisualProfiles} from "../../../services/eBelgeApi";
+import {getIsnetConnectionModePreference} from "./isnetConnectionModePreference";
 import "./eBelgeIntegrationTestCenter.css";
 
 const TYPES=[
@@ -46,9 +47,11 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   return()=>{live=false};
  },[key,activeMainCompany?.slug,activeMainCompany?.id,profile?.defaultDays]);
  const t=TYPES.find(x=>x.key===type)||TYPES[0];
+ const tenant=activeMainCompany?.slug||activeMainCompany?.id||"";
+ const chromeMode=key==="ISNET"&&getIsnetConnectionModePreference(tenant)!=="api";
  const available=key==="ISNET"&&session?.connectionMode==="api"&&session.sessionReady===true&&Boolean(session.companyId);
  const periodValid=dates.from&&dates.to&&dates.from<=dates.to&&(Date.parse(dates.to)-Date.parse(dates.from))<=31*86400000;
- const remoteAllowed=available&&profile?.workflow!=="DISABLED";
+ const remoteAllowed=available&&!chromeMode&&profile?.workflow!=="DISABLED";
  const reset=()=>{setQuery(null);setRawXml("");setParsed(null);setMessage("");setShowXml(false)};
  const runQuery=async()=>{
   if(busy||!remoteAllowed||!periodValid)return;
@@ -87,6 +90,8 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
     setMessage("PDF başlığı doğrulandı. Belge içeriğinin doğruluğu ve üretici görünümüne uygunluğu ayrıca incelenmelidir.");
    }else if(/\.xml$/i.test(f.name)){
     const raw=await f.text(),data=parseUblForVisualOutput(raw);
+    if(data.kind!==(t.kind==="invoice"?"INVOICE":"DISPATCH"))
+      throw Error("Dosyanın belge türü seçilen fatura/irsaliye kategorisiyle uyuşmuyor. Doğru kategoriyi seçin.");
     setRawXml(raw);setParsed(data);setFile({name:f.name,size:f.size,type:"application/xml",source:"LOCAL"});
     setMessage("UBL-TR XML ayrıştırıldı. Kaynak dosya sunucuya yüklenmedi; mali kayıt oluşturulmadı.");
    }else throw Error("Yalnız .xml veya .pdf dosyası seçin.");
@@ -117,7 +122,15 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
     <p>Bağlantı, dört belge türü, gerçek XML okuma ve PDF önizleme aynı alanda. Testler resmî gönderim veya muhasebe kaydı yapmaz.</p></div><FileSearch size={24}/></header>
   <div className="itc-categories">{TYPES.map(x=><button key={x.key} type="button" className={type===x.key?"active":""}
    onClick={()=>{setType(x.key);reset()}}>{x.name}</button>)}</div>
-  {key==="ISNET"&&<div className="itc-remote">
+  {key==="ISNET"&&chromeMode&&<div className="itc-chrome" role="status">
+    <div><strong>Chrome oturumu üzerinden belge testi</strong>
+      <p>NetteFatura'ya giriş yalnız İşNet'in Chrome sekmesinde yapılır. KY ERP şifre/çerez istemez ve API oturumu açmaya çalışmaz.</p>
+      <p>Seçilen kategorideki XML veya PDF'yi portaldan indirin; aşağıdaki <b>Yerel XML / PDF Dosyası</b> alanından dosyayı seçin. XML tarayıcıda okunur; ilgili firma için PDF önizlemesi oluşturulabilir.</p>
+    </div>
+    <a href="https://nettefatura.isnet.net.tr/" target="_blank" rel="noopener noreferrer">NetteFatura'yı Chrome'da Aç</a>
+    <small>Portal oturumu KY ERP tarafından doğrulanamaz. Otomatik belge listesi/çekimi için ayrıca yetkili tarayıcı bağlantısı gerekir; bu modda “Listeyi Test Et” kullanılmaz.</small>
+  </div>}
+  {key==="ISNET"&&!chromeMode&&<div className="itc-remote">
    <div className="itc-status"><ShieldCheck size={16}/><span>{!session?"API durumu okunuyor...":available
     ?"Kayıtlı API oturum bilgisi mevcut; sağlayıcı yetkisi sorguyla doğrulanacak."
     :"Portal firması kaydedilmiş olabilir; gerçek belge sorgusu için İşNet resmî API oturumu gereklidir."}</span></div>

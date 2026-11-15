@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 15.11.2026 — İşNet/NetteFatura girişini Chrome'a taşıyan kullanıcı tercihi (belge testi, API girişi değil)
+
+- **Kullanıcı doğrulaması:** NetteFatura'ya aynı Windows/Chrome oturumunda firma seçili olarak doğrudan giriş yapılabildi. KY ERP Worker üzerinden portal kontrolü `TIMEOUT`, API giriş çağrısı `401 Unauthorized`; bu sonuçlar aynı hata değildir. Chrome'daki başarılı portal girişi İşNet API yetkisini kanıtlamaz.
+- **İstenen yöntem:** e-Belge → Entegrasyonlar → İşNet → Bağlantı ve İş Kuralları seçeneği `Chrome · NetteFatura sitesinde giriş` (yerel tarayıcı tercihi) ve isteğe bağlı ayrı `Resmî İşNet API` olarak ayrıldı. Eskiden tarayıcıda tutulan `portal` tercihi Chrome'a göçer; yeni kullanıcı varsayılanı Chrome'dur. Chrome modunda kullanıcı adı, şifre, API/portal sunucu testi ve firma yeniden kaydı istenmez; `https://nettefatura.isnet.net.tr/` yeni sekmede `noopener,noreferrer` ile açılır. Mevcut D1 firma ve API ayarları değişmez.
+- **Belge Test Merkezi:** Chrome modunda İşNet'e Worker üzerinden `Listeyi Test Et` yapılmaz. Kullanıcı portalda kendi oturumuyla XML/PDF indirir ve KY ERP'deki yerel dosya seçiciden belgeyi açar. UBL-TR ayrıştırma, seçilen fatura/irsaliye türünün doğrulanması, kontrol PDF'si ve onaylı düzenleyen-firma şablonu mevcut tarayıcı akışından yürür. Fatura/irsaliye gönderme, D1/mali kayıt, Drive'a otomatik dosya aktarımı yapılmaz.
+- **Açık teknik sınır:** `kyerp.net`, `nettefatura.isnet.net.tr` sitesinin Chrome oturum çerezlerine/DOM'una çapraz kaynak güvenliği nedeniyle erişemez. Yeni Chrome sekmesi açmak **otomatik XML/PDF senkronizasyonu değildir**. Sonradan otomatik aktarım istenirse yalnız resmi API veya ayrıca izinli ve kabul edilmiş yerel Chrome eklentisi/ajanı mümkün; bu PR böyle bir eklenti, yeni kurulum, token veya Chrome otomasyon yetkisi üretmez. Güvenlik sınırını dolanma yok.
+- **Kabul:** Frontend test/lint/build ve Cloudflare Pages aynı değişiklik commit'inin yayın durumu ayrı kontrol edilir; mevcut API 401 engeli çözülmüş sayılmaz. Gerçek bir müşteri XML/PDF'siyle açma ve şablon karşılaştırma kullanıcı onayıyla test edilmeli. Şifre, cookie veya özel müşteri belgeleri GitHub'a gönderilmez.
+
 ## 15.11.2026 — Model Kartı tek dosya merkezi + File Hub arşiv yolu, e-Belge fatura/irsaliye (bu dal)
 
 - **Kullanıcı kararı:** Bir model tıklanınca ilk sekme **Tüm Dosyalar** olur; Desen/PSD/model görseli/yerleşim ve **gelen-giden e-Fatura ile gelen-giden e-İrsaliye** tek panelden açılır. Gelen irsaliyeye bağlı giden irsaliye/fatura veya faturayla ilişkilendirilmiş karşı belgeler de gösterilir; fatura ve irsaliye ayrı resmî belge/ETTN ve ayrı XML+PDF dosyasıdır. Bir belge 2–3 veya 20 modele bağlanabilir, aynı belge/dosya kopyalanmaz.
