@@ -83,6 +83,29 @@ export async function uploadEBelge(files, { direction = "AUTO", documentKind = "
   }
 }
 
+export const getEBelgeVisualProfiles = () =>
+  apiGet("/e-belge/visual-profiles", undefined, { timeoutMs: 30_000 }).then(unwrap);
+
+export async function uploadEBelgeVisualExample(sampleXml, referenceFile, { layout, outputFormat }) {
+  const form = new FormData();
+  form.set("sampleXml", sampleXml);
+  form.set("referenceFile", referenceFile);
+  form.set("confirmedSameDocument", "true");
+  form.set("layout", JSON.stringify(layout));
+  form.set("outputFormat", outputFormat);
+  return unwrap(await apiUpload("/e-belge/visual-profiles/sample", form, { timeoutMs: 60_000 }));
+}
+
+export const updateEBelgeVisualProfile = (issuer, kind, config) =>
+  apiPatch("/e-belge/visual-profiles/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(kind), config).then(unwrap);
+
+export const approveEBelgeVisualProfile = (issuer, kind, approval) =>
+  apiPost("/e-belge/visual-profiles/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(kind) + "/approve", approval).then(unwrap);
+
+export const getEBelgeVisualReference = (issuer, kind) =>
+  apiFetch("/e-belge/visual-profiles/" + encodeURIComponent(issuer) + "/" + encodeURIComponent(kind) + "/reference",
+    { responseType: "blob", timeoutMs: 30_000 });
+
 export const recoverEBelgeCompanyFromXml = (id) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/recover-company-from-xml`, { confirmed: true }).then(unwrap);
 
