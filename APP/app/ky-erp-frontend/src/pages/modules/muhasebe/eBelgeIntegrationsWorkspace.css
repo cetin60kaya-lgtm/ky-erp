@@ -410,3 +410,11 @@ span.warning {
 .ism-connection-help {margin:0 0 14px!important;font-size:12px;line-height:1.5}
 .ism-connection-complete {display:flex;align-items:center;gap:8px;margin-top:12px!important;color:#21713f!important;font-weight:700}
 @media (max-width: 600px) {.ism-connection-steps {grid-template-columns:1fr}}
+
+.ism-readonly-acceptance{display:grid;gap:11px;padding:14px;margin-top:16px;border:1px solid #cadbf0;border-radius:10px;background:#f3f8ff}
+.ism-readonly-acceptance strong{font-size:13px;color:#245080}
+.ism-readonly-acceptance p{font-size:12px;line-height:1.55;margin:5px 0;color:#64778b}
+.ism-readonly-acceptance>button{justify-self:start;display:inline-flex;gap:8px;align-items:center}
+.ism-acceptance-results{display:flex;flex-wrap:wrap;gap:10px;border-top:1px solid #d7e4f1;padding-top:10px}
+.ism-acceptance-results p{width:100%;margin:0}
+.ism-acceptance-results span{font-size:12px;padding:7px 10px;border:1px solid #d7e4f1;border-radius:7px;background:white}
