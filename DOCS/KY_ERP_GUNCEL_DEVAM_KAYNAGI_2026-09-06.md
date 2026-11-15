@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 15.11.2026 — İK SGK Excel: yalnız KY ERP / Hakan Emprime çalışanları (PR #576)
+
+- **Kullanıcı kuralı:** Muhasebecinin Excel'inde işverenin evindeki çalışanlar ve başka işyerlerindeki kişiler bulunabilir. Bunlar otomatik KY ERP/Hakan Emprime çalışanı veya maaş/fiş kaydı değildir. Yalnız canonical KY ERP şirketindeki kayıtlı ve bordro kapsamına alınmış Hakan Emprime personeli işlenir.
+- **Kod:** Excel preview kimlik/personel kodu dışındaki yalnız isim benzerliğini otomatik eşleştirme saymaz. SGK önizleme listesinde yalnız `payrollIncluded !== false` personeller manuel seçilebilir; kapsam dışı kişiler “Hakan Emprime dışı / alma” olarak hariç kalır. Worker onayında şirket üyeliği, bordro dahil durumu, TCKN, personel kodu/isim tutarlılığı tekrar kontrol edilir. Eşleşmezse kayıt durur. Aylık ve geçmiş ödenmiş maaş kayıtlarına müdahale edilmez.
+- **Kanıt:** [PR #576](https://github.com/cetin60kaya-lgtm/ky-erp/pull/576), squash merge `df30ef710b4056f42bc7307c1e8b2b405020ba2d`; GitHub Actions `43684818753` frontend lint/test/build ve Worker typecheck/test/build (izole D1 dahil) **PASS**. Gerçek SGK dosyalarının çalışan kişi eşleşmeleri yetkili üretim oturumunda hâlâ ayrı kabul gerektirir.
+- **Veri sınırı:** Dosyalardaki gerçek çalışan adı, TCKN ve maaşlar GitHub'a/sohbete kopyalanmadı; canlı D1, maaş, banka/elden, personel kartı ve dönem kapanış kayıtlarına yazılmadı. 
+
 ## 15.11.2026 — e-Belge sistem adaptörleri / firma seçimi ayrımı, Entegrasyonlar UX yenilemesi (PR #573)
 
 - **Kullanıcı ekranı ve zorunlu tasarım:** e-Belge Entegrasyonlar'da İşNet, Manuel, Logo, Mikro, Paraşüt tüm firmalar için beş boş kart olarak sürekli görünüyordu; seçilmemiş adaptörün firmanın ekranında hiç yer almaması, `Adaptör Ekle` ile ayrı **Sistem Adaptör Kataloğu** açılması, kart seçilince yalnız kendi ayar sayfasına gidilmesi ve güvenli `Kaldır` istendi.
