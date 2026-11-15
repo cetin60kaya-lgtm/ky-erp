@@ -9,3 +9,8 @@ export const getCompanyEBelgeAdapters=(company)=>
  apiGet("/e-belge/adapters",tenantParams(company),{timeoutMs:30000,forceFresh:true}).then(unwrap);
 export const setCompanyEBelgeAdapter=(company,key,selected,enabled=true)=>
  apiPut("/e-belge/adapters/"+encodeURIComponent(key),{...tenantParams(company),selected,enabled},{timeoutMs:30000}).then(unwrap);
+
+export const getCompanyEBelgeAdapterProfile=(company,key)=>
+ apiGet("/e-belge/adapters/profile/"+encodeURIComponent(key),tenantParams(company),{forceFresh:true,timeoutMs:20000}).then(unwrap);
+export const saveCompanyEBelgeAdapterProfile=(company,key,profile)=>
+ apiPut("/e-belge/adapters/profile/"+encodeURIComponent(key),{...tenantParams(company),...profile},{timeoutMs:20000}).then(unwrap);
