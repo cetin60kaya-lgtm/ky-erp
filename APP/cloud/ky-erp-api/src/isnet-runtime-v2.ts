@@ -404,6 +404,7 @@ function publicSettings(settings: Row) {
     tokenExpiresOn: settings.tokenExpiresOn || null,
     requiresPasswordForSync: settings.requiresPasswordForSync === true,
     testedAt: settings.testedAt || null,
+    savedAt: settings.savedAt || null,
     diagnostics: settings.diagnostics || null,
     securityNote: "İşNet şifresi D1 veritabanına kaydedilmez. API tokenı varsa yalnız oturum tokenı saklanır.",
   };
