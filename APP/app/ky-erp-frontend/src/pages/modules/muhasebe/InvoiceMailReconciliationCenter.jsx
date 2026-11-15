@@ -2,6 +2,7 @@ import {useCallback,useEffect,useMemo,useState} from "react";
 import {apiGet,apiPost,apiUpload} from "../../../utils/api";
 import {ArrowRight,CheckCircle2,FileSpreadsheet,Mail,RefreshCw,Search,ShieldAlert} from "lucide-react";
 import InvoiceMailWorkspace from "./InvoiceMailWorkspace";
+import InvoiceDifferenceMailDraft from "./InvoiceDifferenceMailDraft";
 import "./invoiceMailReconciliationCenter.css";
 
 const unpack=payload=>payload?.data?.data??payload?.data??payload??{};
@@ -156,6 +157,10 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
      </tr>)}</tbody></table>
      {!sorted.length&&<div className="imrc-empty">Bu filtrede kayıt yok.</div>}
     </div>}
+    {tab==="differences"&&snapshot&&<InvoiceDifferenceMailDraft
+      activeMainCompany={activeMainCompany} customerName={customerName}
+      snapshot={snapshot} missing={rows.filter(isMissing)} extras={extras}
+      onOpenDrafts={()=>openModule?.("iletisim",{tabKey:"mail-taslaklar"})}/>}
     {tab==="differences"&&<section className="imrc-panel"><strong>Excel'de Var · ERP'de Yok ({extras.length})</strong>
      <p>Bu HKN numaraları seçilen firmanın ERP faturalarında eşleşmedi. Başka firma, numara yazımı veya eksik belge kontrolü gerekir; otomatik kayıt açılmaz.</p>
      {extras.length?<div className="imrc-extra">{extras.map(row=><div key={row.documentNo}>{row.documentNo} · {outcomeLabel[row.outcome]}</div>)}</div>
