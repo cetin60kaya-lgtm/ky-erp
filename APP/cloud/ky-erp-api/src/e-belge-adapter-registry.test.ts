@@ -38,7 +38,7 @@ test("Aynı adaptörün birden fazla eski satırında öncelikli tek kayıt beli
  const route=readFileSync(new URL("./e-belge-adapter-company-routes.ts",import.meta.url),"utf8");
  assert.match(route,/ON CONFLICT\(id\) DO UPDATE/);
  assert.match(route,/ORDER BY CASE WHEN id LIKE/);
- assert.match(route,/decodeEBelgeSelections\(rows.results/);
+ assert.match(route,/decodeEBelgeSelections\(list\)/);
 });
 
 test("Firma adaptörleri seçili ve etkin durumlarını ayrı taşır; eski İşNet ayarı yalnız firma kapsamındadır",()=>{
