@@ -226,10 +226,12 @@ test("bulk payroll save blocks paid/locked rows and protects permanent EK from s
   assert.match(api, /PAYROLL_TOTAL_MISMATCH/);
   assert.match(api, /const projectionResponse = await advancedPayroll\(c, year, month, companyId\)/);
   assert.match(api, /MONTHLY_EXTRA_ZERO_CONFIRM_REQUIRED/);
-  assert.match(page, /const protectedRows = rows\.filter/);
-  assert.match(page, /row\.paidLocked \|\| upper\(row\.saved\?\.status\) === "PAID"/);
-  assert.match(page, /row\.saved\?\.payrollVersion/);
-  assert.match(page, /allowMonthlyZeroExtra: Boolean\(row\.extra === 0 && row\.saved\?\.allowMonthlyZeroExtra === true\)/);
+  // Full-month saving is deliberately serial: each person is reviewed
+  // before a server-atomic final control, never a partially committed loop.
+  assert.match(page, /const startMonthlyPayrollSetup = \(\) =>/);
+  assert.match(page, /const reviewable = payrollRows\.filter\(\(row\) => !row\.paidLocked\)/);
+  assert.match(page, /expectedPayrollVersion: modalDraft\.payrollVersion/);
+  assert.match(page, /allowMonthlyZeroExtra,/);
   assert.match(page, /payrollPresentation\(row\)\.reconciled/);
 });
 
