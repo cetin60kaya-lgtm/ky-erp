@@ -3651,7 +3651,7 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
               <div className="payroll-person-rail-list">
                 {periodPeople.map((employee, index) => <button type="button" key={employee.id} data-employee-id={employee.id} className={employee.id === modalDraft.id ? "active" : ""} disabled={busy} onClick={() => switchPayPlanPerson(employee.id)}>
                   <span><b>{index + 1}. {employee.fullName}</b><small>{employee.code || "HKN yok"}</small></span>
-                  <em className="ready">{employmentPeriodLabel(employee, period)}</em>
+                  <em className={monthlySetup?.reviewed?.includes(employee.id) ? "ready" : "pending"}>{monthlySetup?.reviewed?.includes(employee.id) ? "Kaydedildi ✓" : employmentPeriodLabel(employee, period)}</em>
                 </button>)}
               </div>
             </aside>
@@ -3683,6 +3683,9 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                             : manualBankState.message}
                         </div>
                       </>}
+                      <details className="wide payroll-advanced-fields" open={!monthlySetup?.active}>
+                        <summary>Hesap Kalemlerini Düzenle · Maaş / Yol / EK / Mesai / Kesinti</summary>
+                        <div className="form">
                       <Field label="Maaş"><input type="number" min="0" value={finalEditor.salary ?? ""} onChange={(event) => setFinalValue("salary", event.target.value)} /></Field>
                       <Field label="Yol"><input type="number" min="0" value={finalEditor.road ?? ""} onChange={(event) => setFinalValue("road", event.target.value)} /></Field>
                       <Field label="EK Ödeme"><input type="number" min="0" value={finalEditor.extra ?? ""} onChange={(event) => setFinalValue("extra", event.target.value)} /></Field>
@@ -3699,11 +3702,13 @@ const buildLeaveFormDraft = useCallback((employee, selectedPlan = {}) => {
                         <Field label="Bankadan Ödenecek"><input type="number" min="0" value={finalEditor.bank ?? ""} onChange={(event) => setFinalValue("bank", event.target.value)} /></Field>
                         <Field label="Elden Ödenecek"><input type="number" min="0" value={finalEditor.cash ?? ""} onChange={(event) => setFinalValue("cash", event.target.value)} /></Field>
                       </>}
+                        </div>
+                      </details>
                       <Field label="Son Kontrol Açıklaması" wide><input value={finalEditor.reason || ""} onChange={(event) => setFinalValue("reason", event.target.value)} placeholder="Örn. Eylül son bordro kontrolü" /></Field>
                     </div>
                     <div className="warnline">Bu ayın bordrosu ayrı kaydedilir. Kalıcı maaş/ödeme planını değiştirmek için alttaki ayrı düğmeyi kullanın.</div>
                     <div className="row-actions">
-                      {monthlySetup?.active && <button type="button" className="btn" disabled={busy} onClick={applyOfficialBankSuggestion}>İsteğe Bağlı: SGK Excel Netini Öner</button>}
+                      {monthlySetup?.active && <button type="button" className="btn" disabled={busy} onClick={applyOfficialBankSuggestion}>{employees.find((item) => item.id === modalDraft.id)?.sgkFollow === false ? "SGK Dışı: Tamamı Elden" : "Varsa Excel Netini Öner"}</button>}
                       <button type="button" className="btn" disabled={busy} onClick={autoBalanceFinalPayment}>Banka / Elden Otomatik Dengele</button>
                       {!monthlySetup?.active && <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false)}>{busy ? "Kaydediliyor" : "Yalnız Bu Ayı Kaydet"}</button>}
                       {monthlySetup?.active && <button type="button" className="btn primary" disabled={busy} onClick={() => saveFinalPayrollControl(false, true)}>{busy ? "Kaydediliyor" : "Kaydet ve Sonraki Personel →"}</button>}
