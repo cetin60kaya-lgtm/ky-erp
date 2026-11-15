@@ -26,7 +26,7 @@ export async function queryIsnetDocumentTest(fetcher:typeof fetch,token:string,c
   if(!(response.headers.get("Content-Type")||"").toLowerCase().includes("json"))
    return {status:"UNVERIFIED_RESPONSE",firstPageCount:null,items:[],hasMore:false};
   const res=await response.json() as Row;
-  const accepted=[0,"0","Success","success",true].includes(res?.Result??res?.result);
+  const accepted=([0,"0","Success","success",true] as unknown[]).includes(res?.Result??res?.result);
   const rows=res[def.list];
   if(!accepted||!Array.isArray(rows))return {status:"UNVERIFIED_RESPONSE",firstPageCount:null,items:[],hasMore:false};
   const items=(rows as Row[]).slice(0,25).map(x=>({
