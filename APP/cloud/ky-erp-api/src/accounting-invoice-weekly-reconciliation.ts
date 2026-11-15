@@ -130,7 +130,7 @@ export function registerInvoiceWeeklyReconciliationRoutes(app:Hono<AppEnv>){
  });
  app.post("/api/muhasebe/invoice-weekly-reconciliations/:id/manual",async c=>{
   try{
-   const body=await c.req.json<Row>().catch(()=>({}));
+   const body:Row=await c.req.json<Row>().catch(()=>({} as Row));
    const companyId=str(body.companyId),a=await scope(c,companyId,true),id=str(c.req.param("id"));
    const number=idNumber(body.documentNo),choice=upper(body.choice);
    if(!number||!["AUTO","MANUAL_INCLUDED","MANUAL_EXCLUDED","REVIEW_REQUIRED"].includes(choice))
