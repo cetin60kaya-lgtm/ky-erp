@@ -141,7 +141,7 @@ function ProWorkspaceToolbar(){
  </nav>;
 }
 
-function ProDock({onSecurity,securityActive,onHomeSelected}){
+function ProDock({onSecurity,securityActive,securityPending,onHomeSelected}){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
  const [currentPath,setCurrentPath]=useState(location.pathname);
@@ -169,7 +169,7 @@ function ProDock({onSecurity,securityActive,onHomeSelected}){
     <button type="button" className="ky-pro-header-action" onClick={security}><ShieldCheck size={18}/>Güvenlik</button></header>
    <nav className="ky-pro-dock" aria-label="KY ERP PRO telefon gezinmesi">
      <button type="button" onClick={onHome}><House size={23}/><span>Ana Sayfa</span></button>
-     <button type="button" className={securityActive?"is-active":""} onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span></button>
+     <button type="button" className={securityActive?"is-active":""} onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span>{securityPending?<i className="ky-pro-security-wake" aria-label="Yeni güvenlik bildirimi">Yeni</i>:null}</button>
      <button type="button" className="ky-pro-dock-main" onClick={()=>setMenuOpen(true)} aria-haspopup="dialog"><LayoutGrid size={24}/><span>Modüller</span></button>
      <button type="button" className={isAnalytic?"is-active":""} onClick={onAnalysis}><ChartNoAxesCombined size={23}/><span>Analiz</span></button>
      <button type="button" onClick={()=>setMenuOpen(true)}><UserRound size={23}/><span>Menü</span></button>
@@ -183,6 +183,8 @@ function ProApplicationContent(){
  const {user,isAuthenticated,loading}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
  const [securityOpen,setSecurityOpen]=useState(()=>new URLSearchParams(location.search).get("security")==="1");
+ const [securityWakePending,setSecurityWakePending]=useState(false);
+ const openSecurity=useCallback(()=>{setSecurityWakePending(false);setSecurityOpen(true)},[]);
  const [loginRequested,setLoginRequested]=useState(false);
  const [loginEverOpened,setLoginEverOpened]=useState(false);
  const wasAuthenticated=useRef(isAuthenticated);
@@ -198,7 +200,7 @@ function ProApplicationContent(){
  useEffect(()=>{if(!home)setWorkspaceMounted(true)},[home]);
  useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  useEffect(()=>{
-   const onPush=(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")setSecurityOpen(true)};
+   const onPush=(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")setSecurityWakePending(true)};
    navigator.serviceWorker?.addEventListener?.("message",onPush);
    if(location.search.includes("security=1"))history.replaceState(history.state,"",location.pathname);
    return()=>navigator.serviceWorker?.removeEventListener?.("message",onPush);
@@ -216,7 +218,7 @@ function ProApplicationContent(){
     <button type="button" className={loginRequested?"is-active":""} onClick={()=>setLoginRequested(true)}><House size={24}/><span>ERP'ye Giriş</span></button>
    </nav>
   </div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={()=>setSecurityOpen(true)}/></div>{workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||home}><ProWorkspaceToolbar/></div>:null}{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={()=>setSecurityOpen(true)} securityActive={securityOpen} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={openSecurity}/></div>{workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||home}><ProWorkspaceToolbar/></div>:null}{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={openSecurity} securityActive={securityOpen} securityPending={securityWakePending} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();

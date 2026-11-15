@@ -80,3 +80,12 @@ test("KY ERP PRO shares the company selector with canonical workspace",()=>{
  assert.match(main,/setActiveCompanySlug/);
  assert.match(main,/history\.pushState/);
 });
+
+test("push notifications never navigate away from an in-progress ERP form",()=>{
+ const main=read("src/pro/main.jsx");
+ const center=read("src/pro/SecurityCenter.jsx");
+ assert.match(main,/setSecurityWakePending\(true\)/);
+ assert.match(main,/securityPending=\{securityWakePending\}/);
+ assert.match(center,/KYERP_SECURITY_PUSH_WAKE/);
+ assert.doesNotMatch(main,/const onPush=\(event\)=>\{if\(event\.data\?\.type==="KYERP_SECURITY_PUSH_WAKE"\)setSecurityOpen\(true\)/);
+});

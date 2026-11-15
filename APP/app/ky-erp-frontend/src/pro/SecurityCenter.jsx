@@ -34,8 +34,10 @@ export default function SecurityCenter(){
    refresh();
    const timer=setInterval(()=>{if(document.visibilityState==="visible"&&!busy)refresh()},20000);
    const onFocus=()=>refresh();
+   const onPush=event=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")refresh()};
    window.addEventListener("focus",onFocus);
-   return()=>{clearInterval(timer);window.removeEventListener("focus",onFocus)};
+   navigator.serviceWorker?.addEventListener?.("message",onPush);
+   return()=>{clearInterval(timer);window.removeEventListener("focus",onFocus);navigator.serviceWorker?.removeEventListener?.("message",onPush)};
  },[busy,refresh]);
  useEffect(()=>{if(!code)return;const wait=setTimeout(()=>{if(Date.parse(code.expiresAt)<=Date.now())setCode(null)},Math.max(0,Date.parse(code.expiresAt)-Date.now()));return()=>clearTimeout(wait)},[code]);
  const decision=async(item,value)=>{
