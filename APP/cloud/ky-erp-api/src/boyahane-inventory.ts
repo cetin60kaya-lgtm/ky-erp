@@ -1,5 +1,6 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
+import { getAuthenticatedUser } from "./auth-cloud";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -186,6 +187,8 @@ function productView(row: Row) {
     approvalStatus: text(row.approvalStatus || "APPROVED"),
     isApproved: text(row.approvalStatus || "APPROVED") === "APPROVED",
     isActive: row.isActive !== false,
+    documentCount: Array.isArray(row.documents) ? row.documents.length : 0,
+    documentationStatus: row.archiveStatus === "FILE_HUB_PDF_VERIFIED" ? "FILE_HUB_VERIFIED" : "DOCUMENT_REVIEW_PENDING",
   };
 }
 
@@ -354,6 +357,44 @@ async function updateDocumentTransfer(
     .run();
 }
 
+// Yeni ürünün uygunluk onayı gerçek File Hub dosya konumu ve yetkili insan incelemesi gerektirir.
+async function checkProductPdfEvidence(c: Context<AppEnv>, slug: string, productId: string, documents: Row[]) {
+  const required = ["MSDS", "TDS", "ZDHC"];
+  for (const kind of required) {
+    const document = documents.find(row => {
+      const type = normalize(row.name);
+      return (kind === "MSDS" ? /MSDS|SDS|GBF/.test(type) : type.includes(kind))
+        && text(row.verificationStatus) === "VERIFIED"
+        && text(row.status) === "AVAILABLE"
+        && text(row.fileHubAssetId);
+    });
+    if (!document) return { ok: false, kind, code: "DOCUMENT_MISSING" };
+    if (kind === "ZDHC" && text(document.zdhcLevel || document.level) !== "3") {
+      return { ok: false, kind, code: "ZDHC_LEVEL_3_UNVERIFIED" };
+    }
+    const asset = await c.env.DB.prepare(`
+      SELECT a.id,a.extension,a.mime_type,a.status,a.sha256,
+             l.is_available,l.relative_path,l.provider_file_id,
+             r.id AS relation_id
+      FROM file_hub_assets a
+      JOIN file_hub_relations r ON r.file_asset_id=a.id
+        AND r.main_company_slug=a.main_company_slug
+        AND r.entity_type='BOYAHANE_PRODUCT' AND r.entity_id=?
+      JOIN file_hub_locations l ON l.file_asset_id=a.id
+        AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY'
+      WHERE a.main_company_slug=? AND a.id=? LIMIT 1
+    `).bind(productId,slug,text(document.fileHubAssetId)).first<Row>();
+    if (!asset || text(asset.status).toUpperCase()==="MISSING"
+       || Number(asset.is_available)!==1
+       || (!text(asset.relative_path) && !text(asset.provider_file_id))
+       || (text(asset.mime_type)!=="application/pdf" && text(asset.extension).toUpperCase()!=="PDF")
+       || !text(asset.sha256)) {
+      return { ok: false, kind, code: "FILE_HUB_PDF_NOT_VERIFIED" };
+    }
+  }
+  return { ok: true };
+}
+
 export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
   app.get("/api/boyahane/products", async (c) => {
     const slug = slugOf(c);
@@ -444,16 +485,21 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
         400,
       );
     }
-    // Yeni ürünleri dosya doğrulaması olmadan onaylı kimyasal olarak göstermeyin.
+    // Geçmiş ürünleri sessizce geri çekme; yeni ürünün ilk onayı sıkı belgeli.
     if (text(body.approvalStatus) === "APPROVED" && text(current.approvalStatus) !== "APPROVED") {
+      const actor = await getAuthenticatedUser(c);
+      const role = text(actor?.role).toUpperCase();
+      if (!actor || !["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(role)
+          || (role !== "SUPER_ADMIN" && text(actor.mainCompanySlug) !== slug)) {
+        return c.json(jsonError("APPROVAL_FORBIDDEN", "Firma yetkilisi oturumu gereklidir."),403);
+      }
       const docs = Array.isArray(body.documents) ? body.documents : Array.isArray(current.documents) ? current.documents : [];
-      const types = ["MSDS", "TDS", "ZDHC"];
-      const complete = types.every(type => docs.some((doc: Row) =>
-        normalize(doc.name).includes(type) && text(doc.fileHubAssetId) &&
-        text(doc.verificationStatus) === "VERIFIED" && text(doc.status) === "AVAILABLE"
-      ));
-      if (!complete) return c.json(jsonError("CHEMICAL_DOCUMENTS_REQUIRED",
-        "MSDS, TDS ve ZDHC belgeleri gerçek File Hub PDF dosyası ve yetkili doğrulaması olmadan yeni ürün onaylanamaz."),409);
+      const evidence = await checkProductPdfEvidence(c, slug, id, docs);
+      if (!evidence.ok) return c.json(jsonError("CHEMICAL_DOCUMENTS_REQUIRED",
+        "MSDS, TDS ve ZDHC Level 3 gerçek File Hub PDF eşleşmesi ve yetkili kontrol olmadan yeni ürün onaylanamaz.", evidence),409);
+      body.approvedAt = new Date().toISOString();
+      body.approvedBy = actor.id;
+      body.archiveStatus = "FILE_HUB_PDF_VERIFIED";
     }
     const data = productView(
       await storePut(
