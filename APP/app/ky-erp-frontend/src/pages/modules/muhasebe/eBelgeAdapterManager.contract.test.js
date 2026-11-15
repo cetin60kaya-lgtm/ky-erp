@@ -7,6 +7,9 @@ const css=readFileSync(new URL("./eBelgeAdapterManager.css",import.meta.url),"ut
 const client=readFileSync(new URL("../../../services/eBelgeAdapterApi.js",import.meta.url),"utf8");
 const isnetUi=readFileSync(new URL("./EBelgeIntegrationsWorkspace.jsx",import.meta.url),"utf8");
 const isnetClient=readFileSync(new URL("../../../services/isnetApi.js",import.meta.url),"utf8");
+const sharedTest=readFileSync(new URL("./EBelgeIntegrationTestCenter.jsx",import.meta.url),"utf8");
+const profileEditor=readFileSync(new URL("./EBelgeIntegrationProfileEditor.jsx",import.meta.url),"utf8");
+
 
 test("Firma entegrasyonları tek açılır seçiciden seçilir, katalog yalnız Ekle ile açılır",()=>{
  assert.match(ui,/companyAdapters\.filter\(x=>x.selected\)/);
@@ -56,13 +59,30 @@ test("İşNet seçili firma ve son testi yeniden okumada korur; portal ile API d
  assert.match(isnetUi,/getIsnetSettings\(\)/);
  assert.match(isnetClient,/forceFresh:true/);
 });
-test("Gelen XML örneği indirme ayrı kullanıcı tıklamasıdır, muhasebe yazımı yoktur",()=>{
- assert.match(isnetUi,/downloadIsnetReadOnlyXmlSample/);
- assert.match(isnetUi,/downloadXmlSample\("invoice"\)/);
- assert.match(isnetUi,/downloadXmlSample\("despatch"\)/);
- assert.match(isnetUi,/readOnlyCheck\?\.verified&&/);
- assert.match(isnetUi,/Bir Gelen Fatura XML İndir/);
- assert.match(isnetUi,/Bir Gelen İrsaliye XML İndir/);
+test("Tüm entegratörlerde ortak belge test ve kodsuz profil düzenleme sekmeleri bulunur",()=>{
+ assert.match(ui,/<EBelgeIntegrationTestCenter /);
+ assert.match(ui,/<EBelgeIntegrationProfileEditor /);
+ assert.match(ui,/Belge Test Merkezi/);
+ assert.match(ui,/Entegrasyonu Düzenle/);
+ assert.match(sharedTest,/incoming-invoice/);
+ assert.match(sharedTest,/outgoing-invoice/);
+ assert.match(sharedTest,/incoming-despatch/);
+ assert.match(sharedTest,/outgoing-despatch/);
+ assert.match(sharedTest,/parseUblForVisualOutput/);
+ assert.match(sharedTest,/renderUblOutput/);
+ assert.match(sharedTest,/queryIsnetDocumentTest/);
+ assert.match(sharedTest,/downloadIsnetReadOnlyXmlSample/);
  assert.match(isnetClient,/api-read-only-xml-sample/);
- assert.doesNotMatch(isnetClient,/approveInvoice|sendInvoice|ingestProviderEBelgeXml/);
+ assert.match(isnetClient,/document-test/);
+ assert.doesNotMatch(isnetUi,/ism-readonly-acceptance|checkDocumentLists|downloadXmlSample/);
+});
+test("Firma profili yalnız güvenli kurallarla düzenlenir ve şifre içermez",()=>{
+ assert.match(profileEditor,/saveCompanyEBelgeAdapterProfile/);
+ assert.match(profileEditor,/defaultDays/);
+ assert.match(profileEditor,/serviceUrl/);
+ assert.match(profileEditor,/fileNamePattern/);
+ assert.match(profileEditor,/READ_ONLY/);
+ assert.doesNotMatch(profileEditor,/password=|token=/i);
+ assert.match(client,/getCompanyEBelgeAdapterProfile/);
+ assert.match(client,/saveCompanyEBelgeAdapterProfile/);
 });
