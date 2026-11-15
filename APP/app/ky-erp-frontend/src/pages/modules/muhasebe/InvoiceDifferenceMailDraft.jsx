@@ -22,7 +22,7 @@ export default function InvoiceDifferenceMailDraft({activeMainCompany,customerNa
   return()=>{disposed=true;};
  },[tenant]);
  const matchingRoutes=useMemo(()=>{
-  const normalize=value=>String(value||"").toLocaleUpperCase("tr-TR").trim().replace(/\\s+/g," ");
+  const normalize=value=>String(value||"").toLocaleUpperCase("tr-TR").trim().replace(/\s+/g," ");
   return routes.filter(row=>normalize(row.customerName)===normalize(customerName)&&normalize(customerName));
  },[routes,customerName]);
  const route=useMemo(()=>matchingRoutes.find(row=>String(row.id)===routeId),[routeId,matchingRoutes]);
