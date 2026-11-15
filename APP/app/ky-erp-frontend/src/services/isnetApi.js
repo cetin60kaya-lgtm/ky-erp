@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from "../utils/api";
+import { apiFetch, apiGet, apiPost, apiPut } from "../utils/api";
 
 function unwrap(payload) {
   return payload && payload.ok === true && Object.prototype.hasOwnProperty.call(payload, "data")
@@ -6,7 +6,7 @@ function unwrap(payload) {
     : payload;
 }
 
-export const getIsnetSettings = () => apiGet("/isnet/settings").then(unwrap);
+export const getIsnetSettings = () => apiGet("/isnet/settings", {}, {forceFresh:true}).then(unwrap);
 
 export const getIsnetPortalHealth = () =>
   apiGet("/isnet/provider-login-health", { timeoutMs: 14_000 }).then(unwrap);
@@ -25,5 +25,11 @@ export const saveIsnetSettings = (payload) =>
   apiPut("/isnet/settings", payload, { timeoutMs: 90_000 }).then(unwrap);
 
 // Actual authenticated provider list probe; returns only first-page counts, never document content.
-export const getIsnetReadOnlyPreview = () =>
-  apiGet("/isnet/api-read-only-preview", {}, {timeoutMs:20000,forceFresh:true}).then(unwrap);
+export const getIsnetReadOnlyPreview = (from="",to="") =>
+  apiGet("/isnet/api-read-only-preview", {from,to}, {timeoutMs:20000,forceFresh:true}).then(unwrap);
+// A deliberate user click downloads only ONE validated XML to their browser.
+// No R2/D1 write, no accounting write and no official document submission.
+export const downloadIsnetReadOnlyXmlSample = (kind,from="",to="") =>
+  apiFetch("/isnet/api-read-only-xml-sample",{
+    method:"GET",params:{kind,from,to},responseType:"blob",timeoutMs:35000,
+  });
