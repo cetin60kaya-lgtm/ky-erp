@@ -33,6 +33,7 @@ import { registerModelFileTransferRoutes } from "./model-file-transfer.ts";
 import { registerEBelgeLineToolRoutes } from "./e-belge-line-tools";
 import { enforceAccountingTenant } from "./accounting-tenant-guard";
 import { enforceFileHubTenant } from "./file-hub-tenant-guard";
+import { enforceIsnetAdapterActivation } from "./isnet-adapter-activation-guard";
 import { registerAiCloudRoutes } from "./ai-cloud";
 import { registerComplianceCenterRoutes } from "./compliance-center-cloud";
 import { registerComplianceConfigRoutes } from "./compliance-config-cloud";
@@ -355,6 +356,7 @@ for (const productionRoute of [
 shell.use("/api/file-hub/*", enforceFileHubTenant);
 
 shell.use("/api/isnet/*", enforceIsnetTenant);
+shell.use("/api/isnet/*", enforceIsnetAdapterActivation);
 
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.
 shell.use("/api/e-belge/*", enforceAccountingTenant);
