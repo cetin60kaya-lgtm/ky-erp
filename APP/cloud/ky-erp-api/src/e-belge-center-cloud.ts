@@ -18,7 +18,7 @@ import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
 import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity.ts";
 import { verifiedXmlPartyRecoveryDecision } from "./e-belge-xml-party-recovery";
-import { accountingAccess } from "./accounting-access-policy";
+import { accountingAccess,accountingTenantReadAllowed } from "./accounting-access-policy";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -651,7 +651,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(manualOnly){
       const user=await getAuthenticatedUser(c);
       if(!user?.id)return c.json(error("UNAUTHORIZED","Manuel belge kaydı için oturum gerekli."),401);
-      if(!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Muhasebe kayıt yetkisi gerekli."),403);
+      if(!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Bu firmada muhasebe kayıt yetkisi gerekli."),403);
       if(files.length!==1)return c.json(error("MANUAL_ONE_FILE","Manuel kayıtta tek kaynak dosya seçin."),400);
     }
     if(files.length>MAX_FILES)return c.json(error("TOO_MANY_FILES",`Tek seferde en fazla ${MAX_FILES} dosya yüklenebilir.`),413);
@@ -758,7 +758,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(!issue)return c.json(error("ISSUE_NOT_FOUND","Kontrol kaydı bulunamadı."),404);
     if(issue.issue_code==="MANUAL_SOURCE_REVIEW_REQUIRED"){
       const user=await getAuthenticatedUser(c),b=await c.req.json<Row>().catch(()=>({}));
-      if(!user?.id||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Manuel belge doğrulaması için muhasebe yetkisi gerekir."),403);
+      if(!user?.id||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Bu firmada manuel belge doğrulaması için muhasebe yetkisi gerekir."),403);
       if(b.confirmed!==true)return c.json(error("MANUAL_CONFIRM_REQUIRED","Belge ve kalemleri kontrol ettiğinizi açıkça onaylayın."),400);
       if(issue.posted_at||["POSTED","FINALIZING","APPROVED","FINALIZE_RETRY"].includes(upper(issue.status)))
         return c.json(error("DOCUMENT_LOCKED","Kesinleşen belge üzerinde kontrol değiştirilemez."),409);

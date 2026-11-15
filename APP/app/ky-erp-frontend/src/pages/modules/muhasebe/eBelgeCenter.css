@@ -88,3 +88,18 @@
 .eb-print-mark-yes{color:#177143;font-size:11px}.eb-print-mark-no{color:#9b6009;font-size:11px}
 @media(max-width:840px){.eb-four-document-nav{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:520px){.eb-four-document-nav button{padding:10px 6px;font-size:11px}}
+
+/* e-Belge manual intake: touch-friendly, bounded and responsive. */
+.eb-manual-fallback{display:flex;flex-direction:column;gap:14px;padding:16px;border:1px solid var(--border,#cbd5e1);border-radius:12px;background:var(--surface,#fff);min-width:0}
+.eb-manual-fallback header,.eb-manual-fallback footer,.eb-manual-lines-head{display:flex;gap:12px;justify-content:space-between;align-items:center;flex-wrap:wrap}
+.eb-manual-fallback header div{display:flex;flex-direction:column;gap:5px;min-width:0;overflow-wrap:anywhere}
+.eb-manual-fallback button{min-height:44px;display:inline-flex;align-items:center;gap:6px;justify-content:center;padding:8px 12px}
+.eb-manual-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:12px}
+.eb-manual-grid label,.eb-manual-line label{display:flex;flex-direction:column;gap:6px;min-width:0;font-size:13px}
+.eb-manual-grid input,.eb-manual-grid select,.eb-manual-line input{font-size:16px;min-height:44px;width:100%;min-width:0;padding:8px}
+.eb-manual-lines{display:flex;flex-direction:column;gap:10px}
+.eb-manual-line{display:grid;grid-template-columns:minmax(180px,3fr) repeat(4,minmax(85px,1fr)) auto;gap:8px;align-items:end}
+.eb-manual-totals{font-size:14px}
+.eb-manual-ack{display:flex;align-items:flex-start;gap:9px;line-height:1.5}
+.eb-manual-ack input{width:20px;height:20px;min-width:20px}
+@media(max-width:840px){.eb-manual-line{grid-template-columns:repeat(2,minmax(0,1fr))}.eb-manual-line .description{grid-column:1/-1}}

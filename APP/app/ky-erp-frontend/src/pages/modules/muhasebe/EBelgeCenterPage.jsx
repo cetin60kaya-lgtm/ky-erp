@@ -279,6 +279,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
   const [finalAcknowledged, setFinalAcknowledged] = useState(false);
   const [finalPhysicalReceived, setFinalPhysicalReceived] = useState(false);
+  const [manualSourceConfirmed,setManualSourceConfirmed] = useState(false);
   const finalInFlight = useRef(false);
   const [editForm, setEditForm] = useState({ documentNo: "", issueDate: "", dueDate: "", currency: "TRY", direction: "INCOMING", documentType: "FATURA", note: "" });
   const [companyQuery, setCompanyQuery] = useState("");
@@ -303,7 +304,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
       setError(e?.message || "Belge detayı alınamadı.");
     }
   }, [id]);
-  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); setFinalPhysicalReceived(false); }, [id]);
+  useEffect(() => { setFinalConfirmOpen(false); setFinalAcknowledged(false); setFinalPhysicalReceived(false); setManualSourceConfirmed(false); }, [id]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => {
     if (!companyOpen || companyQuery.trim().length < 2) { setCompanies([]); return undefined; }
@@ -436,7 +437,17 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
             </details>
             <details className="eb-fold" open={openIssues.length > 0}>
               <summary><strong>Kontroller</strong><span>{openIssues.length} açık</span></summary>
-              <div className="eb-fold-body">{openIssues.length ? <div className="eb-issues">{openIssues.map((issue) => <div key={issue.id}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}</div>
+              <div className="eb-fold-body">{openIssues.length ? <div className="eb-issues">{openIssues.map((issue) => <div key={issue.id}><AlertTriangle size={17} /><span><strong>{issue.issue_code}</strong><small>{issue.message}</small></span>{issue.issue_code==="MANUAL_SOURCE_REVIEW_REQUIRED"&&<>
+                  <label className="eb-manual-ack"><input type="checkbox" checked={manualSourceConfirmed}
+                    onChange={e=>setManualSourceConfirmed(e.target.checked)}/>
+                    Orijinal belgeyi, kalemleri, KDV'yi ve toplamı tek tek kontrol ettim.
+                  </label>
+                  <button type="button" disabled={!manualSourceConfirmed||Boolean(busy)}
+                    onClick={()=>action(`issue-${issue.id}`,()=>resolveEBelgeIssue(id,issue.id,true))}>
+                    Manuel Kaynağı Doğrula
+                  </button>
+                </>}
+                {issue.severity !== "ERROR" && <button type="button" onClick={() => action(`issue-${issue.id}`, () => resolveEBelgeIssue(id, issue.id))}>Çözüldü</button>}</div>)}</div> : <div className="eb-good"><CheckCircle2 size={17} /> Açık sorun yok.</div>}</div>
             </details>
             <details className="eb-fold">
               <summary><strong>Fatura – İrsaliye Bağı</strong><span>{relationCount}</span></summary>

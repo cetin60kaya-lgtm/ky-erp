@@ -14,36 +14,40 @@ async function buildPdfOcrPreview(file) {
   ]);
   GlobalWorkerOptions.workerSrc = workerModule.default;
   const pdf = await getDocument({ data: new Uint8Array(await file.arrayBuffer()) }).promise;
+  // Never silently OCR only the first pages: Azure can use the full PDF;
+  // the image-only fallback must contain every page or require manual review.
+  if (pdf.numPages > 20) return null;
   const pages = [];
-  let maxWidth = 0;
-  let totalHeight = 0;
-  const gap = 16;
-  for (let pageNo = 1; pageNo <= Math.min(pdf.numPages, 2); pageNo += 1) {
+  let baseWidth = 0, baseHeight = 0;
+  const gap = 12;
+  for (let pageNo = 1; pageNo <= pdf.numPages; pageNo += 1) {
     const page = await pdf.getPage(pageNo);
     const base = page.getViewport({ scale: 1 });
-    const scale = Math.min(2, 1800 / Math.max(1, base.width));
-    const viewport = page.getViewport({ scale });
-    const canvas = document.createElement("canvas");
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const context = canvas.getContext("2d", { alpha: false });
-    if (!context) throw new Error("PDF OCR önizleme alanı oluşturulamadı.");
-    await page.render({ canvasContext: context, viewport }).promise;
-    pages.push(canvas);
-    maxWidth = Math.max(maxWidth, canvas.width);
-    totalHeight += canvas.height + (pages.length > 1 ? gap : 0);
+    pages.push({ page, base });
+    baseWidth = Math.max(baseWidth, base.width);
+    baseHeight += base.height;
   }
   if (!pages.length) throw new Error("PDF içinde OCR için okunabilir sayfa bulunamadı.");
+  const heightBudget = 16000 - gap * Math.max(0, pages.length - 1);
+  const scale = Math.min(2, 1800 / baseWidth, heightBudget / baseHeight,
+    Math.sqrt(24_000_000 / (baseWidth * (baseHeight + gap * pages.length))));
+  if (!Number.isFinite(scale) || scale < 0.45) return null;
   const merged = document.createElement("canvas");
-  merged.width = maxWidth;
-  merged.height = totalHeight;
+  merged.width = Math.ceil(baseWidth * scale);
+  merged.height = Math.ceil(baseHeight * scale + gap * Math.max(0, pages.length - 1));
   const mergedContext = merged.getContext("2d", { alpha: false });
   if (!mergedContext) throw new Error("PDF OCR önizlemesi birleştirilemedi.");
+  mergedContext.fillStyle = "#fff";
+  mergedContext.fillRect(0, 0, merged.width, merged.height);
   let y = 0;
-  pages.forEach((canvas, index) => {
-    mergedContext.drawImage(canvas, 0, y);
-    y += canvas.height + (index < pages.length - 1 ? gap : 0);
-  });
+  for (const {page} of pages) {
+    const viewport = page.getViewport({scale});
+    mergedContext.save();
+    mergedContext.translate(Math.floor((merged.width-viewport.width)/2),y);
+    try{await page.render({canvasContext:mergedContext,viewport}).promise;}
+    finally{mergedContext.restore();}
+    y += Math.ceil(viewport.height) + gap;
+  }
   const blob = await new Promise((resolve, reject) =>
     merged.toBlob((value) => (value ? resolve(value) : reject(new Error("PDF OCR önizlemesi üretilemedi."))), "image/jpeg", 0.88),
   );
