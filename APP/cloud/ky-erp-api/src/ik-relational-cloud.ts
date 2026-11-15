@@ -3277,6 +3277,25 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
   const payrollByEmployee = new Map(payroll.map((row) => [text(row.employee_id), row]));
   const missingPayroll = visible.filter((employee) => !payrollByEmployee.has(text(employee.id)));
   const unbalanced = payroll.filter((row) => Math.abs(number(row.bank_amount) + number(row.cash_amount) - number(row.total_amount)) > 0.01);
+  // A generated CALCULATED row is not proof that an accountant reviewed the person.
+  // Historical PAID rows remain protected, including legacy periods without a control log.
+  const finalControlLogs = await all(c,
+    "SELECT employee_id FROM hr_monthly_audit_logs WHERE main_company_id=? AND period=? AND entity_type='BORDRO' AND action='FINAL_CONTROL'",
+    [companyId, period],
+  );
+  const reviewedEmployeeIds = new Set(finalControlLogs.map((row) => text(row.employee_id)));
+  const unreviewed = visible.filter((employee) => {
+    const id = text(employee.id);
+    const saved = payrollByEmployee.get(id);
+    return saved && upper(saved.status) !== "PAID" && !reviewedEmployeeIds.has(id);
+  });
+  // A later employee/finance change invalidates the review until Son Kontrol is saved again.
+  const projectionResponse = await advancedPayroll(c, year, month, companyId);
+  if (!projectionResponse.ok) return error(c, 409, "PAYROLL_PROJECTION_UNAVAILABLE", "Güncel bordro hesabı okunamadı; ay sonu kontrolü tamamlanamadı.");
+  const projectionBody = await projectionResponse.json() as { data?: { lines?: Row[] } };
+  const staleAfterReview = (projectionBody.data?.lines || []).filter((line) =>
+    line.sourceChangedSinceSave === true && upper(line.status) !== "PAID"
+  );
   const badDates = visible.filter((employee) => {
     const card = cardsByEmployee.get(text(employee.id)) || {};
     const exitDate = hrDateOnly(card.exit_date);
@@ -3295,6 +3314,8 @@ async function runAdvancedCloseCheck(c: Context<AppEnv>) {
     { type: "BORDRO_KAPSAM", title: "Bordro kapsamı", ok: missingPayroll.length === 0, detail: missingPayroll.length ? `${missingPayroll.length} dönem personelinin bordrosu henüz sabitlenmedi.` : `${visible.length} dönem personelinin bordrosu kayıtlı.` },
     { type: "ODEME_DENGE", title: "Banka + elden dengesi", ok: unbalanced.length === 0, detail: unbalanced.length ? `${unbalanced.length} bordro satırında ödeme dengesi bozuk.` : "Tüm bordro satırlarında banka + elden = net." },
     { type: "BORDRO_HAZIR", title: "Bordro düzenleme dengesi", ok: missingPayroll.length === 0 && unbalanced.length === 0, detail: missingPayroll.length || unbalanced.length ? "Eksik veya dengesiz bordro satırları düzeltilmelidir." : "Bordro satırları ay kilidine hazır." },
+    { type: "KISI_SON_KONTROL", title: "Her personel için son kontrol", ok: unreviewed.length === 0, detail: unreviewed.length ? `${unreviewed.length} kişi için Kaydet ve Sonraki Personel kontrolü eksik.` : "Tüm dönem personelleri son kontrolden geçti." },
+    { type: "KAYNAK_GUNCELLIGI", title: "Son kayıttan sonraki ücret / hareket değişikliği", ok: staleAfterReview.length === 0, detail: staleAfterReview.length ? `${staleAfterReview.length} kişinin son kaydından sonra kaynak değişti. Son Kontrol ile yeniden kaydedin.` : "Son kontrolden sonra ücret ve ödeme kaynaklarında tutarsızlık yok." },
   ];
   await audit(c, { mainCompanyId: companyId, period, entityType: "AY_SONU", action: "CHECK", summary: "Ay sonu kontrolü çalıştırıldı.", details: { checks, periodEnd } });
   let lockRow = await advancedPeriodLockRow(c, companyId, year, month);

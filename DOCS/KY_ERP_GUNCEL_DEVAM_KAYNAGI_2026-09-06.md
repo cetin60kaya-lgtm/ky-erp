@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 15.11.2026 — İK Aylık manuel banka ve tek seferlik maaş kontrolü (PR #585)
+
+- **Kullanıcı kararı:** Muhasebecinin XLS/XLSX/ZIP bordro dosyası maaş hazırlamak için zorunlu değildir. İK Aylık → Bordro & Ödeme → Bu Ayın Maaşlarını Hazırla, seçili KY ERP / Hakan Emprime bordro kapsamındaki personeli sıra ile getirir. Maaş, yol, sabit EK, mesai, avans, kesinti, icra/haciz sistemden gelir; kullanıcının o ay için **elle girdiği banka tutarı** temel alınır, elden kalanı **net − banka** hesaplanır. Banka ve elden tutarı birlikte ayrı ayrı girilmez; girilen banka neti aşıyorsa sessiz kısma yok, hata vardır.
+- **SGK:** SGK dışındaki personelde banka sıfır/elden net kurum içi planlama kuralıdır. SGK Excel yüklüyse resmî net yalnız isteğe bağlı kontrol/öneridir; SGK import yok diye maaş hazırlama engellenmez. Bu ödeme planı gerçek banka transferini otomatik yapılmış (PAID) saymaz; nakit dahil tüm ücretler yasal muhasebe ve SGK yükümlülükleriyle mutabık olmalıdır.
+- **UI:** Yeni sekme açılmaz. Maaş hazırlama ilk tıklamada dönem hazır değilse canonical sunucudan hazırlar, yüklenen veriden sonra personel kontrolünü açar. Banka ilk giriş alanıdır, elden otomatik/readonly, diğer kalemler açılır ayrıntıda; kaydedilen personel sol listede işaretlenir. Kalıcı personel kartı yalnız ayrı yetkili işlemle değişir.
+- **Ay kilidi:** Üretilmiş CALCULATED bordro satırının varlığı tek başına insan kontrolü değildir. Dönem kilidi için kişi bazında FINAL_CONTROL günlüğü (veya tarihsel PAID) ve kaynak değişikliği bulunmaması doğrulanır. Eksikse 409 ile kilit engellenir. Geçmiş PAID ve kilitli aylar otomatik değiştirilmez.
+- **Kod/Test:** [PR #585](https://github.com/cetin60kaya-lgtm/ky-erp/pull/585) frontend manuel banka hesaplama + testleri ve Worker ay-kapanış kontrolü. Production D1/şema/migration, gerçek ücret/personel verisi değiştirilmedi. Nihai CI, merge, Cloudflare Pages/Worker ve yetkili gerçek bordro–fiş kabulü **ayrı kanıtlanmalıdır**.
+
+
 ## 15.11.2026 — İşNet/NetteFatura girişini Chrome'a taşıyan kullanıcı tercihi (belge testi, API girişi değil)
 
 - **Kullanıcı doğrulaması:** NetteFatura'ya aynı Windows/Chrome oturumunda firma seçili olarak doğrudan giriş yapılabildi. KY ERP Worker üzerinden portal kontrolü `TIMEOUT`, API giriş çağrısı `401 Unauthorized`; bu sonuçlar aynı hata değildir. Chrome'daki başarılı portal girişi İşNet API yetkisini kanıtlamaz.
