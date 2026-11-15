@@ -1,12 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+> **16.11.2026 — ORTAK ARAÇ/KOTA KARARI (GÜNCEL):** KY ERP canonical ve bütün yan projeler, [tek özel maliyet/erişim kaynağını](https://github.com/cetin60kaya-lgtm/kyerp/blob/main/CONTROL/KY_TUM_PROJELER_ARAC_VE_KOTA_ANA_KURALI.md) izler. **Actions aylık 5 USD ek kullanım hesabın tüm depolarında ortak**, diğer GitHub bütçeleri **0 USD**; Actions limitte durdurma/uyarı açıktır. Kod işi doğrudan GitHub bağlayıcısı; yerel DESEN/X işlemlerinde önce mevcut KY Control Hub/Chat Bridge/Drive; Remote Desktop Commander yalnız kullanıcı isteğiyle gerçekten zorunlu Windows işleminde asgari çağrı. Eski 0 USD Actions ifadeleri tarihîdir. Bu belge canlı erişimi, üretim yayını veya eski sohbetlere otomatik talimat güncellemesini kanıtlamaz.
+
+
 ## 16.11.2026 — e-Belge dört kurumsal liste ve gelen fatura muhasebe tek çıktısı
 
 - **İş akışı kararı:** İşNet benzeri ilk seviye dört görünüm: **Gelen Faturalar / Gelen İrsaliyeler / Giden İrsaliyeler / Giden Faturalar**. Tek canonical `accounting_documents` kayıt kaynağı ve mevcut `INCOMING_INVOICE / INCOMING_DISPATCH / OUTGOING_DISPATCH / OUTGOING_INVOICE` sunucu filtreleri kullanılır; ikinci bir fatura/irsaliye tablosu oluşturulmaz. Eski URL/sekme bağları mümkün olduğu kadar korunur; Belge Havuzu, Görsel Şablonlar, Entegrasyonlar, eşleştirmeler ve File Hub ayrı araç alanıdır. Giden belgede Outlook taslakları alanına geçiş sunulur; **taslak açma/gönderme otomatik yapılmaz**.
 - **Gelen tedarikçi faturası için tek muhasebe çıktısı:** Muhasebe çıktı durumu `PENDING/PRINTED` ve tarih/kullanıcı/gerekçeli geri alma geçmişi firma + belge ID temelli `json_store(scope=EBELGE_ACCOUNTING_PRINT_V1)` içinde tutulur; çıkışı alınan faturaya eşlik eden irsaliyeye ikinci mecburi muhasebe çıktısı kaydı açılmaz. PDF görüntüleme veya yazdır penceresi **tek başına basıldı onayı vermez**. Muhasebeci gerçek kağıdı aldığında açıkça `Çıktı Alındı` der. Gelen fatura listesinde filtre ve çıktı sütunu vardır; değişiklik ayrı kanonik muhasebe/EDI/sending kaydı oluşturmaz.
 - **PDF kaynağı:** Belgeye bağlı orijinal PDF bulunursa açılır. Yoksa orijinal XML doğrulanır, aynı düzenleyenin onaylı `INVOICE` görsel profilinden yeniden PDF üretilir; başka firmanın profili veya örnek fatura verisi kopyalanmaz. PDF birebir XSLT 2.0 garantisi verilmez ve görsel kabul ayrı tutulur.
 - **API güvenliği:** Yetkili kullanıcı ve tenant çapraz erişimi engellenir; sadece `INCOMING` fatura ve silinmemiş belge için çıktı kaydı değişir; `RESET_PENDING` gerekçelidir; kayıtların ana mali fiş/KDV/cari/stok/maliyet alanlarına etkisi yoktur. D1 schema migration yapılmaz; mevcut json_store altyapısı kullanılır. Gerçek e-posta/fatura/irsaliye gönderimi ve mevcut kayıtların taşınması/silinmesi yok.
-- **GitHub Actions:** Kullanıcı önce limit=0 belirtmiş, 16.11'de tekrar aktif olduğunu ve **gerektiğinde dikkatli kullanmamızı** söylemiştir. Öncelik X Windows üzerinde hedefli QA; bir PR için gereksiz push/workflow tekrarı yapılmaz. Merge SHA ve Cloudflare Pages+Worker prod deploy/ci/live-smoke kanıtları ayrı kaydedilmelidir.
+- **GitHub Actions:** 16.11.2026 ortak kuralına göre hesap genelinde 5 USD ek aylık üst sınır (otomatik durdurma açık). X Windows hedefli testleri geçildi, canonical CI yalnız gerektiğinde; yeni workflow veya geniş tetikleme yok. Merge SHA ve Cloudflare Pages+Worker prod deploy/live-smoke ayrı kanıtlanır.
+
 
 ## 15.11.2026 — İK Aylık manuel banka ve tek seferlik maaş kontrolü (PR #585)
 
@@ -1472,7 +1476,7 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 
 ## GitHub maliyet / Actions tek düzen — 04.10.2026
 
-- GitHub ek kullanım bütçeleri 0 USD ve limitte kullanım durdurma yaklaşımı korunur.
+- **16.11.2026 maliyet güncellemesi:** Actions için hesap geneline ortak 5 USD/ay ek bütçe vardır; Packages/Git LFS/AI Credits/Codespaces 0 USD kalır. 04.10 tarihi 0 USD Actions politikası geçersizdir.
 - Copilot Free varsayılandır; ücretli Copilot/ek kredi/ücretli GitHub servisi kullanıcı açıkça istemedikçe açılmaz.
 - Otomatik CI için tek canonical kapı: `.github/workflows/ui-canonical-acceptance.yml`; normal geliştirmede yalnız hedef PR değişikliklerinde çalışır ve aynı işin eski koşusunu iptal eder.
 - PDKS Windows/native build, PDKS web kontrolü, Muhasebe geniş kabul, production smoke, security deploy ve günlük operasyon deploy akışları varsayılan olarak `workflow_dispatch` ile manuel çalıştırılır.
