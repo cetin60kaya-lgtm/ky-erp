@@ -406,8 +406,18 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
           dyeType: text(body.dyeType || body.category || "GENEL"),
           unit: text(body.unit || "KG"),
           minStockKg: numberValue(body.minStockKg),
-          approvalStatus: "APPROVED",
+          approvalStatus: "REVIEW_REQUIRED",
           isActive: body.isActive !== false,
+          supplierName: text(body.supplierName),
+          supplierId: text(body.supplierId),
+          lotPolicy: text(body.lotPolicy || "REQUIRED"),
+          documents: Array.isArray(body.documents) ? body.documents.map((doc: Row) => ({
+            name: text(doc.name), status: ["AVAILABLE", "MISSING", "WAITING", "EXPIRED"].includes(text(doc.status)) ? text(doc.status) : "WAITING",
+            fileName: text(doc.fileName), fileHubAssetId: text(doc.fileHubAssetId),
+            documentDate: text(doc.documentDate), validUntil: text(doc.validUntil), note: text(doc.note),
+            verificationStatus: "PENDING_REVIEW"
+          })).filter((doc: Row)=>doc.name) : [],
+          archiveStatus: "FILE_HUB_BINDING_PENDING",
           note: text(body.note),
           source: text(body.source || "MANUAL"),
           approvedAt: now,
@@ -433,6 +443,17 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
         jsonError("PRODUCT_NAME_REQUIRED", "Onaylı ürün adı zorunludur."),
         400,
       );
+    }
+    // Yeni ürünleri dosya doğrulaması olmadan onaylı kimyasal olarak göstermeyin.
+    if (text(body.approvalStatus) === "APPROVED" && text(current.approvalStatus) !== "APPROVED") {
+      const docs = Array.isArray(body.documents) ? body.documents : Array.isArray(current.documents) ? current.documents : [];
+      const types = ["MSDS", "TDS", "ZDHC"];
+      const complete = types.every(type => docs.some((doc: Row) =>
+        normalize(doc.name).includes(type) && text(doc.fileHubAssetId) &&
+        text(doc.verificationStatus) === "VERIFIED" && text(doc.status) === "AVAILABLE"
+      ));
+      if (!complete) return c.json(jsonError("CHEMICAL_DOCUMENTS_REQUIRED",
+        "MSDS, TDS ve ZDHC belgeleri gerçek File Hub PDF dosyası ve yetkili doğrulaması olmadan yeni ürün onaylanamaz."),409);
     }
     const data = productView(
       await storePut(
