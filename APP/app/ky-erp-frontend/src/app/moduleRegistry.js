@@ -220,7 +220,7 @@ function withOperationalGroups(module) {
       ...module,
       label: "e-Belge / Faturalar",
       groups: [
-        { label: "Operasyon", tabs: [["genel-bakis", "Genel Bakış", "dashboard"], ["gelen-belgeler", "Gelen Belgeler", "dosya"], ["giden-belgeler", "Giden Belgeler", "dosya"], ["belge-havuzu", "Belge Havuzu", "upload"]] },
+        { label: "Operasyon", tabs: [["genel-bakis", "Genel Bakış", "dashboard"], ["gelen-faturalar", "Gelen Faturalar", "dosya"], ["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"], ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"], ["giden-faturalar", "Giden Faturalar", "dosya"], ["belge-havuzu", "Belge Havuzu", "upload"]] },
         { label: "Kontrol & Eşleştirme", tabs: [["eslestirmeler", "Eşleştirmeler", "file-check"], ["onay-sorunlar", "Onay & Sorunlar", "uyari"], ["is-akislari", "İş Akışları", "file-check"]] },
         { label: "Arşiv & Sistem", tabs: [["arsiv-cikti", "Arşiv & Çıktı", "dosya"], ["gorsel-sablonlar", "Görsel Şablonlar", "dosya"], ["entegrasyonlar", "Entegrasyonlar", "ayarlar"]] },
       ],

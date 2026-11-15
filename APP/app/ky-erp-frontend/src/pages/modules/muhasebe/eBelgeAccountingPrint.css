@@ -1,0 +1,17 @@
+.eb-accounting-print{display:grid;gap:10px;padding:13px 15px;border-radius:12px;border:1px solid #c8d9ec;background:#f6faff;margin:10px 0;font-size:12px;color:#23456a}
+.eb-accounting-print-head{display:flex;align-items:flex-start;justify-content:space-between;gap:9px;flex-wrap:wrap}
+.eb-accounting-print-head>div{display:grid;gap:5px}
+.eb-accounting-print-head strong{display:flex;align-items:center;gap:6px;font-size:13px}
+.eb-accounting-print-head small{color:#59718b;line-height:1.4}
+.eb-accounting-print-head>span{white-space:nowrap;border-radius:40px;padding:5px 10px;font-size:11px;font-weight:800}
+.eb-accounting-print-head .pending{background:#fff0d8;color:#975b06}
+.eb-accounting-print-head .printed{background:#e4f5e9;color:#1a6f3a}
+.eb-accounting-print-head .unknown{background:#e7edf4;color:#54667b}
+.eb-accounting-print-actions{display:flex;gap:8px;flex-wrap:wrap}
+.eb-accounting-print button{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #c1d4e7;border-radius:8px;background:#fff;padding:8px 11px;color:#275682;font-weight:750;cursor:pointer}
+.eb-accounting-print button:disabled{opacity:.5;cursor:not-allowed}
+.eb-accounting-print-confirm{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:10px;border:1px solid #d7e4f1;border-radius:9px;background:#fff}
+.eb-accounting-print-confirm label{display:flex;align-items:center;gap:7px;flex-wrap:wrap;flex:1;min-width:230px;line-height:1.4}
+.eb-accounting-print-confirm input:not([type=checkbox]){min-width:200px;flex:1;padding:8px;border:1px solid #c5d5e6;border-radius:7px}
+.eb-accounting-print-audit{color:#59718b}
+.eb-accounting-print p[role=alert]{display:flex;gap:6px;align-items:center;color:#a33131;margin:0}
