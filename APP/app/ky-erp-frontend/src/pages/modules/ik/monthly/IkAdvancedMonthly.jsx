@@ -20,7 +20,6 @@ import {
   saveIkAdvancedLeaveCashRequest,
   cancelIkAdvancedLeave,
   saveIkAdvancedFinanceMovement,
-  saveIkAdvancedPayrollLines,
   saveIkAdvancedFinalPayrollControl,
   saveIkAdvancedPersonCard,
   saveIkAdvancedBulkCompensation,
