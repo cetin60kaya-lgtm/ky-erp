@@ -1,11 +1,11 @@
 import {useCallback,useEffect,useState} from "react";
 import {ShieldCheck,RefreshCw,LockKeyhole,KeyRound,MonitorSmartphone,Activity,History,NotebookPen,MessageCircle} from "lucide-react";
-import {decideTrustedApproval,getSignedSecurityResponse,getTrustedDevice,unlockTrustedDevice,closeTrustedSession} from "./securityDevice";
+import {decideTrustedApproval,decideTrustedSecurityAction,getSignedSecurityResponse,getTrustedDevice,unlockTrustedDevice,closeTrustedSession} from "./securityDevice";
 
 // Same mounted React tree as ERP. The section never redirects to /guvenlik/ or reloads AuthProvider.
 export default function SecurityCenter(){
  const [section,setSection]=useState("approvals");
- const [pending,setPending]=useState([]),[control,setControl]=useState(null),[device,setDevice]=useState(null);
+ const [pending,setPending]=useState([]),[critical,setCritical]=useState([]),[criticalError,setCriticalError]=useState(""),[control,setControl]=useState(null),[device,setDevice]=useState(null);
  const [status,setStatus]=useState(""),[busy,setBusy]=useState(false);
  const [matchById,setMatchById]=useState({}),[code,setCode]=useState(null);
  const [notes,setNotes]=useState([]),[noteText,setNoteText]=useState("");
@@ -15,9 +15,15 @@ export default function SecurityCenter(){
    try{
      const stored=await getTrustedDevice();
      setDevice(stored);
-     if(!stored?.deviceId||!stored?.signingPrivateKey){setStatus("Bu telefon henüz güvenilir cihaz olarak kayıtlı değil.");return}
-     const items=await getSignedSecurityResponse("/auth/push/device/pending");
-     setPending(Array.isArray(items.items)?items.items:[]);
+     if(!stored?.deviceId||!stored?.signingPrivateKey){setPending([]);setCritical([]);setStatus("Bu telefon henüz güvenilir cihaz olarak kayıtlı değil.");return}
+     const [loginResult,criticalResult]=await Promise.allSettled([
+       getSignedSecurityResponse("/auth/push/device/pending"),
+       getSignedSecurityResponse("/auth/security-actions/device/pending")
+     ]);
+     if(loginResult.status==="rejected")throw loginResult.reason;
+     setPending(Array.isArray(loginResult.value.items)?loginResult.value.items:[]);
+     setCritical(criticalResult.status==="fulfilled"&&Array.isArray(criticalResult.value.items)?criticalResult.value.items:[]);
+     setCriticalError(criticalResult.status==="rejected"?(criticalResult.reason?.message||"Kritik işlem kuyruğu kontrol edilemedi."):"");
      try{setControl(await getSignedSecurityResponse("/auth/push/device/control-center"))}catch{setControl(null)}
      try{const data=await getSignedSecurityResponse("/auth/push/device/workspace/notes");setNotes(Array.isArray(data.items)?data.items:[])}catch{setNotes([])}
      try{const data=await getSignedSecurityResponse("/auth/push/device/workspace/chat/users");setPeers(Array.isArray(data.items)?data.items:[])}catch{setPeers([])}
@@ -26,7 +32,7 @@ export default function SecurityCenter(){
  },[]);
  useEffect(()=>{
    refresh();
-   const timer=setInterval(()=>{if(document.visibilityState==="visible"&&!busy)refresh()},10000);
+   const timer=setInterval(()=>{if(document.visibilityState==="visible"&&!busy)refresh()},20000);
    const onFocus=()=>refresh();
    window.addEventListener("focus",onFocus);
    return()=>{clearInterval(timer);window.removeEventListener("focus",onFocus)};
@@ -42,6 +48,16 @@ export default function SecurityCenter(){
      setStatus(value==="APPROVE"?"Onay verildi.":"İstek reddedildi.");
      await refresh();
    }catch(error){setStatus(error?.message||"Onay işlemi başarısız.")}
+   finally{setBusy(false)}
+ };
+ const criticalDecision=async(item,choice)=>{
+   if(busy)return;
+   setBusy(true);setStatus("Kritik işlem için PIN / parmak izi doğrulanıyor...");
+   try{
+     await decideTrustedSecurityAction(item,choice);
+     await refresh();
+     setStatus(choice==="APPROVED"?"Kritik güvenlik işlemi onaylandı. Sonucu ERP ekranında kontrol edin.":"Kritik güvenlik işlemi reddedildi.");
+   }catch(error){setStatus(error?.message||"Kritik güvenlik kararı gönderilemedi.")}
    finally{setBusy(false)}
  };
  const newCode=async()=>{
@@ -85,13 +101,21 @@ export default function SecurityCenter(){
    <p>ERP'yi kapatmadan girişleri, cihazları ve oturumları kontrol edin.</p>
    <button type="button" onClick={refresh} disabled={busy}><RefreshCw size={16}/>Yenile</button></header>
   <div className="ky-pro-security-tabs" role="group" aria-label="Güvenlik bölümleri">
-   {sections.map(([key,label,Icon])=><button key={key} type="button" className={section===key?"active":""} onClick={()=>setSection(key)}><Icon size={17}/>{label}{key==="approvals"&&pending.length?<b>{pending.length}</b>:null}</button>)}
+   {sections.map(([key,label,Icon])=><button key={key} type="button" className={section===key?"active":""} onClick={()=>setSection(key)}><Icon size={17}/>{label}{key==="approvals"&&(pending.length+critical.length)?<b>{pending.length+critical.length}</b>:null}</button>)}
   </div>
   {status?<p className="ky-pro-security-message" role="status">{status}</p>:null}
   {!device?.deviceId?<section className="ky-pro-security-card"><h2>Cihaz bağlantısı gerekli</h2>
    <p>Eski cihaz kaydınız silinmedi. Bu telefonda bağlantı görünmüyorsa mevcut KY ERP güvenilir cihaz kurulumu kontrol edilmelidir.</p></section>:null}
   {section==="approvals"?<div className="ky-pro-security-list">
-    {!pending.length?<div className="ky-pro-security-card"><ShieldCheck size={28}/><h2>Bekleyen giriş onayı yok</h2><p>Yeni istekler otomatik denetleniyor.</p></div>:null}
+    {criticalError?<p className="ky-pro-security-message" role="alert">Kritik işlem kontrolü: {criticalError}. Normal giriş onayları kullanılabilir.</p>:null}
+    {critical.map(item=><article className="ky-pro-security-card" key={"critical-"+item.id}>
+      <span className="ky-pro-critical-label">KRİTİK GÜVENLİK ONAYI</span>
+      <h2>{item.actionType==="OWNER_RECOVERY_QUESTIONS_UPDATE"?"Hesap kurtarma sorularını kaydet":(item.title||"Kritik güvenlik işlemi")}</h2>
+      <p>Bu isteği ERP ekranında siz başlattıysanız PIN / parmak iziyle onaylayın. Aksi halde reddedin.</p>
+      <div className="ky-pro-security-actions"><button type="button" disabled={busy} onClick={()=>criticalDecision(item,"APPROVED")}><LockKeyhole size={17}/>PIN ile Onayla</button>
+      <button type="button" disabled={busy} onClick={()=>criticalDecision(item,"DENIED")}>Reddet</button></div>
+    </article>)}
+    {!pending.length&&!critical.length?<div className="ky-pro-security-card"><ShieldCheck size={28}/><h2>Bekleyen giriş onayı yok</h2><p>Yeni istekler otomatik denetleniyor.</p></div>:null}
     {pending.map(item=><article className="ky-pro-security-card" key={item.id}>
       <h2>{item.title||"Giriş Onayı"}</h2><p>{item.body||"Güvenilir telefon onayı bekleniyor."}</p>
       {/^\d{2}$/.test(String(item.matchNumber||""))?<label>Ekrandaki iki haneli numara

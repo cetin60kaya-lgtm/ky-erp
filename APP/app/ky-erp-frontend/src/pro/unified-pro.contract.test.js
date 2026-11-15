@@ -61,3 +61,22 @@ test("owner and restricted company roles use canonical module RBAC and no client
  assert.match(read("src/context/AuthContext.jsx"),/MODULE_KEYS/);
  assert.match(read("src/AppV3.jsx"),/visibleModules/);
 });
+
+test("KY ERP PRO signed critical approvals stay on the trusted phone",()=>{
+ const client=read("src/pro/SecurityCenter.jsx");
+ const signer=read("src/pro/securityDevice.js");
+ assert.match(client,/auth\/security-actions\/device\/pending/);
+ assert.match(client,/decideTrustedSecurityAction/);
+ assert.match(client,/PIN ile Onayla/);
+ assert.match(signer,/KYERP-DECISION-V1/);
+ assert.match(signer,/SECURITY_ACTION/);
+ assert.match(signer,/criticalRoute/);
+ assert.doesNotMatch(signer,/localStorage\.setItem/);
+});
+test("KY ERP PRO shares the company selector with canonical workspace",()=>{
+ const main=read("src/pro/main.jsx");
+ assert.match(main,/<ActiveCompanyProvider><ProApplicationContent\/><\/ActiveCompanyProvider>/);
+ assert.match(main,/getVisibleModuleTabs/);
+ assert.match(main,/setActiveCompanySlug/);
+ assert.match(main,/history\.pushState/);
+});

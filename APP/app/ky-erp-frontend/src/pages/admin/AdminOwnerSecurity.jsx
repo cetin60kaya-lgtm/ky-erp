@@ -202,10 +202,11 @@ export default function AdminOwnerSecurity() {
       const result = await saveOwnerRecoveryQuestionsSecure({ actionId: action.actionId, actionToken: action.actionToken, questions });
       if (result?.readBackVerified !== true) throw new Error("Kayıt sonrası sunucu doğrulaması tamamlanmadı.");
       setRecoveryAction(null);
-      setMessage(result?.recoveryEnabled
-        ? "Güvenlik soruları kaydedildi ve sunucudan tekrar okunarak doğrulandı. Hesap kurtarma güvenliği aktif."
-        : "Güvenlik soruları kaydedildi ve sunucudan tekrar okunarak doğrulandı. Kurtarmanın aktif olması için doğrulanmış e-posta veya SMS kanalı da hazır olmalıdır.");
+      const savedMessage=result?.recoveryEnabled
+        ? "Güvenlik soruları kalıcı olarak doğrulandı. Hesap kurtarma artık aktif."
+        : "Üç güvenlik sorusu doğrulanarak kaydedildi; kurtarma için doğrulanmış iletişim kanalı ayrıca gerekli.";
       await loadAll();
+      setMessage(savedMessage);
     } catch (error) {
       setRecoveryAction(null);
       setMessage(`Hata: ${error?.message || "KY Güvenlik telefon onayıyla güvenlik soruları kaydedilemedi."}`);
@@ -221,8 +222,9 @@ export default function AdminOwnerSecurity() {
     try {
       const result = await saveOwnerRecoveryQuestions({ provider: recoveryProvider, code: cleanCode, questions });
       setRecoveryStepUpCode("");
-      setMessage(result?.recoveryEnabled ? "Güvenlik soruları yedek Authenticator yöntemiyle kaydedildi." : "Güvenlik soruları yedek yöntemle kaydedildi; doğrulanmış kurtarma kanalı ayrıca gereklidir.");
+      const savedMessage=result?.recoveryEnabled ? "Üç güvenlik sorusu yedek Authenticator ile kaydedildi; kurtarma aktif." : "Üç soru kaydedildi; doğrulanmış kurtarma kanalı ayrıca gereklidir.";
       await loadAll();
+      setMessage(savedMessage);
     } catch (error) { setMessage(`Hata: ${error?.message || "Yedek Authenticator yöntemiyle güvenlik soruları kaydedilemedi."}`); }
     finally { setBusy(false); }
   }
@@ -379,7 +381,7 @@ export default function AdminOwnerSecurity() {
         <div>
           <small className="aos-section-kicker">HESAP KURTARMA / SÜPER YÖNETİCİ</small>
           <h3>Hesap Kurtarma ve Kimlik Doğrulama</h3>
-          <p>Üç güvenlik sorusu tanımlanır. Kaydetme işlemi birincil olarak KY Güvenlik telefon onayı ister; Google/Microsoft Authenticator yalnız yedek yöntemdir.</p>
+          <p>1. Üç özel soru ve cevap belirle. 2. Telefonda onay ver veya yedek Authenticator kodunu kullan. 3. Kayıttan sonra 3/3 ve Kurtarma Hazır durumunu kontrol et.</p>
         </div>
         <span className={recoveryConfig?.recoveryEnabled ? "state good" : "state warn"}>{recoveryConfig?.recoveryEnabled ? "Kurtarma Hazır" : "Kurulum Bekliyor"}</span>
       </div>
@@ -406,7 +408,7 @@ export default function AdminOwnerSecurity() {
         </div>
 
         <div className="aos-recovery-stepup">
-          <div><b>Birincil doğrulama · KY Güvenlik</b><small>Kaydet dediğinizde telefonunuza kritik işlem onayı gelir. Onaydan sonra sunucu kaydı tekrar okuyup doğrulamadan başarı göstermez.</small></div>
+          <div><b>Birincil yöntem · KY Güvenlik</b><small>KY ERP PRO → Güvenlik → Onaylar → Kritik Güvenlik Onayı bölümünü açın. Onay görünmezse aşağıdan yedek Authenticator yöntemini kullanın. E-posta giriş kodu, Authenticator kodu değildir.</small></div>
           <button className="primary" type="submit" disabled={busy}>{recoveryAction ? "Telefonda onay bekleniyor..." : "Telefondan Onayla ve Kaydet"}</button>
           <details>
             <summary>Yedek yöntem · Authenticator</summary>
