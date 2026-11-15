@@ -454,6 +454,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
   }, [companyId]);
   const [selectedPayrollIds, setSelectedPayrollIds] = useState([]);
   const [monthlySetup, setMonthlySetup] = useState(null);
+  const [autoSetupPending, setAutoSetupPending] = useState(false);
   const documentInput = useRef(null);
   const payrollInput = useRef(null);
   const period = `${year}-${String(month).padStart(2, "0")}`;
@@ -698,10 +699,12 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
       if (!state?.prepared) throw new Error("Aylık dönem hazırlık kaydı doğrulanamadı.");
       setPreparedPeriods((old) => [...new Set([...old, period])]);
       const ok = await load({ force: true });
-      if (!ok) return;
+      if (!ok) return false;
       setNotice(`${MONTHS[month - 1]} ${year} bir kez hazırlandı ve sunucuya kaydedildi. Sayfa kapansa da tekrar hazırlamanız gerekmez.`);
+      return true;
     } catch (error) {
       setNotice(error?.message || "Aylık dönem hazırlanamadı.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -714,6 +717,7 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setSelectedId(readIkSelectedPerson(companyId, `${Number(nextYear)}-${String(Number(nextMonth)).padStart(2, "0")}`));
     setSelectedPayrollIds([]);
     setMonthlySetup(null);
+    setAutoSetupPending(false);
     setEmployeeStatusFilter("ALL");
     setSgkFilter("ALL");
     setMovementTypeFilter("ALL");
@@ -1447,9 +1451,15 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setModal("yillik");
   };
 
-  const startMonthlyPayrollSetup = () => {
-    if (!payrollReady || !periodPrepared) return setNotice("Önce seçili ayın bordro bilgilerini hazırlayın.");
+  const startMonthlyPayrollSetup = async () => {
     if (data.close?.isLocked) return setNotice("Ay kilitli. Sıralı kontrol yalnız açık dönemde çalışır.");
+    if (!periodPrepared) {
+      setAutoSetupPending(true);
+      const prepared = await preparePeriod();
+      if (!prepared) setAutoSetupPending(false);
+      return;
+    }
+    if (!payrollReady) return setNotice("Ortak bordro verisi henüz yüklenmedi; sayfayı yenileyip tekrar deneyin.");
     const reviewable = payrollRows.filter((row) => !row.paidLocked);
     if (!reviewable.length) return setNotice("Bütün personel bordroları ödenmiş veya kilitli; değişiklik yapılmaz.");
     setMonthlySetup({ active: true, reviewed: [], total: reviewable.length, period });
@@ -1457,6 +1467,21 @@ export default function IkAdvancedMonthly({ mode = "ozet", activeMainCompany, op
     setPage("bordro");
     openPayPlan(reviewable[0].employee, "FINAL", reviewable[0]);
   };
+
+  // A new month is prepared at the server first, then the one-person review
+  // opens after the canonical payroll projection has actually reloaded.
+  useEffect(() => {
+    if (!autoSetupPending || busy) return;
+    if (periodCheckFailed || (periodPrepared && !payrollReady)) {
+      setAutoSetupPending(false);
+      setNotice("Dönem hazırlandı ancak güncel bordro okunamadı. Kayda geçilmedi; yeniden deneyin.");
+      return;
+    }
+    if (periodPrepared && payrollReady) {
+      setAutoSetupPending(false);
+      startMonthlyPayrollSetup();
+    }
+  }, [autoSetupPending, busy, periodCheckFailed, periodPrepared, payrollReady, startMonthlyPayrollSetup]);
 
   const openPayroll = (row = payrollRows.find((item) => item.employee.id === selected?.id)) => {
     if (!row) return setNotice("Personel seçilmeden son bordro kontrolü açılamaz.");
