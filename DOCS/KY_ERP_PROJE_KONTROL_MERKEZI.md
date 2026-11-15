@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 15.11.2026 — e-Belge İşNet entegrasyon merkezi + firma bazlı çıktı profili (#575, #577)
+
+- **GitHub canonical:** İşNet öncelikli firma adaptör seçimi, etkin/pasif, kaldırma ve salt okunur gelen belge API liste kontrolü [#575](https://github.com/cetin60kaya-lgtm/ky-erp/pull/575) ile squash merge `65ee248d300a9079d462d0bbac8761252e1e6175`. Daha sonra şablon düzenleme, otomatik İşNet panel açma, firma değişiminde şablon state izolasyonu ve PDF/JPEG/PNG görsel profil [#577](https://github.com/cetin60kaya-lgtm/ky-erp/pull/577) ile squash merge `92ebcfe66f62abeec354b5300645ce5721548682`.
+- **Test:** #575 CI `43661274938` ve #577 CI `43684964668`, Frontend lint/test/build + Worker typecheck/test/build **SUCCESS**. Eski şablon #572, CI fail ve branch çakışması nedeniyle #577 ile güvenli şekilde superseded edilip **closed/unmerged**.
+- **Sistem sınırı:** Adaptör katalogda olmak gerçek bağlanma değildir; firma seçimi / etkinlik / yetkili İşNet oturumu / salt okunur belge listesi ayrı doğrulanır. Logo/Mikro/Paraşüt DRIVER_PENDING. İşNet kapatma geçmiş belgeleri veya kayıtlı şifre/ayarları silmez. Şablon orijinal XML'i değiştirmez, üretici PDF'sine otomatik birebir eşitlik iddia etmez, görsel karşılaştırma ve açık kabul ister.
+- **Canlı gözlem:** Public `/api/health` yanıtı `ok=true` ve D1 bildiriyor; Worker `/api/health/isnet-egress` anonim GET'de `einvoiceapi` ve `efatura` READY, `nettefatura` TIMEOUT; credentialTested/sessionVerified false. Yalnız sağlık yanıtı #577 merge SHA'nın Cloudflare Pages ve Worker deploy ancestry'sini **kanıtlamaz**.
+- **Kalan kabul:** Cloudflare Pages+Worker gerçek dağıtım SHA; gerçek yetkili İşNet hesabında API login/yetkili firma/gelen fatura ve irsaliye ilk sayfa; tek XML+PDF örnek görsel karşılaştırması; rol/tenant ve mobil/masaüstü gerçek tarayıcı E2E. Bu aşamalar tamamlanmadan **İşNet tam canlı/tam bitti** denmez.
+- **Yapılmayan:** Production D1 migration, gerçek fatura/e-irsaliye veya müşteri e-postası gönderimi, kesin cari/KDV/ödeme yazısı, customer XML/PDF toplu aktarımı; GitHub'a credential veya hassas müşteri içeriği yazımı.
+
 ## 15.11.2026 — İK SGK Excel: yalnız KY ERP / Hakan Emprime çalışanları (PR #576)
 
 - **Kullanıcı kuralı:** Muhasebecinin Excel'inde işverenin evindeki çalışanlar ve başka işyerlerindeki kişiler bulunabilir. Bunlar otomatik KY ERP/Hakan Emprime çalışanı veya maaş/fiş kaydı değildir. Yalnız canonical KY ERP şirketindeki kayıtlı ve bordro kapsamına alınmış Hakan Emprime personeli işlenir.
