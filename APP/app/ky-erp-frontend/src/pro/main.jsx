@@ -1,6 +1,6 @@
 import React,{useCallback,useEffect,useMemo,useRef,useState,Suspense} from "react";
 import{createRoot}from"react-dom/client";
-import{House,ShieldCheck,LayoutGrid,ChartNoAxesCombined,UserRound,Search,X,ChevronRight}from"lucide-react";
+import{House,ShieldCheck,LayoutGrid,ChartNoAxesCombined,UserRound,Search,X,ChevronRight,Building2}from"lucide-react";
 import{AuthProvider,useAuth}from"../context/AuthContext";
 import{installPersistedAuthBootstrap}from"../context/authBootstrap";
 import{installAndroidRuntimeBridge}from"../utils/installAndroidRuntimeBridge";
@@ -9,6 +9,7 @@ import{getVisibleModuleTabs}from"../app/moduleRegistry";
 import{ActiveCompanyProvider,useActiveCompany}from"../context/ActiveCompanyContext";
 import LoginPage from"../pages/LoginPage";
 import SecurityCenter from"./SecurityCenter";
+import ProCompanyCenter from"./ProCompanyCenter";
 import "../App.css";
 import "../styles/canonical-workspace-ui.css";
 import "../styles/module-action-popups.css";
@@ -71,7 +72,7 @@ function ModuleChooser({opened,onClose,allowed}){
  </dialog>;
 }
 
-function ProHome({onSecurity}){
+function ProHome({onSecurity,onCompanies}){
  const {user,hasModule}=useAuth();
  const {companies,activeCompany,activeCompanySlug,setActiveCompanySlug}=useActiveCompany();
  const [search,setSearch]=useState("");
@@ -95,6 +96,7 @@ function ProHome({onSecurity}){
    </section>
    <div className="ky-pro-home-tools">
     <button type="button" onClick={onSecurity}><ShieldCheck size={22}/><span><b>Güvenlik Onayları</b><small>Giriş, cihaz, oturum ve kod</small></span><ChevronRight size={17}/></button>
+    {owner?<button type="button" onClick={onCompanies}><Building2 size={22}/><span><b>Firmalarım</b><small>Firma sahibi, kullanıcı ve yetkiler</small></span><ChevronRight size={17}/></button>:null}
     <button type="button" onClick={()=>{const m=allowed.find(x=>x.key==="muhasebe");const t=m&&getModuleTabs(m)[0];if(m&&t)goModule(m.key,t[0])}}><ChartNoAxesCombined size={22}/><span><b>ERP Çalışma Alanı</b><small>Bu uygulamada muhasebe ve operasyon</small></span><ChevronRight size={17}/></button>
    </div>
    <div className="ky-pro-home-title"><div><span>TÜM ERİŞİLEBİLİR MODÜLLER</span><h2>Çalışma Alanları</h2></div><LayoutGrid size={20}/></div>
@@ -141,7 +143,7 @@ function ProWorkspaceToolbar(){
  </nav>;
 }
 
-function ProDock({onSecurity,securityActive,securityPending,onHomeSelected}){
+function ProDock({onSecurity,securityActive,securityPending,onCompanies,companiesActive,onHomeSelected}){
  const {user,hasModule}=useAuth();
  const [menuOpen,setMenuOpen]=useState(false);
  const [currentPath,setCurrentPath]=useState(location.pathname);
@@ -172,7 +174,8 @@ function ProDock({onSecurity,securityActive,securityPending,onHomeSelected}){
      <button type="button" className={securityActive?"is-active":""} onClick={security}><ShieldCheck size={23}/><span>Güvenlik</span>{securityPending?<i className="ky-pro-security-wake" aria-label="Yeni güvenlik bildirimi">Yeni</i>:null}</button>
      <button type="button" className="ky-pro-dock-main" onClick={()=>setMenuOpen(true)} aria-haspopup="dialog"><LayoutGrid size={24}/><span>Modüller</span></button>
      <button type="button" className={isAnalytic?"is-active":""} onClick={onAnalysis}><ChartNoAxesCombined size={23}/><span>Analiz</span></button>
-     <button type="button" onClick={()=>setMenuOpen(true)}><UserRound size={23}/><span>Menü</span></button>
+     {owner?<button type="button" className={companiesActive?"is-active":""} onClick={onCompanies}><Building2 size={23}/><span>Firmalar</span></button>
+       :<button type="button" onClick={()=>setMenuOpen(true)}><UserRound size={23}/><span>Menü</span></button>}
    </nav>
    <ModuleChooser opened={menuOpen} onClose={()=>setMenuOpen(false)} allowed={allowed}/>
    <div className="ky-pro-sr-only" role="status" aria-live="polite">İşlemler mevcut KY ERP rol ve firma yetkileriyle korunur.</div>
@@ -183,8 +186,12 @@ function ProApplicationContent(){
  const {user,isAuthenticated,loading}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
  const [securityOpen,setSecurityOpen]=useState(()=>new URLSearchParams(location.search).get("security")==="1");
+ const [companyOpen,setCompanyOpen]=useState(false);
  const [securityWakePending,setSecurityWakePending]=useState(false);
- const openSecurity=useCallback(()=>{setSecurityWakePending(false);setSecurityOpen(true)},[]);
+ const owner=OWNER_ROLES.has(String(user?.role||"").toUpperCase());
+ const openSecurity=useCallback(()=>{setSecurityWakePending(false);setCompanyOpen(false);setSecurityOpen(true)},[]);
+ const openCompanies=useCallback(()=>{setSecurityOpen(false);setCompanyOpen(true)},[]);
+ const openCompanyModule=useCallback((module,tab)=>{goModule(module,tab);setCompanyOpen(false);setSecurityOpen(false)},[]);
  const [loginRequested,setLoginRequested]=useState(false);
  const [loginEverOpened,setLoginEverOpened]=useState(false);
  const wasAuthenticated=useRef(isAuthenticated);
@@ -198,7 +205,7 @@ function ProApplicationContent(){
  useEffect(()=>{if(loginRequested)setLoginEverOpened(true)},[loginRequested]);
  const [workspaceMounted,setWorkspaceMounted]=useState(!home);
  useEffect(()=>{if(!home)setWorkspaceMounted(true)},[home]);
- useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
+ useEffect(()=>{const update=()=>{setHome(location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");setSecurityOpen(false);setCompanyOpen(false)};window.addEventListener("popstate",update);return()=>window.removeEventListener("popstate",update)},[]);
  useEffect(()=>{
    const onPush=(event)=>{if(event.data?.type==="KYERP_SECURITY_PUSH_WAKE")setSecurityWakePending(true)};
    navigator.serviceWorker?.addEventListener?.("message",onPush);
@@ -218,7 +225,14 @@ function ProApplicationContent(){
     <button type="button" className={loginRequested?"is-active":""} onClick={()=>setLoginRequested(true)}><House size={24}/><span>ERP'ye Giriş</span></button>
    </nav>
   </div>;
- return <div className="ky-pro-app" data-role={String(user?.role||"")}><div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div><div className="ky-pro-content" hidden={securityOpen||!home}><ProHome onSecurity={openSecurity}/></div>{workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||home}><ProWorkspaceToolbar/></div>:null}{workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}<ProDock onSecurity={openSecurity} securityActive={securityOpen} securityPending={securityWakePending} onHomeSelected={()=>setSecurityOpen(false)}/></div>;
+ return <div className="ky-pro-app" data-role={String(user?.role||"")}>
+  <div className="ky-pro-content" hidden={!securityOpen}>{securityOpen?<SecurityCenter/>:null}</div>
+  <div className="ky-pro-content" hidden={!companyOpen}>{companyOpen&&owner?<ProCompanyCenter onOpenModule={openCompanyModule} onClose={()=>setCompanyOpen(false)}/>:null}</div>
+  <div className="ky-pro-content" hidden={securityOpen||companyOpen||!home}><ProHome onSecurity={openSecurity} onCompanies={openCompanies}/></div>
+  {workspaceMounted?<div className="ky-pro-workspace-toolbar" hidden={securityOpen||companyOpen||home}><ProWorkspaceToolbar/></div>:null}
+  {workspaceMounted?<div className="ky-pro-workspace-content" hidden={securityOpen||companyOpen||home}><Suspense fallback={<div className="ky-pro-loading"><strong>ERP modülleri yükleniyor...</strong></div>}><LazyWorkspace/></Suspense></div>:null}
+  <ProDock onSecurity={openSecurity} securityActive={securityOpen} securityPending={securityWakePending} onCompanies={openCompanies} companiesActive={companyOpen} onHomeSelected={()=>{setSecurityOpen(false);setCompanyOpen(false)}}/>
+ </div>;
 }
 installAndroidRuntimeBridge();
 installPersistedAuthBootstrap();

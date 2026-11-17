@@ -10,7 +10,7 @@ export async function getSecurityCenterOverview() { return unwrap(await apiGet("
 export async function listSecurityCenterSessions() { return unwrap(await apiGet("/security-center/sessions", { _ts: Date.now() })); }
 export async function listTrustedLoginDevices() { return unwrap(await apiGet("/security-center/trusted-devices", { _ts: Date.now() })); }
 export async function revokeOwnTrustedLoginDevice(deviceId) { return unwrap(await apiDelete(`/security-center/trusted-devices/${encodeURIComponent(deviceId)}`)); }
-export async function listSecurityCenterAudit(limit = 250) { return unwrap(await apiGet("/security-center/audit", { limit, _ts: Date.now() })); }
+export async function listSecurityCenterAudit(limit = 250, companySlug = "") { return unwrap(await apiGet("/security-center/audit", { limit, ...(companySlug ? { companySlug } : {}), _ts: Date.now() })); }
 export async function listSecurityCenterLoginApprovals() { return unwrap(await apiGet("/security-center/login-approvals", { _ts: Date.now() })); }
 export async function decideSecurityCenterLoginApproval(id, decision) {
   const normalized = String(decision || "").trim().toUpperCase();
