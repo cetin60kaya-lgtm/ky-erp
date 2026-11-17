@@ -22,3 +22,11 @@ test("List evidence cannot be treated as payment or saved to financial ledger",(
 test("Weekly router is registered once with existing invoice mail routes",()=>{
  assert.match(router,/registerInvoiceWeeklyReconciliationRoutes\(app\)/);
 });
+
+test("HKN kimlikleri yalnız kesin belge numarası ve sınırlarıyla okunur; kopyalar incelemeye gider",()=>{
+ assert.ok(source.includes('^HKN[0-9]{8,18}$'));
+ assert.ok(source.includes('extractCellHkn(raw)'));
+ assert.ok(source.includes('duplicates.has(row.documentNo)?"REVIEW_REQUIRED"'));
+ assert.ok(source.includes("manualAudit:"));
+ assert.ok(source.includes("actorId:str(a.user.id)"));
+});

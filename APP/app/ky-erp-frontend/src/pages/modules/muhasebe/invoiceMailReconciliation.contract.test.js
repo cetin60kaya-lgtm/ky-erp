@@ -29,3 +29,12 @@ test("Difference response is a draft and must be reviewed by a human",()=>{
  assert.match(discrepancy,/!ack/);
  assert.match(discrepancy,/matchingRoutes/);
 });
+
+test("e-Belge giden PDF bağlantısı ayrı mail merkezine gelir; genel taslaklara atlamaz",()=>{
+ const eBelge=read("./EBelgeCenterPage.jsx");
+ assert.match(eBelge,/Fatura \/ İrsaliye Mail Merkezi/);
+ assert.match(eBelge,/tabKey:"fatura-mail-mutabakat"/);
+ assert.match(center,/handoffDocument\|\|handoffDelivery/);
+ assert.match(center,/fetchSeq\.current/);
+ assert.match(center,/snapshot\.manualAudit/);
+});

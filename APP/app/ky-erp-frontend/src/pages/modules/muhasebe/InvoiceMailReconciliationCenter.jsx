@@ -23,7 +23,7 @@ const isMissing=row=>["NOT_LISTED","MANUAL_EXCLUDED"].includes(row.outcome);
 const today=()=>new Date().toLocaleDateString("en-CA");
 export default function InvoiceMailReconciliationCenter({activeMainCompany,refreshKey=0,moduleActionContext,openModule}){
  const tenant=activeMainCompany?.slug||"";
- const [tab,setTab]=useState(moduleActionContext?.document_no?"send":"import");
+ const [tab,setTab]=useState(moduleActionContext?.document_no||moduleActionContext?.delivery_no?"send":"import");
  const [customerId,setCustomerId]=useState("");
  const [companies,setCompanies]=useState([]);
  const [rows,setRows]=useState([]);
@@ -44,7 +44,7 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
  const [reloadToken,setReloadToken]=useState(0);
  const fetchSeq=useRef(0);
  useEffect(()=>{
-  setTab(handoffDocument?"send":"import");
+  setTab(handoffDocument||handoffDelivery?"send":"import");
   setSelectedMail(handoffDocument||handoffDelivery||handoffModelId||handoffModelName||handoffParty
    ?{document_no:handoffDocument,delivery_no:handoffDelivery,model_id:handoffModelId,model_name:handoffModelName,party_name:handoffParty}:null);
  },[handoffDocument,handoffDelivery,handoffModelId,handoffModelName,handoffParty]);

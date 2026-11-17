@@ -395,7 +395,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
           onPdf={()=>void openSupplierAccountingPdf()} onChanged={onChanged}/>
         <section className="eb-document-toolbar">
           {detail.direction==="OUTGOING"&&<button type="button" onClick={()=>onOpenMailDrafts?.(detail)}>
-             Outlook Taslaklarını Aç
+             Fatura / İrsaliye Mail Merkezi
            </button>}
           <button type="button" disabled={["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(detail.status)} onClick={() => setEditing(true)}><Pencil size={16} /> Belge Düzenle</button>
           {!detail.party_company_id && <button type="button" onClick={() => setCompanyOpen(true)}>Cari Eşleştir</button>}
@@ -836,10 +836,20 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     </div> : null}
     <DetailDrawer key={selectedId || "empty-document"} id={selectedId}
       mainCompanySlug={mainCompanySlug}
-      onOpenMailDrafts={(doc)=>openModule?.("iletisim",{
-        tabKey:"mail-taslaklar",
-        actionContext:{source:"e-belge",documentId:doc.id,documentNo:doc.document_no,recipientCompany:doc.party_name}
-      })}
+      onOpenMailDrafts={(doc)=>{
+        const no=String(doc.document_no||"").trim().toUpperCase();
+        openModule?.("muhasebe",{
+          tabKey:"fatura-mail-mutabakat",
+          actionContext:{
+            source:"e-belge",documentId:doc.id,
+            document_no:no.startsWith("HKN")?no:"",
+            delivery_no:no.startsWith("DDM")?no:"",
+            party_name:doc.party_name||"",
+            model_name:doc.model_name||"",
+            model_id:doc.model_id||"",
+          }
+        });
+      }}
       onClose={()=>setSelectedId("")}
       onChanged={showPool ? loadPool : loadDashboard} />
   </section>;
