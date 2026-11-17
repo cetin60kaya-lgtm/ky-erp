@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 17.11.2026 — Muhasebe e-Belge ile bağımsız Fatura Mail & Haftalık HKN Takibi
+- Kullanıcı kararı: Satış & Müşteri'deki gömülü PDF mail ekranı çıkarılır; Muhasebe → Belge Akışı → **Fatura Mail & Mutabakat** ayrı bir ana sekmedir. İçinde beş görünüm vardır: **PDF Mail Gönderimi / Haftalık Excel & Kontrol / Ödemeye Alınanlar / Ödemeye Alınmayanlar / Eksik-Fazla & İtiraz**. Giden e-Belge ve satış belgelerinden bu merkez açılır.
+- Tek kaynak: HKN giden canonical `accounting_documents` + mevcut File Hub ve Outlook Graph sender. Cari/ödeme/banka/KDV için yeni paralel kesin kayıt açılmaz. İşNet'in resmî gönderiminden bağımsız müşteri PDF mailidir.
+- Müşterinin haftalık XLS/XLSX/CSV'si seçilen firma ve kesin HKN numarasıyla karşılaştırılır. Excel'de var = **müşterinin listesine girmiş**; gerçek tahsilat/ödeme kanıtı **değildir**. Excel henüz yoksa `AWAITING_EXCEL`; yanlış/tekrarlı HKN `REVIEW_REQUIRED`. Manuel dahil/hariç/inceleme kararı kullanıcı/tarih geçmişiyle `json_store` içinde tutulur; otomatik kesin mali kayıt olmaz.
+- Excel'in orijinal byte'ları bu akışta saklanmaz; dosya adı, tarih, hash ve okunan HKN kimlikleri tutulur. Gelen Excel indirilip kullanıcı tarafından seçilir; Outlook ekinden otomatik aktarım **henüz yok**. Eksik/fazla cevapları önce taslaktır; gerçek gönderim ayrıca yetkili kullanıcı onayı ve sağlayıcı kabulü ister.
+- Kod: [PR #589](https://github.com/cetin60kaya-lgtm/ky-erp/pull/589) (bağımsız merkez, filtreler, sunucu kanıtı, müşteri / e-Belge yönlendirmeleri). Kaynak kabulünde frontend ve Worker test/build ayrı; **gerçek müşteri Excel'i, Outlook Graph mail gönderimi, PDF ve banka eşleştirmesi canlı kabul bekler.** Açık PR veya merge, tek başına canlı yayın değildir.
+
+
 > **16.11.2026 — ORTAK ARAÇ/KOTA KARARI (GÜNCEL):** KY ERP canonical ve bütün yan projeler, [tek özel maliyet/erişim kaynağını](https://github.com/cetin60kaya-lgtm/kyerp/blob/main/CONTROL/KY_TUM_PROJELER_ARAC_VE_KOTA_ANA_KURALI.md) izler. **Actions aylık 5 USD ek kullanım hesabın tüm depolarında ortak**, diğer GitHub bütçeleri **0 USD**; Actions limitte durdurma/uyarı açıktır. Kod işi doğrudan GitHub bağlayıcısı; yerel DESEN/X işlemlerinde önce mevcut KY Control Hub/Chat Bridge/Drive; Remote Desktop Commander yalnız kullanıcı isteğiyle gerçekten zorunlu Windows işleminde asgari çağrı. Eski 0 USD Actions ifadeleri tarihîdir. Bu belge canlı erişimi, üretim yayını veya eski sohbetlere otomatik talimat güncellemesini kanıtlamaz.
 
 
