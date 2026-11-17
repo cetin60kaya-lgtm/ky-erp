@@ -1,8 +1,8 @@
-deploy: gunluk-operasyon-log-tarih-haftalik-ek-kesinti-20261105
-pr: 520
-merge: 16595364aaa518577540152c004174adf6d1fde4
-ci: 41975967565 SUCCESS
-scope: API Worker weekly-summary net amounts + revisions workdate filter; Security canonical build
-reason: Date-scoped revisions and ACTIVE weekly adjustment additions/deductions with D1 canonical settlement unchanged
+deploy: kyerp-pro-mobil-firma-merkezi-20261117
+pr: 590
+merge: bd0c14327ae8f68811e631bc3ee15c94f40216b1
+scope: Unified KY ERP PRO owner company cards, users, module permissions, company-scoped security events; canonical API and Security Host
+release: Existing KY Security Canonical Final Deploy
 migration: NONE
-production_mutation: NONE
+production_data_mutation: NONE
+secret_rotation: NONE
