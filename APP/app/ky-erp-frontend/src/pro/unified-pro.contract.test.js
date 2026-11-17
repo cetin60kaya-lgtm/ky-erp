@@ -89,3 +89,24 @@ test("push notifications never navigate away from an in-progress ERP form",()=>{
  assert.match(center,/KYERP_SECURITY_PUSH_WAKE/);
  assert.doesNotMatch(main,/const onPush=\(event\)=>\{if\(event\.data\?\.type==="KYERP_SECURITY_PUSH_WAKE"\)setSecurityOpen\(true\)/);
 });
+
+test("PRO owner firm center reuses protected company, user, permission and audit services",()=>{
+ const main=read("src/pro/main.jsx");
+ const center=read("src/pro/ProCompanyCenter.jsx");
+ const service=read("src/services/securityCenterApi.js");
+ const worker=read("../../cloud/ky-erp-api/src/security-center-cloud.ts");
+ assert.match(main,/import ProCompanyCenter from".\/ProCompanyCenter"/);
+ assert.match(main,/companyOpen&&owner\?<ProCompanyCenter/);
+ assert.match(main,/onOpenModule=\{openCompanyModule\}/);
+ assert.match(center,/OWNER_ROLES\.has/);
+ assert.match(center,/getMainCompanies/);
+ assert.match(center,/listUsers/);
+ assert.match(center,/getUserPermissions/);
+ assert.match(center,/listSecurityCenterAudit\(100, selectedSlug\)/);
+ assert.match(center,/permissionLoading/);
+ assert.match(center,/companySelected/);
+ assert.match(service,/companySlug \? \{ companySlug \}/);
+ assert.match(worker,/const companySlug = text\(c\.req\.query\("companySlug"\)\)/);
+ assert.match(worker,/scope\.type !== "SYSTEM" && companySlug !== text\(scope\.companySlug\)/);
+ assert.match(worker,/WHERE a\.main_company_slug=\? ORDER BY a\.created_at DESC LIMIT \?/);
+});
