@@ -1,4 +1,4 @@
-import {useCallback,useEffect,useMemo,useState} from "react";
+import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {apiGet,apiPost,apiUpload} from "../../../utils/api";
 import {ArrowRight,CheckCircle2,FileSpreadsheet,Mail,RefreshCw,Search,ShieldAlert} from "lucide-react";
 import InvoiceMailWorkspace from "./InvoiceMailWorkspace";
@@ -42,12 +42,13 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
  const handoffModelName=moduleActionContext?.model_name||"";
  const handoffParty=moduleActionContext?.party_name||"";
  const [reloadToken,setReloadToken]=useState(0);
+ const fetchSeq=useRef(0);
  useEffect(()=>{
   setTab(handoffDocument?"send":"import");
   setSelectedMail(handoffDocument||handoffDelivery||handoffModelId||handoffModelName||handoffParty
    ?{document_no:handoffDocument,delivery_no:handoffDelivery,model_id:handoffModelId,model_name:handoffModelName,party_name:handoffParty}:null);
  },[handoffDocument,handoffDelivery,handoffModelId,handoffModelName,handoffParty]);
- useEffect(()=>{setCustomerId("");setRows([]);setExtras([]);setSnapshot(null);setError("");setNotice("");setCompanies([]);},[tenant]);
+ useEffect(()=>{fetchSeq.current+=1;setCustomerId("");setRows([]);setExtras([]);setSnapshot(null);setSummary({});setFile(null);setError("");setNotice("");setCompanies([]);},[tenant]);
  useEffect(()=>{
   if(!tenant)return;
   let canceled=false;
@@ -57,13 +58,15 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
   return()=>{canceled=true;};
  },[tenant,refreshKey]);
  const refresh=useCallback(async()=>{
+  const requestId=++fetchSeq.current;
   if(!tenant||!customerId){setRows([]);setExtras([]);setSnapshot(null);setSummary({});return;}
   setLoading(true);setError("");
   try{
    const result=unpack(await apiGet("/muhasebe/invoice-weekly-reconciliations",{mainCompanySlug:tenant,companyId:customerId,_ts:Date.now()}));
+   if(requestId!==fetchSeq.current)return;
    setRows(result.rows||[]);setExtras(result.extras||[]);setSummary(result.counts||{});setSnapshot(result.snapshot||null);
-  }catch(e){setRows([]);setExtras([]);setSnapshot(null);setError(e.message||"Haftalık karşılaştırma yüklenemedi.");}
-  finally{setLoading(false);}
+  }catch(e){if(requestId===fetchSeq.current){setRows([]);setExtras([]);setSnapshot(null);setSummary({});setError(e.message||"Haftalık karşılaştırma yüklenemedi.");}}
+  finally{if(requestId===fetchSeq.current)setLoading(false);}
  },[customerId,tenant]);
  useEffect(()=>{void refresh();},[refresh,reloadToken]);
  const importFile=async event=>{
@@ -119,7 +122,7 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
   </section>:<>
    <div className="imrc-toolbar">
     <label>Müşteri firma
-     <select value={customerId} onChange={e=>{setCustomerId(e.target.value);setQuery("");setError("");setNotice("");}}>
+     <select value={customerId} disabled={busy} onChange={e=>{fetchSeq.current+=1;setCustomerId(e.target.value);setQuery("");setRows([]);setExtras([]);setSummary({});setSnapshot(null);setFile(null);setError("");setNotice("");}}>
       <option value="">Firma kartını seçin</option>
       {companies.slice().sort((a,b)=>String(a.companyName||a.firmaAdi||a.name).localeCompare(String(b.companyName||b.firmaAdi||b.name),"tr"))
        .map(row=><option key={row.id} value={row.id}>{row.companyName||row.firmaAdi||row.name}</option>)}
@@ -138,8 +141,9 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
     <button type="submit" disabled={!customerId||!file||busy}>{busy?"Kontrol ediliyor...":"Excel'i Al & Karşılaştır"}</button>
    </form>}
    {snapshot&&<p className="imrc-evidence"><ShieldAlert size={16}/> Son Excel: <strong>{snapshot.sourceFile}</strong> · {snapshot.weekDate} · {snapshot.rowCount} satır
-    {snapshot.duplicateInvoiceNos?.length?<> · <strong>{snapshot.duplicateInvoiceNos.length} tekrar HKN var</strong></>:null}
-    <span>Kaynak verisi kayıtlıdır; yeni Excel gelince önceki karşılaştırmanın üzerine yazılmaz.</span>
+    {snapshot.duplicateInvoiceNos?.length?<> · <strong>{snapshot.duplicateInvoiceNos.length} tekrar HKN var; kontrol gerekli</strong></>:null}
+    <span>Kaynak Excel dosyasının kendisi saklanmaz; dosya adı, SHA-256 özeti, HKN kimlikleri ve tarih kaydedilir. Önceki haftalar silinmez.</span>
+     {snapshot.manualAudit?.length?<details><summary>Manuel işlem geçmişi ({snapshot.manualAudit.length})</summary><div className="imrc-history">{snapshot.manualAudit.slice(-20).reverse().map((entry,index)=><div key={index}>{entry.documentNo} · {entry.previous} → {entry.selected} · {entry.changedAt} · Kullanıcı {entry.actorId}</div>)}</div></details>:null}
    </p>}
    <div className="imrc-metrics">
     <button type="button" onClick={()=>setTab("import")}>HKN faturası<strong>{summary.all??0}</strong></button>

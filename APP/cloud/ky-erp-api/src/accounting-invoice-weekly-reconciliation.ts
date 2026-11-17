@@ -16,7 +16,7 @@ const extractCellHkn=(v:unknown)=>{
  const matches=[...upper(v).matchAll(/(?:^|[^A-Z0-9])HKN[\s-]*([0-9]{8,18})(?![A-Z0-9])/g)];
  return [...new Set(matches.map(m=>idNumber("HKN"+m[1])).filter(Boolean))];
 };
-const safeDate=(value:unknown)=>/^\d{4}-\d{2}-\d{2}$/.test(str(value));
+const safeDate=(value:unknown)=>{const v=str(value);if(!/^\d{4}-\d{2}-\d{2}$/.test(v))return false;const d=new Date(v+"T00:00:00Z");return !Number.isNaN(d.getTime())&&d.toISOString().slice(0,10)===v;};
 
 async function scope(c:Context<AppEnv>,companyId:string,write=false){
  const user=await getAuthenticatedUser(c) as Row|null;
@@ -110,7 +110,7 @@ export function registerInvoiceWeeklyReconciliationRoutes(app:Hono<AppEnv>){
    const [docs,record]=await Promise.all([invoiceRows(c,a.tenant,companyId),snapshot(c,a.tenant,companyId)]);
    return c.json({ok:true,data:{company:{id:companyId,name:a.company.name},snapshot:record?{
     id:record.id,weekDate:record.weekDate,sourceFile:record.sourceFile,hash:record.hash,
-    duplicateInvoiceNos:record.duplicates,importedAt:record.importedAt,rowCount:record.rowCount
+    duplicateInvoiceNos:record.duplicates,importedAt:record.importedAt,rowCount:record.rowCount,manualAudit:record.manualAudit||[]
    }:null,...compare(docs,record)}});
   }catch(err){return responseError(c,err)}
  });
