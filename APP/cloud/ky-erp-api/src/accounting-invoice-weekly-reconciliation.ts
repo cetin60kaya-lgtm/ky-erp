@@ -9,7 +9,13 @@ const str=(v:unknown)=>v==null?"":String(v).trim();
 const upper=(v:unknown)=>str(v).toUpperCase().replace(/İ/g,"I");
 const fail=(c:Context<AppEnv>,code:string,message:string,status=400)=>c.json({ok:false,error:{code,message}},status as any);
 const isInvoice=(v:unknown)=>/FATURA|INVOICE|ARSIV/.test(upper(v));
-const idNumber=(v:unknown)=>{const match=upper(v).replace(/\s+/g,"").match(/HKN[0-9]{8,18}/);return match?.[0]||"";};
+// Every canonical invoice number must match the complete value.
+// Descriptions in an Excel cell may include a whole HKN token but not a suffix.
+const idNumber=(v:unknown)=>{const raw=upper(v).replace(/\s+/g,"");return /^HKN[0-9]{8,18}$/.test(raw)?raw:"";};
+const extractCellHkn=(v:unknown)=>{
+ const matches=[...upper(v).matchAll(/(?:^|[^A-Z0-9])HKN[\s-]*([0-9]{8,18})(?![A-Z0-9])/g)];
+ return [...new Set(matches.map(m=>idNumber("HKN"+m[1])).filter(Boolean))];
+};
 const safeDate=(value:unknown)=>/^\d{4}-\d{2}-\d{2}$/.test(str(value));
 
 async function scope(c:Context<AppEnv>,companyId:string,write=false){
@@ -54,10 +60,11 @@ function compare(invoices:Row[],record:Row|null){
  const listed=new Set((Array.isArray(record?.numbers)?record.numbers:[]).map(idNumber).filter(Boolean));
  const overrides=(record?.overrides&&typeof record.overrides==="object")?record.overrides:{};
  const own=new Set(invoices.map(row=>row.documentNo));
+  const duplicates=new Set((Array.isArray(record?.duplicates)?record.duplicates:[]).map(idNumber).filter(Boolean));
  const rows=invoices.map(row=>{
   const manual=overrides[row.documentNo];
   const outcome=manual==="MANUAL_INCLUDED"||manual==="MANUAL_EXCLUDED"||manual==="REVIEW_REQUIRED"
-    ?manual:!record?"AWAITING_EXCEL":listed.has(row.documentNo)?"CUSTOMER_LISTED":"NOT_LISTED";
+    ?manual:!record?"AWAITING_EXCEL":duplicates.has(row.documentNo)?"REVIEW_REQUIRED":listed.has(row.documentNo)?"CUSTOMER_LISTED":"NOT_LISTED";
   return {...row,outcome,listed:listed.has(row.documentNo),manual:Boolean(manual),sourceFile:record?.sourceFile||""};
  });
  const extras=[...listed].filter(no=>!own.has(no)).sort().map(documentNo=>({documentNo,outcome:"EXTRA_IN_CUSTOMER_LIST"}));
@@ -80,8 +87,8 @@ async function readWorkbook(file:File){
   for(const row of rows){
    rowCount++;if(rowCount>15000)throw Object.assign(new Error("Excel çok büyük. En fazla 15.000 satır kabul edilir."),{status:413});
    for(const raw of Array.isArray(row)?row:[]){
-    const value=str(raw).toUpperCase().replace(/\s+/g,"");
-    for(const found of value.match(/HKN[0-9]{8,18}(?![0-9])/g)||[]){
+    const matches=extractCellHkn(raw);
+    for(const found of matches){
       if(numbers.has(found))duplicates.add(found);
       numbers.add(found);
     }
@@ -144,7 +151,11 @@ export function registerInvoiceWeeklyReconciliationRoutes(app:Hono<AppEnv>){
    if(record.companyId!==companyId)return fail(c,"CUSTOMER_MISMATCH","Bu rapor başka firmaya ait.",403);
    const overrides={...(record.overrides||{})};
    if(choice==="AUTO")delete overrides[number];else overrides[number]=choice;
-   const updated={...record,overrides};
+   const updated={...record,overrides,
+    manualAudit:[...(Array.isArray(record.manualAudit)?record.manualAudit:[]).slice(-499),{
+     documentNo:number,previous:str(record.overrides?.[number]||"AUTO"),selected:choice,
+     changedAt:new Date().toISOString(),actorId:str(a.user.id),
+    }]};
    const timestamp=new Date().toISOString();
    const update=await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND data=?")
     .bind(JSON.stringify(updated),timestamp,row.id,SCOPE,a.tenant,row.data).run();
