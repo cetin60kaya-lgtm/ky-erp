@@ -1,0 +1,37 @@
+.ky-pro-firm-center{min-height:0;overflow:auto;padding:15px 13px calc(118px + env(safe-area-inset-bottom));color:#18324d;background:#f4f7fb}
+.ky-pro-firm-center h1,.ky-pro-firm-center h2,.ky-pro-firm-center h3{margin:0;letter-spacing:-.025em}
+.ky-pro-firm-hero{display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;padding:20px 17px;border-radius:19px;background:#112f53;color:#fff}
+.ky-pro-firm-hero small{color:#b5d2ec;font-size:10px;font-weight:900;letter-spacing:.06em}
+.ky-pro-firm-hero h1{font-size:25px;margin:5px 0}.ky-pro-firm-hero p{margin:0;color:#dce9f5;font-size:12px;line-height:1.5}
+.ky-pro-firm-actions{display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.ky-pro-firm-actions button,.ky-pro-firm-user button,.ky-pro-firm-deep-link{min-height:42px;border-radius:11px;padding:9px 12px;background:#eaf3ff;color:#215c98;border:1px solid #cadff4;font-weight:800;font-size:12px}
+.ky-pro-firm-hero .ky-pro-firm-actions button{background:#ffffff21;color:#fff;border-color:#ffffff55}
+.ky-pro-firm-list,.ky-pro-firm-detail{display:grid;gap:12px;margin-top:13px}
+.ky-pro-firm-list,.ky-pro-firm-card{padding:15px;border:1px solid #dfebf5;border-radius:16px;background:#fff}
+.ky-pro-firm-row{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:8px}.ky-pro-firm-row span,.ky-pro-firm-row small{color:#71889f;font-size:11px}
+.ky-pro-firm-list>input{width:100%;min-height:44px;padding:9px 11px;font-size:16px;border:1px solid #cadae9;border-radius:10px}
+.ky-pro-firm-choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(142px,1fr));gap:8px}
+.ky-pro-firm-choices button{display:grid;gap:5px;text-align:left;min-height:80px;padding:11px;background:#f8fbff;border:1px solid #dbe6f2;border-radius:12px}
+.ky-pro-firm-choices button[aria-pressed="true"]{background:#e9f3ff;border-color:#3c88cd}
+.ky-pro-firm-choices button strong{font-size:13px;overflow-wrap:anywhere}.ky-pro-firm-choices button small{font-size:10px;color:#72869a}
+.ky-pro-firm-choices button span{font-size:10px;color:#27805d;font-weight:700}
+.ky-pro-firm-detail-head{display:flex;align-items:center;justify-content:space-between;gap:9px;flex-wrap:wrap;padding:15px;border-radius:15px;background:#e9f2fc}
+.ky-pro-firm-detail-head small{font-size:9px;letter-spacing:.06em;color:#52799b;font-weight:900}
+.ky-pro-firm-detail-head h2{font-size:22px;margin:4px 0}.ky-pro-firm-detail-head p{margin:0;font-size:11px;color:#607a92}
+.ky-pro-firm-detail-head>span{font-size:10px;color:#275d92;font-weight:800}
+.ky-pro-firm-notice,.ky-pro-firm-error{padding:10px;border:1px solid #efce95;background:#fff9eb;border-radius:10px;color:#85511f;font-size:12px}
+.ky-pro-firm-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.ky-pro-firm-metrics>div{display:grid;gap:5px;padding:11px;border-radius:11px;background:#fff;border:1px solid #dce7f2}
+.ky-pro-firm-metrics strong{font-size:23px;color:#193f65}.ky-pro-firm-metrics span{font-size:10px;color:#657d94}
+.ky-pro-firm-card{display:grid;gap:11px}.ky-pro-firm-card>p{margin:0;font-size:12px;line-height:1.55;color:#677e95}
+.ky-pro-firm-card h3{font-size:16px}.ky-pro-firm-modules{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.ky-pro-firm-modules button{display:grid;gap:6px;min-width:0;min-height:65px;padding:10px;text-align:left;border:1px solid #dae7f2;border-radius:11px;background:#f7fbff;color:#274767}
+.ky-pro-firm-modules button:disabled{opacity:.5}.ky-pro-firm-modules strong{font-size:12px}.ky-pro-firm-modules small{color:#7991a6;font-size:10px}
+.ky-pro-firm-users{display:grid;gap:9px}.ky-pro-firm-user{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:9px;padding:11px;border:1px solid #e3eaf2;border-radius:11px}
+.ky-pro-firm-user>div:first-child{display:grid;gap:4px;min-width:0}.ky-pro-firm-user strong{font-size:13px;overflow-wrap:anywhere}.ky-pro-firm-user small{font-size:10px;color:#7a8da1}
+.ky-pro-firm-permissions{grid-column:1/-1;display:grid;gap:5px;padding-top:10px;border-top:1px solid #e7eef6}
+.ky-pro-firm-permissions>div{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between;font-size:11px;padding:6px 0;border-bottom:1px solid #f1f4f8}
+.ky-pro-firm-permissions>div span{color:#526f89}
+.ky-pro-firm-audit{display:grid;gap:7px}.ky-pro-firm-audit>div{display:grid;gap:4px;padding:10px 0;border-top:1px solid #edf2f8}
+.ky-pro-firm-audit strong{font-size:12px}.ky-pro-firm-audit span,.ky-pro-firm-audit small{font-size:10px;color:#6c8499}
+.ky-pro-firm-deep-link{justify-self:start}
+@media(max-width:380px){.ky-pro-firm-modules,.ky-pro-firm-choices{grid-template-columns:1fr}.ky-pro-firm-metrics strong{font-size:20px}}
