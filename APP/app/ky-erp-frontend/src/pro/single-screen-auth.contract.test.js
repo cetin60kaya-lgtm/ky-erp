@@ -17,7 +17,8 @@ test("Security and ERP stay mounted inside one shared AuthProvider and Android b
   const app=src("main.jsx");
   assert.match(app,/<AuthProvider><ProApplication\/>/);
   assert.match(app,/<SecurityCenter\/>/);
-  assert.match(app,/hidden=\{securityOpen\|\|home\}/);
+  assert.match(app,/hidden=\{securityOpen\|\|companyOpen\|\|home\}/);
+  assert.match(app,/hidden=\{securityOpen\|\|companyOpen\|\|!home\}/);
   assert.match(app,/workspaceMounted/);
   assert.match(app,/setSecurityOpen\(true\)/);
   assert.doesNotMatch(app,/location\.assign\("\/guvenlik\/"\)/);
