@@ -280,6 +280,12 @@ async function targetUserWithSecurity(c: any, id: string) {
   return { ...user, ...security, effectiveRole: effectiveRole(user, security), mainCompanySlug: text(security.main_company_slug) || DEFAULT_COMPANY_SLUG };
 }
 async function revokeUserSessions(c: any, userId: string, actorId: string) {
+  // Privileged user updates/revocation also invalidate any previously registered mobile login keys.
+  if ((await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='json_store' LIMIT 1").first())?.name) {
+    const stamp = new Date().toISOString();
+    await c.env.DB.prepare("UPDATE json_store SET data=json_set(data,'$.active',json('false'),'$.revokedAt',?),updated_at=? WHERE scope='AUTH_MOBILE_PASSKEY_V1' AND json_extract(data,'$.userId')=?")
+      .bind(stamp, stamp, userId).run();
+  }
   const timestamp = nowIso();
   await c.env.DB.prepare(
     `UPDATE auth_sessions SET revoked_at=?,revoked_by=?

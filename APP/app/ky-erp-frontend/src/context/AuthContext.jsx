@@ -2,6 +2,8 @@ import { useCallback, createContext, useContext, useEffect, useMemo, useRef, use
 import { API_BASE, clearApiGetCache, setApiAuthHandlers } from "../utils/api";
 import { clearResilientDataCache } from "../utils/resilientDataLoader";
 import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
+import { assertMobilePasskey, createMobilePasskey, rememberMobileUser } from "./mobilePasskeyClient";
+import MobilePasskeyOffer from "./MobilePasskeyOffer";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
@@ -662,6 +664,35 @@ export function AuthProvider({ children }) {
   }, [clearAuth]);
 
   const getTurnstileConfig = useCallback(() => directAuthRequest("/auth/turnstile-config", { method: "GET" }), []);
+  const mobilePasskeyStatus = useCallback(async () => {
+    if (!tokenRef.current) return { enabled: false };
+    const response = await directAuthRequest("/auth/passkey/status", { method: "GET", token: tokenRef.current });
+    return response?.data || { enabled: false };
+  }, []);
+  const registerMobilePasskey = useCallback(() => runAuthOnce("PASSKEY_REGISTER", async () => {
+    const currentToken = tokenRef.current;
+    if (!currentToken || !authSnapshotRef.current.user) throw new Error("Hızlı giriş kaydı için önce güvenli ERP oturumu açın.");
+    const start = await directAuthRequest("/auth/passkey/register/start", { body: {}, token: currentToken });
+    const payload = await createMobilePasskey(start?.data || {});
+    await directAuthRequest("/auth/passkey/register/finish", {
+      token: currentToken,
+      body: { challengeId: start.data.challengeId, challengeToken: start.data.challengeToken, ...payload },
+    });
+    rememberMobileUser(authSnapshotRef.current.user.username);
+    return { enabled: true };
+  }), [runAuthOnce]);
+  const loginMobilePasskey = useCallback((identity) => runAuthOnce("PASSKEY_LOGIN", async () => {
+    const name = String(identity || "").trim();
+    if (!name) throw new Error("İlk kurulumda kullanıcı adınızla giriş yapın ve hızlı girişi etkinleştirin.");
+    const start = await directAuthRequest("/auth/passkey/login/start", { body: { username: name } });
+    const assertion = await assertMobilePasskey(start.data || {});
+    const response = await directAuthRequest("/auth/passkey/login/finish", {
+      body: { challengeId: start.data.challengeId, challengeToken: start.data.challengeToken, assertion },
+    });
+    const result = finalizeResponse(response);
+    if (result?.stage === "AUTHENTICATED") rememberMobileUser(name);
+    return result;
+  }), [finalizeResponse, runAuthOnce]);
 
   const login = useCallback((identity, password, deviceLabel = "", turnstileToken = "") => runAuthOnce("LOGIN", async () => {
     const body = {
@@ -750,13 +781,16 @@ export function AuthProvider({ children }) {
   }, [permissions, user?.role]);
 
   const value = useMemo(() => ({
-    token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa,
+    token, user, permissions, getTurnstileConfig, mobilePasskeyStatus, registerMobilePasskey, loginMobilePasskey, login, verifyMfa, recoverMfa,
     startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, verifyPhoneApprovalCode, resendPhoneApproval, useAuthenticatorFallback,
     logout, hasModule, can,
     isAuthenticated: Boolean(token && user), loading,
-  }), [token, user, permissions, getTurnstileConfig, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, verifyPhoneApprovalCode, resendPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
+  }), [token, user, permissions, getTurnstileConfig, mobilePasskeyStatus, registerMobilePasskey, loginMobilePasskey, login, verifyMfa, recoverMfa, startOwnerRecovery, verifyOwnerRecovery, checkApproval, checkPhoneApproval, verifyPhoneApprovalCode, resendPhoneApproval, useAuthenticatorFallback, logout, hasModule, can, loading]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={value}>
+    {children}
+    {token && user ? <MobilePasskeyOffer user={user} getStatus={mobilePasskeyStatus} onEnroll={registerMobilePasskey} /> : null}
+  </AuthContext.Provider>;
 }
 
 export function useAuth() {

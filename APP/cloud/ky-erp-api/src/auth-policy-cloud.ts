@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
+import { registerMobilePasskeyRoutes } from "./auth-mobile-passkey";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { AUTH_SECURITY_SCOPES, securityStorePut as securityStorePut } from "./auth-security-core";
 import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
@@ -599,6 +600,11 @@ async function consumeChallenge(c: any, challenge: AnyRow) {
 }
 async function revokeSecurityState(c: any, userId: string, actorUserId = "", reason = "SECURITY_POLICY_CHANGED") {
   const timestamp = nowIso();
+  // A password/MFA/account recovery must also revoke saved mobile passkeys.
+  if (await tableExists(c, "json_store")) {
+    await c.env.DB.prepare("UPDATE json_store SET data=json_set(data,'$.active',json('false'),'$.revokedAt',?),updated_at=? WHERE scope='AUTH_MOBILE_PASSKEY_V1' AND json_extract(data,'$.userId')=?")
+      .bind(timestamp, timestamp, userId).run();
+  }
   await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND revoked_at IS NULL").bind(timestamp, actorUserId || userId, userId).run();
   await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(timestamp, userId).run();
   await c.env.DB.prepare("UPDATE auth_login_approvals SET status='DENIED',decided_at=?,decided_by=?,consumed_at=COALESCE(consumed_at,?) WHERE user_id=? AND status IN ('PENDING','APPROVED')").bind(timestamp, actorUserId || userId, timestamp, userId).run();
@@ -840,6 +846,7 @@ async function updateOwnerRecoveryEnabled(c: any, userId: string) {
 }
 
 export function registerAuthPolicyRoutes(app: any) {
+  registerMobilePasskeyRoutes(app, { userById, userByIdentity, createChallenge, challengeFromRequest, afterFactors, audit });
   app.get("/api/auth/turnstile-config", (c: any) => {
     return c.json({ ok: true, ...turnstilePublicConfig(c) });
   });

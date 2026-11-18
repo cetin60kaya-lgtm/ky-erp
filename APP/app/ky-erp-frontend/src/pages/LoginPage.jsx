@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import InlineSecurityApproval from "../pro/InlineSecurityApproval";
 import { useAuth } from "../context/AuthContext";
+import { isMobileAppPage, isMobilePasskeySupported, rememberedMobileUser } from "../context/mobilePasskeyClient";
 import "./LoginPage.css";
 import "./LoginPageV2.css";
 import "../styles/ky-pro-access.css";
@@ -125,6 +126,7 @@ export default function LoginPage({ onClose }) {
   const {
     getTurnstileConfig,
     login,
+    loginMobilePasskey,
     verifyMfa,
     startOwnerRecovery,
     verifyOwnerRecovery,
@@ -135,7 +137,7 @@ export default function LoginPage({ onClose }) {
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
 
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(() => isMobileAppPage() ? rememberedMobileUser() : "");
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("GOOGLE");
@@ -263,6 +265,19 @@ export default function LoginPage({ onClose }) {
     setShowPassword(false);
     setCapsLock(false);
     setError(message);
+  }
+
+  async function handlePasskeyLogin() {
+    if (loading) return;
+    try {
+      setLoading(true);
+      setError("");
+      applyResponse(await loginMobilePasskey(normalizeIdentity(username) || rememberedMobileUser()));
+    } catch (requestError) {
+      setError(requestError?.message || "Telefon hızlı girişi yapılamadı. Şifreyle devam edebilirsiniz.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleLogin(event) {
@@ -617,6 +632,13 @@ export default function LoginPage({ onClose }) {
 
             {stage === "CREDENTIALS" ? (
               <form className="auth-form" onSubmit={handleLogin}>
+                {isMobileAppPage() && isMobilePasskeySupported() ? <div className="auth-mobile-passkey-entry">
+                  <button type="button" onClick={handlePasskeyLogin} disabled={loading || !(normalizeIdentity(username) || rememberedMobileUser())}>
+                    {loading ? "Telefon doğrulanıyor..." : "Parmak İzi / Yüz Tanıma / PIN ile Giriş"}
+                  </button>
+                  <small>İlk kullanımda aşağıdan normal giriş yapın; ardından hızlı telefon girişini etkinleştirin. Parmak izi cihazınızdan çıkmaz.</small>
+                  <div className="auth-mobile-passkey-divider">veya kullanıcı adı ve şifre ile</div>
+                </div> : null}
                 <label>Kullanıcı adı veya e-posta
                   <input
                     name="username"
