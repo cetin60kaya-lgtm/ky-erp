@@ -40,10 +40,10 @@ export function model360DeliveryForInvoice(invoice, items) {
   // Ambiguity is never resolved by "first matching" or newest file.
   return matches.length === 1 ? matches[0].number : "";
 }
-export function model360Warnings(model, design, documents) {
+export function model360Warnings(model, design, documents, identity = null) {
   const notes = [];
   if (model?.isVirtual) notes.push("Bu kaynak sanal model adayıdır; kesin model kartına bağlanmadan işlem yapılamaz.");
-  if (!model?.imageUrl && !design?.mainImage?.previewUrl && !design?.mainImage?.thumbnailUrl)
+  if (!model?.imageUrl && !design?.mainImage?.previewUrl && !design?.mainImage?.thumbnailUrl && !identity?.imageUrl)
     notes.push("Model görseli eksik. DESEN dosyalarından gerçek model görseli ekleyin.");
   if (model && Number(model.overInvoicedQty || 0) > 0) notes.push("Faturalama miktarı model sınırını aşıyor; kontrol edin.");
   if (model && Number(model.overProducedQty || 0) > 0) notes.push("Üretilen miktar gelen adedi aşıyor; kontrol edin.");

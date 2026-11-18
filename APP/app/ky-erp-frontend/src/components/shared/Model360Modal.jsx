@@ -21,7 +21,7 @@ const modelMatchesJob = (job,id) => [job?.modelId,job?.model_id,job?.modelRecord
 const array = (value) => Array.isArray(value)?value:[];
 
 function Metric({name,value,unit="adet",accent=""}) {
-  return <div className={"m360-metric "+accent}><span>{name}</span><strong>{format(value)}</strong><small>{unit}</small></div>;
+  return <div className={"m360-metric "+accent}><span>{name}</span><strong>{value===null||value===undefined||value===""?"—":format(value)}</strong><small>{unit}</small></div>;
 }
 function Empty({children}) {
   return <p className="m360-empty">{children}</p>;
@@ -72,6 +72,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
     let disposed = false;
     setLoading(true);setErrors({});setData({});setSelectedInvoice("");setImageFailed(false);
     const requests = [
+      ["identity",model360Access(user,"general"),()=>apiGet("/model-360/"+encodeURIComponent(modelId)+"/identity",{mainCompanySlug:tenant})],
       ["production",canProduction,()=>getProductionCenterModel(activeMainCompany,modelId)],
       ["design",canDesign,()=>getDesignModel(activeMainCompany,modelId)],
       ["documents",canDocuments,()=>apiGet("/model-files/"+encodeURIComponent(modelId)+"/document-center",{mainCompanySlug:tenant})],
@@ -92,7 +93,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
       setData(next);setErrors(failures);setLoading(false);
     });
     return ()=>{disposed=true;};
-  },[activeMainCompany,tenant,modelId,reload,canProduction,canDesign,canDocuments,canMail,canDyehouse]);
+  },[activeMainCompany,tenant,modelId,reload,user,canProduction,canDesign,canDocuments,canMail,canDyehouse]);
   useEffect(()=>{
     const changed=event=>{if(!event?.detail?.modelId||String(event.detail.modelId)===String(modelId))refresh();};
     window.addEventListener("kyerp:production-refresh",changed);
@@ -103,15 +104,16 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
     };
   },[modelId,refresh]);
 
+  const identity=data.identity||null;
   const production=data.production||null;
   const design=data.design||null;
   const docs=array(data.documents?.items);
   const mailHistory=array(data.mail);
   const dyehouseJobs=array(data.dyehouse).filter(job=>modelMatchesJob(job,modelId));
-  const imageSource=productionImagePath(production?.imageUrl||design?.mainImage?.previewUrl||design?.mainImage?.thumbnailUrl);
-  const name=production?.modelName||design?.modelName||"Model kaydı";
-  const company=production?.companyName||design?.companyName||"Firma bağlantısı bekliyor";
-  const warnings=useMemo(()=>model360Warnings(production,design,canDocuments?docs:null),[production,design,docs,canDocuments]);
+  const imageSource=productionImagePath(production?.imageUrl||design?.mainImage?.previewUrl||design?.mainImage?.thumbnailUrl||identity?.imageUrl);
+  const name=identity?.modelName||production?.modelName||design?.modelName||"Model kaydı";
+  const company=identity?.companyName||production?.companyName||design?.companyName||"Firma bağlantısı bekliyor";
+  const warnings=useMemo(()=>model360Warnings(production,design,canDocuments?docs:null,identity),[production,design,docs,canDocuments,identity]);
   const invoices=useMemo(()=>model360LinkedInvoices(docs),[docs]);
   const picked=invoices.find(row=>row.id===selectedInvoice)||null;
   const canWriteEntry=writeProduction&&!production?.isVirtual&&Boolean(production?.id);
@@ -152,7 +154,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
             {imageSource&&!imageFailed?<img src={imageSource} alt={name+" model görseli"} onError={()=>setImageFailed(true)}/>:<div className="m360-image-missing"><ImageOff size={33}/><strong>Model görseli eksik</strong><small>Gerçek görseli DESEN dosyalarından ekleyin</small></div>}
           </div>
           <div className="m360-hero-info">
-            <div className="m360-hero-tags"><span>Model kodu: {label(production?.modelCode||design?.modelCode)}</span><span>Sipariş: {label(production?.orderNo)}</span><span>İrsaliye: {label(production?.defaultDispatchNo)}</span></div>
+            <div className="m360-hero-tags"><span>Model kodu: {label(identity?.modelCode||production?.modelCode||design?.modelCode)}</span><span>Sipariş: {label(identity?.orderNo||production?.orderNo)}</span><span>İrsaliye: {label(production?.defaultDispatchNo)}</span></div>
             <div className="m360-metrics">
               <Metric name="Müşteriden gelen" value={production?.incomingQty}/>
               <Metric name="Net sağlam üretim" value={production?.completedNetQty}/>
@@ -200,7 +202,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
               <Metric name="Gelen" value={production?.incomingQty}/>
               <Metric name="Brüt üretim" value={production?.completedGrossQty}/>
               <Metric name="Net üretim" value={production?.completedNetQty}/>
-              <Metric name="Fark" value={Number(production?.incomingQty||0)-Number(production?.completedNetQty||0)}/>
+              <Metric name="Fark" value={production?Number(production.incomingQty||0)-Number(production.completedNetQty||0):null}/>
             </div>
             <div className="m360-table-wrap"><table><thead><tr><th>Tarih</th><th>Bölge</th><th>Brüt</th><th>Net</th><th>Makine</th><th>Operatör</th></tr></thead><tbody>
               {array(production?.productionEntries).map((row,index)=><tr key={row.id||index}><td>{row.date||""}</td><td>{row.printRegion||""}</td><td>{format(row.quantity)}</td><td>{format(row.netQuantity??Number(row.quantity||0)-Number(row.printDefectQty||0)-Number(row.fabricDefectQty||0)-Number(row.testQty||0))}</td><td>{row.machineName||"—"}</td><td>{row.operatorName||"—"}</td></tr>)}
