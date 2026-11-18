@@ -1,4 +1,6 @@
 import type { Context, Hono } from "hono";
+import {getAuthenticatedUser} from "./auth-cloud";
+import {accountingTenantReadAllowed} from "./accounting-access-policy";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -318,8 +320,18 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
   });
 
   app.patch("/api/boyahane/jobs/:id", async (c) => {
+    const user=await getAuthenticatedUser(c) as Row|null;
+    if(!user)return c.json(errorBody("UNAUTHORIZED","Boyahane kayıt değişikliği için oturum gerekli."),401);
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
+    const role=upper(user.role);
+    const elevated=["SUPER_ADMIN","ADMIN","OWNER","COMPANY_OWNER","COMPANY_ADMIN"].includes(role);
+    const allow=(v:unknown)=>v===true||v===1||v==="1";
+    const editor=elevated||(Array.isArray(user.permissions)&&user.permissions.some((p:Row)=>
+      upper(p.moduleKey||p.module_key)==="BOYAHANE"&&
+      (allow(p.canUpdate)||allow(p.can_update)||allow(p.canWrite)||allow(p.can_write))));
+    if(!accountingTenantReadAllowed(user,slug)||!editor)
+      return c.json(errorBody("BOYAHANE_FORBIDDEN","Bu firmanın Boyahane işini düzenleme yetkiniz yok."),403);
     const id = c.req.param("id");
     const current = await storeGet(c, SCOPES.job, id, slug);
     if (!current) return c.json(errorBody("NOT_FOUND", "Boyahane işi bulunamadı."), 404);
