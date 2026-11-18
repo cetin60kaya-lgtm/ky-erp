@@ -13,6 +13,7 @@ import { useDisplayPreferences } from "./hooks/useDisplayPreferences";
 import { getSystemSentinelAccess } from "./services/systemSentinelApi";
 import AppShellV3 from "./layouts/AppShellV3";
 import CanonicalTaskNavigator from "./components/erp/CanonicalTaskNavigator";
+import Model360Host from "./components/shared/Model360Host";
 
 const AdminPage = lazyWithRetry(() => import("./pages/modules/AdminPage"), "admin-v3");
 const IkAuditPersonnelPage = lazyWithRetry(() => import("./pages/modules/ik/audit/IkAuditPersonnelPage"), "ik-audit-personnel-v1");
@@ -382,6 +383,7 @@ export default function AppV3() {
       <ModuleErrorBoundary>
         <Suspense fallback={<LoadingCard />}>{renderPage()}</Suspense>
       </ModuleErrorBoundary>
+      <Model360Host activeMainCompany={normalizedCompany} openModule={(moduleKey,options={})=>openTab(moduleKey,options.tabKey,options)}/>
     </AppShellV3>
   );
 }

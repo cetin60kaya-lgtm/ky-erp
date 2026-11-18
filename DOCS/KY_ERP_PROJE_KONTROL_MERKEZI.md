@@ -1,5 +1,7 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+> **18.11.2026 — Model 360:** [Tüm departmanların tek ortak modeli, çoklu belge/imalat/mail kuralı](KY_MODEL_360_ORTAK_KART_20261118.md). P1 uygulama ve P2 açık işler ayrıdır; canlı kabul sonucu ayrı doğrulanır.
+
 ## 17.11.2026 — Muhasebe e-Belge ile bağımsız Fatura Mail & Haftalık HKN Takibi
 - Kullanıcı kararı: Satış & Müşteri'deki gömülü PDF mail ekranı çıkarılır; Muhasebe → Belge Akışı → **Fatura Mail & Mutabakat** ayrı bir ana sekmedir. İçinde beş görünüm vardır: **PDF Mail Gönderimi / Haftalık Excel & Kontrol / Ödemeye Alınanlar / Ödemeye Alınmayanlar / Eksik-Fazla & İtiraz**. Giden e-Belge ve satış belgelerinden bu merkez açılır.
 - Tek kaynak: HKN giden canonical `accounting_documents` + mevcut File Hub ve Outlook Graph sender. Cari/ödeme/banka/KDV için yeni paralel kesin kayıt açılmaz. İşNet'in resmî gönderiminden bağımsız müşteri PDF mailidir.

@@ -21,6 +21,7 @@ import {
   suggestBoyahaneColor,
 } from "../../../services/boyahaneColorAssistantApi";
 import BoyahaneProductionSerialPage from "./BoyahaneProductionSerialPage";
+import {openModel360Card} from "../../../components/shared/model360Bridge";
 import { formatKg, safeArray } from "./boyahaneFormat";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "../boyahaneProductionIntelligence.css";
@@ -377,6 +378,7 @@ function ColorAssistantDock({
           </div>
         </div>
         <div className="bh-ai-head-actions">
+          {(job?.modelId||job?.model_id||job?.modelRecordId||job?.designModelId)?<button type="button" className="bh-ai-button ghost" onClick={()=>openModel360Card({modelId:job.modelId||job.model_id||job.modelRecordId||job.designModelId,tab:"dyehouse",source:"boyahane"})}>Ortak Model 360°</button>:null}
           {result?.catalogStats ? (
             <span className="bh-ai-stat">
               {result.catalogStats.pantones} Pantone · {result.catalogStats.recipes}{" "}

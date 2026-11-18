@@ -3,6 +3,7 @@ import {apiGet,apiPost,apiUpload} from "../../../utils/api";
 import {ArrowRight,CheckCircle2,FileSpreadsheet,Mail,RefreshCw,Search,ShieldAlert} from "lucide-react";
 import InvoiceMailWorkspace from "./InvoiceMailWorkspace";
 import InvoiceDifferenceMailDraft from "./InvoiceDifferenceMailDraft";
+import {openModel360Card} from "../../../components/shared/model360Bridge";
 import "./invoiceMailReconciliationCenter.css";
 
 const unpack=payload=>payload?.data?.data??payload?.data??payload??{};
@@ -118,7 +119,8 @@ export default function InvoiceMailReconciliationCenter({activeMainCompany,refre
   </nav>
   {tab==="send"?<section className="imrc-panel">
    <p className="imrc-info">Gönderim yalnız açık onayla gerçekleşir. PDF kaynakları File Hub'dan doğrulanır. Gönderim geçmişi Microsoft sağlayıcı kabulünü gösterir; teslim veya banka ödemesi anlamına gelmez.</p>
-   <InvoiceMailWorkspace key={tenant+"|"+String(selectedMail?.document_no||"")+"|"+String(selectedMail?.delivery_no||"")} activeMainCompany={activeMainCompany} selectedInvoice={selectedMail}/>
+   {selectedMail?.model_id?<button type="button" className="imrc-model360-btn" onClick={()=>openModel360Card({modelId:selectedMail.model_id,tab:"mail",source:"mail"})}>Model 360° · İmalat / Mail Geçmişi</button>:null}
+    <InvoiceMailWorkspace key={tenant+"|"+String(selectedMail?.document_no||"")+"|"+String(selectedMail?.delivery_no||"")} activeMainCompany={activeMainCompany} selectedInvoice={selectedMail}/>
   </section>:<>
    <div className="imrc-toolbar">
     <label>Müşteri firma
