@@ -58,6 +58,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const [loading,setLoading] = useState(true);
   const [reload,setReload] = useState(0);
   const [imageFailed,setImageFailed] = useState(false);
+  const [imageIndex,setImageIndex] = useState(0);
   const [entry,setEntry] = useState(emptyEntry);
   const [saving,setSaving] = useState(false);
   const [message,setMessage] = useState("");
@@ -70,7 +71,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   },[onClose]);
   useEffect(()=>{
     let disposed = false;
-    setLoading(true);setErrors({});setData({});setSelectedInvoice("");setImageFailed(false);
+    setLoading(true);setErrors({});setData({});setSelectedInvoice("");setImageFailed(false);setImageIndex(0);
     const requests = [
       ["production",canProduction,()=>getProductionCenterModel(activeMainCompany,modelId)],
       ["design",canDesign,()=>getDesignModel(activeMainCompany,modelId)],
@@ -108,7 +109,9 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const docs=array(data.documents?.items);
   const mailHistory=array(data.mail);
   const dyehouseJobs=array(data.dyehouse).filter(job=>modelMatchesJob(job,modelId));
-  const imageSource=productionImagePath(production?.imageUrl||design?.mainImage?.previewUrl||design?.mainImage?.thumbnailUrl);
+  const imageSources=[...new Set([production?.imageUrl,design?.mainImage?.previewUrl,design?.mainImage?.thumbnailUrl]
+    .map(productionImagePath).filter(Boolean))];
+  const imageSource=imageSources[imageIndex]||"";
   const name=production?.modelName||design?.modelName||"Model kaydı";
   const company=production?.companyName||design?.companyName||"Firma bağlantısı bekliyor";
   const warnings=useMemo(()=>model360Warnings(production,design,canDocuments?docs:null),[production,design,docs,canDocuments]);
@@ -150,7 +153,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
       <div className="m360-scroll">
         <section className="m360-hero">
           <div className="m360-image">
-            {imageSource&&!imageFailed?<img src={imageSource} alt={name+" model görseli"} onError={()=>setImageFailed(true)}/>:<div className="m360-image-missing"><ImageOff size={33}/><strong>Model görseli eksik</strong><small>Gerçek görseli DESEN dosyalarından ekleyin</small></div>}
+            {imageSource&&!imageFailed?<img src={imageSource} alt={name+" model görseli"} onError={()=>{if(imageIndex+1<imageSources.length)setImageIndex(v=>v+1);else setImageFailed(true);}}/>:<div className="m360-image-missing"><ImageOff size={33}/><strong>Model görseli eksik</strong><small>Gerçek görseli DESEN dosyalarından ekleyin</small></div>}
           </div>
           <div className="m360-hero-info">
             <div className="m360-hero-tags"><span>Model kodu: {label(production?.modelCode||design?.modelCode)}</span><span>Sipariş: {label(production?.orderNo)}</span><span>İrsaliye: {label(production?.defaultDispatchNo)}</span></div>
