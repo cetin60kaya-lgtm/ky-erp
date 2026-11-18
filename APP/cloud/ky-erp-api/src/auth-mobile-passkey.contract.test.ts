@@ -23,7 +23,7 @@ test("registration requires fresh authenticated session; recovery revokes enroll
   assert.match(source, /CREDENTIAL_ALREADY_USED/);
   assert.match(source, /PASSKEY_REGISTER/);
   assert.match(source, /securityStorePut\(c, SCOPE, credentialId/);
-  assert.match(policy, /registerMobilePasskeyRoutes\(app, \{ userById, userByIdentity, createChallenge, challengeFromRequest, afterFactors, audit \}\)/);
+  assert.match(policy, /registerMobilePasskeyRoutes\(app, \{ userById, userByIdentity, createChallenge, challengeFromRequest, afterFactors, effectivePolicy, roleOf, audit \}\)/);
   assert.match(policy, /scope='AUTH_MOBILE_PASSKEY_V1'/);
   assert.match(auth, /scope='AUTH_MOBILE_PASSKEY_V1'/);
 });

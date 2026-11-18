@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { mobileApiPost, mobileApiGet } from "./mobileApi";
 import { API_BASE } from "../utils/api";
 import {saveStaffSession} from "./personnelSession";
-import {assertMobilePasskey, rememberedMobileUser, rememberMobileUser, createMobilePasskey, isMobilePasskeySupported} from "../context/mobilePasskeyClient";
+import {assertMobilePasskey, rememberedMobileUser, rememberMobileUser, isMobilePasskeySupported} from "../context/mobilePasskeyClient";
 
 export default function MobileLogin({ onLogin, personnelOnly = false }) {
   const [username, setUsername] = useState(() => personnelOnly ? "" : rememberedMobileUser());
