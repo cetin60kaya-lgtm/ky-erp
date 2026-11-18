@@ -26,7 +26,8 @@ export function model360CanonicalLineAudit(rows:Row[],modelCompanyId="",truncate
   const qty=number(row.quantity),unit=model360Unit(row.unit_code);
   const company=text(row.party_company_id),modelCompany=text(modelCompanyId);
   let status="VERIFIED_LINE";
-  if(modelCompany&&company&&modelCompany!==company)status="COMPANY_CONFLICT";
+  if(modelCompany&&!company)status="COMPANY_UNVERIFIED";
+  else if(modelCompany&&company!==modelCompany)status="COMPANY_CONFLICT";
   else if(!lineId)status="DOCUMENT_ONLY_REVIEW";
   else if(Number(row.link_count||0)!==1)status="MULTI_MODEL_LINE_REVIEW";
   else if(kind==="OTHER")status="DOCUMENT_KIND_REVIEW";
@@ -42,6 +43,6 @@ export function model360CanonicalLineAudit(rows:Row[],modelCompanyId="",truncate
   }else count.review+=1;
  }
  return{status:truncated?"TRUNCATED":count.review?"REVIEW_REQUIRED":count.verified?"VERIFIED":"NO_LINKED_LINES",
-  totals,verifiedLineCount:count.verified,reviewLineCount:count.review,
+  totals:truncated?{received:null,shipped:null,invoiced:null}:totals,verifiedLineCount:count.verified,reviewLineCount:count.review,
   linkedDocumentCount:count.documents.size,items,truncated};
 }
