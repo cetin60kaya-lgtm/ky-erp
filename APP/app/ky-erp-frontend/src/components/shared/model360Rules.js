@@ -4,7 +4,7 @@ const normalized = (value) => String(value ?? "").trim().toLocaleUpperCase("tr-T
 export const MODEL360_TABS = [
   ["general", "Genel"], ["design", "DESEN"], ["production", "İmalat"],
   ["dyehouse", "Boyahane"], ["documents", "Muhasebe & Belgeler"],
-  ["mail", "Fatura Mail"], ["history", "İşlem Geçmişi"],
+  ["mail", "Fatura Mail"], ["review", "Adet & Belge Kontrolü"], ["history", "İşlem Geçmişi"],
 ];
 const elevated = new Set(["SUPER_ADMIN", "ADMIN", "OWNER", "COMPANY_OWNER", "COMPANY_ADMIN"]);
 const sections = {
@@ -49,4 +49,60 @@ export function model360Warnings(model, design, documents, identity = null) {
   if (model && Number(model.overProducedQty || 0) > 0) notes.push("Üretilen miktar gelen adedi aşıyor; kontrol edin.");
   if (Array.isArray(documents) && !documents.length) notes.push("Bu modelin doğrulanmış belge bağlantısı bulunamadı.");
   return notes;
+}
+
+// No synthetic model allocation: a multi-model document stays one document.
+// Quantity is taken ONLY from the canonical production center's model-linked
+// document lines, not the invoice header or another model's quantity.
+export function model360QuantityReview(model, documents = null) {
+  if (!model || model.isVirtual) return {ready:false,reason:"Kalıcı canonical model/imalat kaydı doğrulanamadı.",lines:[],checks:[]};
+  const rawLines = Array.isArray(model.invoices) ? model.invoices : [];
+  const seen = new Set();
+  const lines = rawLines.filter(row => {
+    const documentId = String(row.documentId || "").trim();
+    const lineId = String(row.lineId || "").trim();
+    if (!documentId || !lineId) return false;
+    const key = documentId + ":" + lineId;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).map(row=>({
+    documentId:String(row.documentId),
+    lineId:String(row.lineId),
+    documentNo:String(row.documentNo||""),
+    quantity:Number(row.quantity||0),
+    unit:String(row.unit||""),
+    date:String(row.date||""),
+  }));
+  const validLines = lines.filter(row => Number.isFinite(row.quantity) && row.quantity >= 0);
+  const billed = validLines.reduce((sum,row)=>sum+row.quantity,0);
+  const expected = Number(model.incomingQty||0);
+  const receivedFromDispatch = Number(model.dispatchQty||0);
+  const producedNet = Number(model.completedNetQty||0);
+  const producedGross = Number(model.completedGrossQty||0);
+  const actualBilled = Number(model.invoicedQty||0);
+  const checks = [];
+  if (!Number.isFinite(expected) || expected <= 0)
+    checks.push({kind:"review",message:"Gelen müşteri irsaliyesi veya planlanan adet doğrulanmalı."});
+  if (receivedFromDispatch <= 0)
+    checks.push({kind:"review",message:"Müşteriden gelen irsaliye adedi yok; plan adedi gerçek giriş sayılmamalı."});
+  if (producedNet > producedGross)
+    checks.push({kind:"error",message:"Net sağlam üretim brüt üretimi aşıyor."});
+  if (receivedFromDispatch > 0 && producedNet > receivedFromDispatch)
+    checks.push({kind:"review",message:"Net üretim gelen müşteri irsaliyesi adedini aşıyor."});
+  if (producedNet > 0 && actualBilled > producedNet)
+    checks.push({kind:"review",message:"Faturalanan adet net sağlam üretimden fazla; test/hata ve sevk kontrolü gerekir."});
+  if (rawLines.length !== validLines.length)
+    checks.push({kind:"review",message:"Bazı fatura kalemlerinde kimlik veya miktar eksik; tahmini dağıtım yapılmadı."});
+  if (validLines.length && Math.abs(actualBilled - billed) > 0.0001)
+    checks.push({kind:"review",message:"Model kalemi faturalanan miktarı üretim merkezinin toplamıyla uyuşmuyor."});
+  if (Array.isArray(documents)) {
+    const invoiceIds = new Set(documents.filter(row=>String(row.kind)==="FATURA"&&String(row.direction)==="OUTGOING").map(row=>String(row.id)));
+    if (validLines.some(row=>!invoiceIds.has(row.documentId)))
+      checks.push({kind:"review",message:"İmalatın fatura kalemi ile model-belge arşivinin bağlantısı farklı; belge eşleştirmesi incelenmeli."});
+  }
+  const documentsCount = Array.isArray(documents)?new Set(documents.map(row=>String(row.id))).size:null;
+  return {ready:true,receivedFromDispatch,expected,producedGross,producedNet,
+    invoiced:actualBilled,invoiceLineTotal:billed,remainingFromProduction:producedNet-actualBilled,
+    documentCount:documentsCount,lines:validLines,checks};
 }

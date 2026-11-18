@@ -4,12 +4,12 @@ import {useAuth} from "../../context/AuthContext";
 import {apiGet} from "../../utils/api";
 import {createProductionCenterEntry,getProductionCenterModel} from "../../services/productionCenterApi";
 import {getDesignModel} from "../../services/desenWorkflowApi";
-import {listBoyahaneJobs} from "../../services/boyahaneWorkflowApi";
+import {listBoyahaneJobs,patchBoyahaneJob} from "../../services/boyahaneWorkflowApi";
 import {productionImagePath} from "../../pages/imalat/productionModelImage";
 import ModelFilesPanel from "./ModelFilesPanel";
 import ModelDocumentCenter from "./ModelDocumentCenter";
 import InvoiceMailWorkspace from "../../pages/modules/muhasebe/InvoiceMailWorkspace";
-import {MODEL360_TABS,model360Access,model360LinkedInvoices,model360DeliveryForInvoice,model360Warnings} from "./model360Rules";
+import {MODEL360_TABS,model360Access,model360LinkedInvoices,model360DeliveryForInvoice,model360Warnings,model360QuantityReview} from "./model360Rules";
 import "./model360.css";
 
 const unwrap = (v) => v?.data?.data ?? v?.data ?? v ?? {};
@@ -51,6 +51,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const canDocuments = model360Access(user,"documents");
   const canMail = model360Access(user,"mail");
   const writeProduction = model360Access(user,"production",true);
+  const writeDyehouse = model360Access(user,"dyehouse",true);
   const writeDesign = model360Access(user,"design",true);
   const [tab,setTab] = useState(allowedTab(initialTab));
   const [data,setData] = useState({});
@@ -58,10 +59,13 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const [loading,setLoading] = useState(true);
   const [reload,setReload] = useState(0);
   const [imageFailed,setImageFailed] = useState(false);
+  const [imageIndex,setImageIndex] = useState(0);
   const [entry,setEntry] = useState(emptyEntry);
   const [saving,setSaving] = useState(false);
   const [message,setMessage] = useState("");
   const [selectedInvoice,setSelectedInvoice] = useState("");
+  const [jobNotes,setJobNotes] = useState({});
+  const [savingBoyahane,setSavingBoyahane] = useState("");
   const refresh = useCallback(()=>setReload(v=>v+1),[]);
   useEffect(()=>{
     const listener = e=>{if(e.key==="Escape"){e.stopPropagation();onClose();}};
@@ -70,10 +74,10 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   },[onClose]);
   useEffect(()=>{
     let disposed = false;
-    setLoading(true);setErrors({});setData({});setSelectedInvoice("");setImageFailed(false);
+    setLoading(true);setErrors({});setData({});setSelectedInvoice("");setImageFailed(false);setImageIndex(0);
     const requests = [
-      ["identity",model360Access(user,"general"),()=>apiGet("/model-360/"+encodeURIComponent(modelId)+"/identity",{mainCompanySlug:tenant})],
       ["production",canProduction,()=>getProductionCenterModel(activeMainCompany,modelId)],
+      ["identity",model360Access(user,"general"),()=>apiGet("/model-360/"+encodeURIComponent(modelId)+"/identity",{mainCompanySlug:tenant})],
       ["design",canDesign,()=>getDesignModel(activeMainCompany,modelId)],
       ["documents",canDocuments,()=>apiGet("/model-files/"+encodeURIComponent(modelId)+"/document-center",{mainCompanySlug:tenant})],
       ["mail",canMail,()=>apiGet("/muhasebe/invoice-mail-links",{mainCompanySlug:tenant,modelId})],
@@ -91,6 +95,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
         else next[result.key]=result.value;
       }
       setData(next);setErrors(failures);setLoading(false);
+      if(Array.isArray(next.dyehouse))setJobNotes(Object.fromEntries(next.dyehouse.filter(job=>job.id).map(job=>[job.id,String(job.note||"")])));
     });
     return ()=>{disposed=true;};
   },[activeMainCompany,tenant,modelId,reload,user,canProduction,canDesign,canDocuments,canMail,canDyehouse]);
@@ -110,10 +115,13 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const docs=array(data.documents?.items);
   const mailHistory=array(data.mail);
   const dyehouseJobs=array(data.dyehouse).filter(job=>modelMatchesJob(job,modelId));
-  const imageSource=productionImagePath(production?.imageUrl||design?.mainImage?.previewUrl||design?.mainImage?.thumbnailUrl||identity?.imageUrl);
+  const imageSources=[...new Set([production?.imageUrl,design?.mainImage?.previewUrl,design?.mainImage?.thumbnailUrl,identity?.imageUrl]
+    .map(productionImagePath).filter(Boolean))];
+  const imageSource=imageSources[imageIndex]||"";
   const name=identity?.modelName||production?.modelName||design?.modelName||"Model kaydı";
   const company=identity?.companyName||production?.companyName||design?.companyName||"Firma bağlantısı bekliyor";
   const warnings=useMemo(()=>model360Warnings(production,design,canDocuments?docs:null,identity),[production,design,docs,canDocuments,identity]);
+  const quantityReview=useMemo(()=>model360QuantityReview(production,canDocuments?docs:null),[production,docs,canDocuments]);
   const invoices=useMemo(()=>model360LinkedInvoices(docs),[docs]);
   const picked=invoices.find(row=>row.id===selectedInvoice)||null;
   const canWriteEntry=writeProduction&&!production?.isVirtual&&Boolean(production?.id);
@@ -142,6 +150,20 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
     finally{setSaving(false);}
   }
 
+  async function saveBoyahaneNote(job) {
+    const jobId=String(job?.id||"");
+    if(!writeDyehouse||!jobId||!modelMatchesJob(job,modelId)||savingBoyahane)return;
+    const note=String(jobNotes[jobId]||"").trim();
+    if(note.length>1000){setMessage("Boyahane açıklaması en fazla 1000 karakter olabilir.");return;}
+    setSavingBoyahane(jobId);setMessage("");
+    try {
+      await patchBoyahaneJob(activeMainCompany,jobId,{note});
+      setMessage("Boyahane iş açıklaması mevcut iş kaydına işlendi; model kaydı çoğaltılmadı.");
+      refresh();
+    }catch(e){setMessage(e?.message||"Boyahane açıklaması kaydedilemedi.");}
+    finally{setSavingBoyahane("");}
+  }
+
   return <div className="m360-backdrop" role="presentation">
     <section className="m360-dialog" role="dialog" aria-modal="true" aria-labelledby="m360-title">
       <header className="m360-header">
@@ -151,7 +173,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
       <div className="m360-scroll">
         <section className="m360-hero">
           <div className="m360-image">
-            {imageSource&&!imageFailed?<img src={imageSource} alt={name+" model görseli"} onError={()=>setImageFailed(true)}/>:<div className="m360-image-missing"><ImageOff size={33}/><strong>Model görseli eksik</strong><small>Gerçek görseli DESEN dosyalarından ekleyin</small></div>}
+            {imageSource&&!imageFailed?<img src={imageSource} alt={name+" model görseli"} onError={()=>{if(imageIndex+1<imageSources.length)setImageIndex(v=>v+1);else setImageFailed(true);}}/>:<div className="m360-image-missing"><ImageOff size={33}/><strong>Model görseli eksik</strong><small>Gerçek görseli DESEN dosyalarından ekleyin</small></div>}
           </div>
           <div className="m360-hero-info">
             <div className="m360-hero-tags"><span>Model kodu: {label(identity?.modelCode||production?.modelCode||design?.modelCode)}</span><span>Sipariş: {label(identity?.orderNo||production?.orderNo)}</span><span>İrsaliye: {label(production?.defaultDispatchNo)}</span></div>
@@ -228,10 +250,16 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
           {tab==="dyehouse"&&(canDyehouse?<section>
             <h3><Palette size={18}/> Boyahane · Model işi, renk ve reçete bağlantıları</h3>
             <p>Yalnız aynı canonical model ID'ye gerçekten bağlı boyahane işleri gösterilir. Benzer model adına bakarak yanlış iş eşleştirilmez.</p>
-            {dyehouseJobs.length?<div className="m360-doc-list">{dyehouseJobs.map((job,index)=><div className="m360-doc-row" key={job.id||index}><span><b>{job.jobNo||job.modelName||"Boyahane işi"}</b><small>{job.companyName||""}</small></span><span>{job.status||"Durum bekliyor"}</span><small>{job.createdAt||job.date||""}</small></div>)}</div>:<Empty>Bu modele canonical ID ile bağlı boyahane işi bulunamadı. İsim benzerliği tek başına ilişki kurmaz.</Empty>}
+            {dyehouseJobs.length?<div className="m360-doc-list">{dyehouseJobs.map((job,index)=><div className="m360-doc-row" key={job.id||index}>
+              <span><b>{job.jobNo||job.modelName||"Boyahane işi"}</b><small>{job.companyName||""}</small></span>
+              <span>{job.status||"Durum bekliyor"}</span><small>{job.createdAt||job.date||""}</small>
+              {writeDyehouse?<div className="m360-boyahane-note"><label>Boyahane iş notu<input maxLength={1000} value={jobNotes[job.id]??job.note??""} onChange={e=>setJobNotes(v=>({...v,[job.id]:e.target.value}))}/></label>
+               <button type="button" disabled={savingBoyahane===job.id} onClick={()=>void saveBoyahaneNote(job)}><Save size={14}/>{savingBoyahane===job.id?"Kaydediliyor…":"Notu Kaydet"}</button></div>:null}
+             </div>)}</div>:<Empty>Bu modele canonical ID ile bağlı boyahane işi bulunamadı. İsim benzerliği tek başına ilişki kurmaz.</Empty>}
             <h4>DESEN kaynaklı baskı bölgelerinin boyahane durumu</h4>
             <div className="m360-operation-grid">{array(design?.operations).map((op,index)=><article key={op.id||index}><b>{op.printAreaName||op.regionName||"Bölge"}</b><span>{op.dyehouseStatus||"Hazırlık bekliyor"}</span></article>)}</div>
-            <p className="m360-info-note">Boyahane reçete/gramaj yazma formu mevcut Boyahane iş kaydına bağlıdır. Bu sürümde doğrulanmamış reçete değişikliği yapılmaz.</p>
+            <p className="m360-info-note">Boyahane açıklaması aynı gerçek iş kaydında saklanır. Reçete, gramaj ve lot değişiklikleri kendi doğrulama ve stok güvenlik kapısını kullanır; bu modal henüz bu işlemleri değiştirmez.</p>
+            {tab==="dyehouse"&&message?<p role="status">{message}</p>:null}
           </section>:<Empty>Boyahane kayıtlarını görme yetkiniz bulunmuyor.</Empty>)}
           {tab==="documents"&&(canDocuments?<section>
             <h3><FileCheck2 size={18}/> Muhasebe · HKN, DDM ve model kalemleri</h3>
@@ -253,6 +281,30 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
             <h4>KY ERP'de kayıtlı Outlook gönderim geçmişi</h4>
             {mailHistory.length?<div className="m360-doc-list">{mailHistory.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo||"HKN"}</b><small>{item.deliveryNo||""}</small></span><span>{item.status||"Kayıt"}</span><small>{item.recordedAt?.slice(0,16)||""}</small></div>)}</div>:<Empty>ERP'de doğrulanmış gönderim bağlantısı bulunamadı. Outlook'ta elle gönderilmiş eski mailler otomatik gönderildi sayılmaz.</Empty>}
           </section>:<Empty>Fatura maili için muhasebe/iletişim yetkiniz bulunmuyor.</Empty>)}
+          {tab==="review"&&<section>
+            <h3><FileCheck2 size={18}/> Model bazında adet & belge kontrolü</h3>
+            <p>Bu görünüm bütün departmanların aynı model kimliğinden aldığı kayıtları karşılaştırır. Bir faturada birden fazla model varsa belge toplamı burada her modele tekrar yazılmaz; yalnız bu modele ait doğrulanmış kalemler kullanılır.</p>
+            {!canProduction?<Empty>Modelin gerçek üretim miktarlarını görmek için İmalat görüntüleme yetkisi gerekir.</Empty>:
+             !quantityReview.ready?<ErrorNotice text={quantityReview.reason}/>:
+             <>
+              <div className="m360-metrics">
+               <Metric name="Gelen irsaliye" value={quantityReview.receivedFromDispatch}/>
+               <Metric name="Plan / kart adedi" value={quantityReview.expected}/>
+               <Metric name="Brüt üretim" value={quantityReview.producedGross}/>
+               <Metric name="Net sağlam" value={quantityReview.producedNet}/>
+               <Metric name="Fatura kalemleri" value={quantityReview.invoiced}/>
+               <Metric name="Net - fatura" value={quantityReview.remainingFromProduction} accent={quantityReview.remainingFromProduction<0?"warn":""}/>
+              </div>
+              <p className="m360-info-note">Gelen müşteri irsaliyesi ve giden DDM ayrı hareketlerdir. Giden DDM'nin model kalemi doğrulanmadan sevk miktarı varsayılmaz. Baskı bölgelerinin her fişi kendi operasyonunda sayılır; farklı bölgelerin adetleri tek ürün toplamı gibi toplanmaz.</p>
+              {quantityReview.checks.length?<div className="m360-warnings">{quantityReview.checks.map((check,index)=><p key={index}><AlertTriangle size={15}/>{check.message}</p>)}</div>
+               :<p className="m360-info-note"><CheckCircle2 size={15}/> Mevcut model kalemi ve üretim miktarları arasında bilinen sayısal tutarsızlık yok; bu, gerçek belge/PDF kabulü değildir.</p>}
+              <h4>Bu modele bağlanan fatura kalemleri</h4>
+              <div className="m360-table-wrap"><table><thead><tr><th>HKN / Belge</th><th>Kalem ID</th><th>Adet</th><th>Birim</th></tr></thead>
+               <tbody>{quantityReview.lines.map(row=><tr key={row.documentId+":"+row.lineId}><td>{row.documentNo||"Belge adı bekliyor"}</td><td>{row.lineId}</td><td>{format(row.quantity)}</td><td>{row.unit||"—"}</td></tr>)}</tbody></table></div>
+              {!quantityReview.lines.length?<Empty>Model bazında doğrulanmış fatura kalemi bulunamadı. Genel HKN fatura tutarından pay tahmini yapılmaz.</Empty>:null}
+              {canDocuments?<><h4>Belgelerin kaynağı</h4><DocumentList items={docs}/></>:<Empty>Belge bilgileri yalnız Muhasebe / e-Belge yetkisi bulunan personele açılır.</Empty>}
+             </>}
+          </section>}
           {tab==="history"&&<section>
             <h3><CheckCircle2 size={18}/> Ortak işlem geçmişi</h3>
             <div className="m360-history">
