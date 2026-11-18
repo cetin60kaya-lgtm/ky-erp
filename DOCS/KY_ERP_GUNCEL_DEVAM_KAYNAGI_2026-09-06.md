@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 18.11.2026 — Ortak Model 360 kartı · Tüm departmanlar · Adet ve belge kontrolü (açık geliştirme)
+- **Kullanıcı kararı:** Tek canonical model kimliği, DESEN / İmalat / Boyahane / Muhasebe / e-Belge / Mail için **tek ortak modal**. Her departman yalnız kendi yetkili verisini görür/girer. Modüller arasında gidip gelmek gerekmez. Model görseli gerçek DESEN/File Hub kaynağıdır; görsel bulunamıyorsa uydurulmaz, açık eksik uyarısı verilir.
+- **Belge kardinalitesi:** Bir HKN birden fazla modeli, bir DDM birden fazla modeli, bir model birden fazla HKN/DDM'yi içerebilir. Fiziksel HKN/DDM belge kaydı ve XML/PDF tektir. Modelin miktarı sadece canonical model kimliğine bağlı **belge kalemi** üzerinden sayılır; belge başlık toplamı her modele tekrar dağıtılmaz, model adı benzerliği otomatik kesin eşleşme değildir.
+- **Ayrı adet kaynakları:** Müşteriden gelen irsaliye / plan, üretim brüt, baskı-kumaş hatası/test, net sağlam üretim, giden DDM sevk ve HKN fatura kalemleri ayrı kalır. Giden DDM kalem tahsisi kesinleşmediyse hayali sevk adedi yazılmaz. Her HKN için ayrı Outlook mail + ayrı gönderim kaydı kararı korunur.
+- **Bu iş dalında kodlanan ilk etap:** Mevcut `Model360Modal` korunarak **Adet & Belge Kontrolü** sekmesi, doğrulanmış kalem/üretim farkı uyarıları, aynı belge satırını iki kez saymama, model görselinin gerçek alternatif önizlemeleri, yetkili Boyahane iş-notu düzenlemesi ve sözleşme testleri eklendi.
+- **Kalanlar ve kabul:** Boyahane reçete/lot/gramajın aynı modalda yazımı, çok modelli HKN/DDM satır eşleşmelerinin doğrulanması, tüm modül giriş noktalarının eksiksiz olması, görsel gerçek File Hub kabulü, imalat ve mail gerçek kayıt testleri, güvenli yayın ve gerçek Windows/UI kabulü ayrı aşamalardır. **Dalda kodlanmış olmak canlıda tamamlandı demek değildir.** Gerçek ticari veri, stok ve müşteri mailleri değiştirilmedi.
+
+
 > **18.11.2026 — Model 360:** [Tüm departmanların tek ortak modeli, çoklu belge/imalat/mail kuralı](KY_MODEL_360_ORTAK_KART_20261118.md). P1 uygulama ve P2 açık işler ayrıdır; canlı kabul sonucu ayrı doğrulanır.
 
 ## 17.11.2026 — Muhasebe e-Belge ile bağımsız Fatura Mail & Haftalık HKN Takibi
