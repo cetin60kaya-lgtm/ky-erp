@@ -9,7 +9,7 @@ import {productionImagePath} from "../../pages/imalat/productionModelImage";
 import ModelFilesPanel from "./ModelFilesPanel";
 import ModelDocumentCenter from "./ModelDocumentCenter";
 import InvoiceMailWorkspace from "../../pages/modules/muhasebe/InvoiceMailWorkspace";
-import {MODEL360_TABS,model360Access,model360LinkedInvoices,model360DeliveryForInvoice,model360Warnings} from "./model360Rules";
+import {MODEL360_TABS,model360Access,model360LinkedInvoices,model360DeliveryForInvoice,model360Warnings,model360QuantityReview} from "./model360Rules";
 import "./model360.css";
 
 const unwrap = (v) => v?.data?.data ?? v?.data ?? v ?? {};
@@ -112,6 +112,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const name=production?.modelName||design?.modelName||"Model kaydı";
   const company=production?.companyName||design?.companyName||"Firma bağlantısı bekliyor";
   const warnings=useMemo(()=>model360Warnings(production,design,canDocuments?docs:null),[production,design,docs,canDocuments]);
+  const quantityReview=useMemo(()=>model360QuantityReview(production,canDocuments?docs:null),[production,docs,canDocuments]);
   const invoices=useMemo(()=>model360LinkedInvoices(docs),[docs]);
   const picked=invoices.find(row=>row.id===selectedInvoice)||null;
   const canWriteEntry=writeProduction&&!production?.isVirtual&&Boolean(production?.id);
@@ -251,6 +252,30 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
             <h4>KY ERP'de kayıtlı Outlook gönderim geçmişi</h4>
             {mailHistory.length?<div className="m360-doc-list">{mailHistory.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo||"HKN"}</b><small>{item.deliveryNo||""}</small></span><span>{item.status||"Kayıt"}</span><small>{item.recordedAt?.slice(0,16)||""}</small></div>)}</div>:<Empty>ERP'de doğrulanmış gönderim bağlantısı bulunamadı. Outlook'ta elle gönderilmiş eski mailler otomatik gönderildi sayılmaz.</Empty>}
           </section>:<Empty>Fatura maili için muhasebe/iletişim yetkiniz bulunmuyor.</Empty>)}
+          {tab==="review"&&<section>
+            <h3><FileCheck2 size={18}/> Model bazında adet & belge kontrolü</h3>
+            <p>Bu görünüm bütün departmanların aynı model kimliğinden aldığı kayıtları karşılaştırır. Bir faturada birden fazla model varsa belge toplamı burada her modele tekrar yazılmaz; yalnız bu modele ait doğrulanmış kalemler kullanılır.</p>
+            {!canProduction?<Empty>Modelin gerçek üretim miktarlarını görmek için İmalat görüntüleme yetkisi gerekir.</Empty>:
+             !quantityReview.ready?<ErrorNotice text={quantityReview.reason}/>:
+             <>
+              <div className="m360-metrics">
+               <Metric name="Gelen irsaliye" value={quantityReview.receivedFromDispatch}/>
+               <Metric name="Plan / kart adedi" value={quantityReview.expected}/>
+               <Metric name="Brüt üretim" value={quantityReview.producedGross}/>
+               <Metric name="Net sağlam" value={quantityReview.producedNet}/>
+               <Metric name="Fatura kalemleri" value={quantityReview.invoiced}/>
+               <Metric name="Net - fatura" value={quantityReview.remainingFromProduction} accent={quantityReview.remainingFromProduction<0?"warn":""}/>
+              </div>
+              <p className="m360-info-note">Gelen müşteri irsaliyesi ve giden DDM ayrı hareketlerdir. Giden DDM'nin model kalemi doğrulanmadan sevk miktarı varsayılmaz. Baskı bölgelerinin her fişi kendi operasyonunda sayılır; farklı bölgelerin adetleri tek ürün toplamı gibi toplanmaz.</p>
+              {quantityReview.checks.length?<div className="m360-warnings">{quantityReview.checks.map((check,index)=><p key={index}><AlertTriangle size={15}/>{check.message}</p>)}</div>
+               :<p className="m360-info-note"><CheckCircle2 size={15}/> Mevcut model kalemi ve üretim miktarları arasında bilinen sayısal tutarsızlık yok; bu, gerçek belge/PDF kabulü değildir.</p>}
+              <h4>Bu modele bağlanan fatura kalemleri</h4>
+              <div className="m360-table-wrap"><table><thead><tr><th>HKN / Belge</th><th>Kalem ID</th><th>Adet</th><th>Birim</th></tr></thead>
+               <tbody>{quantityReview.lines.map(row=><tr key={row.documentId+":"+row.lineId}><td>{row.documentNo||"Belge adı bekliyor"}</td><td>{row.lineId}</td><td>{format(row.quantity)}</td><td>{row.unit||"—"}</td></tr>)}</tbody></table></div>
+              {!quantityReview.lines.length?<Empty>Model bazında doğrulanmış fatura kalemi bulunamadı. Genel HKN fatura tutarından pay tahmini yapılmaz.</Empty>:null}
+              {canDocuments?<><h4>Belgelerin kaynağı</h4><DocumentList items={docs}/></>:<Empty>Belge bilgileri yalnız Muhasebe / e-Belge yetkisi bulunan personele açılır.</Empty>}
+             </>}
+          </section>}
           {tab==="history"&&<section>
             <h3><CheckCircle2 size={18}/> Ortak işlem geçmişi</h3>
             <div className="m360-history">
