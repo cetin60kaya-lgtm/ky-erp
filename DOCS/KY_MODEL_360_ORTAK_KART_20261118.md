@@ -25,3 +25,11 @@
 - Rol, tenant, model görseli, çoklu irsaliye, farklı üretim bölgeleri ve gerçek işlemlerle uçtan uca kullanıcı kabulü.
 
 P1 commit/test/PR/merge/deploy durumları ayrı izlenir. Kod kaydı gerçek kullanıcı kabulü anlamına gelmez.
+
+
+## 18.11.2026 — P2 canonical HKN/DDM model-kalem denetimi (PR / test aşaması)
+- Model 360, `GET /api/model-360/:modelId/document-lines` üzerinden canonical `accounting_documents + accounting_document_lines + accounting_document_model_links` kayıtlarını salt okunur inceler. Mevcut tenant/rol yetkisi ve modelin müşteri ID sınırı korunur.
+- Sadece tek canonical modele **açıkça bağlanmış** ve firma ID'si doğrulanan ADET satırları hesaplanır. Satırın birden fazla modele bağlanması, sadece belge başlığı bağlanması, bilinmeyen birim/firma ya da eksik satır inceleme durumudur. 1.500 satır sınırına erişilirse eksik toplam kesin diye gösterilmez.
+- Gelen müşteri irsaliyesi / giden DDM / giden HKN ayrı sayaçtır; model modalında önceki İmalat merkezinin legacy belge toplamıyla yan yana, **iki farklı kaynak** olarak görünür ve uyuşmazlık uyarısı verir. Bu kontrol hesaplaması kesin cari, KDV, stok, ücret veya mail hareketi yazmaz.
+- `accounting_document_model_links` tablosu yoksa `SOURCE_UNAVAILABLE` gösterilir, yanlışlıkla 0 adet kabul edilmez.
+- **Henüz otomatik ilişki kurmayan kısım:** XML satırındaki model kodlarının `accounting_document_model_links` tablosuna doğrulanmış ve kullanıcı onaylı yazılması ile HKN/DDM eşleştirici ve Üretim merkezi kaynaklarının ortaklaşması. Gerçek müşteri XML'i ve fiziki kullanıcı kabulü gerekir.
