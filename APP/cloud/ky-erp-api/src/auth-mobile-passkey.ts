@@ -18,6 +18,7 @@ function decode(value: unknown, max = 8192): Uint8Array {
   const normalized = raw.replace(/-/g, "+").replace(/_/g, "/");
   return Uint8Array.from(atob(normalized + "=".repeat((4 - normalized.length % 4) % 4)), (char) => char.charCodeAt(0));
 }
+function arrayBuffer(value: Uint8Array): ArrayBuffer { return Uint8Array.from(value).buffer as ArrayBuffer; }
 function equal(left: Uint8Array, right: Uint8Array) {
   if (left.length !== right.length) return false;
   let diff = 0;
@@ -25,7 +26,7 @@ function equal(left: Uint8Array, right: Uint8Array) {
   return diff === 0;
 }
 async function digest(value: Uint8Array) {
-  return new Uint8Array(await crypto.subtle.digest("SHA-256", value));
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", arrayBuffer(value)));
 }
 function originFor(c: any) {
   const origin = text(c.req.header("Origin"));
@@ -81,13 +82,13 @@ async function verifyAssertion(credential: Row, assertion: Row, challenge: strin
   const clientBytes = checkedClientData(assertion.clientDataJSON, "webauthn.get", challenge, origin);
   const auth = await checkedAuthData(assertion.authenticatorData);
   const publicKey = await crypto.subtle.importKey(
-    "spki", decode(credential.publicKey, 1024), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
+    "spki", arrayBuffer(decode(credential.publicKey, 1024)), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]
   );
   const clientHash = await digest(clientBytes);
   const signed = new Uint8Array(auth.bytes.length + clientHash.length);
   signed.set(auth.bytes); signed.set(clientHash, auth.bytes.length);
   const verified = await crypto.subtle.verify(
-    { name: "ECDSA", hash: "SHA-256" }, publicKey, signatureToRaw(decode(assertion.signature, 256)), signed
+    { name: "ECDSA", hash: "SHA-256" }, publicKey, arrayBuffer(signatureToRaw(decode(assertion.signature, 256))), arrayBuffer(signed)
   );
   if (!verified) throw new Error("SIGNATURE_INVALID");
   if (Number(credential.signCount || 0) > 0 && auth.counter > 0 && auth.counter <= Number(credential.signCount)) {
@@ -98,7 +99,7 @@ async function verifyAssertion(credential: Row, assertion: Row, challenge: strin
 async function credentialList(c: any, userId: string) {
   const result = await c.env.DB.prepare(
     "SELECT data FROM json_store WHERE scope=? AND json_extract(data,'$.userId')=? ORDER BY updated_at DESC LIMIT 12"
-  ).bind(SCOPE, userId).all<Row>();
+  ).bind(SCOPE, userId).all();
   return (result.results || []).flatMap((row: Row) => {
     try { const item = JSON.parse(text(row.data)); return item.active !== false ? [item] : []; }
     catch { return []; }
@@ -114,7 +115,7 @@ async function recentChallengeLimit(c: any, userId: string, challengeType: strin
   const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   const record = await c.env.DB.prepare(
     "SELECT COUNT(*) AS total FROM auth_login_challenges WHERE user_id=? AND challenge_type=? AND created_at>?"
-  ).bind(userId, challengeType, cutoff).first<Row>();
+  ).bind(userId, challengeType, cutoff).first();
   return Number(record?.total || 0) < 30;
 }
 export function registerMobilePasskeyRoutes(app: any, deps: {
@@ -163,7 +164,7 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
       checkedClientData(creation.clientDataJSON, "webauthn.create", text(body.challengeToken), origin);
       await checkedAuthData(creation.authenticatorData, true);
       const publicKeyBytes = decode(creation.publicKey, 1024);
-      const publicKey = await crypto.subtle.importKey("spki", publicKeyBytes, { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
+      const publicKey = await crypto.subtle.importKey("spki", arrayBuffer(publicKeyBytes), { name: "ECDSA", namedCurve: "P-256" }, false, ["verify"]);
       void publicKey;
       const prior = await securityStoreGet(c, SCOPE, credentialId);
       if (prior) throw new Error("CREDENTIAL_ALREADY_USED");
