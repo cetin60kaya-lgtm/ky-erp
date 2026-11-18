@@ -43,3 +43,13 @@ test("adet olmayan birim, bilinmeyen yön ve taşmış sorgu kesin hesap sayılm
  assert.equal(res.reviewLineCount,2);
  assert.equal(res.status,"TRUNCATED");
 });
+test("firma kimliği yoksa isim benzerliğinden tam eşleşme yapılmaz",()=>{
+ const r=model360CanonicalLineAudit([row({party_company_id:null})],"firm-a");
+ assert.equal(r.items[0].status,"COMPANY_UNVERIFIED");
+ assert.equal(r.totals.invoiced,null);
+});
+test("sorgu kesilmişse kısmi adet toplamı kesin diye gösterilmez",()=>{
+ const r=model360CanonicalLineAudit([row()], "firm-a", true);
+ assert.equal(r.status,"TRUNCATED");
+ assert.equal(r.totals.invoiced,null);
+});
