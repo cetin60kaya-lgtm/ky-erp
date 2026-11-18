@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isMobilePasskeySupported, isMobileAppPage } from "./mobilePasskeyClient";
+import { isMobilePasskeySupported, isMobileAppPage, rememberedMobileCredential } from "./mobilePasskeyClient";
 import "./MobilePasskeyOffer.css";
 
 const dismissKey = (userId) => "kyerp_mobile_passkey_offer_" + String(userId || "");
@@ -13,7 +13,11 @@ export default function MobilePasskeyOffer({ user, getStatus, onEnroll }) {
     let dismissed = 0;
     try { dismissed = Number(sessionStorage.getItem(dismissKey(user.id)) || 0); } catch { /* noop */ }
     if (dismissed) return undefined;
-    getStatus().then((status) => { if (active) setVisible(!status?.enabled); }).catch(() => {});
+    getStatus().then((status) => {
+      const localId = rememberedMobileCredential(user.id);
+      const onThisDevice = Boolean(localId && Array.isArray(status?.credentialIds) && status.credentialIds.includes(localId));
+      if (active) setVisible(!onThisDevice);
+    }).catch(() => {});
     return () => { active = false; };
   }, [getStatus, user?.id]);
   const dismiss = () => {

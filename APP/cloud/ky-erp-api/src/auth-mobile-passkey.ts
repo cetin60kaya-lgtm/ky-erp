@@ -132,7 +132,7 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
     const current = await getAuthenticatedUser(c);
     if (!current) return fail(c, "UNAUTHORIZED", "Oturum gerekli.", 401);
     const registered = await credentialList(c, text(current.id));
-    return c.json({ ok: true, data: { enabled: registered.length > 0, count: registered.length, rpId: RP_ID } });
+    return c.json({ ok: true, data: { enabled: registered.length > 0, count: registered.length, credentialIds: registered.map((row: Row) => row.credentialId), rpId: RP_ID } });
   });
   app.post("/api/auth/passkey/register/start", async (c: any) => {
     const current = await getAuthenticatedUser(c);

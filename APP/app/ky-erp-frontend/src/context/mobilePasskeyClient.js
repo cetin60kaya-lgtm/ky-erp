@@ -1,6 +1,15 @@
 // Shared browser WebAuthn helper for all KY ERP mobile roles and PWA entry points.
 // The PIN/biometric remains inside the platform authenticator; no secrets are stored here.
 export const REMEMBERED_MOBILE_USER_KEY = "kyerp_mobile_passkey_user_v1";
+const CREDENTIAL_PREFIX = "kyerp_mobile_passkey_credential_v1_";
+export function rememberedMobileCredential(userId) {
+  try { return String(localStorage.getItem(CREDENTIAL_PREFIX + String(userId)) || ""); }
+  catch { return ""; }
+}
+export function rememberMobileCredential(userId, credentialId) {
+  try { if (userId && credentialId) localStorage.setItem(CREDENTIAL_PREFIX + String(userId), String(credentialId)); }
+  catch { /* non-secret device preference */ }
+}
 const RP_ID = "kyerp.net";
 const b64 = (data) => btoa(String.fromCharCode(...new Uint8Array(data))).replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
 const bytes = (value) => {

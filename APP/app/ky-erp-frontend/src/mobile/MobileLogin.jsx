@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { mobileApiPost, mobileApiGet } from "./mobileApi";
 import { API_BASE } from "../utils/api";
 import {saveStaffSession} from "./personnelSession";
-import {assertMobilePasskey, rememberedMobileUser, rememberMobileUser, isMobilePasskeySupported} from "../context/mobilePasskeyClient";
+import {assertMobilePasskey, rememberedMobileUser, rememberMobileUser, rememberMobileCredential, isMobilePasskeySupported} from "../context/mobilePasskeyClient";
 
 export default function MobileLogin({ onLogin, personnelOnly = false }) {
   const [username, setUsername] = useState(() => personnelOnly ? "" : rememberedMobileUser());
@@ -85,7 +85,10 @@ export default function MobileLogin({ onLogin, personnelOnly = false }) {
         { challengeId: opts.challengeId, challengeToken: opts.challengeToken, assertion });
       if (!finish.ok) throw new Error(finish.data?.error?.message || "Güvenli giriş doğrulanamadı.");
       if (String(finish.data?.stage || "").toUpperCase() === "APPROVAL_PENDING") await waitForCompanyApproval(finish.data, identity);
-      else acceptMobileSession(finish.data, identity);
+      else {
+        acceptMobileSession(finish.data, identity);
+        rememberMobileCredential(finish.data?.user?.id, assertion.credentialId);
+      }
     } catch (err) { setError(err?.message || "Parmak izi/PIN ile giriş olmadı. Şifreyle devam edin."); }
     finally { setLoading(false); }
   }

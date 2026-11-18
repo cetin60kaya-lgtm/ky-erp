@@ -31,7 +31,7 @@ import MobileShell from "./MobileShell";
 import MobilePersonnel from "./MobilePersonnel";
 import {getStaffSession} from "./personnelSession";
 import MobilePasskeyOffer from "../context/MobilePasskeyOffer";
-import {createMobilePasskey,rememberMobileUser} from "../context/mobilePasskeyClient";
+import {createMobilePasskey,rememberMobileUser,rememberMobileCredential} from "../context/mobilePasskeyClient";
 import {mobileApiPost,mobileApiGet} from "./mobileApi";
 
 function isPersonnelSession() {return Boolean(getStaffSession());}
@@ -87,6 +87,7 @@ export default function MobileApp() {
       { challengeId: opts.challengeId, challengeToken: opts.challengeToken, ...proof });
     if (!finished.ok) throw new Error(finished.data?.error?.message || "Telefon giriş anahtarı kaydedilemedi.");
     rememberMobileUser(activeUser.username);
+    rememberMobileCredential(activeUser.id, proof.credentialId);
   };
 
   useEffect(() => {

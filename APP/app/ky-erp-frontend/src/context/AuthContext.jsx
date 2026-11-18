@@ -2,7 +2,7 @@ import { useCallback, createContext, useContext, useEffect, useMemo, useRef, use
 import { API_BASE, clearApiGetCache, setApiAuthHandlers } from "../utils/api";
 import { clearResilientDataCache } from "../utils/resilientDataLoader";
 import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
-import { assertMobilePasskey, createMobilePasskey, rememberMobileUser } from "./mobilePasskeyClient";
+import { assertMobilePasskey, createMobilePasskey, rememberMobileUser, rememberMobileCredential } from "./mobilePasskeyClient";
 import MobilePasskeyOffer from "./MobilePasskeyOffer";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
@@ -679,6 +679,7 @@ export function AuthProvider({ children }) {
       body: { challengeId: start.data.challengeId, challengeToken: start.data.challengeToken, ...payload },
     });
     rememberMobileUser(authSnapshotRef.current.user.username);
+    rememberMobileCredential(authSnapshotRef.current.user.id, payload.credentialId);
     return { enabled: true };
   }), [runAuthOnce]);
   const loginMobilePasskey = useCallback((identity) => runAuthOnce("PASSKEY_LOGIN", async () => {
@@ -690,7 +691,10 @@ export function AuthProvider({ children }) {
       body: { challengeId: start.data.challengeId, challengeToken: start.data.challengeToken, assertion },
     });
     const result = finalizeResponse(response);
-    if (result?.stage === "AUTHENTICATED") rememberMobileUser(name);
+    if (result?.stage === "AUTHENTICATED") {
+      rememberMobileUser(name);
+      rememberMobileCredential(result?.user?.id, assertion.credentialId);
+    }
     return result;
   }), [finalizeResponse, runAuthOnce]);
 
