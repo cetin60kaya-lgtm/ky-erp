@@ -846,7 +846,7 @@ async function updateOwnerRecoveryEnabled(c: any, userId: string) {
 }
 
 export function registerAuthPolicyRoutes(app: any) {
-  registerMobilePasskeyRoutes(app, { userById, userByIdentity, createChallenge, challengeFromRequest, afterFactors, audit });
+  registerMobilePasskeyRoutes(app, { userById, userByIdentity, createChallenge, challengeFromRequest, afterFactors, effectivePolicy, roleOf, audit });
   app.get("/api/auth/turnstile-config", (c: any) => {
     return c.json({ ok: true, ...turnstilePublicConfig(c) });
   });

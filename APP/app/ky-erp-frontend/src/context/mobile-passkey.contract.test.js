@@ -25,3 +25,13 @@ test("mobile fast login preserves password and turnstile as safe fallback", () =
   assert.match(login, /login\(identity, rawPassword/);
   assert.doesNotMatch(login, /window\.location\.assign\("https:\/\/app\.kyerp\.net/);
 });
+test("legacy normal ERP mobile login shares WebAuthn but personnel portal does not escalate",()=>{
+ const legacy=read("../mobile/MobileLogin.jsx");
+ const app=read("../mobile/MobileApp.jsx");
+ assert.match(legacy,/auth\/passkey\/login\/start/);
+ assert.match(legacy,/auth\/passkey\/login\/finish/);
+ assert.match(legacy,/if \(loading \|\| personnelMode\) return/);
+ assert.match(legacy,/PERSONNEL/);
+ assert.match(app,/auth\/passkey\/register\/start/);
+ assert.match(app,/!personnel \? <MobilePasskeyOffer/);
+});

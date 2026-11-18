@@ -30,7 +30,7 @@ test("registration requires fresh authenticated session; recovery revokes enroll
 test("fast login never overrides role, company or manager approval policy", () => {
   assert.match(source, /deps\.userById\(c, text\(challenge\.user_id\)\)/);
   assert.match(source, /user\.must_change_password/);
-  assert.match(source, /BOTH_MFA/);
+  assert.match(source, /deps\.effectivePolicy\(user, deps\.roleOf\(user\)\)/);
   assert.match(source, /deps\.afterFactors\(c, user/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|password_hash/);
 });

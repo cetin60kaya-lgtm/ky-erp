@@ -30,6 +30,9 @@ import MobileAdmin from "./MobileAdmin";
 import MobileShell from "./MobileShell";
 import MobilePersonnel from "./MobilePersonnel";
 import {getStaffSession} from "./personnelSession";
+import MobilePasskeyOffer from "../context/MobilePasskeyOffer";
+import {createMobilePasskey,rememberMobileUser} from "../context/mobilePasskeyClient";
+import {mobileApiPost,mobileApiGet} from "./mobileApi";
 
 function isPersonnelSession() {return Boolean(getStaffSession());}
 
@@ -69,6 +72,22 @@ export default function MobileApp() {
   const [token, setToken] = useState(() => getMobileToken());
   const [page, setPage] = useState(() => getMobilePage(window.location.pathname));
   const [personnel, setPersonnel] = useState(() => isPersonnelSession());
+  const activeUser = (() => { try { return JSON.parse(localStorage.getItem("kyerp_mobile_user") || "{}"); } catch { return {}; } })();
+  const getPasskeyStatus = async () => {
+    const res = await mobileApiGet("auth/passkey/status");
+    if (!res.ok) throw new Error("Hızlı giriş durumu alınamadı.");
+    return res.data?.data || {};
+  };
+  const registerPasskey = async () => {
+    const start = await mobileApiPost("auth/passkey/register/start", {});
+    if (!start.ok) throw new Error(start.data?.error?.message || "Hızlı giriş kaydı başlatılamadı.");
+    const opts = start.data?.data || {};
+    const proof = await createMobilePasskey(opts);
+    const finished = await mobileApiPost("auth/passkey/register/finish",
+      { challengeId: opts.challengeId, challengeToken: opts.challengeToken, ...proof });
+    if (!finished.ok) throw new Error(finished.data?.error?.message || "Telefon giriş anahtarı kaydedilemedi.");
+    rememberMobileUser(activeUser.username);
+  };
 
   useEffect(() => {
     function handlePop() {
@@ -134,6 +153,7 @@ export default function MobileApp() {
   return (
     <MobileShell>
       {renderContent()}
+      {activeUser?.id && !personnel ? <MobilePasskeyOffer user={activeUser} getStatus={getPasskeyStatus} onEnroll={registerPasskey} /> : null}
     </MobileShell>
   );
 }

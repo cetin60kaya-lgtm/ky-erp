@@ -124,6 +124,8 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
   createChallenge: (c: any, user: Row, type: string, source?: Row, policy?: string, ttl?: number) => Promise<Row>;
   challengeFromRequest: (c: any, body: Row) => Promise<Row | null>;
   afterFactors: (c: any, user: Row, source: Row) => Promise<Row>;
+  effectivePolicy: (user: Row, role: string) => string;
+  roleOf: (user: Row) => string;
   audit: (c: any, action: string, actor?: string, target?: string, company?: string, sessionId?: string, detail?: Row) => Promise<void>;
 }) {
   app.get("/api/auth/passkey/status", async (c: any) => {
@@ -188,7 +190,8 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
     const identity = text(body.username).slice(0, 160);
     const user = identity ? await deps.userByIdentity(c, identity) : null;
     const credentials = user?.is_active ? await credentialList(c, text(user.id)) : [];
-    if (!user || !credentials.length || Boolean(user.must_change_password) || text(user.login_policy) === "BOTH_MFA") {
+    if (!user || !credentials.length || Boolean(user.must_change_password) ||
+      !["ANY_MFA", "PASSWORD_ONLY"].includes(deps.effectivePolicy(user, deps.roleOf(user)))) {
       return fail(c, "PASSKEY_UNAVAILABLE", "Bu kullanıcıda hızlı giriş etkin değil. Şifreyle giriş yapın.", 404);
     }
     if (!(await recentChallengeLimit(c, text(user.id), "PASSKEY_LOGIN"))) return fail(c, "TOO_MANY_REQUESTS", "Çok fazla giriş denemesi. Sonra tekrar deneyin.", 429);
@@ -207,7 +210,8 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
     const credentialId = text(body.assertion?.credentialId);
     const stored = credentialId ? await securityStoreGet(c, SCOPE, credentialId) : null;
     const user = stored?.active !== false && stored?.userId === challenge.user_id ? await deps.userById(c, text(challenge.user_id)) : null;
-    if (!stored || !user?.is_active || user.must_change_password || text(user.login_policy) === "BOTH_MFA") {
+    if (!stored || !user?.is_active || user.must_change_password ||
+      !["ANY_MFA", "PASSWORD_ONLY"].includes(deps.effectivePolicy(user, deps.roleOf(user)))) {
       return fail(c, "PASSKEY_UNAVAILABLE", "Giriş doğrulanamadı; şifreyle devam edin.", 401);
     }
     try {
