@@ -33,3 +33,8 @@ test("görsel yok ve adet taşması kontrol gerektirir, adedi otomatik düzeltme
   assert.ok(warnings.some(x=>x.includes("Üretilen")));
   assert.ok(warnings.some(x=>x.includes("belge")));
 });
+
+test("Sınırlı kimlik API görseli var olduğunda yanlış görsel eksik uyarısı çıkmaz",()=>{
+ const list=model360Warnings(null,null,[],{imageUrl:"/real-model-image.jpg"});
+ assert.equal(list.some(x=>x.includes("görseli eksik")),false);
+});
