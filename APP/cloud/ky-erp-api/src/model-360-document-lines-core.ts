@@ -26,7 +26,8 @@ export function model360CanonicalLineAudit(rows:Row[],modelCompanyId="",truncate
   const qty=number(row.quantity),unit=model360Unit(row.unit_code);
   const company=text(row.party_company_id),modelCompany=text(modelCompanyId);
   let status="VERIFIED_LINE";
-  if(modelCompany&&!company)status="COMPANY_UNVERIFIED";
+  if(!modelCompany)status="MODEL_COMPANY_UNVERIFIED";
+  else if(modelCompany&&!company)status="COMPANY_UNVERIFIED";
   else if(modelCompany&&company!==modelCompany)status="COMPANY_CONFLICT";
   else if(!lineId)status="DOCUMENT_ONLY_REVIEW";
   else if(Number(row.link_count||0)!==1)status="MULTI_MODEL_LINE_REVIEW";
