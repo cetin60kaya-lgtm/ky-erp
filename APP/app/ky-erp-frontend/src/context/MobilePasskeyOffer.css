@@ -1,0 +1,7 @@
+.ky-mobile-passkey-offer{position:fixed;z-index:1600;bottom:calc(85px + env(safe-area-inset-bottom));left:12px;right:12px;max-width:490px;margin:0 auto;padding:16px 16px 13px;box-sizing:border-box;border:1px solid #b8cee4;border-radius:15px;background:#f9fcff;box-shadow:0 12px 35px #12304738;color:#163454;font-family:inherit}
+.ky-mobile-passkey-offer strong{font-size:15px}.ky-mobile-passkey-offer p{margin:7px 0 0;font-size:12px;line-height:1.55;color:#4c6580}
+.ky-mobile-passkey-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.ky-mobile-passkey-actions button{min-height:43px;border:1px solid #9dbbd8;border-radius:10px;padding:9px 12px;background:#1662b5;color:#fff;font-weight:750;font-size:12px}
+.ky-mobile-passkey-actions button+button{background:#f4f7fb;color:#37516d}
+.ky-mobile-passkey-offer .ky-mobile-passkey-error{font-size:12px;color:#9d3225}
+@media(min-width:700px){.ky-mobile-passkey-offer{bottom:20px}}
