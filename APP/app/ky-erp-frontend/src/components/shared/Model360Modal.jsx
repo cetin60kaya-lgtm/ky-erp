@@ -4,7 +4,7 @@ import {useAuth} from "../../context/AuthContext";
 import {apiGet} from "../../utils/api";
 import {createProductionCenterEntry,getProductionCenterModel} from "../../services/productionCenterApi";
 import {getDesignModel} from "../../services/desenWorkflowApi";
-import {listBoyahaneJobs} from "../../services/boyahaneWorkflowApi";
+import {listBoyahaneJobs,patchBoyahaneJob} from "../../services/boyahaneWorkflowApi";
 import {productionImagePath} from "../../pages/imalat/productionModelImage";
 import ModelFilesPanel from "./ModelFilesPanel";
 import ModelDocumentCenter from "./ModelDocumentCenter";
@@ -51,6 +51,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const canDocuments = model360Access(user,"documents");
   const canMail = model360Access(user,"mail");
   const writeProduction = model360Access(user,"production",true);
+  const writeDyehouse = model360Access(user,"dyehouse",true);
   const writeDesign = model360Access(user,"design",true);
   const [tab,setTab] = useState(allowedTab(initialTab));
   const [data,setData] = useState({});
@@ -63,6 +64,8 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const [saving,setSaving] = useState(false);
   const [message,setMessage] = useState("");
   const [selectedInvoice,setSelectedInvoice] = useState("");
+  const [jobNotes,setJobNotes] = useState({});
+  const [savingBoyahane,setSavingBoyahane] = useState("");
   const refresh = useCallback(()=>setReload(v=>v+1),[]);
   useEffect(()=>{
     const listener = e=>{if(e.key==="Escape"){e.stopPropagation();onClose();}};
@@ -91,6 +94,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
         else next[result.key]=result.value;
       }
       setData(next);setErrors(failures);setLoading(false);
+      if(Array.isArray(next.dyehouse))setJobNotes(Object.fromEntries(next.dyehouse.filter(job=>job.id).map(job=>[job.id,String(job.note||"")])));
     });
     return ()=>{disposed=true;};
   },[activeMainCompany,tenant,modelId,reload,canProduction,canDesign,canDocuments,canMail,canDyehouse]);
@@ -142,6 +146,20 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
       window.dispatchEvent(new CustomEvent("kyerp:production-refresh",{detail:{source:"model-360",modelId}}));
     }catch(e){setMessage(e?.message||"İmalat kaydı doğrulanamadı.");}
     finally{setSaving(false);}
+  }
+
+  async function saveBoyahaneNote(job) {
+    const jobId=String(job?.id||"");
+    if(!writeDyehouse||!jobId||!modelMatchesJob(job,modelId)||savingBoyahane)return;
+    const note=String(jobNotes[jobId]||"").trim();
+    if(note.length>1000){setMessage("Boyahane açıklaması en fazla 1000 karakter olabilir.");return;}
+    setSavingBoyahane(jobId);setMessage("");
+    try {
+      await patchBoyahaneJob(activeMainCompany,jobId,{note});
+      setMessage("Boyahane iş açıklaması mevcut iş kaydına işlendi; model kaydı çoğaltılmadı.");
+      refresh();
+    }catch(e){setMessage(e?.message||"Boyahane açıklaması kaydedilemedi.");}
+    finally{setSavingBoyahane("");}
   }
 
   return <div className="m360-backdrop" role="presentation">
@@ -230,10 +248,16 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
           {tab==="dyehouse"&&(canDyehouse?<section>
             <h3><Palette size={18}/> Boyahane · Model işi, renk ve reçete bağlantıları</h3>
             <p>Yalnız aynı canonical model ID'ye gerçekten bağlı boyahane işleri gösterilir. Benzer model adına bakarak yanlış iş eşleştirilmez.</p>
-            {dyehouseJobs.length?<div className="m360-doc-list">{dyehouseJobs.map((job,index)=><div className="m360-doc-row" key={job.id||index}><span><b>{job.jobNo||job.modelName||"Boyahane işi"}</b><small>{job.companyName||""}</small></span><span>{job.status||"Durum bekliyor"}</span><small>{job.createdAt||job.date||""}</small></div>)}</div>:<Empty>Bu modele canonical ID ile bağlı boyahane işi bulunamadı. İsim benzerliği tek başına ilişki kurmaz.</Empty>}
+            {dyehouseJobs.length?<div className="m360-doc-list">{dyehouseJobs.map((job,index)=><div className="m360-doc-row" key={job.id||index}>
+              <span><b>{job.jobNo||job.modelName||"Boyahane işi"}</b><small>{job.companyName||""}</small></span>
+              <span>{job.status||"Durum bekliyor"}</span><small>{job.createdAt||job.date||""}</small>
+              {writeDyehouse?<div className="m360-boyahane-note"><label>Boyahane iş notu<input maxLength={1000} value={jobNotes[job.id]??job.note??""} onChange={e=>setJobNotes(v=>({...v,[job.id]:e.target.value}))}/></label>
+               <button type="button" disabled={savingBoyahane===job.id} onClick={()=>void saveBoyahaneNote(job)}><Save size={14}/>{savingBoyahane===job.id?"Kaydediliyor…":"Notu Kaydet"}</button></div>:null}
+             </div>)}</div>:<Empty>Bu modele canonical ID ile bağlı boyahane işi bulunamadı. İsim benzerliği tek başına ilişki kurmaz.</Empty>}
             <h4>DESEN kaynaklı baskı bölgelerinin boyahane durumu</h4>
             <div className="m360-operation-grid">{array(design?.operations).map((op,index)=><article key={op.id||index}><b>{op.printAreaName||op.regionName||"Bölge"}</b><span>{op.dyehouseStatus||"Hazırlık bekliyor"}</span></article>)}</div>
-            <p className="m360-info-note">Boyahane reçete/gramaj yazma formu mevcut Boyahane iş kaydına bağlıdır. Bu sürümde doğrulanmamış reçete değişikliği yapılmaz.</p>
+            <p className="m360-info-note">Boyahane açıklaması aynı gerçek iş kaydında saklanır. Reçete, gramaj ve lot değişiklikleri kendi doğrulama ve stok güvenlik kapısını kullanır; bu modal henüz bu işlemleri değiştirmez.</p>
+            {tab==="dyehouse"&&message?<p role="status">{message}</p>:null}
           </section>:<Empty>Boyahane kayıtlarını görme yetkiniz bulunmuyor.</Empty>)}
           {tab==="documents"&&(canDocuments?<section>
             <h3><FileCheck2 size={18}/> Muhasebe · HKN, DDM ve model kalemleri</h3>
