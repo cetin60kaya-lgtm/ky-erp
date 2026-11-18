@@ -78,6 +78,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
     const requests = [
       ["production",canProduction,()=>getProductionCenterModel(activeMainCompany,modelId)],
       ["identity",model360Access(user,"general"),()=>apiGet("/model-360/"+encodeURIComponent(modelId)+"/identity",{mainCompanySlug:tenant})],
+      ["canonicalLines",model360Access(user,"general"),()=>apiGet("/model-360/"+encodeURIComponent(modelId)+"/document-lines",{mainCompanySlug:tenant})],
       ["design",canDesign,()=>getDesignModel(activeMainCompany,modelId)],
       ["documents",canDocuments,()=>apiGet("/model-files/"+encodeURIComponent(modelId)+"/document-center",{mainCompanySlug:tenant})],
       ["mail",canMail,()=>apiGet("/muhasebe/invoice-mail-links",{mainCompanySlug:tenant,modelId})],
@@ -111,6 +112,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
 
   const identity=data.identity||null;
   const production=data.production||null;
+  const canonicalLines=data.canonicalLines||null;
   const design=data.design||null;
   const docs=array(data.documents?.items);
   const mailHistory=array(data.mail);
@@ -298,10 +300,26 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
               <p className="m360-info-note">Gelen müşteri irsaliyesi ve giden DDM ayrı hareketlerdir. Giden DDM'nin model kalemi doğrulanmadan sevk miktarı varsayılmaz. Baskı bölgelerinin her fişi kendi operasyonunda sayılır; farklı bölgelerin adetleri tek ürün toplamı gibi toplanmaz.</p>
               {quantityReview.checks.length?<div className="m360-warnings">{quantityReview.checks.map((check,index)=><p key={index}><AlertTriangle size={15}/>{check.message}</p>)}</div>
                :<p className="m360-info-note"><CheckCircle2 size={15}/> Mevcut model kalemi ve üretim miktarları arasında bilinen sayısal tutarsızlık yok; bu, gerçek belge/PDF kabulü değildir.</p>}
-              <h4>Bu modele bağlanan fatura kalemleri</h4>
-              <div className="m360-table-wrap"><table><thead><tr><th>HKN / Belge</th><th>Kalem ID</th><th>Adet</th><th>Birim</th></tr></thead>
+              <h4>Canonical e-Belge · Model kalemlerine ait doğrulanmış adetler</h4>
+              {canonicalLines?.status==="SOURCE_UNAVAILABLE"?<ErrorNotice text="Canonical model–belge satır bağlantısı hazır değil; fatura adedi kesin hesaplanamaz."/>:null}
+              {canonicalLines?.status==="TRUNCATED"?<ErrorNotice text="Belge satırı sorgusu sınırına ulaşıldı; toplam kesin sayılmaz."/>:null}
+              <div className="m360-metrics">
+               <Metric name="Gelen müşteri irsaliyesi" value={canonicalLines?.totals?.received??null}/>
+               <Metric name="Giden DDM / sevk" value={canonicalLines?.totals?.shipped??null}/>
+               <Metric name="Giden HKN / fatura" value={canonicalLines?.totals?.invoiced??null}/>
+               <Metric name="İncelenecek kalem" value={canonicalLines?.reviewLineCount??null} unit="satır"/>
+              </div>
+              <p className="m360-info-note">Adetler yalnız bu model ID'ye <b>kesin ve tekil</b> bağlanan canonical XML kalemlerinden toplanır. Belge başlığına bağlı bir miktar tüm modellere dağıtılmaz. — değeri kayıt eksik demektir; sıfır adet değildir.</p>
+              {canonicalLines?.status==="REVIEW_REQUIRED"?<div className="m360-warnings"><p><AlertTriangle size={15}/> Bazı kalemler firma, ölçü birimi veya birden fazla model bağlantısı nedeniyle hesap dışında bırakıldı.</p></div>:null}
+              <div className="m360-table-wrap"><table><thead><tr><th>Belge</th><th>Kalem</th><th>Miktar</th><th>Birim</th><th>Kontrol</th></tr></thead>
+               <tbody>{array(canonicalLines?.items).map((row,index)=><tr key={row.documentId+":"+row.lineId+":"+index}><td>{row.documentNo||"Belge"}</td><td>{row.description||row.lineId||"—"}</td><td>{row.quantity==null?"—":format(row.quantity)}</td><td>{row.unit||"—"}</td><td>{row.status==="VERIFIED_LINE"?"Eşleşti":row.status}</td></tr>)}</tbody></table></div>
+              {!array(canonicalLines?.items).length?<Empty>Canonical HKN/DDM belge kalemleri henüz bu model ID ile kesin bağlanmamış; tahmini miktar yazılmayacak.</Empty>:null}
+              {canonicalLines?.totals?.invoiced!=null&&Math.abs(Number(canonicalLines.totals.invoiced)-Number(quantityReview.invoiced||0))>0.0001?
+               <div className="m360-warnings"><p><AlertTriangle size={15}/> Canonical HKN kalemleri ve eski İmalat fatura özeti farklı. Otomatik kesin düzeltme yapılmaz.</p></div>:null}
+              <h4>İmalat merkezindeki eski fatura kalemleri (ayrı kaynak)</h4>
+              <div className="m360-table-wrap"><table><thead><tr><th>Belge</th><th>Kalem ID</th><th>Adet</th><th>Birim</th></tr></thead>
                <tbody>{quantityReview.lines.map(row=><tr key={row.documentId+":"+row.lineId}><td>{row.documentNo||"Belge adı bekliyor"}</td><td>{row.lineId}</td><td>{format(row.quantity)}</td><td>{row.unit||"—"}</td></tr>)}</tbody></table></div>
-              {!quantityReview.lines.length?<Empty>Model bazında doğrulanmış fatura kalemi bulunamadı. Genel HKN fatura tutarından pay tahmini yapılmaz.</Empty>:null}
+              {!quantityReview.lines.length?<Empty>İmalat merkezinden fatura kalemi henüz bulunamadı.</Empty>:null}
               {canDocuments?<><h4>Belgelerin kaynağı</h4><DocumentList items={docs}/></>:<Empty>Belge bilgileri yalnız Muhasebe / e-Belge yetkisi bulunan personele açılır.</Empty>}
              </>}
           </section>}
