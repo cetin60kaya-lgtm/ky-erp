@@ -53,3 +53,8 @@ test("sorgu kesilmişse kısmi adet toplamı kesin diye gösterilmez",()=>{
  assert.equal(r.status,"TRUNCATED");
  assert.equal(r.totals.invoiced,null);
 });
+test("canonical modelin müşteri kartı yoksa çapraz firma riski nedeniyle satır kesin sayılmaz",()=>{
+ const r=model360CanonicalLineAudit([row()],"");
+ assert.equal(r.items[0].status,"MODEL_COMPANY_UNVERIFIED");
+ assert.equal(r.totals.invoiced,null);
+});
