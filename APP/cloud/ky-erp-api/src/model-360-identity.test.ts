@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {model360CanReadIdentity,model360PublicIdentity} from "./model-360-identity.ts";
+import {model360CanReadIdentity,model360PublicIdentity} from "./model-360-identity-core.ts";
 import {readFileSync} from "node:fs";
 
 test("Boyahane yetkisi yalnız kimlik görüntülemeye yeter, yetkisiz kullanıcı kapalıdır",()=>{
