@@ -122,7 +122,7 @@ function loadTurnstileScript() {
   return turnstileScriptPromise;
 }
 
-export default function LoginPage({ onClose }) {
+export default function LoginPage({ onClose, initialFlow = null, initialError = "" }) {
   const {
     getTurnstileConfig,
     login,
@@ -142,9 +142,9 @@ export default function LoginPage({ onClose }) {
   const [code, setCode] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("GOOGLE");
   const [resetProvider, setResetProvider] = useState("");
-  const [flow, setFlow] = useState({ stage: "CREDENTIALS" });
+  const [flow, setFlow] = useState(() => initialFlow?.stage ? initialFlow : { stage: "CREDENTIALS" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError || "");
   const [phoneStatusMessage, setPhoneStatusMessage] = useState("");
   const [qrError, setQrError] = useState("");
   const [showPassword, setShowPassword] = useState(false);

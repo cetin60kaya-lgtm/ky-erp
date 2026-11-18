@@ -35,3 +35,15 @@ test("legacy normal ERP mobile login shares WebAuthn but personnel portal does n
  assert.match(app,/auth\/passkey\/register\/start/);
  assert.match(app,/!personnel \? <MobilePasskeyOffer/);
 });
+
+test("PRO ERP button opens native biometric prompt before any password form when registered",()=>{
+ const pro=read("../pro/main.jsx");
+ const login=read("../pages/LoginPage.jsx");
+ assert.match(pro,/const openErpWithPhone=useCallback/);
+ assert.match(pro,/const identity=rememberedMobileUser\(\)/);
+ assert.match(pro,/await loginMobilePasskey\(identity\)/);
+ assert.match(pro,/onClick=\{loginRequested\?\(\)=>setLoginRequested\(false\):openErpWithPhone\}/);
+ assert.match(pro,/onClick=\{openErpWithPhone\}/);
+ assert.match(login,/initialFlow = null/);
+ assert.match(login,/initialFlow\?\.stage \? initialFlow/);
+});

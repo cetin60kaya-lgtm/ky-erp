@@ -8,6 +8,7 @@ import{MODULES,getModuleTabs}from"../app/moduleRegistry";
 import{getVisibleModuleTabs}from"../app/moduleRegistry";
 import{ActiveCompanyProvider,useActiveCompany}from"../context/ActiveCompanyContext";
 import LoginPage from"../pages/LoginPage";
+import{isMobilePasskeySupported,rememberedMobileUser}from"../context/mobilePasskeyClient";
 import SecurityCenter from"./SecurityCenter";
 import ProCompanyCenter from"./ProCompanyCenter";
 import "../App.css";
@@ -183,7 +184,7 @@ function ProDock({onSecurity,securityActive,securityPending,onCompanies,companie
 }
 function ProApplication(){return <ActiveCompanyProvider><ProApplicationContent/></ActiveCompanyProvider>}
 function ProApplicationContent(){
- const {user,isAuthenticated,loading}=useAuth();
+ const {user,isAuthenticated,loading,loginMobilePasskey}=useAuth();
  const [home,setHome]=useState(()=>location.pathname===PRO_PREFIX||location.pathname===PRO_PREFIX+"/");
  const [securityOpen,setSecurityOpen]=useState(()=>new URLSearchParams(location.search).get("security")==="1");
  const [companyOpen,setCompanyOpen]=useState(false);
@@ -194,11 +195,32 @@ function ProApplicationContent(){
  const openCompanyModule=useCallback((module,tab)=>{goModule(module,tab);setCompanyOpen(false);setSecurityOpen(false)},[]);
  const [loginRequested,setLoginRequested]=useState(false);
  const [loginEverOpened,setLoginEverOpened]=useState(false);
+ const [quickEntryLoading,setQuickEntryLoading]=useState(false);
+ const [quickEntryFlow,setQuickEntryFlow]=useState(null);
+ const [quickEntryError,setQuickEntryError]=useState("");
+ const openErpWithPhone=useCallback(async()=>{
+   if(quickEntryLoading)return;
+   setQuickEntryFlow(null);
+   setQuickEntryError("");
+   const identity=rememberedMobileUser();
+   if(!identity||!isMobilePasskeySupported()){setLoginRequested(true);return;}
+   setQuickEntryLoading(true);
+   try{
+     const result=await loginMobilePasskey(identity);
+     if(String(result?.stage||"").toUpperCase()!=="AUTHENTICATED"){
+       setQuickEntryFlow(result||null);
+       setLoginRequested(true);
+     }
+   }catch(error){
+     setQuickEntryError(error?.message||"Telefon giriş doğrulaması yapılamadı. Şifreyle devam edin.");
+     setLoginRequested(true);
+   }finally{setQuickEntryLoading(false)}
+ },[loginMobilePasskey,quickEntryLoading]);
  const wasAuthenticated=useRef(isAuthenticated);
  useEffect(()=>{
    if(isAuthenticated&&!wasAuthenticated.current){
      // A just-approved phone login must enter ERP immediately, not reopen approvals.
-     setSecurityOpen(false);setLoginRequested(false);
+     setSecurityOpen(false);setLoginRequested(false);setQuickEntryFlow(null);setQuickEntryError("");
    }
    wasAuthenticated.current=isAuthenticated;
  },[isAuthenticated]);
@@ -215,14 +237,14 @@ function ProApplicationContent(){
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
  if(!isAuthenticated)return <div className="ky-pro-app ky-pro-device-mode">
    <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>Tek Telefon · Güvenli Onay</small></div></div>
-    <button className="ky-pro-header-action" type="button" onClick={()=>setLoginRequested(v=>!v)}>{loginRequested?"Onaylara Dön":"ERP Girişi"}</button></header>
+    <button className="ky-pro-header-action" type="button" disabled={quickEntryLoading} onClick={loginRequested?()=>setLoginRequested(false):openErpWithPhone}>{quickEntryLoading?"Telefon Doğrulanıyor...":loginRequested?"Onaylara Dön":"ERP Girişi"}</button></header>
    <div className="ky-pro-content" hidden={loginRequested}><SecurityCenter/></div>
    {loginEverOpened?<div className="ky-pro-content ky-pro-login" hidden={!loginRequested}>
-      <LoginPage onClose={()=>setLoginRequested(false)}/>
+      <LoginPage key={quickEntryFlow?.approvalId||"normal-login"} initialFlow={quickEntryFlow} initialError={quickEntryError} onClose={()=>setLoginRequested(false)}/>
     </div>:null}
    <nav className="ky-pro-dock" aria-label="KY ERP PRO tek telefon gezinmesi">
     <button type="button" className={!loginRequested?"is-active":""} onClick={()=>setLoginRequested(false)}><ShieldCheck size={24}/><span>Onaylar</span></button>
-    <button type="button" className={loginRequested?"is-active":""} onClick={()=>setLoginRequested(true)}><House size={24}/><span>ERP'ye Giriş</span></button>
+    <button type="button" className={loginRequested?"is-active":""} disabled={quickEntryLoading} onClick={openErpWithPhone}><House size={24}/><span>{quickEntryLoading?"Doğrulanıyor":"ERP'ye Giriş"}</span></button>
    </nav>
   </div>;
  return <div className="ky-pro-app" data-role={String(user?.role||"")}>
