@@ -53,6 +53,23 @@ export default function MobileLogin({ onLogin, personnelOnly = false }) {
     rememberMobileUser(identity);
     onLogin({ personnel: false });
   };
+  async function waitForCompanyApproval(payload, identity) {
+    if (!payload?.approvalId || !payload?.approvalToken) throw new Error("Firma giriş onayı başlatılamadı.");
+    setError("Firma yöneticisi onayı bekleniyor. Bu ekran açık kalacak.");
+    for (let attempt = 0; attempt < 48; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      if (document.visibilityState === "hidden") continue;
+      const result = await mobileApiPost("auth/approval/" + encodeURIComponent(payload.approvalId) + "/status",
+        { approvalToken: payload.approvalToken });
+      if (!result.ok) throw new Error(result.data?.error?.message || "Yönetici onayı kontrol edilemedi.");
+      const data = result.data || {};
+      const stage = String(data.stage || "").toUpperCase();
+      if (stage === "AUTHENTICATED") { acceptMobileSession(data, identity); return; }
+      if (stage.includes("DENIED") || stage.includes("EXPIRED") || stage.includes("REJECTED"))
+        throw new Error("Yönetici onayı verilmedi veya süresi doldu. Normal giriş yolu açıktır.");
+    }
+    throw new Error("Yönetici onayı devam ediyor. Normal giriş yöntemini de kullanabilirsiniz.");
+  }
   async function handleFastLogin() {
     if (loading || personnelMode) return;
     const identity = String(username || rememberedMobileUser()).trim();
@@ -67,7 +84,8 @@ export default function MobileLogin({ onLogin, personnelOnly = false }) {
       const finish = await mobileApiPost("auth/passkey/login/finish",
         { challengeId: opts.challengeId, challengeToken: opts.challengeToken, assertion });
       if (!finish.ok) throw new Error(finish.data?.error?.message || "Güvenli giriş doğrulanamadı.");
-      acceptMobileSession(finish.data, identity);
+      if (String(finish.data?.stage || "").toUpperCase() === "APPROVAL_PENDING") await waitForCompanyApproval(finish.data, identity);
+      else acceptMobileSession(finish.data, identity);
     } catch (err) { setError(err?.message || "Parmak izi/PIN ile giriş olmadı. Şifreyle devam edin."); }
     finally { setLoading(false); }
   }
