@@ -36,6 +36,7 @@ import ProductionSmartEntryDrawer from "./ProductionSmartEntryDrawer";
 import ProductionHistoryImportDrawer from "./ProductionHistoryImportDrawer";
 import ProductionDirectEntryPanel from "./ProductionDirectEntryPanel";
 import { productionImagePath } from "./productionModelImage";
+import {openModel360Card} from "../../components/shared/model360Bridge";
 import "./productionControlCenterV2.css";
 
 const PAGE_SIZE = 100;
@@ -716,7 +717,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                   {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14}/> Fiş Gir</button> : null}
                   {pool === "IRSALIYE" ? <a href="/e-belge/eslestirmeler" className="pc2-action-link"><FileCheck2 size={13}/> Eşleştir</a> : null}
                   {pool === "FATURA" ? <a href="/e-belge/giden-belgeler" className="pc2-action-link"><FileText size={13}/> Faturalar</a> : null}
-                  <button type="button" onClick={() => openDetail(row)}>Detay</button>
+                  <button type="button" onClick={() => openModel360Card({modelId:row.id,tab:"general",source:"imalat"})}>Model 360°</button><button type="button" onClick={() => openDetail(row)}>İmalat Detayı</button>
                 </div></td>
               </tr>)}
             </tbody>
@@ -810,7 +811,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
         subtitle={`${detail?.companyName || "Firma bekliyor"} · ${detail?.legacyApproved ? "Geçmiş üretim tamamlandı" : statusLabel(detail?.status)}`}
         onClose={() => setDetail(null)}
         wide
-        footer={<><button type="button" onClick={() => setDetail(null)}>Kapat</button>{pool === "IMALATTA" && !detail?.legacyApproved ? <><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></> : null}</>}
+        footer={<><button type="button" onClick={() => {openModel360Card({modelId:detail.id,tab:"general",source:"imalat"});setDetail(null);}}>Model 360°</button><button type="button" onClick={() => setDetail(null)}>Kapat</button>{pool === "IMALATTA" && !detail?.legacyApproved ? <><button type="button" onClick={() => openModelPlan(detail)}><Pencil size={15} /> İmalat Planı</button><button className="primary" type="button" onClick={() => { focusQuick(detail); setDetail(null); }}><Layers3 size={15} /> Üretim Gir</button></> : null}</>}
       >
         {detail ? <ModelDetail detail={detail} readOnly={pool !== "IMALATTA" || Boolean(detail.legacyApproved)} onEdit={(row) => openEntry(detail, row)} onDelete={removeEntry} /> : null}
       </Drawer>

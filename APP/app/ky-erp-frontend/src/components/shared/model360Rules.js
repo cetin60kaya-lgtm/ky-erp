@@ -21,8 +21,8 @@ export function model360Access(user, section, write = false) {
   return (Array.isArray(user.permissions) ? user.permissions : []).some((p) => {
     if (!keys.includes(normalized(p.moduleKey || p.module_key))) return false;
     return write
-      ? Boolean(p.canCreate ?? p.can_create ?? p.canUpdate ?? p.can_update ?? p.canWrite ?? p.can_write)
-      : Boolean(p.canView ?? p.can_view ?? p.canCreate ?? p.can_create ?? p.canUpdate ?? p.can_update);
+      ? Boolean(p.canCreate || p.can_create || p.canUpdate || p.can_update || p.canWrite || p.can_write)
+      : Boolean(p.canView || p.can_view || p.canCreate || p.can_create || p.canUpdate || p.can_update);
   });
 }
 export function model360LinkedInvoices(items) {

@@ -9,6 +9,7 @@ import {
   X,
 } from "lucide-react";
 import { apiGet } from "../../../utils/api";
+import {openModel360Card} from "../../../components/shared/model360Bridge";
 import { loadModuleData, moduleLoadMessage } from "../../../utils/resilientDataLoader";
 import "./invoiceDispatchControlWorkspace.css";
 
@@ -232,6 +233,7 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany, ope
             </header>
             <div className="idc-drawer-body">
               <div className="accounting-inline-actions">
+                {selected.modelId?<button type="button" onClick={()=>{openModel360Card({modelId:selected.modelId,tab:"documents",source:"muhasebe"});setSelected(null);}}>Model 360° · İmalat / Belgeler</button>:null}
                 {selected.id && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-irsaliyeler", actionContext: { documentId: selected.id } })}>Müşteri İrsaliyesini Aç</button>}
                 {selected.invoiceId && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-faturalar", actionContext: { documentId: selected.invoiceId } })}>İlişkili Faturayı Aç</button>}
                 {String(selected.invoiceNo || "").toUpperCase().startsWith("HKN") && <button type="button" onClick={() => onInvoiceMail?.({ id: selected.invoiceId || selected.id, document_no: selected.invoiceNo, delivery_no: selected.dispatchNo, model_id: selected.modelId, model_name: selected.modelName, party_name: selected.companyName })}>HKN Faturasını Maille Gönder</button>}
