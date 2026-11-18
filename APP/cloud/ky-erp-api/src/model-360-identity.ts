@@ -41,11 +41,8 @@ export function registerModel360IdentityRoutes(app:Hono<Env>){
    const model=await c.env.DB.prepare("SELECT id,company_id,customer_id FROM model_records WHERE main_company_slug=? AND id=? AND deleted_at IS NULL LIMIT 1").bind(slug,id).first<Row>();
    if(!model)return c.json({ok:false,error:{code:"MODEL_NOT_FOUND",message:"Kalıcı model kartı bulunamadı."}},404);
    const schema=(await c.env.DB.prepare('PRAGMA table_info("accounting_document_model_links")').all<Row>()).results||[];
-   if(!schema.length){
-     c.header("Cache-Control","private, no-store");
-     return c.json({ok:true,data:{status:"SOURCE_UNAVAILABLE",totals:{received:null,shipped:null,invoiced:null},items:[],verifiedLineCount:0,reviewLineCount:0,linkedDocumentCount:0}});
-   }
-   const rows=(await c.env.DB.prepare(`
+   const hasModelLineLinks=schema.some(column=>str(column.name)==="document_line_id")&&schema.some(column=>str(column.name)==="model_id");
+   const linkedRows=hasModelLineLinks?(await c.env.DB.prepare(`
      SELECT d.id AS document_id,d.document_no,d.document_type,d.direction,d.party_company_id,
        l.id AS line_id,l.description,l.quantity,l.unit_code,x.model_id,
        (SELECT COUNT(DISTINCT x2.model_id) FROM accounting_document_model_links x2
@@ -56,8 +53,33 @@ export function registerModel360IdentityRoutes(app:Hono<Env>){
      WHERE x.main_company_slug=? AND x.model_id=?
      ORDER BY d.issue_date DESC,d.document_no,l.line_no
      LIMIT 1501
-   `).bind(slug,id).all<Row>()).results||[];
-   const audit=model360CanonicalLineAudit(rows.slice(0,1500),str(model.company_id||model.customer_id),rows.length>1500);
+   `).bind(slug,id).all<Row>()).results||[]:[];
+   // Also accept an exact canonical model ID already persisted on a UBL line.
+   // NEVER infer the model from a similar product name, invoice heading or amount.
+   // When explicit model-line link exists, it has priority over raw metadata.
+   const extraFilter=hasModelLineLinks?`
+     AND NOT EXISTS(SELECT 1 FROM accounting_document_model_links x
+       WHERE x.main_company_slug=l.main_company_slug AND x.document_id=l.document_id AND x.document_line_id=l.id)`:"";
+   const rawModel=`COALESCE(
+      json_extract(CASE WHEN json_valid(l.raw_metadata) THEN l.raw_metadata ELSE '{}' END,'$.modelId'),
+      json_extract(CASE WHEN json_valid(l.raw_metadata) THEN l.raw_metadata ELSE '{}' END,'$.model_id'),
+      json_extract(CASE WHEN json_valid(l.raw_metadata) THEN l.raw_metadata ELSE '{}' END,'$.modelRecordId'))`;
+   const directRows=(await c.env.DB.prepare(`
+     SELECT d.id AS document_id,d.document_no,d.document_type,d.direction,d.party_company_id,
+       l.id AS line_id,l.description,l.quantity,l.unit_code,? AS model_id,1 AS link_count
+     FROM accounting_document_lines l
+     JOIN accounting_documents d ON d.main_company_slug=l.main_company_slug AND d.id=l.document_id AND d.deleted_at IS NULL
+     WHERE l.main_company_slug=? AND ${rawModel}=?
+     ${extraFilter}
+     ORDER BY d.issue_date DESC,d.document_no,l.line_no
+     LIMIT 1501
+   `).bind(id,slug,id).all<Row>()).results||[];
+   const rows=[...linkedRows,...directRows];
+   const truncated=linkedRows.length>1500||directRows.length>1500||rows.length>1500;
+   const audit=model360CanonicalLineAudit(rows.slice(0,1500),str(model.company_id||model.customer_id),truncated);
+   if(!hasModelLineLinks&&!directRows.length){
+     audit.status="SOURCE_UNAVAILABLE";
+   }
    c.header("Cache-Control","private, no-store");
    return c.json({ok:true,data:audit});
  });
