@@ -12,7 +12,7 @@
   position:absolute;z-index:70;left:0;top:calc(100% + 6px);width:min(620px,calc(100vw - 55px));
   border:1px solid #a9bfdc;border-radius:10px;background:#fff;
   box-shadow:0 12px 28px rgba(16,38,70,.21);padding:12px;
-  max-height:min(61vh,510px);display:flex;flex-direction:column;gap:8px
+  max-height:min(45vh,360px);display:flex;flex-direction:column;gap:8px
 }
 .gop-quick-dialog .kyq-roster-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
 .gop-quick-dialog .kyq-roster-header>div{display:flex;flex-direction:column;gap:3px}
@@ -41,3 +41,6 @@
  .gop-quick-dialog .kyq-roster-list{grid-template-columns:1fr}
  .gop-quick-dialog .kyq-roster-new{font-size:10px}
 }
+
+/* Personel secimi kendi Hizli Giris penceresi icinde, kartlarin ustunde acilir. */
+.gop-quick-dialog .quick-controls{position:relative!important;z-index:65!important;overflow:visible!important}
