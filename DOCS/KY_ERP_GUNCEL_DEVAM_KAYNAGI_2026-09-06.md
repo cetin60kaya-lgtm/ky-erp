@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Gmail OAuth projesi Drive'dan ayrıldı, 0 hesap teşhisi eklendi
+- Gmail ayrı `GOOGLE_MAIL_CLIENT_ID` / `GOOGLE_MAIL_CLIENT_SECRET` olmadan Drive OAuth istemcisine otomatik geri düşmez; mevcut Drive / Firebase kimlik bilgileri korunur. Mail projesine ait ayrı Web OAuth istemcisi Cloudflare'da doğrulanmalıdır.
+- “0 posta kutusu” görünmesi hesap silinmesi kanıtı değildir. Yetkili uygulama sahibi için firma kapsamındaki kayıt sayılarını ve diğer Gmail firma kapsamlarını okuyacak salt okunur denetim eklendi; otomatik hesap oluşturma/taşıma/silme yok.
+- Belge: [KY_ERP_GMAIL_TAM_SENKRON_20261119.md](KY_ERP_GMAIL_TAM_SENKRON_20261119.md). Test, canonical merge, Cloudflare deploy, secrets eşleşmesi, gerçek OAuth ve 15/15 senkron ayrı kabul edilir.
+
+
 ## 19.11.2026 — Gmail gerçek kullanıcı ekranı: 0/15 klasör; sayfalı ilk arşiv senkron düzeltmesi
 - Firma bazlı E-Posta Yönetim Merkezi (PR #599) gerçek tarayıcıda açıldı; 4 sekmeli tasarım ve DESEN Gmail kartı kontrol edildi. Onay/OAuth/provider hazır, fakat **0/15 klasör**, **0 hazır hesap**: Gmail arşivi kabulü henüz PASS değil.
 - İlk 100 Gelen/Sent sınırının 15 Gmail etiketini tamamlaması mümkün değildi. Mevcut OAuth ve Mail Core korunarak `GMAIL_PAGE` ile kademeli sayfalama, gerçek klasör tamamlanma sayacı, çok etiketli mesajı bir defa konumlama ve tekrar senkronizasyonda File Hub ek kanıtını koruma üzerinde çalışıldı.
