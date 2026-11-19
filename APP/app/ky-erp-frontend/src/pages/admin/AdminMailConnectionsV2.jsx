@@ -98,8 +98,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   }, [load]);
 
   // Firma değiştirilirken eski firmanın posta kutuları bir anlığına bile gösterilmez.
-  const shownAccounts = loadedSlug === slug ? accounts : [];
-  const shownApprovals = loadedSlug === slug ? approvals : [];
+  const shownAccounts = useMemo(() => loadedSlug === slug ? accounts : [], [loadedSlug, slug, accounts]);
+  const shownApprovals = useMemo(() => loadedSlug === slug ? approvals : [], [loadedSlug, slug, approvals]);
 
   const providerState = (type) => providers.find((item) => upper(item.provider) === upper(type)) || null;
   const counts = useMemo(() => ({
