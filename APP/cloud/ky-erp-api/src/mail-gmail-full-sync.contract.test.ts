@@ -14,6 +14,7 @@ test("Gmail full sync visits all enabled real labels with bounded resumable pagi
   assert.match(source,/GMAIL_PAGE_SIZE/);
   assert.match(source,/GMAIL_FOLDERS_PER_PASS/);
   assert.match(source,/url\.searchParams\.set\("pageToken",pageToken\)/);
+  assert.match(source,/includeSpamTrash/);
   assert.match(source,/gmailSyncPageState\(previous,nextPageToken,failed\)/);
   assert.match(source,/completedFolders!==totalFolders/);
   assert.match(source,/partial\?207:200/);
