@@ -220,3 +220,10 @@ test("daily view has real D1 audit log under work area and no duplicated weekly 
   assert.doesNotMatch(workspace, /onClick=\{\(\) => printWeeklyControlList\(range, days, weeklyControlRows\)\}/);
   assert.match(workspace, /onClick=\{\(\) => printWeeklySummary\(range, days, weeklyControlRows\)\}/);
 });
+
+test("date range change keeps D1 roster untouched, clears only stale UI and shows the saved range chooser", () => {
+  assert.match(workspace, /setRosterIds\(new Set\(\)\); setRosterSaved\(false\); setOtherSavedRanges\(\[\]\)/);
+  assert.match(workspace, /setOtherSavedRanges\(!savedSet\.size && Array\.isArray\(roster\?\.otherRanges\)/);
+  assert.match(workspace, /Bu tarih aralığının havuzu boş\. Önceki kayıtlar silinmedi/);
+  assert.match(workspace, /setSafeRange\(\{ start: item\.startDate, end: item\.endDate \}\)/);
+});
