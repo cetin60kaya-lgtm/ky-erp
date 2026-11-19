@@ -17,9 +17,11 @@ test("One invoice, three models and two dispatches: require HKN and at least one
 test("Outlook sent history accepts a single HKN with one or more DDM candidates but no extra HKN",()=>{
   const h=["HKN2026000000989"],d=["DDM2026000000974","DDM2026000000975"];
   assert.deepEqual(invoiceMailOutlookFileEvidence([h[0]+".pdf",d[0]+".pdf",d[1]+".pdf"],h,d),
-    {invoiceNo:h[0],deliveryNo:d[0],deliveryNos:d});
+    {invoiceNo:h[0],deliveryNo:d[0],deliveryNos:d,matchingDeliveryNos:d});
   assert.equal(invoiceMailOutlookFileEvidence([h[0]+".pdf"],h,d),null);
   assert.equal(invoiceMailOutlookFileEvidence([h[0]+".pdf","HKN2026000000990.pdf",d[0]+".pdf"],[...h,"HKN2026000000990"],d),null);
+  const shared=invoiceMailOutlookFileEvidence([h[0]+".pdf",d[0]+".pdf","DDM2026000000976.pdf"],h,d);
+  assert.deepEqual(shared,{invoiceNo:h[0],deliveryNo:d[0],deliveryNos:[d[0],"DDM2026000000976"],matchingDeliveryNos:[d[0]]});
   assert.equal(invoiceMailOutlookFileEvidence([h[0]+".pdf","DDM2026000000976.pdf"],h,d),null);
 });
 test("One HKN one send key regardless of how many DDMs; legacy key remains recognized",()=>{

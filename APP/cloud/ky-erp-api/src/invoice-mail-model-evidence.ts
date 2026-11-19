@@ -17,8 +17,10 @@ export function invoiceMailCommonModelIds(rows:Array<{modelId:string,assetId:str
 export function invoiceMailOutlookFileEvidence(names:string[],knownHkn:string[],knownDdm:string[]){
   const allHkn=[...new Set(names.map(n=>invoiceMailDocumentFromFile(n,"HKN")).filter(Boolean))];
   const allDdm=[...new Set(names.map(n=>invoiceMailDocumentFromFile(n,"DDM")).filter(Boolean))];
-  if(allHkn.length!==1||!knownHkn.includes(allHkn[0])||!allDdm.length||allDdm.some(n=>!knownDdm.includes(n)))return null;
-  return {invoiceNo:allHkn[0],deliveryNo:allDdm[0],deliveryNos:allDdm.sort()};
+  const matched=allDdm.filter(n=>knownDdm.includes(n));
+  // A shared HKN may have other DDMs belonging to different models.
+  if(allHkn.length!==1||!knownHkn.includes(allHkn[0])||!matched.length)return null;
+  return {invoiceNo:allHkn[0],deliveryNo:matched[0],deliveryNos:allDdm.sort(),matchingDeliveryNos:matched.sort()};
 }
 export function invoiceMailDispatchKey(tenant:string,invoiceNo:string){
   const scope=txt(tenant).toLocaleLowerCase("tr-TR"),no=txt(invoiceNo).toUpperCase();

@@ -237,9 +237,14 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     const admin=elevated(a.user!),userId=txt(a.user?.id);
     const permissionJoin=admin?"":"JOIN mail_account_members mm ON mm.main_company_slug=m.main_company_slug AND mm.account_id=m.account_id AND mm.user_id=? AND mm.can_view=1";
     const params:any[]=admin?[]:[userId];params.push(a.tenant);
+    const before=txt(c.req.query("before")),beforeId=txt(c.req.query("beforeId"));
+    if((before&&(!Number.isFinite(Date.parse(before))||before.length>50||!beforeId||beforeId.length>100))||(!before&&beforeId))
+      return error(c,"MAIL_HISTORY_CURSOR_INVALID","Geçersiz arşiv devam adresi.",422);
+    const pageFilter=before?" AND (m.sent_at<? OR (m.sent_at=? AND m.id<?))":"";
+    if(before)params.push(before,before,beforeId);
     const result=await c.env.DB.prepare(
       "SELECT DISTINCT m.id,m.subject,m.sent_at,m.provider_message_id FROM mail_messages m JOIN mail_accounts account ON account.main_company_slug=m.main_company_slug AND account.id=m.account_id JOIN mail_folders folder ON folder.main_company_slug=m.main_company_slug AND folder.id=m.folder_id "+permissionJoin+
-      " JOIN mail_attachments att ON att.main_company_slug=m.main_company_slug AND att.message_id=m.id WHERE m.main_company_slug=? AND m.direction='OUTGOING' AND m.sent_at IS NOT NULL AND UPPER(folder.folder_type)='SENT' AND account.provider_type='MICROSOFT_365' AND UPPER(att.file_name) LIKE 'HKN%.PDF' ORDER BY m.sent_at DESC LIMIT 201"
+      " JOIN mail_attachments att ON att.main_company_slug=m.main_company_slug AND att.message_id=m.id WHERE m.main_company_slug=? AND m.direction='OUTGOING' AND m.sent_at IS NOT NULL AND UPPER(folder.folder_type)='SENT' AND account.provider_type='MICROSOFT_365' AND UPPER(att.file_name) LIKE 'HKN%.PDF' "+pageFilter+" ORDER BY m.sent_at DESC,m.id DESC LIMIT 201"
     ).bind(...params).all<Row>();
     const messages=(result.results||[]).slice(0,200),byMessage=new Map<string,Row[]>();
     // D1 allows 100 bound parameters, including the tenant. Batch under the cap.
@@ -257,20 +262,22 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       const evidence=invoiceMailOutlookFileEvidence(attachments.map(att=>txt(att.file_name)),hkn,ddm);
       if(!evidence)return null;
       const relevant=attachments.filter(att=>invoiceMailDocumentFromFile(att.file_name,"HKN")===evidence.invoiceNo||
-        evidence.deliveryNos.includes(invoiceMailDocumentFromFile(att.file_name,"DDM")));
-      const proved=relevant.length===evidence.deliveryNos.length+1&&relevant.every(att=>{
+        evidence.matchingDeliveryNos.includes(invoiceMailDocumentFromFile(att.file_name,"DDM")));
+      const proved=relevant.length===evidence.matchingDeliveryNos.length+1&&relevant.every(att=>{
         let metadata:Row={};try{metadata=JSON.parse(txt(att.provider_metadata)||"{}");}catch{}
         const asset=assets.get(txt(att.file_asset_id));
         return invoiceMailAttachmentProved({fileAssetId:txt(att.file_asset_id),fileName:txt(att.file_name),sha256:txt(metadata.sha256)},
           asset?{id:txt(asset.id),sha256:txt(asset.sha256),fileName:txt(asset.file_name)}:undefined);
       });
       return {id:txt(m.id),invoiceNo:evidence.invoiceNo,deliveryNo:evidence.deliveryNo,
-        deliveryNos:evidence.deliveryNos,subject:txt(m.subject),sentAt:txt(m.sent_at),
+        deliveryNos:evidence.deliveryNos,matchedDeliveryNos:evidence.matchingDeliveryNos,subject:txt(m.subject),sentAt:txt(m.sent_at),
         providerMessageId:txt(m.provider_message_id),status:"OUTLOOK_SYNCED_SENT",
         verificationStatus:proved?"VERIFIED":"REVIEW_REQUIRED",source:"OUTLOOK_ATTACHMENT_EVIDENCE",delivered:false};
     }).filter(Boolean);
     c.header("Cache-Control","private, no-store");
-    return c.json({ok:true,data:{items,scanned:messages.length,limited:(result.results||[]).length>200,source:"OUTLOOK_ATTACHMENT_EVIDENCE"}});
+    const hasMore=(result.results||[]).length>200,last=messages[messages.length-1];
+    const nextCursor=hasMore&&last?{before:txt(last.sent_at),beforeId:txt(last.id)}:null;
+    return c.json({ok:true,data:{items,scanned:messages.length,limited:hasMore,nextCursor,source:"OUTLOOK_ATTACHMENT_EVIDENCE"}});
   });
 
   // Link ONE accepted mail job to every model proven by HKN and at least one DDM.
