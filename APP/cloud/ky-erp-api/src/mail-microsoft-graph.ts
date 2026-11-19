@@ -4,6 +4,7 @@ import { openMailCredential, sealMailCredential } from "./mail-communication-cor
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext } from "./mail-reply-context.ts";
 import {microsoftDeltaPageState,microsoftDeltaSafeUrl,microsoftDeltaComplete} from "./mail-microsoft-delta-core.ts";
+import {invoiceMailDocumentFromFile} from "./invoice-mail-model-evidence.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -136,7 +137,7 @@ async function ensureFolder(c:any,tenant:string,accountId:string,providerId:stri
   }
   return row;
 }
-async function ensureThread(c:any,tenant:string,accountId:string,providerThreadId:string,subject:string,stamp:string){
+async function ensureThread(c:any,tenant:string,accountId:string,providerThreadId:string,subject:string,stamp:string,isNew:boolean){
   if(!providerThreadId)return"";
   const ts=nowIso();
   let row=await c.env.DB.prepare("SELECT id FROM mail_threads WHERE main_company_slug=? AND account_id=? AND provider_thread_id=? LIMIT 1").bind(tenant,accountId,providerThreadId).first<AnyRow>();
@@ -146,14 +147,19 @@ async function ensureThread(c:any,tenant:string,accountId:string,providerThreadI
       .bind(id,tenant,accountId,providerThreadId,subject||null,stamp||null,1,0,ts,ts).run();
     return id;
   }
-  await c.env.DB.prepare("UPDATE mail_threads SET subject=COALESCE(NULLIF(?,''),subject),last_message_at=CASE WHEN COALESCE(last_message_at,'')<? THEN ? ELSE last_message_at END,message_count=message_count+1,updated_at=? WHERE id=?").bind(subject||"",stamp||"",stamp||null,ts,row.id).run();
+  await c.env.DB.prepare("UPDATE mail_threads SET subject=COALESCE(NULLIF(?,''),subject),last_message_at=CASE WHEN COALESCE(last_message_at,'')<? THEN ? ELSE last_message_at END,message_count=message_count+?,updated_at=? WHERE id=?").bind(subject||"",stamp||"",stamp||null,isNew?1:0,ts,row.id).run();
   return text(row.id);
 }
 async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,item:AnyRow,direction:string){
   const providerMessageId=text(item.id);if(!providerMessageId)return;
-  const stamp=text(item.receivedDateTime||item.sentDateTime||nowIso()),threadId=await ensureThread(c,tenant,text(account.id),text(item.conversationId),text(item.subject),stamp),ts=nowIso();
+  const stamp=text(item.receivedDateTime||item.sentDateTime||nowIso()),ts=nowIso();
   const removed=Boolean(item["@removed"]);
   const existing=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
+  if(removed){
+    if(existing?.id)await c.env.DB.prepare("UPDATE mail_messages SET provider_metadata=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(JSON.stringify({provider:"MICROSOFT_365",removed:item["@removed"]}),ts,existing.id,tenant).run();
+    return;
+  }
+  const threadId=await ensureThread(c,tenant,text(account.id),text(item.conversationId),text(item.subject),stamp,!existing?.id);
   const id=text(existing?.id)||crypto.randomUUID(),from=item?.from?.emailAddress||{},body=item?.body||{};
   const bodyHtml=upper(body.contentType)==="HTML"&&!removed?text(body.content):null;
   const bodyText=upper(body.contentType)!=="HTML"&&!removed?text(body.content):null;
@@ -232,8 +238,8 @@ async function attachMicrosoftAsset(base:string,providerDraftId:string,token:str
 }
 async function syncMicrosoftDraftAttachments(base:string,providerDraftId:string,token:string,assets:any[]){
   if(!assets.length)return;
-  const listed=(await graphJson(base+"/messages/"+encodeURIComponent(providerDraftId)+"/attachments?$select=id,name,size",token)).payload;
-  const existing=new Set((Array.isArray(listed.value)?listed.value:[]).map((row:any)=>text(row.name).toLowerCase()+"\u0000"+Number(row.size||0)));
+  const listed=await graphCollection(base+"/messages/"+encodeURIComponent(providerDraftId)+"/attachments?$top=50&$select=id,name,size",token,10);
+  const existing=new Set(listed.map((row:any)=>text(row.name).toLowerCase()+"\u0000"+Number(row.size||0)));
   for(const asset of assets)await attachMicrosoftAsset(base,providerDraftId,token,asset,existing);
 }
 
@@ -283,38 +289,36 @@ async function discoverMicrosoftFolders(c:any,tenant:string,account:AnyRow,token
   return local;
 }
 async function syncMicrosoftAttachments(c:any,tenant:string,account:AnyRow,token:string,item:AnyRow){
-  const providerMessageId=text(item.id);if(!providerMessageId)return;
+  const providerMessageId=text(item.id);if(!providerMessageId||item["@removed"]||!item.hasAttachments)return;
   const local=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
   if(!local?.id)return;
-  if(item["@removed"]){
-    await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id).run();
-    return;
-  }
-  if(!item.hasAttachments)return;
-  // Read the complete provider metadata BEFORE replacing the locally known
-  // attachments. A failed Graph request cannot erase evidence from the archive.
   const base=mailboxBase(account),initial=base+"/messages/"+encodeURIComponent(providerMessageId)+"/attachments?$top=50&$select=id,name,contentType,size,isInline,contentId";
   const rows:any[]=[];let next=initial,pages=0;
   while(next&&pages<10){
     const payload=(await graphJson(next,token)).payload;
     rows.push(...(Array.isArray(payload.value)?payload.value:[]));
     next=text(payload["@odata.nextLink"]);pages++;
-    if(next){
-      const u=new URL(next);
-      if(u.protocol!=="https:"||u.host!=="graph.microsoft.com")
-        throw new Error("MICROSOFT_ATTACHMENT_CURSOR_INVALID");
-    }
+    if(next){const u=new URL(next);if(u.protocol!=="https:"||u.host!=="graph.microsoft.com")throw new Error("MICROSOFT_ATTACHMENT_CURSOR_INVALID");}
   }
   if(next)throw new Error("MICROSOFT_ATTACHMENT_PAGE_LIMIT");
-  const ts=nowIso(),statements:any[]=[
-    c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id)
-  ];
-  for(const attachment of rows){
-    if(!text(attachment.id)||!text(attachment.name))continue;
-    statements.push(c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,local.id,text(attachment.id),null,text(attachment.name),text(attachment.contentType)||null,Number(attachment.size||0)||null,attachment.isInline?1:0,text(attachment.contentId)||null,JSON.stringify({provider:"MICROSOFT_365"}),ts));
+  // Atomic metadata refresh; don't destroy previously hash-verified attachments on a failed Graph page.
+  const stored=await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id).all<AnyRow>();
+  const previous=new Map((stored.results||[]).filter(row=>text(row.provider_attachment_id)).map(row=>[text(row.provider_attachment_id),row]));
+  const seen=new Set<string>(),statements:any[]=[],ts=nowIso();
+  for(const row of rows){
+    const id=text(row.id),name=text(row.name),size=Number(row.size||0);if(!id||!name)continue;
+    seen.add(id);const old=previous.get(id);
+    const same=old&&text(old.file_name)===name&&Number(old.size_bytes||0)===size;
+    if(old)statements.push(c.env.DB.prepare("UPDATE mail_attachments SET file_name=?,mime_type=?,size_bytes=?,is_inline=?,content_id=?,file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=?")
+      .bind(name,text(row.contentType)||null,size||null,row.isInline?1:0,text(row.contentId)||null,same?old.file_asset_id:null,same?old.provider_metadata:JSON.stringify({provider:"MICROSOFT_365"}),old.id,tenant));
+    else statements.push(c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(),tenant,local.id,id,null,name,text(row.contentType)||null,size||null,row.isInline?1:0,text(row.contentId)||null,JSON.stringify({provider:"MICROSOFT_365"}),ts));
   }
-  await c.env.DB.batch(statements);
+  for(const old of stored.results||[]){
+    if(!text(old.provider_attachment_id)||seen.has(text(old.provider_attachment_id)))continue;
+    statements.push(c.env.DB.prepare("UPDATE mail_attachments SET file_asset_id=NULL,provider_metadata=? WHERE id=? AND main_company_slug=?").bind(JSON.stringify({provider:"MICROSOFT_365",removed:true}),old.id,tenant));
+  }
+  if(statements.length)await c.env.DB.batch(statements);
 }
 
 async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:string,folder:AnyRow,maxPages=4){
@@ -354,21 +358,28 @@ async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:stri
 }
 
 export async function runMicrosoftMailScheduledSync(env:Cloudflare.Env){
-  // Run only on already approved/connected accounts with discovered folders.
+  // Fair, bounded scheduling. An invalid token pauses only this account for 15 minutes.
+  const cutoff=new Date(Date.now()-15*60*1000).toISOString();
   const account=await env.DB.prepare(
-    "SELECT a.* FROM mail_accounts a WHERE a.provider_type='MICROSOFT_365' AND a.status='ACTIVE' AND a.approval_status='APPROVED' AND a.provider_connected=1 AND EXISTS(SELECT 1 FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) ORDER BY COALESCE((SELECT MIN(COALESCE(s.last_sync_at,'')) FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1),'') ASC LIMIT 1"
-  ).first<AnyRow>();
+    "SELECT a.* FROM mail_accounts a WHERE a.provider_type='MICROSOFT_365' AND a.status='ACTIVE' AND a.approval_status='APPROVED' AND a.provider_connected=1 "+
+    "AND EXISTS(SELECT 1 FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) "+
+    "AND NOT EXISTS(SELECT 1 FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='MICROSOFT_DELTA' AND s.last_sync_at>? AND COALESCE(s.last_error,'') NOT IN ('','SYNC_PENDING_PAGINATION')) "+
+    "ORDER BY COALESCE((SELECT MIN(COALESCE(s.last_sync_at,'')) FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1),'') ASC LIMIT 1"
+  ).bind(cutoff).first<AnyRow>();
   if(!account)return {processed:0,accountCount:0};
   const folders=await env.DB.prepare(
     "SELECT f.* FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1 ORDER BY COALESCE(s.last_sync_at,'') ASC, CASE f.folder_type WHEN 'INBOX' THEN 0 WHEN 'SENT' THEN 1 ELSE 2 END LIMIT 2"
   ).bind(account.main_company_slug,account.id).all<AnyRow>();
   try{
-    const c={env},token=(await usableToken(c,text(account.main_company_slug),account)).text;
-    const results=[];
-    for(const folder of folders.results||[]) results.push(await syncMicrosoftFolder(c,text(account.main_company_slug),account,token,folder,1));
+    const c={env},token=(await usableToken(c,text(account.main_company_slug),account)).text,results=[];
+    for(const folder of folders.results||[])results.push(await syncMicrosoftFolder(c,text(account.main_company_slug),account,token,folder,1));
     return {processed:results.reduce((n,r)=>n+r.count,0),accountCount:1,folders:results.length,partial:results.some(r=>!r.completed)};
-  }catch{
-    return {processed:0,accountCount:1,failed:true};
+  }catch(error:any){
+    const ts=nowIso(),code=["MAIL_REAUTH_REQUIRED","MICROSOFT_TOKEN_FAILED"].includes(text(error?.code))?text(error.code):"MAIL_SYNC_ACCOUNT_FAILED";
+    const operations=(folders.results||[]).map(folder=>env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET last_sync_at=excluded.last_sync_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
+      .bind(crypto.randomUUID(),account.main_company_slug,account.id,folder.id,"MICROSOFT_DELTA",null,ts,null,code,ts));
+    if(operations.length)await env.DB.batch(operations);
+    return {processed:0,accountCount:1,failed:true,code};
   }
 }
 
