@@ -6,6 +6,7 @@ import {
   listMailApprovals,
   requestMailAccount,
   setMailAccountDefaults,
+  startGoogleMailOAuth,
   startMicrosoftMailOAuth,
   syncMailAccount,
   updateMailAccountProfile,
@@ -151,23 +152,35 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   }
 
   async function connect(account) {
-    if (upper(account.provider_type) !== "MICROSOFT_365") return;
+    const provider = upper(account.provider_type);
+    if (!["MICROSOFT_365", "GMAIL"].includes(provider)) return;
     setLoading(true);setNotice("");
     try {
-      const result = await startMicrosoftMailOAuth(account.id, slug);
-      if (!result?.authorizeUrl) throw new Error("Microsoft OAuth bağlantısı alınamadı.");
+      const result = provider === "GMAIL"
+        ? await startGoogleMailOAuth(account.id, slug)
+        : await startMicrosoftMailOAuth(account.id, slug);
+      if (!result?.authorizeUrl) throw new Error("Sağlayıcı OAuth bağlantısı alınamadı.");
       window.location.assign(result.authorizeUrl);
     } catch (error) {
-      setNotice("Hata: " + (error?.message || "Microsoft hesabı bağlantısı başlatılamadı."));
+      setNotice("Hata: " + (error?.message || "E-posta hesabı bağlantısı başlatılamadı."));
       setLoading(false);
     }
   }
 
   async function synchronize(account) {
-    await run("Senkronizasyon isteği tamamlandı; klasörlerin tam kabul durumunu aşağıdan kontrol edin.", async () => {
+    setLoading(true);setNotice("");
+    try {
       const result = await syncMailAccount(account.id, slug);
-      if (result?.partial) throw new Error("Klasörlerde sayfalama devam ediyor. Senkronizasyon eksik, sonraki çalışmada devam etmeli.");
-    });
+      await load();
+      setNotice(result?.partial
+        ? "Senkronizasyon kısmen tamamlandı. Klasörlerde devam eden sayfa veya hata var; tüm klasörler bitmeden hazır sayılmayacak."
+        : "Senkronizasyon isteği tamamlandı. Klasör kanıtları güncellendi.");
+    } catch (error) {
+      await load();
+      setNotice("Hata: " + (error?.message || "Senkronizasyon tamamlanamadı."));
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function decide(approval, decision) {
@@ -229,8 +242,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
               </div>
               <div className="mail-admin-account-actions">
                 {canManage && <button type="button" className="secondary" disabled={loading} onClick={() => editingThis ? setEditingId("") : startEdit(account)}>{editingThis ? "Kapat" : "Düzenle"}</button>}
-                {state.approved && !state.oauth && state.configured && provider === "MICROSOFT_365" && <button type="button" disabled={loading} onClick={() => connect(account)}>Microsoft'a Bağla</button>}
-                {state.oauth && state.configured && provider === "MICROSOFT_365" && <button type="button" className="secondary" disabled={loading} onClick={() => synchronize(account)}>Senkronize Et</button>}
+                {state.approved && !state.oauth && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && <button type="button" disabled={loading} onClick={() => connect(account)}>Hesabı Bağla</button>}
+                {state.oauth && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && <button type="button" className="secondary" disabled={loading} onClick={() => synchronize(account)}>Senkronize Et</button>}
               </div>
             </div>
             <div className="mail-admin-health">

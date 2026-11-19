@@ -27,16 +27,18 @@ test("mail provider wrapper bootstraps 0050 and routes Gmail generic sync/send",
   assert.match(source,/oauth\/google\/callback/);
 });
 
-test("Hakan Emprime mailbox presets are canonical and department-safe",()=>{
+test("Mail yönetimi artık Hakan'a sabit değil; seçili firma için hesap, bölüm ve provider seçilir",()=>{
   const source=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
-  assert.match(source,/hkngursu@hotmail\.com/);
-  assert.match(source,/hkndesen@gmail\.com/);
+  assert.doesNotMatch(source,/hkngursu@hotmail\.com|hkndesen@gmail\.com|HAKAN_PRESETS/);
+  assert.match(source,/listMailAccounts\(slug\)/);
+  assert.match(source,/listMailApprovals\(slug\)/);
+  assert.match(source,/mainCompanySlug: slug/);
   assert.match(source,/providerType: "MICROSOFT_365"/);
-  assert.match(source,/providerType: "GMAIL"/);
-  assert.match(source,/accountType: "DEPARTMENT"/);
-  assert.match(source,/departmentCode: "DESEN"/);
-  assert.match(source,/isDefaultSend: true/);
-  assert.match(source,/isDefaultReceive: true/);
+  assert.match(source,/value: "SHARED"/);
+  assert.match(source,/value: "DEPARTMENT"/);
+  assert.match(source,/departmentCode:/);
+  assert.match(source,/isDefaultSend/);
+  assert.match(source,/isDefaultReceive/);
 });
 
 test("worker source no longer contains the literal escaped import regression",()=>{
@@ -83,17 +85,18 @@ test("reply-waiting view is server-derived instead of misusing incoming flags",(
 });
 
 
-test("daily Mail keeps OAuth provisioning in the canonical storage connection screen",()=>{
+test("Günlük Mail OAuth işlemleri ortak ve firma bazlı E-Posta Hesapları ekranında kalır",()=>{
   const source=read("../../../app/ky-erp-frontend/src/pages/modules/CommunicationHubPage.jsx");
   const storage=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
   assert.match(source,/Hesap Bağlantıları/);
   assert.match(source,/tabKey: "depolama-mail"/);
   assert.doesNotMatch(source,/addAndConnectPreset|setMailAccountDefaults|requestMailAccount/);
-  assert.match(storage,/hkngursu@hotmail\.com/);
-  assert.match(storage,/hkndesen@gmail\.com/);
+  assert.doesNotMatch(storage,/HAKAN_PRESETS|hkngursu@hotmail\.com|hkndesen@gmail\.com/);
   assert.match(storage,/startGoogleMailOAuth/);
   assert.match(storage,/startMicrosoftMailOAuth/);
   assert.match(storage,/setMailAccountDefaults/);
+  assert.match(storage,/updateMailAccountProfile/);
+  assert.match(storage,/listMailAccounts\(slug\)/);
 });
 
 test("mail workspace final includes per-user pinning and provider folders",()=>{

@@ -73,7 +73,7 @@ async function dispatch(request:Request,env:Cloudflare.Env,ctx:ExecutionContext)
       if(normalizedProvider(body?.providerType||body?.provider)==="GMAIL")return overlay.fetch(request,env,ctx);
       return base.fetch(request,env,ctx);
     }
-    if(/^\/api\/mail\/accounts\/[^/]+\/defaults$/.test(path)&&method==="PUT")return overlay.fetch(request,env,ctx);
+    // Default account changes use one tenant-scoped Mail Core endpoint for all providers.
     if(googleCallback||/\/oauth\/google\/start$/.test(path)||/\/sync\/google$/.test(path)||/\/send\/google$/.test(path))return overlay.fetch(request,env,ctx);
 
     const syncMatch=path.match(/^\/api\/mail\/accounts\/([^/]+)\/sync$/);

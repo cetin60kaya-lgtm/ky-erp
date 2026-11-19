@@ -29,4 +29,15 @@ test("Graph hesap seçimi firmayı destekler ve kişisel OAuth tek başına gön
   assert.match(graph, /app\.post\("\/api\/mail\/accounts\/:id\/oauth\/microsoft\/start"/);
   assert.match(graph, /approval_status/);
   assert.match(core, /providerRuntimeReady\(c,account\.provider_type\)/);
+  assert.match(core, /normalized==="GMAIL"/);
+  assert.match(graph, /currentAccess\(c,body\)/);
+});
+
+test("Gmail ve Microsoft varsayılan hesap kararı tek core rotasına gider", () => {
+  const entry = readFileSync(new URL("./main-entry-mail.ts", import.meta.url), "utf8");
+  const overlay = readFileSync(new URL("./mail-provider-overlay.ts", import.meta.url), "utf8");
+  assert.doesNotMatch(entry, /\/defaults\$\/\.test\(path\).*overlay\.fetch/);
+  assert.doesNotMatch(overlay, /app\.put\("\/api\/mail\/accounts\/:id\/defaults"/);
+  assert.match(core, /MAIL_DEFAULT_NOT_READY/);
+  assert.match(overlay, /p==="GMAIL"/);
 });
