@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Gmail gerçek kullanıcı ekranı: 0/15 klasör; sayfalı ilk arşiv senkron düzeltmesi
+- Firma bazlı E-Posta Yönetim Merkezi (PR #599) gerçek tarayıcıda açıldı; 4 sekmeli tasarım ve DESEN Gmail kartı kontrol edildi. Onay/OAuth/provider hazır, fakat **0/15 klasör**, **0 hazır hesap**: Gmail arşivi kabulü henüz PASS değil.
+- İlk 100 Gelen/Sent sınırının 15 Gmail etiketini tamamlaması mümkün değildi. Mevcut OAuth ve Mail Core korunarak `GMAIL_PAGE` ile kademeli sayfalama, gerçek klasör tamamlanma sayacı, çok etiketli mesajı bir defa konumlama ve tekrar senkronizasyonda File Hub ek kanıtını koruma üzerinde çalışıldı.
+- Kaynak ve canlı sınırlar: [KY_ERP_GMAIL_TAM_SENKRON_20261119.md](KY_ERP_GMAIL_TAM_SENKRON_20261119.md). Kod/CI/yayın kanıtı ile gerçek Gmail 15/15 kullanıcı testi ayrı işaretlenecektir.
+
+
 ## 19.11.2026 — E-Posta Hesapları: bütün firmalara ortak dinamik yönetim ekranı / geliştirme
 - Kullanıcının canlı KY ERP ekranındaki Hakan'a özel sabit mail kartları kaldırılarak tek firma bazlı hesap yönetim ekranına geçildi: Posta Kutuları, Hesap Ekle, Onaylar, Sağlayıcı Durumu. Mevcut hesaplar ve posta kayıtları silinmez.
 - API'ye tenant bazlı hesap profili ve varsayılan gönder/al endpointleri eklendi; seçili firma slug'ı arayüzden okunur, yetkili sunucu tekrar kontrol eder. Hesap/OAuth/sağlayıcı sağlığı ayrı tutulur.

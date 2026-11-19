@@ -185,7 +185,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
       const result = await syncMailAccount(account.id, slug);
       await load();
       setNotice(result?.partial
-        ? "Senkronizasyon kısmen tamamlandı. Klasörlerde devam eden sayfa veya hata var; tüm klasörler bitmeden hazır sayılmayacak."
+        ? `Senkronizasyon devam ediyor: ${Number(result.completedFolders || 0)}/${Number(result.totalFolders || 0)} klasör tamamlandı. Bu adımda ${Number(result.total || 0)} mesaj işlendi. Devam için yeniden Senkronize Et.`
         : "Senkronizasyon isteği tamamlandı. Klasör kanıtları güncellendi.");
     } catch (error) {
       await load();

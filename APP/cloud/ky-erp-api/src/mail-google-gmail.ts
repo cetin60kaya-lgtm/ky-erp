@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { openMailCredential, sealMailCredential } from "./mail-communication-core.ts";
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
+import { gmailCanonicalLabel, gmailReadPageToken, gmailSyncPageState, GMAIL_PAGE_SIZE, GMAIL_FOLDERS_PER_PASS } from "./mail-gmail-sync-cursor.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -190,7 +191,11 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
     for(const recipient of splitAddresses(value))await c.env.DB.prepare("INSERT INTO mail_recipients(id,main_company_slug,message_id,recipient_type,email_address,display_name,created_at) VALUES(?,?,?,?,?,?,?)")
       .bind(crypto.randomUUID(),tenant,id,kind,recipient.email,recipient.name||null,ts).run();
   }
-  await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
+  // The same message may appear under multiple Gmail labels. Keep existing proof.
+  const previous=(await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?")
+    .bind(tenant,id).all<AnyRow>()).results||[];
+  const oldByProvider=new Map(previous.map((row:any)=>[text(row.provider_attachment_id),row]));
+  const seen=new Set<string>();
   const attachmentParts:any[]=[];
   const partHeader=(part:any,name:string)=>{
     const wanted=upper(name);
@@ -205,9 +210,27 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
   };
   collect(item.payload||{});
   for(const part of attachmentParts){
-    const mime=text(part.mimeType)||"application/octet-stream",fallbackName=part._contentId?`inline-${text(part.partId)||crypto.randomUUID()}`:"ek";
-    await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,id,text(part._providerAttachmentId),null,text(part.filename)||fallbackName,mime,Number(part?.body?.size||0)||null,part._isInline?1:0,text(part._contentId)||null,JSON.stringify({provider:"GMAIL",partId:text(part.partId),inlineBodyData:Boolean(text(part?.body?.data))}),ts).run();
+    const providerId=text(part._providerAttachmentId),mime=text(part.mimeType)||"application/octet-stream",fallbackName=part._contentId?"inline-"+(text(part.partId)||providerId):"ek";
+    const name=text(part.filename)||fallbackName,size=Number(part?.body?.size||0)||null,old=oldByProvider.get(providerId);
+    seen.add(providerId);
+    const metadata:any={provider:"GMAIL",partId:text(part.partId),inlineBodyData:Boolean(text(part?.body?.data))};
+    if(old){
+      let prior:any={};try{prior=JSON.parse(text(old.provider_metadata)||"{}");}catch{}
+      const same=text(old.file_name)===name&&text(old.mime_type)===mime&&Number(old.size_bytes||0)===Number(size||0);
+      metadata.reviewRequired=!same&&Boolean(old.file_asset_id);
+      await c.env.DB.prepare("UPDATE mail_attachments SET file_name=?,mime_type=?,size_bytes=?,is_inline=?,content_id=?,file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=?")
+        .bind(name,mime,size,part._isInline?1:0,text(part._contentId)||null,same?old.file_asset_id:null,
+          JSON.stringify({...prior,...metadata,removed:false}),old.id,tenant).run();
+    }else{
+      await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(),tenant,id,providerId,null,name,mime,size,part._isInline?1:0,text(part._contentId)||null,JSON.stringify(metadata),ts).run();
+    }
+  }
+  for(const old of previous){
+    if(seen.has(text(old.provider_attachment_id)))continue;
+    let metadata:any={};try{metadata=JSON.parse(text(old.provider_metadata)||"{}");}catch{}
+    await c.env.DB.prepare("UPDATE mail_attachments SET provider_metadata=? WHERE id=? AND main_company_slug=?")
+      .bind(JSON.stringify({...metadata,removed:true}),old.id,tenant).run();
   }
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
@@ -301,41 +324,80 @@ export function registerGoogleMailRoutes(app:any){
     const account=await accountForUser(c,current,tenant,text(c.req.param("id")));
     if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Mail hesabı bulunamadı veya erişim yok."),404);
     if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
-    const token=(await usableToken(c,tenant,account)).text,labelPayload=(await googleJson(GMAIL+"/labels",token)).payload,labels=Array.isArray(labelPayload.labels)?labelPayload.labels:[],folderMap=new Map<string,AnyRow>();
+
+    const token=(await usableToken(c,tenant,account)).text;
+    const labelPayload=(await googleJson(GMAIL+"/labels",token)).payload;
+    const labels=Array.isArray(labelPayload.labels)?labelPayload.labels:[];
+    const folderMap=new Map<string,AnyRow>();
     const typeOf=(id:string)=>({INBOX:"INBOX",SENT:"SENT",DRAFT:"DRAFTS",SPAM:"JUNK",TRASH:"TRASH",STARRED:"STARRED",IMPORTANT:"IMPORTANT"}[id]||"CUSTOM");
     for(const label of labels){
       const id=text(label.id);if(!id)continue;
       const folder=await ensureFolder(c,tenant,text(account.id),id,text(label.name)||id,typeOf(id));
       folderMap.set(id,{...folder,folder_type:typeOf(id)});
     }
-    const defs=[["INBOX","INCOMING"],["SENT","OUTGOING"]],summary:any[]=[];
-    const profile=(await googleJson(GMAIL+"/profile",token)).payload;
-    for(const [labelId,direction] of defs){
-      const folder=folderMap.get(labelId)||await ensureFolder(c,tenant,text(account.id),labelId,labelId==="INBOX"?"Gelen Kutusu":"Gönderilenler",typeOf(labelId));
-      let count=0,failed=0;const failures:any[]=[];
+    // Only rows belonging to an enabled, currently discoverable Gmail label are scanned.
+    // Previously linked folders are never deleted or relabeled without explicit consent.
+    const folderRows=await c.env.DB.prepare(
+      "SELECT f.*,s.cursor_value page_cursor,s.last_success_at page_success,s.last_error page_error,s.last_sync_at page_last_sync "+
+      "FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id "+
+      "AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1"
+    ).bind(tenant,account.id).all<AnyRow>();
+    const enabled=(folderRows.results||[]).filter((row:any)=>folderMap.has(text(row.provider_folder_id)));
+    const rank=(row:any)=>({INBOX:0,SENT:1,DRAFTS:2,CUSTOM:3,STARRED:4,IMPORTANT:5,JUNK:6,TRASH:7}[upper(row.folder_type)]??8);
+    const todo=enabled.filter((row:any)=>text(row.page_cursor)!=="DONE")
+      .sort((a:any,b:any)=>{
+        // Finish new folders early without starving partially paginated folders.
+        const aFirst=text(a.page_last_sync)?1:0,bFirst=text(b.page_last_sync)?1:0;
+        return aFirst-bFirst||rank(a)-rank(b)||text(a.page_last_sync).localeCompare(text(b.page_last_sync));
+      }).slice(0,GMAIL_FOLDERS_PER_PASS);
+    const summary:any[]=[];let total=0,successfulFolders=0;
+    for(const folder of todo){
+      const labelId=text(folder.provider_folder_id),previous=text(folder.page_cursor);
+      const pageToken=gmailReadPageToken(previous);
+      const url=new URL(GMAIL+"/messages");
+      url.searchParams.set("maxResults",String(GMAIL_PAGE_SIZE));
+      url.searchParams.set("labelIds",labelId);
+      if(["SPAM","TRASH"].includes(labelId))url.searchParams.set("includeSpamTrash","true");
+      if(pageToken)url.searchParams.set("pageToken",pageToken);
+      let count=0,failed=0,nextPageToken="",errorText="";const failures:any[]=[];
       try{
-        const list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
+        const list=(await googleJson(url.toString(),token)).payload;
+        nextPageToken=text(list.nextPageToken);
         for(const item of Array.isArray(list.messages)?list.messages:[]){
           try{
             const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-            await persistMessage(c,tenant,account,folder,full,direction);count++;
+            const primary=gmailCanonicalLabel(full.labelIds,labelId,folderMap.keys());
+            await persistMessage(c,tenant,account,folderMap.get(primary)||folder,full,"AUTO");
+            count++;
           }catch(error:any){
             failed++;
-            if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
+            if(failures.length<5)failures.push({providerMessageId:text(item.id),error:text(error?.message)||"Mesaj işlenemedi."});
           }
         }
-        const ts=nowIso(),lastError=failed?String(failed)+" mesaj işlenemedi.":null;
-        await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
-          .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_HISTORY",text(profile.historyId)||null,ts,failed?null:ts,lastError,ts).run();
-        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,failures});
       }catch(error:any){
-        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:false,error:text(error?.message)||"Klasör senkronize edilemedi.",failures});
+        failed++;errorText=text(error?.message)||"Gmail sayfası okunamadı.";
       }
+      const pageState=gmailSyncPageState(previous,nextPageToken,failed);
+      const done=pageState.complete,checkpoint=pageState.cursor;
+      const ts=nowIso(),lastError=errorText|| (failed?failed+" mesaj işlenemedi.":"SYNC_PENDING_PAGINATION");
+      await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
+        .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_PAGE",checkpoint,ts,done?ts:null,done?"":lastError,ts).run();
+      if(done)successfulFolders++;
+      total+=count;
+      summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,completed:done,pending:Boolean(nextPageToken)||!done,failures,...(errorText?{error:errorText}:{})});
     }
-    const partial=summary.some(r=>!r.ok),successfulFolders=summary.filter(r=>r.count>0||r.ok).length,total=summary.reduce((sum,row)=>sum+Number(row.count||0),0);
-    await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length});
-    if(partial&&successfulFolders===0&&total===0)return c.json(err("MAIL_SYNC_FAILED","Gmail posta kutusu senkronize edilemedi.",{folders:summary}),502);
-    return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,discoveredFolders:labels.length,warning:partial?"Bazı Gmail mesajları veya klasörleri atlandı; başarılı kayıtlar güncellendi.":""}},partial?207:200);
+    // A 200/207 result is based on *all enabled provider labels*, not only the first INBOX/SENT page.
+    const finished=(await c.env.DB.prepare(
+      "SELECT COUNT(*) n FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id "+
+      "AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1 "+
+      "AND s.cursor_value='DONE' AND s.last_success_at IS NOT NULL AND TRIM(COALESCE(s.last_error,''))=''"
+    ).bind(tenant,account.id).first<AnyRow>())?.n;
+    const completedFolders=Number(finished||0),totalFolders=Number((folderRows.results||[]).filter((f:any)=>Number(f.sync_enabled)===1).length);
+    const partial=completedFolders!==totalFolders||summary.some(r=>!r.ok);
+    await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length,completedFolders,totalFolders});
+    if(partial&&successfulFolders===0&&total===0&&summary.some(r=>!r.ok))
+      return c.json(err("MAIL_SYNC_FAILED","Gmail posta kutusu senkronize edilemedi.",{folders:summary}),502);
+    return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,completedFolders,totalFolders,discoveredFolders:labels.length,warning:partial?"Gmail klasör sayfalaması henüz bitmedi; 'Senkronize Et' ile kaldığı yerden devam edin.":""}},partial?207:200);
   });
 
   app.post("/api/mail/accounts/:id/folders/:folderId/sync/google",async(c:any)=>{
@@ -350,7 +412,11 @@ export function registerGoogleMailRoutes(app:any){
     for(const item of Array.isArray(list.messages)?list.messages:[]){
       try{
         const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-        await persistMessage(c,tenant,account,folder,full,upper(folder.folder_type)==="SENT"?"OUTGOING":"AUTO");count++;
+        const known=Array.isArray(full.labelIds)?full.labelIds:[];
+        const canonical=gmailCanonicalLabel(known,labelId,known);
+        const kind=({INBOX:"INBOX",SENT:"SENT",DRAFT:"DRAFTS",SPAM:"JUNK",TRASH:"TRASH"} as any)[canonical]||"CUSTOM";
+        const destination=canonical===labelId?folder:await ensureFolder(c,tenant,text(account.id),canonical,canonical,kind);
+        await persistMessage(c,tenant,account,destination,full,canonical==="SENT"?"OUTGOING":"AUTO");count++;
       }catch(error:any){
         failed++;
         if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});

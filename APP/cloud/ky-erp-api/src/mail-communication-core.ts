@@ -218,9 +218,10 @@ export function registerMailCommunicationRoutes(app:any){
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role);
     const readiness=`,(SELECT MAX(s.last_success_at) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id) last_sync_success_at
       ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.last_success_at IS NOT NULL) sync_success_count
-      ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND TRIM(COALESCE(s.last_error,''))<>'') sync_error_count
+      ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND TRIM(COALESCE(s.last_error,''))<>'' AND ((a.provider_type='MICROSOFT_365' AND s.cursor_type='MICROSOFT_DELTA') OR (a.provider_type='GMAIL' AND s.cursor_type='GMAIL_PAGE'))) sync_error_count
       ,(SELECT COUNT(*) FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) sync_enabled_folder_count
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value IS NOT NULL AND TRIM(COALESCE(s.last_error,''))='') sync_completed_folder_count
+      ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value='DONE' AND TRIM(COALESCE(s.last_error,''))='') gmail_completed_folder_count
       ,CASE WHEN EXISTS(SELECT 1 FROM mail_account_credentials mc WHERE mc.main_company_slug=a.main_company_slug AND mc.account_id=a.id) THEN 1 ELSE 0 END credential_present`;
     const result=elevated
       ?await c.env.DB.prepare("SELECT a.*"+readiness+" FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
@@ -228,10 +229,11 @@ export function registerMailCommunicationRoutes(app:any){
     const rows=(result.results||[]).map((row:AnyRow)=>{
       const companyApproved=upper(row.approval_status)==="APPROVED";
       const oauthConnected=Number(row.provider_connected||0)===1&&Number(row.credential_present||0)===1;
-      const enabled=Number(row.sync_enabled_folder_count||0),completed=Number(row.sync_completed_folder_count||0);
-      // Yalnız bütün klasörler gerçekten tamamlanınca sağlıklı. Gmail'in ilk 100 mesajlık
-      // INBOX/SENT taraması eksiksiz Gmail arşivi kanıtı değildir; MICROSOFT_DELTA
-      // tamamlanmış klasör sayısına karışmaz.
+      const microsoft=upper(row.provider_type)==="MICROSOFT_365";
+      const enabled=Number(row.sync_enabled_folder_count||0);
+      const completed=Number(microsoft?row.sync_completed_folder_count:row.gmail_completed_folder_count||0);
+      // Gmail GMAIL_PAGE completion requires every enabled label to have reached the
+      // last page without provider errors; historic first-page GMAIL_HISTORY is not proof.
       const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0;
       return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,completedFolders:completed,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
