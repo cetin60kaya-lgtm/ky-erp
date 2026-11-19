@@ -49,6 +49,7 @@ import {
   updateDailyEmployee,
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
+import DailyEntrySmartSelector from "./DailyEntrySmartSelector";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
 import { dailyWorkDateInRange, reconcileDailyWeeklyReport, paginateDailyPrintRows } from "../../../services/dailyOpsReportIntegrity";
@@ -427,6 +428,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [shift, setShift] = useState("day");
   const [records, setRecords] = useState([]);
   const [attendance, setAttendance] = useState([]);
+  const [priorAttendance, setPriorAttendance] = useState([]);
+  const dailyDraftDirtyRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [checkedIds, setCheckedIds] = useState(() => new Set());
   const [notes, setNotes] = useState({});
@@ -541,6 +544,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const setSafeRange = useCallback((next) => {
     const resolved = typeof next === "function" ? next(range) : next;
     if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
+    if (!sameRange(resolved, range) && dailyDraftDirtyRef.current
+      && !window.confirm("Kaydedilmemiş günlük seçimler var. Tarih aralığı değişince taslak kaybolacak. Devam edilsin mi?")) return;
     if (rangeSpanDays(resolved.start, resolved.end) > 31) { setError("Günlük Operasyon tek seferde en fazla 31 günlük aralıkla çalışır."); return; }
     if (!sameRange(resolved, dailyRangeRef.current)) {
       rangeRequestRef.current += 1;
@@ -819,6 +824,13 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => { void loadPaymentHistory(); }, [loadPaymentHistory]);
 
   const employeeMap = useMemo(() => new Map(employees.map((person) => [person.id, person])), [employees]);
+  const savedDailyIds = useMemo(() => focusedIds(records), [records]);
+  const savedDailyChecked = useMemo(() => focusedCheckedIds(records), [records]);
+  const noteDraftDirty = [...new Set([...rosterIds, ...selectedIds])].some((id) =>
+    String(notes[id] || "") !== String(recordByIdValue(records, id, "note") || ""));
+  const dailyDraftDirty = !sameSet(selectedIds, savedDailyIds)
+    || !sameSet(checkedIds, savedDailyChecked) || noteDraftDirty;
+  useEffect(() => { dailyDraftDirtyRef.current = dailyDraftDirty; }, [dailyDraftDirty]);
   const attendanceRosterIds = useMemo(() => new Set(attendance
     .filter((row) => {
       const date = rowDate(row);
