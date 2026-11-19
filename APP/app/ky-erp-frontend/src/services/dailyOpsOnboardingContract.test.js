@@ -9,7 +9,8 @@ test("new card onboarding persists a roster member before claiming success", () 
   assert.match(card, /persistRosterAddition\(createdId\)/);
   assert.match(card, /setCardDialog\(null\)/);
   assert.match(card, /setQuick\(\(current\) =>/);
-  assert.match(card, /setSelectedIds\(\(current\) =>/);
+  // Havuz üyeliği ücretli vardiya seçimi değildir; gün ayrıca seçilir.
+  assert.doesNotMatch(card, /setSelectedIds\(\(current\) =>/);
   assert.doesNotMatch(card, /setRosterSaved\(false\)/);
 });
 test("quick next-day action moves main date and keeps the same shift", () => {
