@@ -224,6 +224,8 @@ export function registerMailCommunicationRoutes(app:any){
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value IS NOT NULL AND TRIM(COALESCE(s.last_error,''))='') sync_completed_folder_count
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value='DONE' AND TRIM(COALESCE(s.last_error,''))='') gmail_completed_folder_count
       ,(SELECT s.cursor_value FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_HISTORY' LIMIT 1) gmail_history_cursor
+      ,(SELECT s.cursor_value FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_CRON' LIMIT 1) gmail_cron_state
+      ,(SELECT s.last_sync_at FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_CRON' LIMIT 1) gmail_cron_last_at
       ,CASE WHEN EXISTS(SELECT 1 FROM mail_account_credentials mc WHERE mc.main_company_slug=a.main_company_slug AND mc.account_id=a.id) THEN 1 ELSE 0 END credential_present`;
     const result=elevated
       ?await c.env.DB.prepare("SELECT a.*"+readiness+" FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
@@ -246,11 +248,17 @@ export function registerMailCommunicationRoutes(app:any){
             &&!text(state?.finalHistoryId);
         }catch{}
       }
+      let cronState:any={};
+      if(!microsoft){try{cronState=JSON.parse(text(row.gmail_cron_state)||"{}");}catch{}}
       const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0
         &&(microsoft||gmailHistoryLive);
-      return{...row,gmail_history_cursor:undefined,
+      return{...row,gmail_history_cursor:undefined,gmail_cron_state:undefined,
         readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,
           completedFolders:completed,gmailHistoryLive:microsoft?null:gmailHistoryLive,
+          gmailAutoLastAt:microsoft?null:text(row.gmail_cron_last_at)||null,
+          gmailAutoProcessed:microsoft?null:Math.max(0,Number(cronState.processed||0)),
+          gmailAutoLastFolder:microsoft?null:text(cronState.lastFolder)||null,
+          gmailAutoStatus:microsoft?null:text(cronState.state)||null,
           lastSyncSuccessAt:text(row.last_sync_success_at)||null,
           complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
