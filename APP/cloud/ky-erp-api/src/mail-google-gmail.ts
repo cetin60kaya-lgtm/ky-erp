@@ -5,6 +5,7 @@ import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
 import { gmailCanonicalLabel, gmailReadPageToken, gmailSyncPageState, GMAIL_PAGE_SIZE, GMAIL_FOLDERS_PER_PASS } from "./mail-gmail-sync-cursor.ts";
 import { gmailOAuthClientReadiness } from "./mail-google-client-boundary.ts";
+import { gmailHistoryCursor, gmailHistoryChangedMessageIds, gmailHistoryQueuePage, gmailHistoryAdvance } from "./mail-gmail-history-cursor.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -320,6 +321,90 @@ function mimeMessage(account:AnyRow,draft:AnyRow,attachments:any[]=[],replyHeade
 }
 
 
+
+async function writeGmailHistoryCursor(c:any,tenant:string,accountId:string,folderId:string,state:any){
+  const ts=nowIso();
+  await c.env.DB.prepare(
+    "INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) "+
+    "VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) "+
+    "DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at"
+  ).bind(crypto.randomUUID(),tenant,accountId,folderId,"GMAIL_HISTORY",JSON.stringify(state),ts,ts,"",ts).run();
+}
+async function ensureGmailHistoryBaseline(c:any,tenant:string,account:AnyRow,folderId:string,token:string){
+  const row=await c.env.DB.prepare(
+    "SELECT * FROM mail_sync_cursors WHERE main_company_slug=? AND account_id=? AND cursor_type='GMAIL_HISTORY' LIMIT 1"
+  ).bind(tenant,account.id).first<AnyRow>();
+  if(row){
+    const state=gmailHistoryCursor(row.cursor_value);
+    if(!state.historyId)throw Object.assign(new Error("Geçmiş senkron imleci doğrulanamadı."),{code:"GMAIL_HISTORY_CURSOR_INVALID"});
+    return {row,state};
+  }
+  // Capture the mailbox history point BEFORE the remaining pages are read.
+  // New mail arriving mid-backfill will be replayed after the archive completes.
+  const profile=(await googleJson(GMAIL+"/profile",token)).payload;
+  const historyId=text(profile.historyId);
+  if(!/^[0-9]+$/.test(historyId))throw Object.assign(new Error("Gmail historyId alınamadı."),{code:"GMAIL_HISTORY_BASELINE_MISSING"});
+  const state=gmailHistoryCursor({historyId});
+  await writeGmailHistoryCursor(c,tenant,text(account.id),folderId,state);
+  return {row:{folder_id:folderId},state};
+}
+async function syncGmailHistoryChanges(c:any,tenant:string,account:AnyRow,token:string,
+  history:any,folderMap:Map<string,AnyRow>){
+  const folderId=text(history.row?.folder_id);
+  if(!folderId)return {count:0,pending:false,mode:"NO_FOLDERS"};
+  let state=history.state;
+  if(!state.pending.length){
+    const url=new URL(GMAIL+"/history");
+    url.searchParams.set("startHistoryId",state.historyId);
+    url.searchParams.set("maxResults","3");
+    if(state.pageToken)url.searchParams.set("pageToken",state.pageToken);
+    let payload:any;
+    try{payload=(await googleJson(url.toString(),token)).payload;}
+    catch(error:any){
+      if(Number(error?.status)!==404)throw error;
+      // Gmail discards old history. Rebuild from actual provider pages without
+      // deleting old message or attachment records, as Google recommends.
+      const profile=(await googleJson(GMAIL+"/profile",token)).payload;
+      const newHistoryId=text(profile.historyId);
+      if(!/^[0-9]+$/.test(newHistoryId))throw error;
+      const newState=gmailHistoryCursor({historyId:newHistoryId});
+      const ts=nowIso();
+      await c.env.DB.prepare(
+        "UPDATE mail_sync_cursors SET cursor_value='',last_success_at=NULL,last_error='',updated_at=? "+
+        "WHERE main_company_slug=? AND account_id=? AND cursor_type='GMAIL_PAGE'"
+      ).bind(ts,tenant,account.id).run();
+      await writeGmailHistoryCursor(c,tenant,text(account.id),folderId,newState);
+      return {count:0,pending:true,mode:"FULL_RESCAN_HISTORY_EXPIRED"};
+    }
+    state=gmailHistoryQueuePage(state,payload);
+    await writeGmailHistoryCursor(c,tenant,text(account.id),folderId,state);
+  }
+  if(!state.pending.length){
+    const final=gmailHistoryAdvance(state,0);
+    await writeGmailHistoryCursor(c,tenant,text(account.id),folderId,final);
+    return {count:0,pending:Boolean(final.pageToken),mode:"HISTORY_NO_NEW_MESSAGES"};
+  }
+  let count=0,processed=0;
+  for(const id of state.pending.slice(0,3)){
+    let message:any;
+    try{message=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(id)+"?format=full",token)).payload;}
+    catch(error:any){
+      // A message may be permanently deleted after the history event.
+      if(Number(error?.status)===404){processed++;continue;}
+      throw error;
+    }
+    const labels=Array.isArray(message.labelIds)?message.labelIds:[];
+    const primary=gmailCanonicalLabel(labels,"INBOX",folderMap.keys());
+    const folder=folderMap.get(primary)||folderMap.get("INBOX")||folderMap.values().next().value;
+    if(!folder)throw Object.assign(new Error("Gmail klasörü bulunamadı."),{code:"GMAIL_FOLDER_MISSING"});
+    await persistMessage(c,tenant,account,folder,message,"AUTO");
+    processed++;count++;
+  }
+  state=gmailHistoryAdvance(state,processed);
+  await writeGmailHistoryCursor(c,tenant,text(account.id),folderId,state);
+  return {count,pending:Boolean(state.pending.length||state.pageToken),mode:"HISTORY_DELTA"};
+}
+
 // One canonical page engine for manual clicks and the existing Worker cron.
 // The account is already tenant-scoped and authorized by its caller.
 async function syncGmailAccountStep(c:any,tenant:string,account:AnyRow,actorId="",onStage:((stage:string)=>void)=()=>{}){
@@ -358,6 +443,10 @@ async function syncGmailAccountStep(c:any,tenant:string,account:AnyRow,actorId="
       "AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1"
     ).bind(tenant,account.id).all<AnyRow>();
     const enabled=(folderRows.results||[]).filter((row:any)=>folderMap.has(text(row.provider_folder_id)));
+    // Baseline is tenant-bound and never obtained from the Google Drive account.
+    const gmailHistory=enabled.length
+      ?await ensureGmailHistoryBaseline(c,tenant,account,text(enabled[0].id),token)
+      :null;
     const rank=(row:any)=>({INBOX:0,SENT:1,DRAFTS:2,CUSTOM:3,STARRED:4,IMPORTANT:5,JUNK:6,TRASH:7}[upper(row.folder_type)]??8);
     const todo=enabled.filter((row:any)=>text(row.page_cursor)!=="DONE")
       .sort((a:any,b:any)=>{
@@ -411,11 +500,22 @@ async function syncGmailAccountStep(c:any,tenant:string,account:AnyRow,actorId="
       "AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1 "+
       "AND s.cursor_value='DONE' AND s.last_success_at IS NOT NULL AND TRIM(COALESCE(s.last_error,''))=''"
     ).bind(tenant,account.id).first<AnyRow>())?.n;
-    const completedFolders=Number(finished||0),totalFolders=Number((folderRows.results||[]).filter((f:any)=>Number(f.sync_enabled)===1).length);
-    const partial=completedFolders!==totalFolders||summary.some(r=>!r.ok);
-    await audit(c,tenant,actorId,text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length,completedFolders,totalFolders});
+    let completedFolders=Number(finished||0),totalFolders=enabled.length;
+    let partial=completedFolders!==totalFolders||summary.some(r=>!r.ok);
+    // Only when all initial folder pages are complete do we consume Gmail
+    // changes made since the pre-backfill history baseline.
+    let historyMode="INITIAL_ARCHIVE";
+    if(!partial&&gmailHistory){
+      onStage("GMAIL_HISTORY");
+      const delta=await syncGmailHistoryChanges(c,tenant,account,token,gmailHistory,folderMap);
+      historyMode=delta.mode;total+=delta.count;
+      if(delta.mode==="FULL_RESCAN_HISTORY_EXPIRED"){
+        completedFolders=0;partial=true;
+      }else if(delta.pending)partial=true;
+    }
+    await audit(c,tenant,actorId,text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length,completedFolders,totalFolders,historyMode});
     const fatal=partial&&successfulFolders===0&&total===0&&summary.some(r=>!r.ok);
-    return {accountId:account.id,partial,total,folders:summary,completedFolders,totalFolders,
+    return {accountId:account.id,partial,total,folders:summary,completedFolders,totalFolders,historyMode,
       discoveredFolders:labels.length,fatal,
       warning:partial?"Gmail arşivi kaldığı yerden otomatik taranıyor.":"Gmail arşiv taraması tamamlandı."};
 
