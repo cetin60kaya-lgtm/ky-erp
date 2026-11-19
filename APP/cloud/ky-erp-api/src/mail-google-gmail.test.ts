@@ -31,6 +31,8 @@ test("Mail yönetimi artık Hakan'a sabit değil; seçili firma için hesap, bö
   const source=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
   assert.doesNotMatch(source,/hkngursu@hotmail\.com|hkndesen@gmail\.com|HAKAN_PRESETS/);
   assert.match(source,/listMailAccounts\(slug\)/);
+  assert.match(source,/loadedSlug === slug/);
+  assert.match(source,/loadSequence\.current/);
   assert.match(source,/listMailApprovals\(slug\)/);
   assert.match(source,/mainCompanySlug: slug/);
   assert.match(source,/providerType: "MICROSOFT_365"/);

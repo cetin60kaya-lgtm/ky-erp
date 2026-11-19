@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   decideMailApproval,
   getMailProviders,
@@ -59,6 +59,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const companyName = activeMainCompany?.name || activeMainCompany?.title || slug || "Firma seçilmedi";
   const canManage = isOwner(user?.role);
   const [accounts, setAccounts] = useState([]);
+  const [loadedSlug, setLoadedSlug] = useState("");
+  const loadSequence = useRef(0);
   const [approvals, setApprovals] = useState([]);
   const [providers, setProviders] = useState([]);
   const [tab, setTab] = useState("accounts");
@@ -70,8 +72,9 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const [editing, setEditing] = useState({ displayName: "", departmentCode: "" });
 
   const load = useCallback(async () => {
+    const sequence = ++loadSequence.current;
     if (!slug) {
-      setAccounts([]);setApprovals([]);setProviders([]);
+      setAccounts([]);setApprovals([]);setProviders([]);setLoadedSlug("");
       setNotice("Hata: E-posta hesaplarını görmek için aktif firma seçin.");
       return;
     }
@@ -79,27 +82,36 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     const result = await Promise.allSettled([
       listMailAccounts(slug), listMailApprovals(slug), getMailProviders(),
     ]);
+    if (sequence !== loadSequence.current) return;
     const errors = result.filter((item) => item.status === "rejected");
     setAccounts(result[0].status === "fulfilled" && Array.isArray(result[0].value) ? result[0].value : []);
     setApprovals(result[1].status === "fulfilled" && Array.isArray(result[1].value) ? result[1].value : []);
     setProviders(result[2].status === "fulfilled" && Array.isArray(result[2].value?.providers) ? result[2].value.providers : []);
     setNotice(errors.length ? "Hata: Firma posta kutularının bazı bilgileri alınamadı. Eksik sonuçları tam bağlantı olarak kabul etmeyin." : "");
+    setLoadedSlug(slug);
     setLoading(false);
   }, [slug]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+    return () => { loadSequence.current += 1; };
+  }, [load]);
+
+  // Firma değiştirilirken eski firmanın posta kutuları bir anlığına bile gösterilmez.
+  const shownAccounts = loadedSlug === slug ? accounts : [];
+  const shownApprovals = loadedSlug === slug ? approvals : [];
 
   const providerState = (type) => providers.find((item) => upper(item.provider) === upper(type)) || null;
   const counts = useMemo(() => ({
-    total: accounts.length,
-    connected: accounts.filter((a) => Boolean(a.readiness?.oauthConnected)).length,
-    ready: accounts.filter((a) => {
+    total: shownAccounts.length,
+    connected: shownAccounts.filter((a) => Boolean(a.readiness?.oauthConnected)).length,
+    ready: shownAccounts.filter((a) => {
       const state = providers.find((item) => upper(item.provider) === upper(a.provider_type));
       return mailAccountReadiness(a, state).ready;
     }).length,
-    pending: approvals.filter((a) => upper(a.status) === "PENDING").length,
-  }), [accounts, approvals, providers]);
-  const visible = useMemo(() => accounts.filter((account) => accountMatchesFilter(account, filter)), [accounts, filter]);
+    pending: shownApprovals.filter((a) => upper(a.status) === "PENDING").length,
+  }), [shownAccounts, shownApprovals, providers]);
+  const visible = useMemo(() => shownAccounts.filter((account) => accountMatchesFilter(account, filter)), [shownAccounts, filter]);
   const availableForNew = providerState(form.providerType);
   const newProviderReady = mailProviderReady(availableForNew);
 
@@ -225,7 +237,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
           {canManage && <button type="button" onClick={() => setTab("add")} disabled={!slug}>+ Yeni Hesap</button>}
         </div>
       </div>
-      {!visible.length ? <div className="mail-admin-empty"><b>{accounts.length ? "Aramaya uygun hesap bulunamadı." : "Bu firmada henüz posta kutusu yok."}</b><span>Yeni hesap eklemek için Hesap Ekle sekmesini kullanın. Eski hesaplar silinmez.</span></div> :
+      {!visible.length ? <div className="mail-admin-empty"><b>{shownAccounts.length ? "Aramaya uygun hesap bulunamadı." : "Bu firmada henüz posta kutusu yok."}</b><span>Yeni hesap eklemek için Hesap Ekle sekmesini kullanın. Eski hesaplar silinmez.</span></div> :
         <div className="mail-admin-account-list">{visible.map((account) => {
           const provider = upper(account.provider_type), available = providerState(provider);
           const state = mailAccountReadiness(account, available), active = upper(account.status);
@@ -287,8 +299,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     </section>}
     {tab === "approvals" && <section className="mail-admin-card">
       <div className="mail-admin-card-head"><div><h3>Posta Kutusu Onayları</h3><p>Yeni bağlantılar, hesap sahibinin OAuth izni ve yetkili firma onayı olmadan kullanılmaz.</p></div></div>
-      {approvals.filter((row) => upper(row.status) === "PENDING").length === 0 ? <div className="mail-admin-empty compact">Bekleyen posta kutusu onayı yok.</div> :
-        <div className="mail-admin-approvals">{approvals.filter((row) => upper(row.status) === "PENDING").map((row) => <div className="approval" key={row.id}><div><b>{row.display_name || row.email_address}</b><span>{row.email_address} · {PROVIDER_NAMES[upper(row.provider_type)] || row.provider_type} · {row.department_code || "Genel"}</span><small>Talep sahibi: {row.requested_by_name || "—"}. Kararı yetkili firma sahibi / Süper Yönetici verir.</small></div><div className="actions">{canManage ? <><button type="button" disabled={loading} onClick={() => decide(row, "APPROVE")}>Onayla</button><button type="button" className="danger" disabled={loading} onClick={() => decide(row, "REJECT")}>Reddet</button></> : <span>Yetkili onayı bekleniyor</span>}</div></div>)}</div>}
+      {shownApprovals.filter((row) => upper(row.status) === "PENDING").length === 0 ? <div className="mail-admin-empty compact">Bekleyen posta kutusu onayı yok.</div> :
+        <div className="mail-admin-approvals">{shownApprovals.filter((row) => upper(row.status) === "PENDING").map((row) => <div className="approval" key={row.id}><div><b>{row.display_name || row.email_address}</b><span>{row.email_address} · {PROVIDER_NAMES[upper(row.provider_type)] || row.provider_type} · {row.department_code || "Genel"}</span><small>Talep sahibi: {row.requested_by_name || "—"}. Kararı yetkili firma sahibi / Süper Yönetici verir.</small></div><div className="actions">{canManage ? <><button type="button" disabled={loading} onClick={() => decide(row, "APPROVE")}>Onayla</button><button type="button" className="danger" disabled={loading} onClick={() => decide(row, "REJECT")}>Reddet</button></> : <span>Yetkili onayı bekleniyor</span>}</div></div>)}</div>}
     </section>}
     {tab === "providers" && <section className="mail-admin-card">
       <div className="mail-admin-card-head"><div><h3>Sağlayıcı ve Bağlantı Durumu</h3><p>Katalog bütün firmalar için ortaktır; her firmanın hesap bağlantıları özeldir.</p></div></div>

@@ -41,3 +41,8 @@ test("Gmail ve Microsoft varsayılan hesap kararı tek core rotasına gider", ()
   assert.match(core, /MAIL_DEFAULT_NOT_READY/);
   assert.match(overlay, /p==="GMAIL"/);
 });
+
+test("Gmail ilk 100 mesaj veya kısmi klasör taraması tam sağlık raporu değildir", () => {
+  assert.match(core, /const syncHealthy=enabled>0&&completed===enabled/);
+  assert.doesNotMatch(core, /Number\(row\.sync_success_count\|\|0\)>0&&Number\(row\.sync_error_count/);
+});

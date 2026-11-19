@@ -24,3 +24,8 @@
 
 ## İzleme
 Değişiklik ve CI, bu belgeyi içeren PR'ın commit/yayın kanıtıyla eşleştirilmelidir. **Gerçek tarayıcı kabulü ve sağlayıcı bağlantısı PASS değildir.**
+
+## Ek kabul korumaları
+- Gmail mevcut adapterı korunur; Gmail OAuth ve senkron eylemleri aynı firmaya bağlı olarak çalışır. Eski overlay varsayılan hesabı kaldırılıp tek Mail Core PUT rotası kullanılır.
+- Gmail tam arşiv taraması şimdilik ilk INBOX/SENT sayfası ve başarısız mesaj kontrolü ile sınırlıdır. Bu, 15 klasörün tam eşitlendiği anlamına gelmediğinden **syncHealthy false** kalır. Tam Gmail pagination ayrı testte kabul edilecek.
+- Aktif firma değişimi sırasında eski firma yanıtları atılır; yeni firma yanıtı gelene kadar önceki firmanın hesapları ekranda gösterilmez.

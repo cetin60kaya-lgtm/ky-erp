@@ -229,9 +229,10 @@ export function registerMailCommunicationRoutes(app:any){
       const companyApproved=upper(row.approval_status)==="APPROVED";
       const oauthConnected=Number(row.provider_connected||0)===1&&Number(row.credential_present||0)===1;
       const enabled=Number(row.sync_enabled_folder_count||0),completed=Number(row.sync_completed_folder_count||0);
-      const syncHealthy=upper(row.provider_type)==="MICROSOFT_365"
-        ? enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0
-        : Number(row.sync_success_count||0)>0&&Number(row.sync_error_count||0)===0;
+      // Yalnız bütün klasörler gerçekten tamamlanınca sağlıklı. Gmail'in ilk 100 mesajlık
+      // INBOX/SENT taraması eksiksiz Gmail arşivi kanıtı değildir; MICROSOFT_DELTA
+      // tamamlanmış klasör sayısına karışmaz.
+      const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0;
       return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,completedFolders:completed,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
     return c.json({ok:true,data:rows});
