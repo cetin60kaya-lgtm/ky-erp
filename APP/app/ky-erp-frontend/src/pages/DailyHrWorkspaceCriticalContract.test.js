@@ -129,8 +129,11 @@ test("open past periods remain visible and printing never marks payment complete
 
 
 test("manual daily range keeps arbitrary ranges instead of forcing Monday-Sunday", () => {
-  assert.match(workspace, /setSafeRange\(value > range\.end \? \{ start: value, end: value \} : \{ \.\.\.range, start: value \}\)/);
-  assert.match(workspace, /setSafeRange\(value < range\.start \? \{ start: value, end: value \} : \{ \.\.\.range, end: value \}\)/);
+  assert.match(workspace, /value=\{rangeDraft\.start\}/);
+  assert.match(workspace, /value=\{rangeDraft\.end\}/);
+  assert.match(workspace, /onClick=\{\(\) => void setSafeRange\(rangeDraft\)\}/);
+  assert.match(workspace, /saveDailyActiveRange\(/);
+  assert.match(workspace, /expectedVersion: sharedVersionRef\.current/);
   assert.match(workspace, /rangeSpanDays\(resolved\.start, resolved\.end\) > 31/);
   assert.doesNotMatch(workspace, /kyop-range-summary/);
 });
@@ -187,7 +190,7 @@ test("long custom weekly ranges never silently omit days from printed report", (
 test("selected date range is shared across operation tabs without overwriting other PCs navigation", () => {
   assert.match(workspace, /const PAYMENT_POOL_RANGE_KEY = RANGE_KEY/);
   assert.match(workspace, /const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY/);
-  assert.match(workspace, /setPaymentPoolRange\(resolved\); setPaymentHistoryRange\(resolved\)/);
+  assert.match(workspace, /setPaymentPoolRange\(next\); setPaymentHistoryRange\(next\)/);
   assert.match(workspace, /window\.addEventListener\("storage", onStorage\)/);
   assert.match(workspace, /event\.data\?\.type === "date-range"/);
 });
