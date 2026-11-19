@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Günlük Operasyon son kabul / kişi ödeme kartı
+- Güncel canonical production HEAD üzerinde yalnız Günlük Operasyon kaynakları taşındı; paralel Gmail/mail değişiklikleri korunuyor.
+- 14–22 gibi firma-geneli ortak haftayı D1 CAS sürümü korur. “Bu Hafta” kendiliğinden seçilmez; ilk kez `Bu Dönemi Sabitle` ile kullanıcı onayı gerekir.
+- Hızlı Giriş Personel Ekle sağ genişletilebilir panel + son 7/14 gündeki havuz dışı sık kullanılanlar. Toplu ekleme sadece havuza kaydeder, çalışma/ödeme değildir.
+- Personel kartındaki D1 çalışan/ödeme geçmişine aylık gündüz/gece, net hakediş ve fiilen yapılmış teyitli ödeme sütunları eklendi; ödeme tarihi ve çalışma tarihi karışmaz, iptal/legacy ayrı.
+- D1 canlı kayıtları üzerinde yazma/silme yok. Sonraki Supi ismi düzenlemesi ayrı aşama.
+
+
 ## 19.11.2026 — Gmail 2/15 görünürlük ve gerçek hata ayrımı
 - Kullanıcı Gmail `hkndesen@gmail.com` yetkili hesabında birkaç saat boyunca `2/15` kaldığını, otomatik turda `0 mesaj işlendi` yazdığını canlı gösterdi. **Bu durum tam senkron PASS değildir.**
 - Kanonik Gmail Worker kod incelemesi: `runGmailMailScheduledSync` 5 dakika cron'a bağlı; her turda 1 klasör/3 mesaj sınırı var. Otomatik başarısız tur, arayüzde `gmailAutoStatus` saklanmasına rağmen gösterilmiyordu. Bir sayfa hata verdiğinde `result.folders[].ok=false` olsa bile `fatal=false` olan yollarda cron `OK` olarak kayıt açabiliyordu. Ayrıca `SYNC_PENDING_PAGINATION` normal bekleme iken `sync_error_count` hatası sayılıyordu.

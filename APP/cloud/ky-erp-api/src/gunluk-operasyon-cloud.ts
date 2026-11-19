@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, validDailyWageAmount, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
+import { summarizeDailyPersonnelHistory, monthlyDailyPersonnelHistory } from "./gunluk-personnel-history-core";
 import { parseDailyExcelRows } from "./gunluk-excel-import";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -201,6 +202,13 @@ function ensureSchema(c: Context<AppEnv>) {
         request_id TEXT,
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(attendance_id, revision)
+      )`),
+      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_active_range (
+        main_company_id TEXT PRIMARY KEY,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`),
       c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_period_lock (
         id TEXT PRIMARY KEY,
@@ -581,6 +589,58 @@ async function listFocused(c: Context<AppEnv>) {
   return okItems(c, rows, rows);
 }
 
+/**
+ * Firma bazında TEK aktif rapor/dönem aralığı; personel, vardiya veya ödeme
+ * tablolarını değiştirmez. Sürüm eşleşmesi başka PC'deki yeni seçimi korur.
+ */
+async function getActiveDailyRange(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId = companyIdOf(c);
+  const row = await c.env.DB.prepare(`SELECT start_date,end_date,version,updated_at
+    FROM hr_daily_active_range WHERE main_company_id=?`).bind(companyId).first<Row>();
+  if (!row) return ok(c,{ configured:false, version:0 });
+  return ok(c,{
+    configured:true, startDate:dateOnly(row.start_date), endDate:dateOnly(row.end_date),
+    version:num(row.version), updatedAt:text(row.updated_at),
+  });
+}
+async function saveActiveDailyRange(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c,body);
+  const start = dateOnly(body.startDate);
+  const end = dateOnly(body.endDate);
+  const startMs=Date.parse(start+"T12:00:00Z");
+  const endMs=Date.parse(end+"T12:00:00Z");
+  if (!validDate(start) || !validDate(end) || !Number.isFinite(startMs)
+    || !Number.isFinite(endMs) || new Date(startMs).toISOString().slice(0,10)!==start
+    || new Date(endMs).toISOString().slice(0,10)!==end
+    || endMs<startMs || endMs-startMs>30*86400000)
+    return fail(c,400,"INVALID_SHARED_RANGE","Ortak günlük dönem 1 ile 31 gün arasında olmalıdır.");
+  const expected=Number(body.expectedVersion);
+  if (!Number.isSafeInteger(expected) || expected<0)
+    return fail(c,400,"RANGE_REVISION_REQUIRED","Tarih aralığı sürümü belirtilmelidir.");
+  const result=await c.env.DB.prepare(`INSERT INTO hr_daily_active_range
+    (main_company_id,start_date,end_date,version,updated_at)
+    VALUES(?,?,?,1,CURRENT_TIMESTAMP)
+    ON CONFLICT(main_company_id) DO UPDATE SET
+      start_date=excluded.start_date,end_date=excluded.end_date,
+      version=hr_daily_active_range.version+1,updated_at=CURRENT_TIMESTAMP
+    WHERE hr_daily_active_range.version=?`)
+    .bind(companyId,start,end,expected).run();
+  const saved=await c.env.DB.prepare(`SELECT start_date,end_date,version,updated_at
+    FROM hr_daily_active_range WHERE main_company_id=?`).bind(companyId).first<Row>();
+  // İlk kurulum yalnız beklenen sürüm=0 için mümkün; aynı anda ikinci kurucu
+  // başarılı görünmesin. SQL changes=0 veya kayıt beklenenden farklıysa conflict.
+  const created=expected===0 && num(saved?.version)===1 && dateOnly(saved?.start_date)===start && dateOnly(saved?.end_date)===end;
+  if (num(result.meta?.changes)===0 || !saved || !(num(saved.version)===expected+1 || created))
+    return fail(c,409,"SHARED_RANGE_CONFLICT","Başka bilgisayarda tarih aralığı değişti. Son kayıt okunmalı.");
+  return ok(c,{
+    configured:true, startDate:dateOnly(saved.start_date), endDate:dateOnly(saved.end_date),
+    version:num(saved.version), updatedAt:text(saved.updated_at),
+  });
+}
+
 async function listRoster(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId = companyIdOf(c);
@@ -606,24 +666,9 @@ async function listRoster(c: Context<AppEnv>) {
     .map((row) => text(row.employee_id))
     .filter((id) => id && knownIds.has(id));
 
-  // Kayitlar yalniz exact tarih araligina baglidir. Baska araliktaki
-  // personele sessiz vardiya/roster kopyasi yapmadan, kullaniciya kayitli
-  // diger araliklari gostermek icin salt okunur alternatif don.
-  let otherRanges: { startDate: string; endDate: string; employeeCount: number }[] = [];
-  if (!employeeIds.length) {
-    const alternatives = await c.env.DB.prepare(`SELECT r.start_date,r.end_date,COUNT(DISTINCT r.employee_id) AS employee_count
-      FROM hr_daily_range_roster r
-      JOIN hr_daily_employees e ON e.id=r.employee_id AND e.main_company_id=r.main_company_id
-      WHERE r.main_company_id=? AND NOT (r.start_date=? AND r.end_date=?)
-      GROUP BY r.start_date,r.end_date
-      ORDER BY r.end_date DESC,r.start_date DESC LIMIT 5`)
-      .bind(companyId, start, end).all<Row>();
-    otherRanges = (alternatives.results || []).map((row) => ({
-      startDate: dateOnly(row.start_date), endDate: dateOnly(row.end_date),
-      employeeCount: Math.max(0, Math.trunc(num(row.employee_count))),
-    })).filter((row) => row.employeeCount > 0);
-  }
-  const data = { startDate: start, endDate: end, employeeIds, otherRanges };
+  // Yalnız seçilen exact aralık dönülür. Önceki havuzları arama/yönlendirme
+  // artık yapılmaz; firma ortak aralığı active-range kaydından yüklenir.
+  const data = { startDate: start, endDate: end, employeeIds };
   return okItems(c, data, employeeIds);
 }
 
@@ -2039,6 +2084,65 @@ async function paymentPeriodStatus(c: Context<AppEnv>) {
   return okItems(c, results, results);
 }
 
+/**
+ * Personel kartının salt-okunur çalışma/ödeme geçmişi.
+ * Yeni ödeme tablosu veya çift mali toplam yok: tarihli ücretler mevcut
+ * paymentSourceRows(), fiilen alınan ödemeler hr_daily_payments'dan.
+ */
+async function employeeWorkPaymentHistory(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId=companyIdOf(c);
+  const employeeId=text(c.req.param("id"));
+  const start=dateOnly(c.req.query("startDate") || "1900-01-01");
+  const end=dateOnly(c.req.query("endDate") || currentWageWeekStart());
+  if (!employeeId || !validDate(start) || !validDate(end) || end < start)
+    return fail(c,400,"INVALID_PERSON_HISTORY_PERIOD","Geçerli personel ve başlangıç/bitiş tarih aralığı zorunludur.");
+  const employee=await c.env.DB.prepare(`SELECT id,full_name,qualification,day_wage,night_wage
+    FROM hr_daily_employees WHERE main_company_id=? AND id=? LIMIT 1`)
+    .bind(companyId,employeeId).first<Row>();
+  if (!employee) return fail(c,404,"EMPLOYEE_NOT_FOUND","Personel kartı bulunamadı.");
+  const [worked,paymentsResult,adjustmentsResult]=await Promise.all([
+    paymentSourceRows(c,companyId,start,end,employeeId),
+    c.env.DB.prepare(`SELECT id,payment_no,paid_date,paid_at,period_start,period_end,
+      day_count,night_count,total_days,total_amount_cents,status,cancel_reason
+      FROM hr_daily_payments
+      WHERE main_company_id=? AND employee_id=? AND paid_date>=? AND paid_date<=?
+      ORDER BY paid_date DESC,paid_at DESC,id DESC`)
+      .bind(companyId,employeeId,start,end).all<Row>(),
+    c.env.DB.prepare(`SELECT id,period_start,period_end,kind,reason,amount_cents,settled_payment_id
+      FROM hr_daily_payment_adjustments
+      WHERE main_company_id=? AND employee_id=? AND status='ACTIVE'
+        AND period_start>=? AND period_end<=?
+      ORDER BY period_start,period_end,id`)
+      .bind(companyId,employeeId,start,end).all<Row>(),
+  ]);
+  const payments=paymentsResult.results || [];
+  const adjustments=adjustmentsResult.results || [];
+  const totals=summarizeDailyPersonnelHistory(worked,payments,adjustments);
+  const months=monthlyDailyPersonnelHistory(worked,payments,adjustments);
+  const paymentRecords=payments.slice(0,100).map((row)=>({
+    id:text(row.id),paymentNo:text(row.payment_no),
+    paidDate:dateOnly(row.paid_date),periodStart:dateOnly(row.period_start),
+    periodEnd:dateOnly(row.period_end),paidAt:text(row.paid_at),
+    dayCount:num(row.day_count),nightCount:num(row.night_count),
+    totalAmount:Number(row.total_amount_cents || 0)/100,
+    status:text(row.status),cancelReason:text(row.cancel_reason),
+  }));
+  return ok(c,{
+    employeeId, employeeName:text(employee.full_name),
+    role:text(employee.qualification),startDate:start,endDate:end,
+    ...totals,
+    months,
+    days:totals.shifts.slice(0,90),
+    daysTruncated:totals.shifts.length>90,
+    payments:paymentRecords,
+    paymentsTruncated:payments.length>100,
+    basis:"EARNED_BY_WORK_DATE_PAID_BY_PAYMENT_DATE",
+    confirmedPaidNote:"Gerçek ödeme yalnız aktif PAID ödeme defteri kayıtlarından hesaplanır. İptaller hariçtir.",
+    legacyNote:"Eski sistemde yalnız ÖDENDİ işaretli kayıtlar teyitli ödeme toplamına dahil edilmez.",
+  });
+}
+
 async function paymentHistory(c: Context<AppEnv>) {
   await ensureSchema(c);
   const companyId=companyIdOf(c);
@@ -2213,11 +2317,14 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
   app.get("/api/gunluk-operasyon/payments/pool", protect(paymentPool));
   app.get("/api/gunluk-operasyon/payments/period-status", protect(paymentPeriodStatus));
   app.get("/api/gunluk-operasyon/payments/history", protect(paymentHistory));
+  app.get("/api/gunluk-operasyon/employees/:id/history", protect(employeeWorkPaymentHistory));
   app.post("/api/gunluk-operasyon/payments", protect(createPayment));
   app.post("/api/gunluk-operasyon/payments/:id/cancel", protect(cancelPayment));
 
   app.get("/api/gunluk-operasyon/records", protect(listFocused));
   app.post("/api/gunluk-operasyon/records", protect(saveFocused));
+  app.get("/api/gunluk-operasyon/active-range", protect(getActiveDailyRange));
+  app.post("/api/gunluk-operasyon/active-range", protect(saveActiveDailyRange));
   app.get("/api/gunluk-operasyon/roster", protect(listRoster));
   app.post("/api/gunluk-operasyon/roster", protect(saveRoster));
   app.post("/api/gunluk-operasyon/excel-upload", protect(excelUploadPreview));

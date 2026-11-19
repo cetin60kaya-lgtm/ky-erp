@@ -17,8 +17,8 @@ test("daily operations quick entry keeps existing personnel visible and protects
 test("daily entry keeps manual start/end range, double-click quick entry and wide day dropdown", () => {
   assert.match(workspace, /kyop-manual-range/);
   assert.match(workspace, /aria-label="Tarih aralığını elle seç"/);
-  assert.match(workspace, /<span>Başlangıç<\/span><input type="date" value=\{range\.start\}/);
-  assert.match(workspace, /<span>Bitiş<\/span><input type="date" value=\{range\.end\}/);
+  assert.match(workspace, /<span>Başlangıç<\/span><input type="date" value=\{rangeDraft\.start\}/);
+  assert.match(workspace, /<span>Bitiş<\/span><input type="date" value=\{rangeDraft\.end\}/);
   assert.match(workspace, /shiftRange\(-1\)/);
   assert.match(workspace, /shiftRange\(1\)/);
   assert.match(workspace, /onDoubleClick=\{\(\) => void openQuick\(item\.date, shift\)\}/);
@@ -129,8 +129,11 @@ test("open past periods remain visible and printing never marks payment complete
 
 
 test("manual daily range keeps arbitrary ranges instead of forcing Monday-Sunday", () => {
-  assert.match(workspace, /setSafeRange\(value > range\.end \? \{ start: value, end: value \} : \{ \.\.\.range, start: value \}\)/);
-  assert.match(workspace, /setSafeRange\(value < range\.start \? \{ start: value, end: value \} : \{ \.\.\.range, end: value \}\)/);
+  assert.match(workspace, /value=\{rangeDraft\.start\}/);
+  assert.match(workspace, /value=\{rangeDraft\.end\}/);
+  assert.match(workspace, /onClick=\{\(\) => void setSafeRange\(rangeDraft\)\}/);
+  assert.match(workspace, /saveDailyActiveRange\(/);
+  assert.match(workspace, /expectedVersion: sharedVersionRef\.current/);
   assert.match(workspace, /rangeSpanDays\(resolved\.start, resolved\.end\) > 31/);
   assert.doesNotMatch(workspace, /kyop-range-summary/);
 });
@@ -187,9 +190,9 @@ test("long custom weekly ranges never silently omit days from printed report", (
 test("selected date range is shared across operation tabs without overwriting other PCs navigation", () => {
   assert.match(workspace, /const PAYMENT_POOL_RANGE_KEY = RANGE_KEY/);
   assert.match(workspace, /const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY/);
-  assert.match(workspace, /setPaymentPoolRange\(resolved\); setPaymentHistoryRange\(resolved\)/);
-  assert.match(workspace, /window\.addEventListener\("storage", onStorage\)/);
-  assert.match(workspace, /event\.data\?\.type === "date-range"/);
+  assert.match(workspace, /setPaymentPoolRange\(next\); setPaymentHistoryRange\(next\)/);
+  assert.match(workspace, /window\.addEventListener\("focus", onFocus\)/);
+  assert.match(workspace, /data\?\.type === "date-range"/);
 });
 
 test("main and quick attendance save only changed people and retain original server revisions", () => {
@@ -218,12 +221,23 @@ test("daily view has real D1 audit log under work area and no duplicated weekly 
   assert.match(workspace, /gop-daily-audit-list/);
   assert.match(workspace, /Tüm Geçmiş ve Ayrıntılar/);
   assert.doesNotMatch(workspace, /onClick=\{\(\) => printWeeklyControlList\(range, days, weeklyControlRows\)\}/);
-  assert.match(workspace, /onClick=\{\(\) => printWeeklySummary\(range, days, weeklyControlRows\)\}/);
+  assert.match(workspace, /onClick=\{\(\) => void printVerifiedWeeklySummary\(\)\}/);
 });
 
-test("date range change keeps D1 roster untouched, clears only stale UI and shows the saved range chooser", () => {
-  assert.match(workspace, /setRosterIds\(new Set\(\)\); setRosterSaved\(false\); setOtherSavedRanges\(\[\]\)/);
-  assert.match(workspace, /setOtherSavedRanges\(!savedSet\.size && Array\.isArray\(roster\?\.otherRanges\)/);
-  assert.match(workspace, /Bu tarih aralığının havuzu boş\. Önceki kayıtlar silinmedi/);
-  assert.match(workspace, /setSafeRange\(\{ start: item\.startDate, end: item\.endDate \}\)/);
+test("date range scope stays isolated and no previous-roster warning or navigation is rendered", () => {
+  assert.match(workspace, /setRosterIds\(new Set\(\)\); setRosterSaved\(false\)/);
+  assert.match(workspace, /setRosterIds\(savedSet\)/);
+  assert.match(workspace, /setRosterSaved\(Boolean\(attendanceRows\)/);
+  assert.doesNotMatch(workspace, /otherSavedRanges|setOtherSavedRanges|gop-roster-saved-ranges/);
+  assert.doesNotMatch(workspace, /Bu tarih aralığının havuzu boş|Kaydedilmiş aralığı aç:/);
+  assert.doesNotMatch(workspace, /setSafeRange\(\{ start: item\.startDate, end: item\.endDate \}\)/);
+});
+
+test("dönem değişikliği anlık kaydetme, haftalık çıktı, Excel ve ödeme öncesinde D1 ile tekrar doğrulanır", () => {
+  assert.match(workspace, /const verifyPrintAndPaymentRange = useCallback\(async/);
+  assert.match(workspace, /getDailyActiveRange\(\{ mainCompanyId: companyId \}, \{ forceFresh: true \}\)/);
+  assert.match(workspace, /current\.version !== sharedVersionRef\.current/);
+  assert.match(workspace, /await verifyPrintAndPaymentRange\(paymentPoolRange\)/);
+  assert.match(workspace, /await verifyPrintAndPaymentRange\(range\)/);
+  assert.match(workspace, /sharedRangeReady && sharedRangeConfigured/);
 });
