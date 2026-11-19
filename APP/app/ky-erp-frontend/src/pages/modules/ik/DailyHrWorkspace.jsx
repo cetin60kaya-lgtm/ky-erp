@@ -404,6 +404,11 @@ function printPaidPaymentReceipt(row = {}) {
 
 function actionLabel(row = {}) {
   const key = normalizeText(row.action || row.operation || row.eventType || row.type || row.changeType);
+  if (key === "ROSTER_ADD") return "PERSONEL HAVUZA EKLENDİ";
+  if (key === "ROSTER_REMOVE") return "PERSONEL HAVUZDAN ÇIKARILDI";
+  if (key === "EMPLOYEE_CARD_CREATE") return "PERSONEL KARTI OLUŞTURULDU";
+  if (key === "EMPLOYEE_CARD_UPDATE") return "PERSONEL KARTI GÜNCELLENDİ";
+  if (key === "EMPLOYEE_WAGE_CHANGE") return "PERSONEL ÜCRETİ DEĞİŞTİRİLDİ";
   if (key.includes("PAID") || key.includes("ODE") || key.includes("ÖDE")) return "ÖDENDİ";
   if (key.includes("REMOVE") || key.includes("DELETE") || key.includes("SIL")) return "KAYIT KALDIRILDI";
   if (key.includes("CREATE") || key.includes("ADD")) return "KAYIT EKLENDİ";
@@ -857,7 +862,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       ? reconcileDailyWeeklyReport(matrixRows, summaryRows)
       : matrixRows.map((row) => ({ ...row, baseAmount: row.totalAmount, additions: 0, deductions: 0, financialVerified: false }));
   }, [attendance, employeeMap, range.end, range.start, summaryRows, weeklySummaryInScope]);
-  const weeklyFinancialReady = weeklySummaryInScope && weeklyControlRows.every((row) => row.financialVerified);
+  const weeklyFinancialReady = weeklySummaryInScope
+    && rangeReadScope === expectedRangeScope
+    && !rangeLoadError
+    && weeklyControlRows.every((row) => row.financialVerified);
   // Geçmiş haftalarda da açık hakediş olabilir; tarih nedeniyle havuzu gizleme.
   const visiblePaymentRows = paymentRows;
   const selectedPaymentRows = useMemo(() => visiblePaymentRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [visiblePaymentRows, paymentSelectedIds]);
