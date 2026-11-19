@@ -14,14 +14,17 @@ test("daily operations quick entry keeps existing personnel visible and protects
   assert.match(workspace, /Hızlı giriş personel listesi eksik yüklendi/);
 });
 
-test("daily entry keeps manual start/end range, double-click quick entry and wide day dropdown", () => {
+test("daily entry keeps manual range and opens direct inline smart selection without a second popup", () => {
   assert.match(workspace, /kyop-manual-range/);
   assert.match(workspace, /aria-label="Tarih aralığını elle seç"/);
   assert.match(workspace, /<span>Başlangıç<\/span><input type="date" value=\{range\.start\}/);
   assert.match(workspace, /<span>Bitiş<\/span><input type="date" value=\{range\.end\}/);
   assert.match(workspace, /shiftRange\(-1\)/);
   assert.match(workspace, /shiftRange\(1\)/);
-  assert.match(workspace, /onDoubleClick=\{\(\) => void openQuick\(item\.date, shift\)\}/);
+  assert.match(workspace, /onClick=\{\(\) => changeDailyFocus\(item\.date, shift\)\}/);
+  assert.match(workspace, /<DailyEntrySmartSelector/);
+  assert.match(workspace, /onSave=\{saveFocused\}/);
+  assert.doesNotMatch(workspace, /onDoubleClick=\{\(\) => void openQuick\(item\.date, shift\)\}/);
   assert.match(workspace, /quick-active-day-card/);
   assert.match(workspace, /quick-day-popover-grid/);
   assert.match(workspace, /quickDayPickerOpen/);

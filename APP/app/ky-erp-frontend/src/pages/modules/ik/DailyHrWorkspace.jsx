@@ -49,6 +49,7 @@ import {
   updateDailyEmployee,
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
+import DailyEntrySmartSelector from "./DailyEntrySmartSelector";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
 import { dailyWorkDateInRange, reconcileDailyWeeklyReport, paginateDailyPrintRows } from "../../../services/dailyOpsReportIntegrity";
@@ -427,6 +428,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [shift, setShift] = useState("day");
   const [records, setRecords] = useState([]);
   const [attendance, setAttendance] = useState([]);
+  const [priorAttendance, setPriorAttendance] = useState([]);
+  const dailyDraftDirtyRef = useRef(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [checkedIds, setCheckedIds] = useState(() => new Set());
   const [notes, setNotes] = useState({});
@@ -541,6 +544,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const setSafeRange = useCallback((next) => {
     const resolved = typeof next === "function" ? next(range) : next;
     if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
+    if (!sameRange(resolved, range) && dailyDraftDirtyRef.current
+      && !window.confirm("Kaydedilmemiş günlük seçimler var. Tarih aralığı değişince taslak kaybolacak. Devam edilsin mi?")) return;
     if (rangeSpanDays(resolved.start, resolved.end) > 31) { setError("Günlük Operasyon tek seferde en fazla 31 günlük aralıkla çalışır."); return; }
     if (!sameRange(resolved, dailyRangeRef.current)) {
       rangeRequestRef.current += 1;
@@ -819,6 +824,29 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => { void loadPaymentHistory(); }, [loadPaymentHistory]);
 
   const employeeMap = useMemo(() => new Map(employees.map((person) => [person.id, person])), [employees]);
+  const frequentAttendanceRows = useMemo(() => [...priorAttendance, ...attendance], [priorAttendance, attendance]);
+  const savedDailyIds = useMemo(() => focusedIds(records), [records]);
+  const savedDailyChecked = useMemo(() => focusedCheckedIds(records), [records]);
+  const noteDraftDirty = [...new Set([...rosterIds, ...selectedIds])].some((id) =>
+    String(notes[id] || "") !== String(records.find((row) => rowEmployeeId(row) === id)?.note || ""));
+  const dailyDraftDirty = !sameSet(selectedIds, savedDailyIds)
+    || !sameSet(checkedIds, savedDailyChecked) || noteDraftDirty;
+  useEffect(() => { dailyDraftDirtyRef.current = dailyDraftDirty; }, [dailyDraftDirty]);
+  // Tek ek istek: yalnız geçmiş 30 günlük gerçek vardiya kayıtlarından
+  // sık kullanılanlar önerisi üretir. D1'e yazmaz, hata olursa mevcut dönem yeterlidir.
+  useEffect(() => {
+    if (!companyId || view !== "daily-entry" || !range.start) { setPriorAttendance([]); return undefined; }
+    let cancelled = false;
+    setPriorAttendance([]);
+    const from = addDays(range.start, -30);
+    const to = addDays(range.start, -1);
+    if (!from || !to) return undefined;
+    void getDailyAttendance({ mainCompanyId: companyId, startDate: from, endDate: to })
+      .then((rows) => { if (!cancelled) setPriorAttendance(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setPriorAttendance([]); });
+    return () => { cancelled = true; };
+  }, [companyId, range.start, view]);
+
   const attendanceRosterIds = useMemo(() => new Set(attendance
     .filter((row) => {
       const date = rowDate(row);
@@ -1071,36 +1099,18 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   };
 
-  const setPersonSelectedForShift = async (person, nextSelected) => {
+  // Tek ekran: kart tıklaması D1'e yazmaz, sadece seçili vardiya taslağını değiştirir.
+  const setPersonSelectedForShift = (person, nextSelected) => {
     if (!person?.id || busy || dailyWriteBlocked) return;
-    const currentRecord = recordByEmployee.get(person.id) || {};
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await saveDailyFocusedRecords({
-        mainCompanyId: companyId,
-        date: selectedDate,
-        shift,
-        personnelEntries: [{
-          personelId: person.id,
-          status: nextSelected ? "ACTIVE" : "REMOVE",
-          checked: nextSelected ? false : false,
-          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
-          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
-          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
-          note: nextSelected ? (notes[person.id] || "") : "",
-        }],
-      });
-      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
-      setNotice(
-        nextSelected
-          ? `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} vardiyasına kaydedildi.`
-          : `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kaydı kaldırıldı. Personel havuzda kaldı.`,
-      );
-    } catch (e) {
-      setError(e?.message || "Gün/vardiya kaydı güncellenemedi. Ekranı yenileyip tekrar deneyin.");
-    } finally {
-      setBusy(false);
-    }
+    if (nextSelected && shift === "night" && personWageAtDate(person, selectedDate).night <= 0) return;
+    setSelectedIds((current) => {
+      const ids = new Set(current);
+      if (nextSelected) ids.add(person.id); else ids.delete(person.id);
+      return ids;
+    });
+    if (!nextSelected) setCheckedIds((current) => {
+      const next = new Set(current); next.delete(person.id); return next;
+    });
   };
 
   const removePersonFromRoster = async (person) => {
@@ -1161,32 +1171,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   };
 
-  const setPersonReviewed = async (person, nextChecked) => {
+  const setPersonReviewed = (person, nextChecked) => {
     if (!person?.id || busy || dailyWriteBlocked || !selectedIds.has(person.id)) return;
-    const currentRecord = recordByEmployee.get(person.id) || {};
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await saveDailyFocusedRecords({
-        mainCompanyId: companyId,
-        date: selectedDate,
-        shift,
-        personnelEntries: [{
-          personelId: person.id,
-          status: "ACTIVE",
-          checked: Boolean(nextChecked),
-          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
-          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
-          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
-          note: notes[person.id] || "",
-        }],
-      });
-      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
-      setNotice(`${person.name} kontrol durumu ${nextChecked ? "onaylandı" : "kaldırıldı"}.`);
-    } catch (e) {
-      setError(e?.message || "Kontrol durumu güncellenemedi. Ekranı yenileyip tekrar deneyin.");
-    } finally {
-      setBusy(false);
-    }
+    setCheckedIds((current) => {
+      const next = new Set(current);
+      if (nextChecked) next.add(person.id); else next.delete(person.id);
+      return next;
+    });
+  };
+
+  const addManyToDailyDraft = (ids) => {
+    if (busy || dailyWriteBlocked) return;
+    const peopleById = new Map(employees.filter((person) => person.active !== false).map((person) => [person.id, person]));
+    const safeIds = (Array.isArray(ids) ? ids : []).filter((id) => {
+      const person = peopleById.get(id);
+      return person && (shift === "day" || personWageAtDate(person, selectedDate).night > 0);
+    });
+    setSelectedIds((current) => new Set([...current, ...safeIds]));
+  };
+  const restoreDailyDraft = () => {
+    if (busy || dailyWriteBlocked) return;
+    setSelectedIds(new Set(focusedIds(records)));
+    setCheckedIds(new Set(focusedCheckedIds(records)));
+    setNotes(Object.fromEntries(records.map((row) => [rowEmployeeId(row), row.note || ""])));
+    setNotice("Kaydedilmemiş taslak seçimleri geri alındı; sunucudaki kayıtlar değiştirilmedi.");
+  };
+  const changeDailyFocus = (date, nextShift) => {
+    if (date === selectedDate && nextShift === shift) return;
+    if (dailyDraftDirty && !window.confirm("Kaydedilmemiş seçimler var. Gün veya vardiya değiştirilirse taslak kaybolacak. Devam edilsin mi?")) return;
+    setSelectedDate(date); setShift(nextShift);
   };
 
   const addFromQuickPool = () => addRosterPerson(resolveRosterChoice(quickAddQuery), "quick");
@@ -1196,8 +1209,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try {
       const missingSelectedPeople = [...selectedIds].filter((id) => !employeeMap.has(id));
       if (missingSelectedPeople.length) throw new Error("Personel listesi eksik yüklendi. Kayıt korunması için ekranı yenileyip tekrar deneyin.");
-      if (!rosterSaved && rosterWriteBlocked) throw new Error("Dönem personel listesi doğrulanamadı veya aralıkta kapalı gün var.");
-      if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
+      const missingRosterIds = [...selectedIds].filter((id) => !rosterIds.has(id));
+      if ((!rosterSaved || missingRosterIds.length) && rosterWriteBlocked)
+        throw new Error("Dönem personel listesi doğrulanamadı veya aralıkta kapalı gün var.");
+      if (!rosterSaved || missingRosterIds.length) {
+        const savedRoster = await saveDailyRoster({
+          mainCompanyId: companyId, startDate: range.start, endDate: range.end,
+          employeeIds: [...effectiveRosterIds], mode: "merge",
+        });
+        const confirmed = Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : null;
+        if (!confirmed || missingRosterIds.some((id) => !confirmed.includes(id)))
+          throw new Error("Seçilenlerin dönem havuzuna D1 kaydı doğrulanamadı; vardiya kaydı yapılmadı.");
+        setRosterIds(new Set(confirmed)); setRosterSaved(true);
+      }
       // Delta write: başka cihazdaki değişmemiş satırları tekrar yazma.
       const changedPeople = activeRosterPeople.filter((person) => {
         const record = recordByEmployee.get(person.id) || {};
@@ -1220,8 +1244,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setNotice(`${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kayıtları kaydedildi.`); await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
     } catch (e) { setError(e?.message || "Günlük giriş kaydedilemedi. Başka cihazda değişiklik olduysa Yenile'ye basın."); } finally { setBusy(false); }
   };
-  const selectAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set(activeRosterPeople.filter((p) => shift === "day" || personWageAtDate(p, selectedDate).night > 0).map((p) => p.id))); };
-  const clearAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set()); setCheckedIds(new Set()); };
+  const selectAll = () => { if (busy || dailyWriteBlocked) return; addManyToDailyDraft(activeRosterPeople.map((person) => person.id)); };
+  const clearAll = () => restoreDailyDraft();
   const thisWeek = () => { const start = startOfWeek(); setSafeRange({ start, end: addDays(start, 6) }); setSelectedDate(localDateKey()); };
 
   const loadQuickFocus = async (date, mode, preserveQuery = "") => {
@@ -1779,7 +1803,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       {periodLockVerified && !periodLocked && rangeLockInfo && view === "daily-entry" ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> Tarih aralığının başka gününde kapalı dönem var. Seçili açık günün kayıtları düzenlenebilir; dönem personel listesi değiştirilemez.</div> : null}
 
       {view === "daily-entry" ? <div className={`kyop-daily ${shift}`}>
-        <div className="kyop-titlebar"><div><span>KY ERP / GÜNLÜK OPERASYON / GÜVENLİ GİRİŞ</span><h1>Günlük Personel Girişi</h1><p>Detaylı kontrolde tek gün aktiftir; hızlı giriş de tek gün ve tek vardiya üzerinden çalışır.</p></div><div className="kyop-mode"><button className={shift === "day" ? "active day" : ""} type="button" onClick={() => setShift("day")}><Sun size={17}/> GÜNDÜZ GİRİŞİ</button><button className={shift === "night" ? "active night" : ""} type="button" onClick={() => setShift("night")}><Moon size={17}/> GECE GİRİŞİ</button></div></div>
+        <div className="kyop-titlebar"><div><span>KY ERP / GÜNLÜK OPERASYON / GÜVENLİ GİRİŞ</span><h1>Günlük Personel Girişi</h1><p>Detaylı kontrolde tek gün aktiftir; hızlı giriş de tek gün ve tek vardiya üzerinden çalışır.</p></div><div className="kyop-mode"><button className={shift === "day" ? "active day" : ""} type="button" onClick={() => changeDailyFocus(selectedDate, "day")}><Sun size={17}/> GÜNDÜZ GİRİŞİ</button><button className={shift === "night" ? "active night" : ""} type="button" onClick={() => changeDailyFocus(selectedDate, "night")}><Moon size={17}/> GECE GİRİŞİ</button></div></div>
         <div className="kyop-actions">
           <div className="kyop-action-group kyop-date-actions" aria-label="Tarih ve hafta seçimi">
           <div className="kyop-manual-range" aria-label="Tarih aralığını elle seç">
@@ -1790,12 +1814,43 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           <button type="button" onClick={thisWeek}><CalendarDays size={15}/> Bu Hafta</button>
           </div>
           <div className="kyop-action-group kyop-entry-actions" aria-label="Personel kayıt işlemleri">
-          <button type="button" className="primary" onClick={() => void openQuick()}><Zap size={15}/> Hızlı Personel Girişi</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={15}/> Yeni Personel Ekle</button><button type="button" disabled={busy || dailyWriteBlocked} onClick={selectAll}><CheckCircle2 size={15}/> Tümünü Seç</button><button type="button" disabled={busy || dailyWriteBlocked} onClick={clearAll}>Seçimi Kaldır</button><button type="button" onClick={loadFocused}><RefreshCw size={15}/> Kayıtlı Seçimi Yükle</button><button type="button" className="primary" disabled={busy || dailyWriteBlocked} onClick={saveFocused}><Save size={15}/> Günlük Kaydet</button>
+            <button type="button" className="primary" onClick={() => document.getElementById("ky-smart-entry")?.scrollIntoView({ behavior: "smooth", block: "start" })}><Users size={15}/> Personel Seç</button>
+            <button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={15}/> Yeni Personel</button>
+            <button type="button" disabled={busy || dailyWriteBlocked} onClick={selectAll}><CheckCircle2 size={15}/> Havuzun Tümünü Seç</button>
+            <button type="button" disabled={busy || dailyWriteBlocked || !dailyDraftDirty} onClick={clearAll}><RefreshCw size={15}/> Taslağı Geri Al</button>
+            <button type="button" disabled={busy || dailyWriteBlocked || !dailyDraftDirty} className="primary" onClick={saveFocused}><Save size={15}/> Seçilileri Kaydet</button>
           </div>
           <details className="kyop-extra-tools"><summary><FileSpreadsheet size={15}/> Çıktı ve Excel</summary><div className="kyop-extra-tool-list"><button type="button" disabled={!weeklyFinancialReady} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={15}/> Haftalık Liste Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={15}/> Excel Aktar</button><button type="button" onClick={importExcel}><FileSpreadsheet size={15}/> Excel Yükle</button></div></details>
         </div>
         <div className={`kyop-banner ${shift === "night" ? "night" : ""}`}><strong>Güvenli giriş modu:</strong><span>Yalnız {longDateText(selectedDate)} — {shift === "day" ? "Gündüz" : "Gece"} aktif. Hızlı girişte de aynı anda yalnız bir gün düzenlenir.</span>{periodLockVerified && periodLocked ? <b><LockKeyhole size={14}/> DÖNEM KAPALI</b> : null}{!periodLockVerified ? <b><LockKeyhole size={14}/> KİLİT DOĞRULANAMADI</b> : null}</div>
-        <div className="kyop-days" aria-label="Tarih aralığı">{daySummaries.map((item) => <button type="button" key={item.date} className={item.date === selectedDate ? "active" : ""} title={`${longDateText(item.date)} · Gündüz ${item.dayCount} · Gece ${item.nightCount} · ${item.people} kişi · çift tıkla hızlı giriş`} onClick={() => setSelectedDate(item.date)} onDoubleClick={() => void openQuick(item.date, shift)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong><em className="kyop-day-counts"><span className="day">G {item.dayCount}</span><span className="night">N {item.nightCount}</span><span className="people">{item.people} kişi</span></em>{item.date === selectedDate ? <i>AKTİF</i> : null}</button>)}</div>
+        <div className="kyop-days" aria-label="Tarih aralığı">{daySummaries.map((item) => <button type="button" key={item.date} className={item.date === selectedDate ? "active" : ""} title={`${longDateText(item.date)} · Gündüz ${item.dayCount} · Gece ${item.nightCount} · ${item.people} kişi · çift tıkla hızlı giriş`} onClick={() => changeDailyFocus(item.date, shift)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong><em className="kyop-day-counts"><span className="day">G {item.dayCount}</span><span className="night">N {item.nightCount}</span><span className="people">{item.people} kişi</span></em>{item.date === selectedDate ? <i>AKTİF</i> : null}</button>)}</div>
+        <div id="ky-smart-entry">
+          <DailyEntrySmartSelector
+            employees={employees}
+            attendance={frequentAttendanceRows}
+            rosterIds={rosterIds}
+            selectedIds={selectedIds}
+            checkedIds={checkedIds}
+            savedIds={savedDailyIds}
+            date={selectedDate}
+            shift={shift}
+            busy={busy}
+            blocked={dailyWriteBlocked}
+            dirty={dailyDraftDirty}
+            rangeReady={rangeReadScope === expectedRangeScope && !rangeLoadError}
+            wageAtDate={personWageAtDate}
+            formatMoney={money}
+            onToggle={(id) => { const person = employeeMap.get(id); if (person) setPersonSelectedForShift(person, !selectedIds.has(id)); }}
+            onToggleChecked={(id) => { const person = employeeMap.get(id); if (person) setPersonReviewed(person, !checkedIds.has(id)); }}
+            onSelectMany={addManyToDailyDraft}
+            onRestore={restoreDailyDraft}
+            onSave={saveFocused}
+            onEdit={(person) => setCardDialog({ ...person })}
+            onNewPerson={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}
+          />
+        </div>
+        <details className="ky-smart-advanced">
+          <summary>Detaylı liste, notlar ve dönem havuzu yönetimi</summary>
         <div className="kyop-grid">
           <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Dönem Personel Listesi <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div>{!rosterIds.size && !rangeLoadError && otherSavedRanges.length ? <div className="gop-roster-saved-ranges" role="status"><strong>Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi.</strong><span>Kaydedilmiş aralığı aç:</span>{otherSavedRanges.map((item) => <button type="button" key={`${item.startDate}-${item.endDate}`} disabled={busy} onClick={() => setSafeRange({ start: item.startDate, end: item.endDate })}>{dateText(item.startDate)} – {dateText(item.endDate)} · {item.employeeCount} personel</button>)}</div> : null}<div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} disabled={busy || dailyWriteBlocked} title={inRoster ? "Havuzdan çıkarmak için orta tablodaki çöp butonunu kullanın." : "Tarih aralığı havuzuna ekle"} onChange={() => { if (!inRoster) void addPersonToRoster(person); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{addingPersonId === person.id ? "Havuza kaydediliyor…" : inRoster ? "Havuzda · Kayıtlı" : "Havuza ekle"}</em><em>G: {money(personWageAtDate(person, selectedDate).day)} · N: {money(personWageAtDate(person, selectedDate).night)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved || rosterWriteBlocked} onClick={saveRoster}><Save size={15}/> {rosterSaved ? (rosterIds.size ? `Dönem Listesi Kayıtlı (${rosterIds.size})` : "Bu Dönem Havuzu Boş") : `Dönem Listesini Kaydet (${rosterIds.size})`}</button></aside>
 
@@ -1804,7 +1859,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           </main>
 
           <aside className="kyop-panel kyop-control"><div className="kyop-panel-head"><ClipboardList size={16}/> Günlük Kontrol</div><div className="kyop-control-body"><div className="kyop-active-day"><span>Aktif Gün</span><strong>{dateText(selectedDate)}</strong><small>{shift === "day" ? "Gündüz" : "Gece"}</small></div><div className="kyop-control-highlight"><span>Bu Gün Seçili / Seçilmedi</span><strong>{selectedIds.size} / {Math.max(visibleEntryPeople.length - selectedIds.size, 0)}</strong><small>{visibleEntryPeople.length} havuz/gün personeli</small></div><div className="kyop-control-highlight cyan"><span>Kontrol Edilen / Toplam</span><strong>{checkedSelectedCount} / {selectedIds.size}</strong><small>{Math.max(selectedIds.size - checkedSelectedCount, 0)} kayıt kontrol bekliyor</small></div><div className="kyop-control-highlight blue"><span>Günlük Toplam</span><strong>{money(selectedDaySummary.total)}</strong><small>G {money(employees.reduce((sum, p) => sum + (selectedIds.has(p.id) ? personWageAtDate(p, selectedDate).day : 0), 0))} · N {money(employees.reduce((sum, p) => sum + (selectedIds.has(p.id) ? personWageAtDate(p, selectedDate).night : 0), 0))}</small></div><div className="kyop-control-highlight violet"><span>Tarih Aralığı Toplamı</span><strong>{money(rangeTotals.total)}</strong><small>{dateText(range.start)} - {dateText(range.end)} · G {rangeTotals.day} · N {rangeTotals.night}</small></div><div className="kyop-role-counts"><div><span>Gündüz çalışan</span><b>{selectedDaySummary.dayCount}</b></div><div><span>Gece çalışan</span><b>{selectedDaySummary.nightCount}</b></div>{selectedRoleCounts.map((row) => <div key={row.role}><span>{row.role}</span><b>{row.count}</b></div>)}</div><div className={`kyop-control-alert ${selectedIds.size ? "ok" : "warn"}`}>{selectedIds.size ? `${shift === "day" ? "Gündüz" : "Gece"} seçili · ${selectedIds.size} personel seçildi.` : `${shift === "day" ? "Gündüz" : "Gece"} seçili · henüz personel seçilmedi.`}</div><button type="button" className="primary full" disabled={busy || dailyWriteBlocked} onClick={saveFocused}><Save size={15}/> Günü Kaydet</button></div></aside>
-        </div>
+        </div></details>
       </div> : null}
 
       {view === "daily-dashboard" ? <div className="gop-dashboard">

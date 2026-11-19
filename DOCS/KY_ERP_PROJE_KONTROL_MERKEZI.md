@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+
+## 19.11.2026 — Günlük Personel Girişi akıllı tek ekran
+- Dal: `feature/gunluk-akilli-tek-ekran-20261119`; PR #610. Yalnız mevcut `DailyHrWorkspace` sayfasına bağımsız `DailyEntrySmartSelector.jsx` ve kapsamlı yeni CSS eklenir; eski D1 ücret/hakediş motoru, ödeme defteri, personel kartı ve Cloudflare Worker veri sözleşmesi değiştirilmez.
+- Ana Günlük Giriş sayfası açılır açılmaz personel seçiciyi gösterir: sık kullanılanlar gerçek önceki 30 günlük aynı vardiya çalışma kayıtlarıyla hesaplanır, ayrıca tüm personel araması, vasıf, dönem havuzu ve seçili filtreleri, tek tuşta görünürleri/sık kullanılanları seçme ve sağda seçili liste vardır. Öneriler kendiliğinden vardiya yaratmaz.
+- Yalnız tıklama = **taslak**; `Seçilileri Kaydet` = mevcut `saveFocused` içinde tek toplu vardiya kaydı, eksik havuz üyeliği varsa önce silmesiz `merge` ve D1 yanıtı kontrolü. Dönem kilidi, tarih/vardiya değişikliği, iki-PC eşzamanlılık ve not/kontrol revizyon anahtarları korunur. Tıklamayla personel başına anlık sunucu yazma kaldırıldı. Eski not/havuz detayları varsayılan kapalı, sayfa içi gelişmiş bölümde kalır.
+- Ücretler yalnız seçili vardiyanın personel kartından **önizleme** olarak gösterilir; gerçek hakediş/ek-kesinti/fiş kesin otoritesi mevcut D1'dır. Toplu ekleme başka gün/çalışanı silmez, ödeme kaydı oluşturmaz.
+- Test kanıtı: tam frontend lint/test/build ve Worker typecheck/test/build PR'ın son commitinde doğrulanmadan merge/canlı tamam yazılmaz. Gerçek oturumlu kullanıcıyla personel seç/tek kaydet/yenile/diğer cihaz eşitleme kontrolü ayrıca gereklidir.
+
+
 ## 19.11.2026 — Gmail 0/15 sayaç ilk sayfalarda sabit: kontrollü tek tık tarama
 - Gerçek DESEN Gmail OAuth onaylı; ilk iki "Senkronize Et" adımında aynı `0/15 klasör, 3 mesaj işlendi` sonucu göründü. Bu tek başına senkronun takıldığı kanıtı değil: kod `GMAIL_PAGE_SIZE=3` ve `GMAIL_FOLDERS_PER_PASS=1`, bitmemiş etiketler `DONE` sayılmaz, yenilerine öncelik verir.
 - Tek buton artık **en fazla 8 ardışık, ayrı, küçük Worker isteği** çalıştırır; adım, işlenen mesaj **işlem sayısı** (yeni/eşsiz mail sayısı değil), son etiket ve tamamlanan klasör sayısını gösterir. Her adım backend'in gerçek cursor'ına dayanır. Klasör hata, sıfır ilerleme, kullanıcı durdurması ve ekran terk etmede yeni istek durur.
