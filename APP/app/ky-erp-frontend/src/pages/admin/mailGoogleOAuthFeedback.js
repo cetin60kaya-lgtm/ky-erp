@@ -10,7 +10,7 @@ const MESSAGES = Object.freeze({
   GOOGLE_IDENTITY_FAILED: "Google hesabının kimliği doğrulanamadı. Google OAuth izinlerini kontrol edin.",
   GOOGLE_ACCOUNT_MISMATCH: "Seçilen Google hesabının e-posta adresi bu posta kutusuyla eşleşmiyor. Aynı hesabı seçin.",
   GOOGLE_REFRESH_TOKEN_MISSING: "Google kalıcı yenileme izni vermedi. Eski bağlantı silinmedi; OAuth erişimi yeniden incelenmeli.",
-  GOOGLE_GMAIL_API_DISABLED: "Google Cloud projesinde Gmail API etkin değil. API'ler ve Hizmetler > Kitaplık > Gmail API bölümünü kontrol edin.",
+  GOOGLE_GMAIL_API_DISABLED: "Gmail API, bu OAuth istemcisinin bağlı olduğu Google Cloud projesinde etkin değil. Başka bir projedeki etkin Gmail API bu istemci için geçerli değildir.",
   GOOGLE_GMAIL_FAILED: "Google hesabı seçildi fakat Gmail API posta kutusunu doğrulamadı. Gmail API'nin açık ve gerekli izinlerin verilmiş olduğundan emin olun.",
   GMAIL_CREDENTIAL_SAVE_FAILED: "Google izni alındı fakat KY ERP güvenli bağlantı kasasına kaydedilemedi. Sunucu kaydı kontrol edilmeli.",
   GMAIL_ACCOUNT_UPDATE_FAILED: "Google bağlantı bilgisi alındı fakat KY ERP hesap durumu güncellenemedi. Hesabı silmeyin.",
