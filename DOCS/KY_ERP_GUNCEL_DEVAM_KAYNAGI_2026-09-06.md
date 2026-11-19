@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Günlük Personel Girişi gereksiz eski havuz uyarısının gizlenmesi
+- Kullanıcı açık isteğiyle "Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi." bilgilendirme paneli ve önceki tarih aralıklarına geçiş butonları kaldırıldı.
+- Yalnız frontend görünümü ve buna bağlı kullanılmayan state; gerçek D1 personel havuzu, kayıtlı dönemler, vardiya/gündüz/gece, hesaplar ve Worker değişmez. Tarih aralığı doğru seçilmediyse ekran mevcut kapsamın verilerini göstermeye devam eder; geçmiş kayıtlar başka aralığa otomatik eklenmez.
+- PR/CI/production frontend dosyası kanıtı yayın kabulünden önce ayrı doğrulanır.
+
+
 ## 19.11.2026 — Günlük Personel Girişi acil tasarım geri alma
 - Kullanıcı tek ekran akıllı paneli reddetti. PR #610'un ana ekran değişiklikleri geri alınacak; **önceki ana ekran ve Hızlı Giriş penceresi aynen kalacak**. Yeni seçici yalnız Hızlı Giriş > Personel Ekle alanında yer alacak.
 - Çoklu personel işaretle/tek tuşla havuza ekle; tek silmesiz `mode:merge` D1 çağrısı ve eksiksiz kişi doğrulaması. Sık kullanılanlar mevcut gerçek dönem çalışma kayıtlarından; seçim tek başına vardiya/ücret/ödeme değiştirmez.
