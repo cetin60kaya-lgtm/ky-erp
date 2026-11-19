@@ -23,7 +23,7 @@ test("revisions endpoint also enforces range on D1 SQL, not just the UI", () => 
 test("weekly matrix, totals, PDF and Excel all use D1 verified net money", () => {
   assert.match(frontend, /getDailyWeeklySummary\(\{ mainCompanyId: companyId, startDate: range\.start, endDate: range\.end \}\)/);
   assert.match(frontend, /reconcileDailyWeeklyReport\(matrixRows, summaryRows\)/);
-  assert.match(frontend, /const weeklyFinancialReady = weeklySummaryInScope/);
+  assert.match(frontend, /const weeklyFinancialReady = sharedRangeReady && sharedRangeConfigured && weeklySummaryInScope/);
   assert.match(frontend, /row\["Ek Ödeme \(\+\)"\]/);
   assert.match(frontend, /row\["Kesinti \(-\)"\]/);
   assert.match(frontend, /<th>Ek \(\+\)<\/th><th>Kesinti \(-\)<\/th><th>Net Toplam<\/th>/);
