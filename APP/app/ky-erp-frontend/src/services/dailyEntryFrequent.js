@@ -13,12 +13,13 @@ export function rankDailyFrequentEmployees(employees, attendance, selectedDate, 
     .map((person) => [String(person.id), person]));
   const ranking = new Map();
   const seen = new Set();
+  const isWorked = (value) => value === true || value === 1 || value === "1" || String(value).toUpperCase() === "TRUE";
   for (const row of Array.isArray(attendance) ? attendance : []) {
     const id = String(row.employeeId ?? row.personelId ?? row.personId ?? row.employee_id ?? "");
     const date = String(row.workDate ?? row.date ?? row.work_date ?? "").slice(0, 10);
     if (!activePeople.has(id) || date < fromKey || date > selectedDate) continue;
-    const isDay = Boolean(row.dayShift ?? row.day ?? row.day_shift);
-    const isNight = Boolean(row.nightShift ?? row.night ?? row.night_shift);
+    const isDay = isWorked(row.dayShift ?? row.day ?? row.day_shift);
+    const isNight = isWorked(row.nightShift ?? row.night ?? row.night_shift);
     if (shift === "night" ? !isNight : !isDay) continue;
     const key = id + "|" + date + "|" + shift;
     if (seen.has(key)) continue;
