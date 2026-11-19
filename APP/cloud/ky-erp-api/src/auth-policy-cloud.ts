@@ -2,7 +2,7 @@
 import { compare } from "bcryptjs";
 import { registerMobilePasskeyRoutes } from "./auth-mobile-passkey";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { AUTH_SECURITY_SCOPES, securityStoreGet as securityStoreGet, securityStorePut as securityStorePut } from "./auth-security-core";
+import { AUTH_SECURITY_SCOPES, securityStorePut as securityStorePut } from "./auth-security-core";
 import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
 import {
   cancelPhoneApproval,
