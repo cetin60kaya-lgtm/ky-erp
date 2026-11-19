@@ -476,6 +476,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [cardAddToRoster, setCardAddToRoster] = useState(false);
   const [cardDialog, setCardDialog] = useState(null);
   const [quick, setQuick] = useState(null);
+  const [quickHistory, setQuickHistory] = useState([]);
+  const [quickHistoryLoading, setQuickHistoryLoading] = useState(false);
   const [quickDayPickerOpen, setQuickDayPickerOpen] = useState(false);
   const [quickRowHeight, setQuickRowHeight] = useState(readQuickRowHeight);
   const [quickCardWidth, setQuickCardWidth] = useState(readQuickCardWidth);
@@ -1317,6 +1319,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const clearAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set()); setCheckedIds(new Set()); };
   const thisWeek = async () => { const start = startOfWeek(); if (await setSafeRange({ start, end: addDays(start, 6) })) setSelectedDate(localDateKey()); };
 
+  useEffect(() => {
+    if (!companyId || !quick?.date) { setQuickHistory([]); setQuickHistoryLoading(false); return undefined; }
+    let active = true;
+    const startDate = addDays(quick.date, -14);
+    const endDate = addDays(quick.date, -1);
+    setQuickHistoryLoading(true); setQuickHistory([]);
+    void getDailyAttendance({ mainCompanyId: companyId, startDate, endDate }, { forceFresh: true })
+      .then((rows) => { if (active) setQuickHistory(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (active) setQuickHistory([]); })
+      .finally(() => { if (active) setQuickHistoryLoading(false); });
+    return () => { active = false; };
+  }, [companyId, quick?.date]);
+
   const loadQuickFocus = async (date, mode, preserveQuery = "") => {
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
     const ids = focusedIds(rows);
@@ -2026,7 +2041,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="quick-status-strip"><span className="selected"><i/><b>Seçilen</b><strong>{quick.ids.size}</strong></span><span className="checked"><i/><b>Kontrol</b><strong>{quickChecked}/{quick.ids.size}</strong></span><span className="pending"><i/><b>Bekleyen</b><strong>{quickPending}</strong></span><span className="pool"><i/><b>Toplam Personel</b><strong>{activeRosterPeople.length}</strong></span></div>
         <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-add-bar"><QuickRosterPicker
           people={availableRosterPeople}
-          attendance={attendance}
+          attendance={quickHistory}
+          date={quick.date}
+          shift={quick.shift}
+          historyLoading={quickHistoryLoading}
           busy={busy}
           disabled={rosterWriteBlocked}
           onAdd={addManyFromQuickPool}
