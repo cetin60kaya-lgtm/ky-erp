@@ -16,6 +16,7 @@ import { useAuth } from "../../context/AuthContext";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 import { accountMatchesFilter, mailAccountReadiness, mailProviderReady } from "./mailAccountRules";
 import { gmailOAuthFeedback } from "./mailGoogleOAuthFeedback";
+import { runGmailSyncBatch } from "./mailGmailSyncBatch";
 import "./AdminMailConnections.css";
 
 const PROVIDER_NAMES = {
@@ -72,6 +73,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const [notice, setNotice] = useState("");
   const [oauthFeedback, setOauthFeedback] = useState(null);
   const [accountDiagnostics, setAccountDiagnostics] = useState(null);
+  const syncStopRequested = useRef(false);
+  const [syncBatchRunning, setSyncBatchRunning] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
   const [editingId, setEditingId] = useState("");
   const [editing, setEditing] = useState({ displayName: "", departmentCode: "" });
@@ -208,16 +211,38 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
 
   async function synchronize(account) {
     setLoading(true);setNotice("");
+    const gmail = upper(account.provider_type) === "GMAIL";
+    syncStopRequested.current = false;
+    if (gmail) setSyncBatchRunning(true);
     try {
-      const result = await syncMailAccount(account.id, slug);
-      await load();
-      setNotice(result?.partial
-        ? `Senkronizasyon devam ediyor: ${Number(result.completedFolders || 0)}/${Number(result.totalFolders || 0)} klasör tamamlandı. Bu adımda ${Number(result.total || 0)} mesaj işlendi. Devam için yeniden Senkronize Et.`
-        : "Senkronizasyon isteği tamamlandı. Klasör kanıtları güncellendi.");
+      if (gmail) {
+        const result = await runGmailSyncBatch({
+          syncStep: () => syncMailAccount(account.id, slug),
+          shouldStop: () => syncStopRequested.current,
+          onProgress: ({ steps, maxSteps, processed, completedFolders, totalFolders, lastFolder }) =>
+            setNotice(`Gmail arşivi taranıyor: ${steps}/${maxSteps} kontrollü adım, ${processed} mesaj işleme kaydı, ${completedFolders}/${totalFolders} klasör tamamlandı.${lastFolder ? " Son etiket: " + lastFolder : ""}`),
+        });
+        await load();
+        const progress = `${result.steps} adımda ${result.processed} mesaj işleme kaydı; ${result.completedFolders}/${result.totalFolders} klasör tamamlandı.`;
+        setNotice(result.reason === "completed"
+          ? "Gmail tam senkron sunucu tarafından doğrulandı. " + progress
+          : result.reason === "limit"
+            ? "Bu kontrollü tarama turu tamamlandı. " + progress + " Kaldığı yerden sürdürmek için Senkronize Et'e bas."
+            : result.reason === "cancelled"
+              ? "Gmail taraması kullanıcı tarafından durduruldu. İlerleme kaydedildi. " + progress
+              : "Gmail taraması güvenli biçimde durduruldu (" + result.reason + "). " + progress + " Hata veya ilerleme durumunu kontrol edin.");
+      } else {
+        const result = await syncMailAccount(account.id, slug);
+        await load();
+        setNotice(result?.partial
+          ? `Senkronizasyon devam ediyor: ${Number(result.completedFolders || 0)}/${Number(result.totalFolders || 0)} klasör tamamlandı.`
+          : "Senkronizasyon isteği tamamlandı. Klasör kanıtları güncellendi.");
+      }
     } catch (error) {
       await load();
-      setNotice("Hata: " + (error?.message || "Senkronizasyon tamamlanamadı."));
+      setNotice("Hata: " + (error?.message || "Senkronizasyon tamamlanamadı.") + " Önceki başarılı sayfalar korunur.");
     } finally {
+      setSyncBatchRunning(false);
       setLoading(false);
     }
   }
@@ -245,6 +270,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     <IntegrationFlowSteps kind="MAIL" stage={counts.ready > 0 ? 3 : counts.connected > 0 ? 2 : 1} />
     {oauthFeedback && <div role="status" className={"mail-admin-notice " + (oauthFeedback.ok ? "ok" : "bad")}>Gmail OAuth — {oauthFeedback.code}: {oauthFeedback.text}</div>}
     {notice && <div role="status" className={"mail-admin-notice " + (notice.startsWith("Hata:") ? "bad" : "ok")}>{notice}</div>}
+    {syncBatchRunning && <button type="button" className="secondary" onClick={() => { syncStopRequested.current = true; setNotice("Durdurma istendi. Mevcut küçük senkronizasyon adımı bittikten sonra yeni istek yapılmayacak."); }}>Senkronizasyonu Durdur</button>}
     <div className="mail-admin-stats">
       <div><span>Bu firmanın hesapları</span><strong>{counts.total}</strong><small>Kişisel, ortak ve bölüm</small></div>
       <div><span>OAuth doğrulanan</span><strong>{counts.connected}</strong><small>Bağlantı kanıtı bulunan</small></div>
