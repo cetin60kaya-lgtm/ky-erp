@@ -107,3 +107,12 @@ test("roster changes are merge-only or targeted removals across PCs", () => {
   assert.match(dailySource, /mode === "remove"/);
   assert.match(dailySource, /REMOVE_EMPLOYEE_REQUIRED/);
 });
+
+test("exact roster remains independent; empty range exposes other saved ranges without moving staff", () => {
+  const roster = dailySource.slice(dailySource.indexOf("async function listRoster("), dailySource.indexOf("async function writeRows("));
+  assert.match(roster, /r\.main_company_id=\? AND NOT \(r\.start_date=\? AND r\.end_date=\?\)/);
+  assert.match(roster, /COUNT\(DISTINCT r\.employee_id\)/);
+  assert.match(roster, /otherRanges/);
+  assert.doesNotMatch(roster, /INSERT INTO hr_daily_range_roster/);
+  assert.doesNotMatch(roster, /DELETE FROM hr_daily_range_roster/);
+});
