@@ -95,6 +95,11 @@ export async function getDailyPeriodPaymentStatus(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/period-status`, params, freshOptions(options)));
 }
 
+export async function getDailyEmployeeWorkPaymentHistory(employeeId, params = {}, options = {}) {
+  if (!employeeId) throw new Error("Personel kimliği zorunludur.");
+  return unwrap(await apiGet(`${ROOT}/employees/${encodeURIComponent(employeeId)}/history`, params, freshOptions(options)));
+}
+
 export async function getDailyPaymentHistory(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/history`, params, freshOptions(options)));
 }
@@ -118,6 +123,15 @@ export async function getDailyFocusedRecords(params = {}, options = {}) {
 export async function saveDailyFocusedRecords(payload = {}) {
   const result = unwrap(await apiPost(`${ROOT}/records`, payload));
   publishDailyMutation("saveDailyFocusedRecords");
+  return result;
+}
+
+export async function getDailyActiveRange(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/active-range`, params, freshOptions(options)));
+}
+export async function saveDailyActiveRange(payload = {}) {
+  const result = unwrap(await apiPost(`${ROOT}/active-range`, payload));
+  publishDailyMutation("saveDailyActiveRange");
   return result;
 }
 
