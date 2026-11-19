@@ -1328,14 +1328,33 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   useEffect(() => {
     if (!companyId || !quick?.date) { setQuickHistory([]); setQuickHistoryLoading(false); return undefined; }
     let active = true;
+    let request = 0;
     const startDate = addDays(quick.date, -14);
     const endDate = addDays(quick.date, -1);
-    setQuickHistoryLoading(true); setQuickHistory([]);
-    void getDailyAttendance({ mainCompanyId: companyId, startDate, endDate }, { forceFresh: true })
-      .then((rows) => { if (active) setQuickHistory(Array.isArray(rows) ? rows : []); })
-      .catch(() => { if (active) setQuickHistory([]); })
-      .finally(() => { if (active) setQuickHistoryLoading(false); });
-    return () => { active = false; };
+    const refresh = (quiet = false) => {
+      const current = ++request;
+      if (!quiet) { setQuickHistoryLoading(true); setQuickHistory([]); }
+      void getDailyAttendance({ mainCompanyId: companyId, startDate, endDate }, { forceFresh: true })
+        .then((rows) => {
+          if (active && current === request) setQuickHistory(Array.isArray(rows) ? rows : []);
+        }).catch(() => {
+          if (active && current === request) setQuickHistory([]);
+        }).finally(() => {
+          if (active && current === request) setQuickHistoryLoading(false);
+        });
+    };
+    refresh();
+    const onFocus = () => { if (active) refresh(true); };
+    const timer = window.setInterval(() => { if (!document.hidden) refresh(true); }, 60000);
+    window.addEventListener("focus", onFocus);
+    const channel = typeof window.BroadcastChannel === "function"
+      ? new window.BroadcastChannel("kyerp.dailyOperations.live.v1") : null;
+    channel?.addEventListener("message", onFocus);
+    return () => {
+      active = false;
+      window.clearInterval(timer); window.removeEventListener("focus", onFocus);
+      channel?.removeEventListener("message", onFocus); channel?.close();
+    };
   }, [companyId, quick?.date]);
 
   const loadQuickFocus = async (date, mode, preserveQuery = "") => {
