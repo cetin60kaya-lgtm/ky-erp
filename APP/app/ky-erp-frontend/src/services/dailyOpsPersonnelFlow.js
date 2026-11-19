@@ -21,7 +21,12 @@ export async function persistDailyRosterMember({
   // Tek POST: sunucu hedef üyeyi ekler ve D1'den tekrar okuyarak doğrular.
   // Önce GET + POST + tekrar GET zinciri yüksek gecikme oluşturuyordu.
   if (typeof addRoster === "function") {
-    const confirmed = dailyRosterIds(await addRoster({ ...params, mode: "add", addEmployeeId: id }));
+    // Eski ve yeni Worker ile tek istekli, silmeyen ortak sözleşme.
+    // Old Worker 'add' modunu bilmiyor: boş employeeIds bütün havuzu silebilirdi.
+    const safeIds = [...new Set([...localIds.map(String).filter(Boolean), id])];
+    const confirmed = dailyRosterIds(await addRoster({
+      ...params, mode: "merge", employeeIds: safeIds,
+    }));
     if (!confirmed.includes(id))
       throw new Error("Sunucu personelin dönem havuzuna kaydedildiğini doğrulamadı.");
     return new Set(confirmed);

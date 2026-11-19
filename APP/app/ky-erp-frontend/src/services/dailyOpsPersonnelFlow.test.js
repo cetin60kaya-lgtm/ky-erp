@@ -42,8 +42,8 @@ test("havuza ekleme tek POST ile D1 doğrulanmış yanıtı kullanır, üç ağ 
     ...params,
     addRoster: async (body) => {
       calls++;
-      assert.equal(body.mode, "add");
-      assert.equal(body.addEmployeeId, "new-employee");
+      assert.equal(body.mode, "merge");
+      assert.deepEqual(body.employeeIds, ["new-employee"]);
       assert.equal(body.mainCompanyId, "hakan");
       return { employeeIds: ["existing", "new-employee"] };
     },
@@ -57,4 +57,16 @@ test("sunucuda görünmeyen havuz kaydı başarılı gösterilmez", async () => 
   await assert.rejects(() => persistDailyRosterMember({
     ...params, addRoster: async () => ({ employeeIds: ["existing"] }),
   }), /doğrulamadı/);
+});
+
+test("eski Worker bile tek POST ile mevcut havuzu silmeden korur", async () => {
+  const ids = await persistDailyRosterMember({
+    ...params, localIds: ["existing", "existing", "new-employee"],
+    addRoster: async (body) => {
+      assert.equal(body.mode, "merge");
+      assert.deepEqual(body.employeeIds, ["existing", "new-employee"]);
+      return { employeeIds: [...new Set([...body.employeeIds, "other-pc-person"])] };
+    },
+  });
+  assert.deepEqual([...ids], ["existing", "new-employee", "other-pc-person"]);
 });
