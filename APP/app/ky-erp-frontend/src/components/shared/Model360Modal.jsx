@@ -117,8 +117,13 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const design=data.design||null;
   const docs=array(data.documents?.items);
   const mailHistory=array(data.mail);
-  const outlookEvidence=array(data.outlookEvidence?.items);
   const [evidenceBusy,setEvidenceBusy]=useState("");
+  const [olderEvidence,setOlderEvidence]=useState([]);
+  const [olderCursor,setOlderCursor]=useState(null);
+  const [olderLoading,setOlderLoading]=useState(false);
+  useEffect(()=>{setOlderEvidence([]);setOlderCursor(null);},[modelId,reload]);
+  const outlookEvidence=[...new Map([...array(data.outlookEvidence?.items),...olderEvidence].map(row=>[row.id,row])).values()];
+  const activeOlderCursor=olderCursor===null?data.outlookEvidence?.nextCursor:olderCursor;
   const dyehouseJobs=array(data.dyehouse).filter(job=>modelMatchesJob(job,modelId));
   const imageSources=[...new Set([production?.imageUrl,design?.mainImage?.previewUrl,design?.mainImage?.thumbnailUrl,identity?.imageUrl]
     .map(productionImagePath).filter(Boolean))];
@@ -142,6 +147,19 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
       refresh();
     }catch(e){setMessage(e?.message||"Outlook PDF doğrulaması başarısız.");}
     finally{setEvidenceBusy("");}
+  }
+
+  async function loadOlderOutlook(){
+    if(!activeOlderCursor||olderLoading||!canMail||!canDocuments)return;
+    setOlderLoading(true);setMessage("");
+    try{
+      const response=unwrap(await apiGet("/muhasebe/invoice-mail-outlook-history",{
+        mainCompanySlug:tenant,modelId,before:activeOlderCursor.before,beforeId:activeOlderCursor.beforeId
+      }));
+      setOlderEvidence(current=>[...new Map([...current,...array(response.items)].map(row=>[row.id,row])).values()]);
+      setOlderCursor(response.nextCursor||false);
+    }catch(e){setMessage(e?.message||"Eski Outlook arşiv sayfası okunamadı.");}
+    finally{setOlderLoading(false);}
   }
 
   async function saveProduction(event) {
@@ -305,7 +323,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
               {item.verificationStatus!=="VERIFIED"?<button type="button" disabled={Boolean(evidenceBusy)} onClick={()=>void verifyOutlookEvidence(item)}>PDF Kanıtını Doğrula</button>:null}
               <small>{String(item.sentAt||"").slice(0,16).replace("T"," ")}</small></div>)}</div>:<Empty>Her iki PDF ile doğrulanmış eski Outlook maili bulunamadı veya posta geçmişi henüz senkronize edilmedi.</Empty>}
             {message?<p role="status">{message}</p>:null}
-            {data.outlookEvidence?.limited?<p className="m360-error">İlk 200 Outlook gönderimi incelendi; daha eski kayıtlar için tamamlanmış geçmiş senkronizasyonu gerekir.</p>:null}
+            {activeOlderCursor?<button type="button" onClick={()=>void loadOlderOutlook()} disabled={olderLoading}>{olderLoading?"Eski gönderimler okunuyor...":"Daha Eski Outlook Gönderilenler (200 kayıtlık sayfa)"}</button>:null}
             {errors.outlookEvidence?<ErrorNotice text={"Outlook geçmişi: "+errors.outlookEvidence}/>:null}
           </section>:<Empty>Fatura maili için muhasebe/iletişim yetkiniz bulunmuyor.</Empty>)}
           {tab==="review"&&<section>
