@@ -411,7 +411,11 @@ export function registerGoogleMailRoutes(app:any){
     for(const item of Array.isArray(list.messages)?list.messages:[]){
       try{
         const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-        await persistMessage(c,tenant,account,folder,full,upper(folder.folder_type)==="SENT"?"OUTGOING":"AUTO");count++;
+        const known=Array.isArray(full.labelIds)?full.labelIds:[];
+        const canonical=gmailCanonicalLabel(known,labelId,known);
+        const kind=({INBOX:"INBOX",SENT:"SENT",DRAFT:"DRAFTS",SPAM:"JUNK",TRASH:"TRASH"} as any)[canonical]||"CUSTOM";
+        const destination=canonical===labelId?folder:await ensureFolder(c,tenant,text(account.id),canonical,canonical,kind);
+        await persistMessage(c,tenant,account,destination,full,canonical==="SENT"?"OUTGOING":"AUTO");count++;
       }catch(error:any){
         failed++;
         if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
