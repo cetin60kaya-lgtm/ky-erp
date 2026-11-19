@@ -67,3 +67,12 @@ export function reconcileDailyWeeklyReport(matrixRows, financialRows) {
   }
   return [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
 }
+
+/** A4 yatay haftalık listede 26 kişiden fazlası kesilmeden ayrı sayfaya geçer. */
+export function paginateDailyPrintRows(rows, perPage = 26) {
+  if (!Array.isArray(rows)) throw new Error("Yazdırılacak personel listesi geçersiz.");
+  const size = Math.max(1, Math.min(50, Math.trunc(Number(perPage)) || 26));
+  const result = [];
+  for (let start = 0; start < rows.length; start += size) result.push(rows.slice(start, start + size));
+  return result;
+}
