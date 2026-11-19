@@ -38,3 +38,12 @@
 - Kodda callback `APP_RETURN=.../iletisim/mail-gelen` kullanırken Mail Merkezi `mailError` gerçek kodunu okuyup genel mesajla gizliyor. Artık canonical sonuç adresi `/depolama/depolama-mail`; firma bazlı E-Posta Hesapları paneli yalnız beyaz listedeki güvenli kodu gösterir.
 - Callback CODE_EXCHANGE / GOOGLE_IDENTITY / GMAIL_PROFILE / CREDENTIAL_SAVE / ACCOUNT_UPDATE aşamalarını ayırır; Google API `SERVICE_DISABLED` için açık kod, Google refresh izni yoksa ayrı kod. URL, log ve UI'da token/kişisel Google açıklaması yoktur.
 - Gerçek kök neden yeni callback kodu ve kullanıcı sonucu gelmeden **kesin PASS değildir**. Ekrandaki 0 kayıt yeni e-posta gönderildiğini veya arşivin silindiğini göstermez. OAuth sonrası otomatik mail gönderimi yok.
+
+## 19.11.2026 — Google OAuth Gmail/Drive proje sınırı ve 0 hesap salt okunur denetimi
+
+- Kullanıcının ekranlarında Firebase/Drive ve Mail, Google Cloud üzerinde iki ayrı proje. Gmail posta kutusu hesabı, Cloud proje yönetici hesabından bağımsızdır. Bir projede Gmail API'nin etkinliği diğer projenin OAuth istemcisini doğrulamaz.
+- Mevcut Gmail adapterı `GOOGLE_MAIL_CLIENT_ID || GOOGLE_DRIVE_CLIENT_ID` biçiminde Drive'a sessiz geri düşüyordu. Bu kaldırıldı: `GOOGLE_MAIL_CLIENT_ID` ve `GOOGLE_MAIL_CLIENT_SECRET` ayrı Web OAuth istemcisiyle tanımlanmalı; Drive Client ID ile eşitse bağlantı hazır sayılmaz.
+- Değerler yalnız Cloudflare Worker'ın güvenli Variables and Secrets alanına kaydedilir. GitHub/Chat'e Client Secret, token, parola, mail veya müşteri bilgisi aktarılmaz. Worker'da eksikse Gmail katalogu “hazır” göstermez; mevcut Drive OAuth, Gmail hesap/credential kayıtları, posta geçmişi ve File Hub bağlantıları değiştirilmez.
+- Sabit Gmail dönüş URI: `https://api.kyerp.net/api/auth/mail/oauth/google/callback`. Mail projesi OAuth Web uygulamasının Authorized redirect URIs alanında bulunmalı. Google Cloud proje kimliği seçimi ve Worker istemcisinin eşleşmesi kullanıcı Cloudflare arayüzünde doğrulanacak.
+- “0 posta kutusu” sonucu, sunucunun `REAUTH_REQUIRED` durumundaki hesapları filtrelemesinden kaynaklanmıyor; veritabanı kaydının varlığını tek başına dışlamıyor. Uygulama sahibi için `GET /api/mail/accounts/diagnostics` salt okunur; aktif tenant + her Gmail tenant kapsamı için yalnız toplamları verir. Mail adresi/mesaj/secret döndürmez; başka firma hesabını otomatik taşımaz.
+- Canlı kabul: Google Mail secrets ayrı yapılandırılmadan OAuth ve 15/15 senkron **PASS değildir**. Gerçek D1 kayıt teşhisi ve posta kutusu örnekleri ayrıca doğrulanacak.
