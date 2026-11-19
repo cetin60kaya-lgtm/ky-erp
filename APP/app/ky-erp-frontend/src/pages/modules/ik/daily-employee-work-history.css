@@ -26,3 +26,11 @@
 .gop-person-dialog .gop-person-history-toggle,.gop-card-detail .gop-person-history-toggle{border:1px solid #ccdceb;border-radius:8px;background:#f4f8ff;margin:9px 12px;padding:9px}
 .gop-person-dialog .gop-person-history-toggle>summary,.gop-card-detail .gop-person-history-toggle>summary{font-size:12px;font-weight:800;color:#204c79;cursor:pointer}
 @media(max-width:760px){.ky-person-history-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ky-person-history-sections{grid-template-columns:1fr}.ky-person-history{padding:8px}.ky-person-history-filters label{min-width:110px}}
+
+/* Aylık personel hakediş ve gerçek ödeme karşılaştırması; kayıt oluşturmaz. */
+.ky-person-history-months{margin:13px 0;min-width:0}
+.ky-person-history-months h4{font-size:12px;color:#24476c;margin:4px 0 5px}
+.ky-person-history-months p{font-size:10px;color:#667d95;line-height:1.5;margin:0 0 7px}
+.ky-person-history-months .ky-person-history-scroll{max-height:260px}
+.ky-person-history-months .ky-person-history-scroll table{min-width:570px}
+.ky-person-history-months .ky-person-history-scroll td{font-variant-numeric:tabular-nums}
