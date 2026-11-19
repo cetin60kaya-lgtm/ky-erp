@@ -236,3 +236,35 @@ test("Gmail delete is idempotent and posts explicit JSON to the trash endpoint",
   assert.match(wrapper,/rewriteJsonPostPath/);
   assert.match(wrapper,/JSON\.stringify\(payload\)/);
 });
+
+test("Gmail refresh invalid_grant kullanıcıyı yeniden yetkilendirmeye yönlendirir; transient hata yetkiyi silmez",()=>{
+  const source=read("./mail-google-gmail.ts");
+  const start=source.indexOf("async function usableToken(");
+  const end=source.indexOf("async function audit(",start);
+  const body=source.slice(start,end);
+  assert.match(body,/providerCode\)===\"invalid_grant\"/);
+  assert.match(body,/markGmailReconnectRequired\(c,tenant,text\(account.id\),\"REFRESH_GRANT_INVALID\"\)/);
+  assert.match(body,/CREDENTIAL_MISSING/);
+  assert.match(body,/REFRESH_TOKEN_MISSING/);
+  assert.doesNotMatch(body,/DELETE FROM mail_account_credentials/);
+  assert.match(body,/throw error;/);
+});
+
+test("Google re-consent must return a new refresh token before replacing encrypted credentials",()=>{
+  const source=read("./mail-google-gmail.ts");
+  assert.match(source,/access_type:\"offline\"/);
+  assert.match(source,/prompt:\"consent\"/);
+  assert.match(source,/GOOGLE_REFRESH_TOKEN_MISSING/);
+  const callback=source.slice(source.indexOf('app.get("/api/auth/mail/oauth/google/callback"'),source.indexOf('app.post("/api/mail/accounts/:id/sync/google"'));
+  assert.ok(callback.indexOf('if(!text(payload.refresh_token))') < callback.indexOf('await saveCredential('));
+  assert.match(source,/GMAIL_PROVIDER_CONFIG_REQUIRED/);
+  assert.match(source,/const reauth=providerCode===\"MAIL_REAUTH_REQUIRED\"/);
+});
+
+test("Firma posta kutusu kayıtlı bağlantıyı silmeden Yeniden Bağla seçeneği sunar",()=>{
+  const source=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
+  assert.match(source,/active === "REAUTH_REQUIRED" \? "Yeniden Bağla"/);
+  assert.match(source,/Google Yetkisini Yenile/);
+  assert.match(source,/startGoogleMailOAuth\(account.id, slug\)/);
+  assert.match(source,/OAuth: \{active === "REAUTH_REQUIRED"/);
+});

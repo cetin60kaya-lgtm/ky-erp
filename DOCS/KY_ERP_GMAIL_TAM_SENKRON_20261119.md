@@ -24,3 +24,11 @@
 - Önceki işlem 3 klasör x 40 mesaj ve gereksiz klasör sorguları içeriyordu. Cloudflare Free planında 50 dış istek, 50 D1 query/Worker isteği kotası bulunduğundan sınır aşımı ciddi olasılıktır.
 - Yeni güvenli adım: 1 klasör x en fazla 3 mesaj; Gmail nextPageToken kaldığı yerden. Klasörler tek sorguda okunur, yalnız yenileri/ değişenleri toplu yazılır. To/CC/BCC ve ek kaydı D1.batch kullanır.
 - GMAIL_TOKEN, GMAIL_LABELS, FOLDER_DISCOVERY, GMAIL_PAGES, CURSOR_CHECKPOINT, SYNC_SUMMARY aşamaları hata kodu ile ayrılır. Token ve mail içeriği loglanmaz. Gerçek Gmail kullanıcı testi ayrıca gereklidir.
+
+## 19.11.2026 — Gerçek Gmail refresh token hatası ve aynı hesabı yeniden yetkilendirme
+- Kullanıcı ekranı: `Gmail oturum anahtarı yenilenemedi; bağlantı kontrolü gerekli`, 0/15. Bu sonuç, gönderim veya tam arşiv testi değil; OAuth yenileme aşaması FAIL.
+- Google OAuth token yenileme hatasında yalnız `invalid_grant` / kayıtlı refresh token eksikliği kesin yeniden onay gerektirir. `invalid_client` veya geçici Google hatası otomatik olarak kullanıcı yetkisi iptali sayılmaz.
+- Kesin yenileme problemi varsa `mail_accounts.status=REAUTH_REQUIRED`, `provider_connected=0` güncellenir; aynı hesap, onay, şifreli credential satırı, mail arşivi ve File Hub ilişkileri silinmez.
+- UI bağlı Gmail hesabında **Google Yetkisini Yenile**, sorun doğrulanmışsa **Yeniden Bağla** düğmesini sunar; yalnız aynı hesap ID'siyle OAuth başlatılır.
+- Google `access_type=offline` + `prompt=consent` zaten mevcut. Callback `refresh_token` gelmeden eski şifreli kimlik bilgisini üzerine yazmaz, yanıltıcı başarı kaydı üretmez.
+- Hangi Gmail/Google OAuth token sorunu yaşandığı canlı provider log ve kullanıcı yönlendirme sonrası kesinleşir; yetkilendirme kullanıcı ekranından yapılır, token/şifre GitHub'a veya sohbete girilmez. Gmail 15/15 kabulü hâlâ açık.

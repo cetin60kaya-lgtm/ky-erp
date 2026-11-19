@@ -254,13 +254,13 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
               </div>
               <div className="mail-admin-account-actions">
                 {canManage && <button type="button" className="secondary" disabled={loading} onClick={() => editingThis ? setEditingId("") : startEdit(account)}>{editingThis ? "Kapat" : "Düzenle"}</button>}
-                {state.approved && !state.oauth && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && <button type="button" disabled={loading} onClick={() => connect(account)}>Hesabı Bağla</button>}
+                {state.approved && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && (!state.oauth || provider === "GMAIL") && <button type="button" disabled={loading} onClick={() => connect(account)}>{active === "REAUTH_REQUIRED" ? "Yeniden Bağla" : state.oauth ? "Google Yetkisini Yenile" : "Hesabı Bağla"}</button>}
                 {state.oauth && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && <button type="button" className="secondary" disabled={loading} onClick={() => synchronize(account)}>Senkronize Et</button>}
               </div>
             </div>
             <div className="mail-admin-health">
               <StateMark ok={state.approved}>Firma onayı: {state.approved ? "Onaylandı" : "Bekliyor"}</StateMark>
-              <StateMark ok={state.oauth}>OAuth: {state.oauth ? "Bağlı" : "Bekliyor"}</StateMark>
+              <StateMark ok={state.oauth && active !== "REAUTH_REQUIRED"}>OAuth: {active === "REAUTH_REQUIRED" ? "Yeniden onay gerekli" : state.oauth ? "Kayıtlı bağlantı" : "Bekliyor"}</StateMark>
               <StateMark ok={state.sync}>Tam senkron: {state.sync ? "Tamam" : "Bekliyor"} ({state.completed}/{state.enabled})</StateMark>
               <StateMark ok={state.configured} warning={!state.configured}>Sağlayıcı: {state.configured ? "Hazır" : "Ayar gerekli"}</StateMark>
               <span className="mail-admin-last-sync">Son tam işlem: {formatDate(account.readiness?.lastSyncSuccessAt)}</span>
