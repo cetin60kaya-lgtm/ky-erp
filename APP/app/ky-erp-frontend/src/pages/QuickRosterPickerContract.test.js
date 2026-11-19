@@ -35,7 +35,7 @@ test("çoklu ekleme tek D1 merge, sunucu doğrulaması ve vardiya bağımsızlı
   assert.match(handler, /setRosterIds\(new Set\(confirmed\)\)/);
   assert.doesNotMatch(handler, /saveDailyFocusedRecords|createDailyPayment/);
   assert.match(picker, /const \[selected, setSelected\] = useState/);
-  assert.match(picker, /await onAdd\(pendingIds\)/);
+  assert.match(picker, /await onAdd\(pending\)/);
   assert.match(picker, /Seçimi Temizle/);
 });
 
