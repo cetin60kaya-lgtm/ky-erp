@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   decideMailApproval,
+  diagnoseMailAccounts,
   getMailProviders,
   listMailAccounts,
   listMailApprovals,
@@ -59,6 +60,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const slug = String(activeMainCompany?.slug || "").trim();
   const companyName = activeMainCompany?.name || activeMainCompany?.title || slug || "Firma seçilmedi";
   const canManage = isOwner(user?.role);
+  const canInspectRecords = ["SUPER_ADMIN", "ADMIN"].includes(upper(user?.role));
   const [accounts, setAccounts] = useState([]);
   const [loadedSlug, setLoadedSlug] = useState("");
   const loadSequence = useRef(0);
@@ -69,6 +71,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [oauthFeedback, setOauthFeedback] = useState(null);
+  const [accountDiagnostics, setAccountDiagnostics] = useState(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [editingId, setEditingId] = useState("");
   const [editing, setEditing] = useState({ displayName: "", departmentCode: "" });
@@ -105,6 +108,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   }, [slug]);
 
   useEffect(() => {
+    setAccountDiagnostics(null);
     load();
     return () => { loadSequence.current += 1; };
   }, [load]);
@@ -166,6 +170,17 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
         departmentCode: upper(editing.departmentCode), mainCompanySlug: slug });
     });
     if (done) setEditingId("");
+  }
+
+  async function inspectAccountRegistry() {
+    setLoading(true);setNotice("");setAccountDiagnostics(null);
+    try {
+      const diagnostics=await diagnoseMailAccounts(slug);
+      setAccountDiagnostics(diagnostics);
+      setNotice("Salt okunur hesap kayıt denetimi tamamlandı. Hiçbir kayıt taşınmadı veya silinmedi.");
+    } catch(error) {
+      setNotice("Hata: " + (error?.message || "Kayıt kontrolü tamamlanamadı."));
+    } finally { setLoading(false); }
   }
 
   async function changeDefault(account, type, enabled) {
@@ -250,7 +265,10 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
           {canManage && <button type="button" onClick={() => setTab("add")} disabled={!slug}>+ Yeni Hesap</button>}
         </div>
       </div>
-      {!visible.length ? <div className="mail-admin-empty"><b>{shownAccounts.length ? "Aramaya uygun hesap bulunamadı." : "Bu firmada henüz posta kutusu yok."}</b><span>Yeni hesap eklemek için Hesap Ekle sekmesini kullanın. Eski hesaplar silinmez.</span></div> :
+      {!visible.length ? <div className="mail-admin-empty"><b>{shownAccounts.length ? "Aramaya uygun hesap bulunamadı." : "Bu firma kapsamında görüntülenen posta kutusu yok."}</b>
+          <span>Bu, geçmiş hesapların silindiğini kanıtlamaz. Aynı hesabı yeniden oluşturmadan kayıt kapsamını kontrol edin.</span>
+          {!shownAccounts.length && canInspectRecords && <button type="button" className="secondary" disabled={loading || !slug} onClick={inspectAccountRegistry}>Hesap Kayıtlarını Kontrol Et</button>}
+        </div> :
         <div className="mail-admin-account-list">{visible.map((account) => {
           const provider = upper(account.provider_type), available = providerState(provider);
           const state = mailAccountReadiness(account, available), active = upper(account.status);
@@ -293,6 +311,14 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
             </div>}
           </article>;
         })}</div>}
+    </section>}
+    {tab === "accounts" && accountDiagnostics && <section className="mail-admin-card" aria-label="Salt okunur posta kutusu denetimi">
+      <div className="mail-admin-card-head"><div><h3>Posta Kutusu Kayıt Denetimi</h3>
+        <p>Yalnız veritabanı kayıt sayılarını okur; başka firmadan hesap taşımaz veya yeni kayıt açmaz.</p></div></div>
+      <div style={{padding:"14px 18px",fontSize:"12px"}}>
+        <p>Firma kapsamı: <strong>{accountDiagnostics.requestedTenant}</strong>. Toplam hesap: <strong>{accountDiagnostics.currentTenantCount}</strong>. Gmail: <strong>{accountDiagnostics.currentTenantGmailCount}</strong>. Yeniden onay gereken: <strong>{accountDiagnostics.currentTenantReconnectCount}</strong>.</p>
+        {(accountDiagnostics.gmailTenants || []).length ? <p>Gmail kaydı bulunan firma kapsamları: {accountDiagnostics.gmailTenants.map(item => item.tenant + " (" + item.count + ")").join(" · ")}</p> : <p>Gmail kaydı görünmüyor. Canlı D1 ve yedek karşılaştırması yapılmadan yeni hesap açmayın.</p>}
+      </div>
     </section>}
     {tab === "add" && canManage && <section className="mail-admin-card">
       <div className="mail-admin-card-head"><div><h3>Yeni Posta Kutusu Ekle</h3><p>Yalnız <strong>{companyName}</strong> firmasına eklenir. Bağlantı ve posta gönderimi kendiliğinden başlamaz.</p></div></div>
