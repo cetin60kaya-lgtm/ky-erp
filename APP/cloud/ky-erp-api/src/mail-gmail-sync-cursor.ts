@@ -6,7 +6,7 @@ const STANDARD_FOLDERS = ["TRASH","SPAM","DRAFT","SENT","INBOX"];
 
 // Gmail labels are not exclusive folders. A message's canonical place must not
 // change merely because it was found through a second label on another page.
-export function gmailCanonicalLabel(labels, scanned, knownLabels) {
+export function gmailCanonicalLabel(labels: unknown, scanned: string, knownLabels: Iterable<string>) {
   const values = Array.isArray(labels) ? labels.map(String) : [];
   const known = new Set(knownLabels);
   for (const id of STANDARD_FOLDERS) if (values.includes(id) && known.has(id)) return id;
@@ -17,11 +17,11 @@ export function gmailCanonicalLabel(labels, scanned, knownLabels) {
 
 // Cursor is a pageToken (not Gmail historyId). It only becomes DONE after
 // the final page and after every message on that page persisted successfully.
-export function gmailSyncPageState(previous, next, failed) {
+export function gmailSyncPageState(previous: string, next: string, failed: number) {
   if (failed) return {cursor: previous || "", complete: false, error: true};
   if (next) return {cursor: "PAGE:" + next, complete: false, error: false};
   return {cursor: "DONE", complete: true, error: false};
 }
-export function gmailReadPageToken(cursor) {
+export function gmailReadPageToken(cursor: unknown) {
   return String(cursor||"").startsWith("PAGE:") ? String(cursor).slice(5) : "";
 }
