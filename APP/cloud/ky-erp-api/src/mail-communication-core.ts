@@ -223,6 +223,7 @@ export function registerMailCommunicationRoutes(app:any){
       ,(SELECT COUNT(*) FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) sync_enabled_folder_count
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value IS NOT NULL AND TRIM(COALESCE(s.last_error,''))='') sync_completed_folder_count
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value='DONE' AND TRIM(COALESCE(s.last_error,''))='') gmail_completed_folder_count
+      ,(SELECT s.cursor_value FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_HISTORY' LIMIT 1) gmail_history_cursor
       ,CASE WHEN EXISTS(SELECT 1 FROM mail_account_credentials mc WHERE mc.main_company_slug=a.main_company_slug AND mc.account_id=a.id) THEN 1 ELSE 0 END credential_present`;
     const result=elevated
       ?await c.env.DB.prepare("SELECT a.*"+readiness+" FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
@@ -233,10 +234,25 @@ export function registerMailCommunicationRoutes(app:any){
       const microsoft=upper(row.provider_type)==="MICROSOFT_365";
       const enabled=Number(row.sync_enabled_folder_count||0);
       const completed=Number(microsoft?row.sync_completed_folder_count:row.gmail_completed_folder_count||0);
-      // Gmail GMAIL_PAGE completion requires every enabled label to have reached the
-      // last page without provider errors; historic first-page GMAIL_HISTORY is not proof.
-      const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0;
-      return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,completedFolders:completed,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
+      // Gmail initial archive and ongoing History delta must BOTH have
+      // a complete persisted checkpoint before the account is "ready".
+      let gmailHistoryLive=false;
+      if(!microsoft){
+        try{
+          const state=JSON.parse(text(row.gmail_history_cursor)||"{}");
+          gmailHistoryLive=/^[0-9]+$/.test(text(state?.historyId))
+            &&!text(state?.pageToken)
+            &&(!Array.isArray(state?.pending)||state.pending.length===0)
+            &&!text(state?.finalHistoryId);
+        }catch{}
+      }
+      const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0
+        &&(microsoft||gmailHistoryLive);
+      return{...row,gmail_history_cursor:undefined,
+        readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,
+          completedFolders:completed,gmailHistoryLive:microsoft?null:gmailHistoryLive,
+          lastSyncSuccessAt:text(row.last_sync_success_at)||null,
+          complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
     return c.json({ok:true,data:rows});
   });
