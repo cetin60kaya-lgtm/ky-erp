@@ -23,7 +23,8 @@ test("D1 history is batched under 100 bindings; filename-only evidence is review
  assert.match(history,/invoiceMailAttachmentProved/);
  assert.match(history,/invoiceMailLegacyKeyPrefix/);
  assert.match(history,/deliveryAssets/);
- assert.doesNotMatch(history,/message_id IN \(".*ids\.map\(\(\)=>"\?"\)/);
+ assert.match(history,/messages\.slice\(offset,offset\+90\)/);
+ assert.match(history,/\.bind\(a\.tenant,\.\.\.ids\)/);
 });
 test("Only fully completed folders can report healthy Microsoft account",()=>{
  const core=read("./mail-communication-core.ts");

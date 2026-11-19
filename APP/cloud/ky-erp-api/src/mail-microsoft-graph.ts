@@ -4,7 +4,7 @@ import { openMailCredential, sealMailCredential } from "./mail-communication-cor
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext } from "./mail-reply-context.ts";
 import {microsoftDeltaPageState,microsoftDeltaSafeUrl,microsoftDeltaComplete} from "./mail-microsoft-delta-core.ts";
-import {invoiceMailDocumentFromFile} from "./invoice-mail-model-evidence.ts";
+import {invoiceMailDocumentFromFile,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix} from "./invoice-mail-model-evidence.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -631,6 +631,18 @@ export function registerMicrosoftMailRoutes(app:any){
     try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
     catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Mail eki File Hub'dan alınamadı."),Number(error?.status)||502);}
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId;
+    // The invariant is enforced by the Worker too, not only the browser preflight.
+    const hknDocs=resolvedAttachments.map(a=>invoiceMailDocumentFromFile(a.fileName,"HKN")).filter(Boolean);
+    const ddmDocs=resolvedAttachments.map(a=>invoiceMailDocumentFromFile(a.fileName,"DDM")).filter(Boolean);
+    if(hknDocs.length||ddmDocs.length){
+      if(hknDocs.length!==1||!ddmDocs.length||new Set(ddmDocs).size!==ddmDocs.length||
+        logicalEventId!==invoiceMailDispatchKey(tenant,hknDocs[0]))
+        return c.json(err("MAIL_INVOICE_PACKAGE_INVALID","HKN başına tek gönderim anahtarı ve doğrulanmış DDM PDF paketi zorunludur."),422);
+      const legacy=invoiceMailLegacyKeyPrefix(tenant,hknDocs[0]);
+      const past=await c.env.DB.prepare("SELECT id FROM mail_send_jobs WHERE main_company_slug=? AND substr(logical_event_id,1,?)=? LIMIT 1")
+        .bind(tenant,legacy.length,legacy).first<AnyRow>();
+      if(past)return c.json(err("MAIL_INVOICE_LEGACY_ATTEMPT","Bu HKN'nin eski DDM gönderim kaydı var; yeniden gönderim engellendi."),409);
+    }
     const existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
     // An idempotency key belongs to exactly one immutable draft.
     // Never attribute another draft's accepted send to a new recipient/attachment set.
