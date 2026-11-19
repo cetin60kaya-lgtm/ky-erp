@@ -19,7 +19,8 @@ test("mobile passkey requires server-side challenge, RP hash, user verification 
 });
 test("registration requires fresh authenticated session; recovery revokes enrolled keys", () => {
   assert.match(source, /getAuthenticatedUser\(c\)/);
-  assert.match(source, /recent > 5 \* 60 \* 1000/);
+  assert.match(source, /age <= 5 \* 60 \* 1000/);
+  assert.match(source, /freshAuth\(current\)/);
   assert.match(source, /CREDENTIAL_ALREADY_USED/);
   assert.match(source, /PASSKEY_REGISTER/);
   assert.match(source, /securityStorePut\(c, SCOPE, credentialId/);

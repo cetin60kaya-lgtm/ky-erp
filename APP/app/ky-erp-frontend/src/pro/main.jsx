@@ -237,14 +237,14 @@ function ProApplicationContent(){
  if(loading)return <div className="ky-pro-loading"><span className="ky-pro-loading-icon">KY</span><strong>KY ERP PRO</strong><p>Güvenli oturum ve yetkiler kontrol ediliyor...</p></div>;
  if(!isAuthenticated)return <div className="ky-pro-app ky-pro-device-mode">
    <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>Tek Telefon · Güvenli Onay</small></div></div>
-    <button className="ky-pro-header-action" type="button" disabled={quickEntryLoading} onClick={loginRequested?()=>setLoginRequested(false):openErpWithPhone}>{quickEntryLoading?"Telefon Doğrulanıyor...":loginRequested?"Onaylara Dön":"ERP Girişi"}</button></header>
+    <button className="ky-pro-header-action" type="button" disabled={quickEntryLoading} onClick={loginRequested?()=>setLoginRequested(false):openErpWithPhone}>{quickEntryLoading?"Biyometri Doğrulanıyor...":loginRequested?"Onaylara Dön":rememberedMobileUser()?"Parmak İziyle Aç":"ERP Girişi"}</button></header>
    <div className="ky-pro-content" hidden={loginRequested}><SecurityCenter/></div>
    {loginEverOpened?<div className="ky-pro-content ky-pro-login" hidden={!loginRequested}>
       <LoginPage key={quickEntryFlow?.approvalId||"normal-login"} initialFlow={quickEntryFlow} initialError={quickEntryError} onClose={()=>setLoginRequested(false)}/>
     </div>:null}
    <nav className="ky-pro-dock" aria-label="KY ERP PRO tek telefon gezinmesi">
     <button type="button" className={!loginRequested?"is-active":""} onClick={()=>setLoginRequested(false)}><ShieldCheck size={24}/><span>Onaylar</span></button>
-    <button type="button" className={loginRequested?"is-active":""} disabled={quickEntryLoading} onClick={openErpWithPhone}><House size={24}/><span>{quickEntryLoading?"Doğrulanıyor":"ERP'ye Giriş"}</span></button>
+    <button type="button" className={loginRequested?"is-active":""} disabled={quickEntryLoading} onClick={openErpWithPhone}><House size={24}/><span>{quickEntryLoading?"Doğrulanıyor":rememberedMobileUser()?"Parmak İziyle Aç":"ERP'ye Giriş"}</span></button>
    </nav>
   </div>;
  return <div className="ky-pro-app" data-role={String(user?.role||"")}>
