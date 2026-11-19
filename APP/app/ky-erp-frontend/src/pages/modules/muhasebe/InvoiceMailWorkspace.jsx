@@ -353,7 +353,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const processMail = async (sendNow) => {
     if (actionGuard.current || working || dispatchLocked || sent) return;
     if (sendNow && !sendAcknowledged) {
-      setError("Gönderimden önce aynı ekranda alıcıları, iki PDF ekini ve mail içeriğini kontrol edip onaylayın.");
+      setError("Gönderimden önce alıcıları, HKN ve bütün DDM PDF eklerini kontrol edip onaylayın.");
       return;
     }
     actionGuard.current = true;
@@ -523,7 +523,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     <div className="imw-send-review">
       <label><input type="checkbox" checked={sendAcknowledged} disabled={working || dispatchLocked || sent}
         onChange={(event) => setSendAcknowledged(event.target.checked)} />
-        Alıcıları, HKN/DDM PDF eklerini, konu ve mesajı bu ekranda kontrol ettim. Gönderim onayım sadece bu hazırlık içindir.
+        Alıcıları, HKN ve bütün DDM PDF eklerini, konu ve mesajı bu ekranda kontrol ettim. Gönderim onayım sadece bu hazırlık içindir.
       </label>
       <small>Önizleme ve taslak aynı ekranda kalır. "Outlook Taslaklarına Kaydet" mail göndermez; "Gönder" Microsoft Graph'a açık gönderim isteğidir.</small>
     </div>

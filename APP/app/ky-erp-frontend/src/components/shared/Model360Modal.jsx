@@ -289,7 +289,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
           </section>:<Empty>Muhasebe belgelerini görme yetkiniz bulunmuyor.</Empty>)}
           {tab==="mail"&&(canMail?<section>
             <h3><Mail size={18}/> Fatura Mail · Her HKN için ayrı gönderim</h3>
-            <p>Her HKN'nin kendi alıcı listesi, iki PDF ön kontrolü ve tekli gönderim kaydı vardır. Toplu seçimin tek maile birleştirilmesi yapılmaz.</p>
+            <p>Bir HKN için ayrı posta hazırlanır; bir HKN ile ilgili tüm DDM PDF ekleri birlikte doğrulanır. Birden fazla HKN asla tek mailde birleştirilmez.</p>
             {invoices.length?<div className="m360-mail-pick"><label>Mail hazırlanacak HKN faturası<select value={selectedInvoice} onChange={e=>setSelectedInvoice(e.target.value)}><option value="">Fatura seç</option>{invoices.map(row=><option key={row.id} value={row.id}>{row.number} · {row.date||""}</option>)}</select></label></div>:<Empty>Mail hazırlamak için bu modele bağlanmış gerçek giden HKN faturası bulunmalı.</Empty>}
             {picked?<InvoiceMailWorkspace key={modelId+":"+picked.id} activeMainCompany={activeMainCompany} selectedInvoice={{
               document_no:picked.number,delivery_no:model360DeliveryForInvoice(picked,docs),
@@ -297,9 +297,9 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
               model_id:modelId,model_name:name,party_name:company,
             }}/>:null}
             <h4>KY ERP'de kayıtlı Outlook gönderim geçmişi</h4>
-            {mailHistory.length?<div className="m360-doc-list">{mailHistory.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo||"HKN"}</b><small>{item.deliveryNo||""} · {array(item.modelIds).length} bağlı model</small></span><span>{item.status||"Kayıt"}</span><small>{item.recordedAt?.slice(0,16)||""}</small></div>)}</div>:<Empty>KY ERP üzerinden kanıtlanmış gönderim kaydı bulunamadı.</Empty>}
+            {mailHistory.length?<div className="m360-doc-list">{mailHistory.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo||"HKN"}</b><small>{(item.deliveryNos||[item.deliveryNo]).filter(Boolean).join(", ")} · {array(item.modelIds).length} bağlı model</small></span><span>{item.status||"Kayıt"}</span><small>{item.recordedAt?.slice(0,16)||""}</small></div>)}</div>:<Empty>KY ERP üzerinden kanıtlanmış gönderim kaydı bulunamadı.</Empty>}
             <h4>Outlook Gönderilenler · Eski manuel gönderimler</h4>
-            <p className="m360-info-note">Yalnız Outlook Gönderilenler'deki ve her iki HKN/DDM PDF eki bu modele kesin bağlı olan mesajlar salt okunur gösterilir. Teslim/okundu bilgisi değildir.</p>
+            <p className="m360-info-note">Outlook Gönderilenler'deki HKN/DDM ekleri önce aday olarak listelenir. Dosya adı kesin kanıt değildir; SHA-256 ile File Hub eşleşirse doğrulanır. Teslim/okundu kanıtı değildir.</p>
             {outlookEvidence.length?<div className="m360-doc-list">{outlookEvidence.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo}</b><small>{(item.deliveryNos||[item.deliveryNo]).join(", ")} · {item.subject||"Konu yok"}</small></span>
               <span>{item.verificationStatus==="VERIFIED"?"SHA kanıtlı":"REVIEW_REQUIRED"}</span>
               {item.verificationStatus!=="VERIFIED"?<button type="button" disabled={Boolean(evidenceBusy)} onClick={()=>void verifyOutlookEvidence(item)}>PDF Kanıtını Doğrula</button>:null}

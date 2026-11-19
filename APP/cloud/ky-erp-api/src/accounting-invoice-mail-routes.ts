@@ -181,6 +181,18 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     const canReconcile=elevated(a.user!)||txt(job.requested_by)===txt(a.user?.id);
     const deliveries=Array.isArray(stored.deliveryNos)?stored.deliveryNos:stored.deliveryNo?[stored.deliveryNo]:
       txt(job.logical_event_id).startsWith(legacy)?[txt(job.logical_event_id).slice(legacy.length)]:[];
+    if(!deliveries.length && canReconcile){
+      const draft=await c.env.DB.prepare("SELECT attachment_refs_json FROM mail_drafts WHERE id=? AND main_company_slug=? LIMIT 1")
+        .bind(txt(job.draft_id),a.tenant).first<Row>();
+      let refs:any[]=[];try{refs=JSON.parse(txt(draft?.attachment_refs_json)||"[]");}catch{}
+      for(const ref of refs.slice(0,10)){
+        const assetId=txt(typeof ref==="string"?ref:ref.fileAssetId||ref.file_asset_id||ref.id);
+        const asset=await c.env.DB.prepare("SELECT file_name FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1")
+          .bind(assetId,a.tenant).first<Row>();
+        const no=invoiceMailDocumentFromFile(asset?.file_name,"DDM");
+        if(no&&!deliveries.includes(no))deliveries.push(no);
+      }
+    }
     return c.json({ok:true,data:{status:role(job.status),linked:Boolean(linked),deliveryNos:deliveries,
       draftId:canReconcile?txt(job.draft_id):null,sendJobId:canReconcile?txt(job.id):null,
       updatedAt:txt(job.updated_at),providerAccepted:role(job.status)==="ACCEPTED",delivered:false}});

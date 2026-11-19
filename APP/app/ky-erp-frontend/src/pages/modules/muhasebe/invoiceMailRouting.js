@@ -45,7 +45,7 @@ export const INVOICE_MAIL_TEMPLATES = Object.freeze([
   { id: "SHORT", label: "Kısa bildirim" },
 ]);
 
-export function makeInvoiceMailContent(modelName, invoiceNo, deliveryNo, templateId = "STANDARD") {
+export function makeInvoiceMailContent(_modelName, invoiceNo, deliveryNo, templateId = "STANDARD") {
   const hkn=documentKey(invoiceNo),ddm=parseDeliveryNumbers(deliveryNo);
   if(!/^HKN[0-9]{8,18}$/.test(hkn))throw new Error("Kesin HKN fatura numarası gerekir.");
   // HKN can include several models. Do not misrepresent the entire invoice

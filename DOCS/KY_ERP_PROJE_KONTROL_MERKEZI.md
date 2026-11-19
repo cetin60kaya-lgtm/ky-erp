@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Outlook tek canonical revizyon / geliştirme PR (CI ve canlı kabul bekliyor)
+- Bir HKN/çoklu DDM → tek posta, geriye dönük eski gönderim kilidi, Model 360 ortak kart, hash doğrulamalı eski Outlook kanıtı, adil Graph cron ve klasör bazlı tam senkron, yarış-korumalı provider taslağı.
+- Mevcut mail D1/Graph/File Hub korunur; yeni depo/servis/secret veya gerçek mail/mali kayıt oluşturulmaz.
+- İş kanıtı: `DOCS/KY_ERP_OUTLOOK_TEK_CANONICAL_REV_20261119.md`. Test, merge, deploy ve gerçek OAuth kullanıcı kabulü ayrıca doğrulanacaktır.
+
+
 ## 19.11.2026 — Hotmail/Outlook + Model 360 · PR #597 / canlı OAuth kabulü açık
 - **Kod:** mevcut Microsoft Graph/mail altyapısında sayfa kaybetmeyen `nextLink` / `deltaLink` cursor, idempotent gerçek Outlook taslağı, sınırlı cron takibi, tek HKN mailinin iki PDF ile doğrulanan çoklu modellere bağlanması, eski Outlook sent HKN/DDM kanıtı ve hesap sağlık göstergeleri.
 - **Test:** PR #597 head `9e81639b25e2726c24f3ae85333d03646679488c`; Frontend lint/test/build ve Worker typecheck/test/build PASS (Actions #44469401143). İlk Worker build eksik export nedeniyle FAIL idi, düzeltildi.
