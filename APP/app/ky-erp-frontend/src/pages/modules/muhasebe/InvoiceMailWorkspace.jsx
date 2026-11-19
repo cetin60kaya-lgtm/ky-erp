@@ -318,14 +318,6 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       mainCompanySlug: companySlug,
     }));
     if (!created?.id) throw new Error("Posta taslağı KY ERP'de doğrulanamadı.");
-    // Same idempotent Outlook draft; the user will find it in the real Drafts folder.
-    // A provider failure never pretends the draft was synced or the mail was sent.
-    try {
-      const mirrored = unwrap(await saveMicrosoftOutlookDraft(created.id));
-      if (!mirrored?.providerDraftId || mirrored?.sent) throw new Error("Outlook taslak kimliği doğrulanamadı.");
-    } catch (e) {
-      throw new Error("KY ERP taslağı kaydedildi, ancak Outlook Taslaklar klasörüne aktarılamadı: " + (e?.message || "Microsoft bağlantısını kontrol edin."));
-    }
     const prepared = { ...created, to, cc, bcc, subject: finalSubject, bodyText: finalBody, invoiceAssetId, deliveryAssetId,
       invoiceNo: documentKey(invoiceNo), deliveryNo: documentKey(deliveryNo), modelId, modelName, routeId };
     setDraft(prepared);
@@ -366,6 +358,11 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     setWorking(true); setError(""); setNotice(""); setPhase("PREPARING");
     try {
       const prepared = draft || await createVerifiedDraft();
+      // Saving to Outlook is independently retryable on the SAME canonical
+      // KY ERP draft. If Graph fails, the prepared draft stays in state.
+      const mirrored = unwrap(await saveMicrosoftOutlookDraft(prepared.id));
+      if (!mirrored?.providerDraftId || mirrored?.sent)
+        throw new Error("Outlook Taslaklar klasörüne kaydetme doğrulanamadı. Mail gönderilmedi.");
       if (!sendNow) {
         setPhase("DRAFT_SAVED");
         setNotice("Taslak KY ERP ve Outlook Taslaklar klasörüne kaydedildi. Mail gönderilmedi.");
