@@ -137,7 +137,7 @@ export default function LoginPage({ onClose, initialFlow = null, initialError = 
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
 
-  const [username, setUsername] = useState(() => isMobileAppPage() ? rememberedMobileUser() : "");
+  const [username, setUsername] = useState(() => rememberedMobileUser());
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("GOOGLE");
@@ -274,7 +274,7 @@ export default function LoginPage({ onClose, initialFlow = null, initialError = 
       setError("");
       applyResponse(await loginMobilePasskey(normalizeIdentity(username) || rememberedMobileUser()));
     } catch (requestError) {
-      setError(requestError?.message || "Telefon hızlı girişi yapılamadı. Şifreyle devam edebilirsiniz.");
+      setError(requestError?.message || "Parmak izi / Windows Hello girişinde sorun oluştu. Şifreyle devam edebilirsiniz.");
     } finally {
       setLoading(false);
     }
@@ -632,11 +632,11 @@ export default function LoginPage({ onClose, initialFlow = null, initialError = 
 
             {stage === "CREDENTIALS" ? (
               <form className="auth-form" onSubmit={handleLogin}>
-                {isMobileAppPage() && isMobilePasskeySupported() ? <div className="auth-mobile-passkey-entry">
+                {isMobilePasskeySupported() ? <div className="auth-mobile-passkey-entry">
                   <button type="button" onClick={handlePasskeyLogin} disabled={loading || !(normalizeIdentity(username) || rememberedMobileUser())}>
-                    {loading ? "Telefon doğrulanıyor..." : "Parmak İzi / Yüz Tanıma / PIN ile Giriş"}
+                    {loading ? "Cihaz doğrulanıyor..." : (isMobileAppPage() ? "Parmak İzi / Yüz Tanıma / PIN ile Giriş" : "Windows Hello / Parmak İzi / PIN ile Giriş")}
                   </button>
-                  <small>İlk kullanımda aşağıdan normal giriş yapın; ardından hızlı telefon girişini etkinleştirin. Parmak izi cihazınızdan çıkmaz.</small>
+                  <small>İlk kullanımda normal giriş ve güvenlik onayını tamamlayıp bu cihazda hızlı girişi etkinleştirin. Parmak izi verisi KY ERP'ye gönderilmez.</small>
                   <div className="auth-mobile-passkey-divider">veya kullanıcı adı ve şifre ile</div>
                 </div> : null}
                 <label>Kullanıcı adı veya e-posta
