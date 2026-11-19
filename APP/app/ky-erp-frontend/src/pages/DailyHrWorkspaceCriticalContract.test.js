@@ -221,9 +221,11 @@ test("daily view has real D1 audit log under work area and no duplicated weekly 
   assert.match(workspace, /onClick=\{\(\) => printWeeklySummary\(range, days, weeklyControlRows\)\}/);
 });
 
-test("date range change keeps D1 roster untouched, clears only stale UI and shows the saved range chooser", () => {
-  assert.match(workspace, /setRosterIds\(new Set\(\)\); setRosterSaved\(false\); setOtherSavedRanges\(\[\]\)/);
-  assert.match(workspace, /setOtherSavedRanges\(!savedSet\.size && Array\.isArray\(roster\?\.otherRanges\)/);
-  assert.match(workspace, /Bu tarih aralığının havuzu boş\. Önceki kayıtlar silinmedi/);
-  assert.match(workspace, /setSafeRange\(\{ start: item\.startDate, end: item\.endDate \}\)/);
+test("date range scope stays isolated and no previous-roster warning or navigation is rendered", () => {
+  assert.match(workspace, /setRosterIds\(new Set\(\)\); setRosterSaved\(false\)/);
+  assert.match(workspace, /setRosterIds\(savedSet\)/);
+  assert.match(workspace, /setRosterSaved\(Boolean\(attendanceRows\)/);
+  assert.doesNotMatch(workspace, /otherSavedRanges|setOtherSavedRanges|gop-roster-saved-ranges/);
+  assert.doesNotMatch(workspace, /Bu tarih aralığının havuzu boş|Kaydedilmiş aralığı aç:/);
+  assert.doesNotMatch(workspace, /setSafeRange\(\{ start: item\.startDate, end: item\.endDate \}\)/);
 });
