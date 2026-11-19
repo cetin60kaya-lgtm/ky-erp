@@ -18,7 +18,8 @@ test("mevcut personel kartında hem modal hem kart yönetiminde gerçek D1 geçm
 test("tarih bazlı hakediş ve ödeme tarihi bazlı ödeme ayrı, iptal dahil değil",()=>{
   assert.match(worker,/paymentSourceRows\(c,companyId,start,end,employeeId\)/);
   assert.match(worker,/FROM hr_daily_payments[\s\S]*?employee_id=\?/);
-  assert.match(worker,/summarizeDailyPersonnelHistory\(worked,payments,adjustments\)/);\n  assert.match(worker,/monthlyDailyPersonnelHistory\(worked,payments,adjustments\)/);
+  assert.match(worker,/summarizeDailyPersonnelHistory\(worked,payments,adjustments\)/);
+  assert.match(worker,/monthlyDailyPersonnelHistory\(worked,payments,adjustments\)/);
   assert.match(api,/getDailyEmployeeWorkPaymentHistory/);
   assert.match(history,/Son 6 Ay/);
   assert.match(history,/Tüm Geçmiş/);
