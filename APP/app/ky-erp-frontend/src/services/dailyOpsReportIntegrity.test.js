@@ -63,3 +63,22 @@ test("aynı personel farklı gün ve gece vardiyalarında doğru fiş neti verir
   assert.equal(rows[0].nightTotal, 1800);
   assert.equal(rows[0].financialVerified, true);
 });
+
+test("D1 gündüz/gece alt toplamlarını kanonik olarak verir ve çıktı aynı rakamları taşır", () => {
+  const rows=reconcileDailyWeeklyReport([
+    {employeeId:"p1",dayCount:2,nightCount:1,dayTotal:2500,nightTotal:1800,totalAmount:4300},
+  ],[
+    {employeeId:"p1",dayCount:2,nightCount:1,dayTotal:2500,nightTotal:1800,
+      baseAmount:4300,additions:125.2,deductions:45.1,totalAmount:4380.1},
+  ]);
+  assert.equal(rows[0].dayTotal,2500);
+  assert.equal(rows[0].nightTotal,1800);
+  assert.equal(rows[0].totalAmount,4380.1);
+  assert.equal(rows[0].financialVerified,true);
+});
+test("sunucu gündüz/gece alt toplamı baz hakedişiyle uyuşmazsa hiçbir fiş onaylanmaz", () => {
+  assert.throws(()=>reconcileDailyWeeklyReport([],[
+    {employeeId:"p1",dayCount:1,nightCount:1,dayTotal:1500,nightTotal:1600,
+      baseAmount:3200,additions:0,deductions:0,totalAmount:3200},
+  ]),/D1 gündüz\/gece alt toplamı/);
+});
