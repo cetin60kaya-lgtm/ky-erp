@@ -219,12 +219,13 @@ export function registerMailCommunicationRoutes(app:any){
     const elevated=ownerRole(current?.role)||companyAdminRole(current?.role);
     const readiness=`,(SELECT MAX(s.last_success_at) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id) last_sync_success_at
       ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.last_success_at IS NOT NULL) sync_success_count
-      ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND TRIM(COALESCE(s.last_error,''))<>'' AND ((a.provider_type='MICROSOFT_365' AND s.cursor_type='MICROSOFT_DELTA') OR (a.provider_type='GMAIL' AND s.cursor_type='GMAIL_PAGE'))) sync_error_count
+      ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND TRIM(COALESCE(s.last_error,'')) NOT IN ('','SYNC_PENDING_PAGINATION') AND ((a.provider_type='MICROSOFT_365' AND s.cursor_type='MICROSOFT_DELTA') OR (a.provider_type='GMAIL' AND s.cursor_type='GMAIL_PAGE'))) sync_error_count
       ,(SELECT COUNT(*) FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) sync_enabled_folder_count
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value IS NOT NULL AND TRIM(COALESCE(s.last_error,''))='') sync_completed_folder_count
       ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value='DONE' AND TRIM(COALESCE(s.last_error,''))='') gmail_completed_folder_count
       ,(SELECT s.cursor_value FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_HISTORY' LIMIT 1) gmail_history_cursor
       ,(SELECT s.cursor_value FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_CRON' LIMIT 1) gmail_cron_state
+      ,(SELECT s.last_error FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_PAGE' AND TRIM(COALESCE(s.last_error,'')) NOT IN ('','SYNC_PENDING_PAGINATION') ORDER BY s.updated_at DESC LIMIT 1) gmail_page_error
       ,(SELECT s.last_sync_at FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='GMAIL_CRON' LIMIT 1) gmail_cron_last_at
       ,CASE WHEN EXISTS(SELECT 1 FROM mail_account_credentials mc WHERE mc.main_company_slug=a.main_company_slug AND mc.account_id=a.id) THEN 1 ELSE 0 END credential_present`;
     const result=elevated
@@ -250,15 +251,21 @@ export function registerMailCommunicationRoutes(app:any){
       }
       let cronState:any={};
       if(!microsoft){try{cronState=JSON.parse(text(row.gmail_cron_state)||"{}");}catch{}}
+      const safeCode=(input:unknown)=>/^GMAIL_[A-Z0-9_]{1,65}$/.test(text(input))?text(input):"";
+      const safeStage=(input:unknown)=>["GMAIL_TOKEN","GMAIL_LABELS","FOLDER_DISCOVERY","GMAIL_PAGES","CURSOR_CHECKPOINT","SYNC_SUMMARY","GMAIL_HISTORY"].includes(text(input))?text(input):"UNKNOWN";
       const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0
         &&(microsoft||gmailHistoryLive);
-      return{...row,gmail_history_cursor:undefined,gmail_cron_state:undefined,
+      return{...row,gmail_history_cursor:undefined,gmail_cron_state:undefined,gmail_page_error:undefined,
         readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,
           completedFolders:completed,gmailHistoryLive:microsoft?null:gmailHistoryLive,
           gmailAutoLastAt:microsoft?null:text(row.gmail_cron_last_at)||null,
           gmailAutoProcessed:microsoft?null:Math.max(0,Number(cronState.processed||0)),
           gmailAutoLastFolder:microsoft?null:text(cronState.lastFolder)||null,
-          gmailAutoStatus:microsoft?null:text(cronState.state)||null,
+          gmailAutoStatus:microsoft?null:(cronState.state==="ERROR"?"ERROR":cronState.state==="OK"?"OK":"UNKNOWN"),
+          gmailAutoFailureReason:microsoft?null:safeCode(cronState.reason),
+          gmailAutoStage:microsoft?null:safeStage(cronState.stage),
+          gmailPageFailureReason:microsoft?null:safeCode(row.gmail_page_error),
+          syncErrorCount:Math.max(0,Number(row.sync_error_count||0)),
           lastSyncSuccessAt:text(row.last_sync_success_at)||null,
           complete:companyApproved&&oauthConnected&&syncHealthy}};
     });

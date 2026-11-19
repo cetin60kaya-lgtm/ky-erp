@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Gmail 2/15 görünürlük ve gerçek hata ayrımı
+- Kullanıcı Gmail `hkndesen@gmail.com` yetkili hesabında birkaç saat boyunca `2/15` kaldığını, otomatik turda `0 mesaj işlendi` yazdığını canlı gösterdi. **Bu durum tam senkron PASS değildir.**
+- Kanonik Gmail Worker kod incelemesi: `runGmailMailScheduledSync` 5 dakika cron'a bağlı; her turda 1 klasör/3 mesaj sınırı var. Otomatik başarısız tur, arayüzde `gmailAutoStatus` saklanmasına rağmen gösterilmiyordu. Bir sayfa hata verdiğinde `result.folders[].ok=false` olsa bile `fatal=false` olan yollarda cron `OK` olarak kayıt açabiliyordu. Ayrıca `SYNC_PENDING_PAGINATION` normal bekleme iken `sync_error_count` hatası sayılıyordu.
+- Tek düzeltme: Gmail otomatik cron, sayfa/provider/kimlik doğrulama hatasını **güvenli ve sabit hata koduyla** (`GMAIL_*`) saklar; hata varsa başarılı tarama gibi göstermez. Gerçek `GMAIL_PAGE` hata kaydı ve aşaması yetkili firma mail hesabı kartında görünür. OAuth token, mail adresi, Gmail mesaj içeriği ve provider error metni dönmez. Başarı/yanlış hata ayrımı: geçerli sayfalama artık `last_error=''`; tarihî `SYNC_PENDING_PAGINATION` hata sayılmaz.
+- **Gerçek Gmail veri erişimi / Cloudflare D1 canlı hata kaydı bu kod çalışma oturumunda okunmadıkça 2/15'in tek kesin nedeni belirlenmiş sayılmaz.** Mevcut şifre/Google Client/Firebase/Drive değiştirilmez; eski mail, File Hub ve D1 kayıtları korunur. Yeni masraflı cron yok, kullanıcıyı 15 kere tıklamaya yönlendirme yok.
+- E-Belge, tedarikçi giderleri, cari, KDV muhasebe iş akışı ayrı; Gmail tamamlanmadı diye XML testinin başlaması engellenmez.
+
 ## 19.11.2026 — Gmail tam otomatik tarama + artımlı değişiklik takibi
 - Kullanıcı canlı ekranda 2/15'in 2–3 saat boyunca değişmediğini gösterdi: gerçek sorun 5 dakika cron'unun yalnız Microsoft Graph/Drive/diğer görevleri çalıştırması, Gmail sayfalama fonksiyonuna **hiç otomatik bağlanmaması**ydı.
 - Var olan `main-entry-security.scheduled` içindeki `*/5` cron'a `runGmailMailScheduledSync(env)` eklendi. İlişkili mail hesabı **APPROVED+ACTIVE+provider_connected** zorunlu; maksimum 1 hesap ve 1 × 3 mesaj sayfası/cron; D1 Workers Free 50 sorgu/sunucu çağrısı sınırını korur. OAuth secrets yenilenmesi güvenli kasada, tenant izolasyonu mevcut. Üretimde hesap/mektup silme, mail gönderme, yeni servis/ücretli cron/migration yok.
