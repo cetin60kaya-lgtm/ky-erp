@@ -121,6 +121,15 @@ export async function saveDailyFocusedRecords(payload = {}) {
   return result;
 }
 
+export async function getDailyActiveRange(params = {}, options = {}) {
+  return unwrap(await apiGet(`${ROOT}/active-range`, params, freshOptions(options)));
+}
+export async function saveDailyActiveRange(payload = {}) {
+  const result = unwrap(await apiPost(`${ROOT}/active-range`, payload));
+  publishDailyMutation("saveDailyActiveRange");
+  return result;
+}
+
 export async function getDailyRoster(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/roster`, params, freshOptions(options)));
 }
