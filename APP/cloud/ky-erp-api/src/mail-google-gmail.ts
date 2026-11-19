@@ -12,7 +12,7 @@ const TOKEN = "https://oauth2.googleapis.com/token";
 const USERINFO = "https://www.googleapis.com/oauth2/v3/userinfo";
 const GMAIL = "https://gmail.googleapis.com/gmail/v1/users/me";
 const CALLBACK = "https://api.kyerp.net/api/auth/mail/oauth/google/callback";
-const APP_RETURN = "https://kyerp.net/iletisim/mail-gelen";
+const APP_RETURN = "https://kyerp.net/depolama/depolama-mail";
 const SCOPES = [
   "openid",
   "email",
@@ -82,7 +82,14 @@ async function googleJson(url:string,accessToken:string,init:RequestInit={}){
   if(init.body&&!headers.has("Content-Type"))headers.set("Content-Type","application/json");
   const response=await fetch(url,{...init,headers});
   const payload=await response.json().catch(()=>({})) as AnyRow;
-  if(!response.ok)throw Object.assign(new Error(text(payload?.error?.message||payload?.error_description||payload?.error)||"Google Gmail isteği başarısız."),{code:"GOOGLE_GMAIL_FAILED",status:response.status});
+  if(!response.ok){
+    const reasons=[
+      ...(Array.isArray(payload?.error?.details)?payload.error.details:[]),
+      ...(Array.isArray(payload?.error?.errors)?payload.error.errors:[])
+    ].map((entry:any)=>text(entry?.reason));
+    const disabled=reasons.some((reason:string)=>["SERVICE_DISABLED","accessNotConfigured"].includes(reason));
+    throw Object.assign(new Error("Google API erişimi reddedildi."),{code:disabled?"GOOGLE_GMAIL_API_DISABLED":"GOOGLE_GMAIL_FAILED",status:response.status});
+  }
   return{payload,response};
 }
 async function accountForUser(c:any,current:AnyRow,tenant:string,accountId:string){
@@ -330,29 +337,56 @@ export function registerGoogleMailRoutes(app:any){
 
   app.get("/api/auth/mail/oauth/google/callback",async(c:any)=>{
     const state=text(c.req.query("state")),code=text(c.req.query("code")),providerError=text(c.req.query("error")),providerDescription=text(c.req.query("error_description"));
-    const fail=(message:string,codeValue="GOOGLE_OAUTH_FAILED")=>c.redirect(APP_RETURN+"?mailProvider=GMAIL&mailError="+encodeURIComponent(codeValue+":"+message),302);
+    const fail=(_message:string,codeValue="GOOGLE_OAUTH_FAILED")=>{
+      // Only a finite error code goes into the browser redirect URL. Provider
+      // error descriptions, token payloads and user data must never be exposed.
+      const approved=new Set(["GOOGLE_OAUTH_DENIED","GOOGLE_OAUTH_FAILED","GOOGLE_OAUTH_STATE_INVALID","GOOGLE_OAUTH_CODE_INVALID",
+        "GOOGLE_ACCOUNT_MISMATCH","GOOGLE_REFRESH_TOKEN_MISSING","GOOGLE_TOKEN_FAILED","GOOGLE_OAUTH_CLIENT_INVALID",
+        "GOOGLE_IDENTITY_FAILED","GOOGLE_GMAIL_API_DISABLED","GOOGLE_GMAIL_FAILED","GMAIL_CREDENTIAL_SAVE_FAILED",
+        "GMAIL_ACCOUNT_UPDATE_FAILED","GOOGLE_MAIL_CONFIG_MISSING"]);
+      const safe=approved.has(codeValue)?codeValue:"GOOGLE_OAUTH_FAILED";
+      return c.redirect(APP_RETURN+"?mailProvider=GMAIL&mailError="+encodeURIComponent(safe),302);
+    };
     if(providerError)return fail(providerDescription||providerError,"GOOGLE_OAUTH_DENIED");
     if(!state||!code)return fail("OAuth state veya code eksik.");
     const stateHash=await sha256Hex(state),row=await c.env.DB.prepare("SELECT s.*,a.email_address,a.account_type,a.approval_status,a.provider_type FROM mail_oauth_states s JOIN mail_accounts a ON a.id=s.account_id AND a.main_company_slug=s.main_company_slug WHERE s.state_hash=? LIMIT 1").bind(stateHash).first<AnyRow>();
     if(!row||Date.parse(text(row.expires_at))<=Date.now())return fail("OAuth state geçersiz veya süresi dolmuş.","GOOGLE_OAUTH_STATE_INVALID");
     await c.env.DB.prepare("DELETE FROM mail_oauth_states WHERE state_hash=?").bind(stateHash).run();
+    let stage="CODE_EXCHANGE";
     try{
       const verifier=await openMailCredential(c,{ciphertext:text(row.code_verifier_ciphertext),nonce:text(row.code_verifier_nonce)}),cfg=clientConfig(c);
       const payload=await tokenPost(c,{grant_type:"authorization_code",code,redirect_uri:CALLBACK,code_verifier:verifier});
+      stage="GOOGLE_IDENTITY";
       const accessToken=text(payload.access_token),profile=(await googleJson(USERINFO,accessToken)).payload,connectedEmail=text(profile.email).toLowerCase(),mailbox=text(row.email_address).toLowerCase();
       if(!connectedEmail||connectedEmail!==mailbox)return fail("Seçilen Google hesabı talep edilen posta kutusuyla eşleşmiyor.","GOOGLE_ACCOUNT_MISMATCH");
       // Consent alone is insufficient: without an offline refresh grant the
       // next scheduled token expiry would immediately break this connection.
       // Reject before overwriting any existing encrypted working credential.
       if(!text(payload.refresh_token))return fail("Google kalıcı yenileme izni vermedi. Hesap yetkisini Google ekranından tekrar onaylayın.","GOOGLE_REFRESH_TOKEN_MISSING");
+      stage="GMAIL_PROFILE";
       await googleJson(GMAIL+"/profile",accessToken);
       const cred={accessToken,refreshToken:text(payload.refresh_token),expiresAt:new Date(Date.now()+Math.max(60,Number(payload.expires_in||3600))*1000).toISOString(),scope:text(payload.scope)||SCOPES,tokenType:text(payload.token_type)||"Bearer",connectedUserId:text(profile.sub)||connectedEmail,connectedEmail,mailboxAddress:mailbox};
+      stage="CREDENTIAL_SAVE";
       await saveCredential(c,text(row.main_company_slug),text(row.account_id),cred,{provider:"GMAIL",connectedEmail,mailboxAddress:mailbox});
+      stage="ACCOUNT_UPDATE";
       const ts=nowIso(),active=upper(row.approval_status)==="APPROVED";
       await c.env.DB.prepare("UPDATE mail_accounts SET provider_connected=1,provider_account_id=?,status=?,updated_at=? WHERE id=? AND main_company_slug=?")
         .bind(text(profile.sub)||connectedEmail,active?"ACTIVE":"PENDING",ts,row.account_id,row.main_company_slug).run();
       return c.redirect(APP_RETURN+"?mailProvider=GMAIL&mailConnected=1&accountId="+encodeURIComponent(text(row.account_id)),302);
-    }catch(error:any){return fail(text(error?.message)||"Gmail hesabı bağlanamadı.",text(error?.code)||"GOOGLE_OAUTH_FAILED");}
+    }catch(error:any){
+      const providerCode=text(error?.code);
+      const oauthReason=text(error?.providerCode);
+      const safeCode=stage==="CODE_EXCHANGE"&&["invalid_client","unauthorized_client"].includes(oauthReason)
+        ?"GOOGLE_OAUTH_CLIENT_INVALID"
+        :stage==="CODE_EXCHANGE"&&oauthReason==="invalid_grant"?"GOOGLE_OAUTH_CODE_INVALID"
+        :stage==="GOOGLE_IDENTITY"?"GOOGLE_IDENTITY_FAILED"
+        :stage==="GMAIL_PROFILE"?(providerCode==="GOOGLE_GMAIL_API_DISABLED"?"GOOGLE_GMAIL_API_DISABLED":"GOOGLE_GMAIL_FAILED")
+        :stage==="CREDENTIAL_SAVE"?"GMAIL_CREDENTIAL_SAVE_FAILED"
+        :stage==="ACCOUNT_UPDATE"?"GMAIL_ACCOUNT_UPDATE_FAILED"
+        :providerCode||"GOOGLE_OAUTH_FAILED";
+      console.error(JSON.stringify({code:"GMAIL_OAUTH_CALLBACK_FAILURE",stage,reason:safeCode}));
+      return fail("",safeCode);
+    }
   });
 
   app.post("/api/mail/accounts/:id/sync/google",async(c:any)=>{

@@ -14,6 +14,7 @@ import {
 import { useAuth } from "../../context/AuthContext";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 import { accountMatchesFilter, mailAccountReadiness, mailProviderReady } from "./mailAccountRules";
+import { gmailOAuthFeedback } from "./mailGoogleOAuthFeedback";
 import "./AdminMailConnections.css";
 
 const PROVIDER_NAMES = {
@@ -67,9 +68,20 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
+  const [oauthFeedback, setOauthFeedback] = useState(null);
   const [form, setForm] = useState(INITIAL_FORM);
   const [editingId, setEditingId] = useState("");
   const [editing, setEditing] = useState({ displayName: "", departmentCode: "" });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const feedback = gmailOAuthFeedback(params);
+    if (!feedback) return;
+    setOauthFeedback(feedback);
+    const target = new URL(window.location.href);
+    for (const key of ["mailProvider","mailConnected","mailError","accountId"]) target.searchParams.delete(key);
+    window.history.replaceState({}, "", target.pathname + target.search + target.hash);
+  }, []);
 
   const load = useCallback(async () => {
     const sequence = ++loadSequence.current;
@@ -216,6 +228,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
       </div>
     </section>
     <IntegrationFlowSteps kind="MAIL" stage={counts.ready > 0 ? 3 : counts.connected > 0 ? 2 : 1} />
+    {oauthFeedback && <div role="status" className={"mail-admin-notice " + (oauthFeedback.ok ? "ok" : "bad")}>Gmail OAuth — {oauthFeedback.code}: {oauthFeedback.text}</div>}
     {notice && <div role="status" className={"mail-admin-notice " + (notice.startsWith("Hata:") ? "bad" : "ok")}>{notice}</div>}
     <div className="mail-admin-stats">
       <div><span>Bu firmanın hesapları</span><strong>{counts.total}</strong><small>Kişisel, ortak ve bölüm</small></div>
