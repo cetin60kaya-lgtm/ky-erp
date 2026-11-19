@@ -38,3 +38,9 @@ test("Provider health requires 15 of 15 genuine completed Gmail pages, not old h
   assert.match(core,/a\.provider_type='GMAIL' AND s\.cursor_type='GMAIL_PAGE'/);
   assert.doesNotMatch(core,/const syncHealthy=enabled>0&&completed===enabled&&Number\(row\.sync_success_count/);
 });
+
+test("Gmail hızlı klasör yenilemesi çoklu etiketlerde aynı kanonik konumu korur",()=>{
+  const source=read("./mail-google-gmail.ts");
+  assert.match(source,/const canonical=gmailCanonicalLabel\(known,labelId,known\)/);
+  assert.match(source,/const destination=canonical===labelId\?folder:await ensureFolder/);
+});
