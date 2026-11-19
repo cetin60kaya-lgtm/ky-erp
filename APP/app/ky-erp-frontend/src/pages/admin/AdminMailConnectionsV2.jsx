@@ -12,6 +12,7 @@ import {
 } from "../../services/mailApi";
 import { useAuth } from "../../context/AuthContext";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
+import { accountMatchesFilter, mailAccountReadiness, mailProviderReady } from "./mailAccountRules";
 import "./AdminMailConnections.css";
 
 const PROVIDER_NAMES = {
@@ -38,25 +39,12 @@ const INITIAL_FORM = {
   accountType: "PERSONAL", departmentCode: "",
 };
 const upper = (value) => String(value || "").trim().toUpperCase();
-const normalized = (value) => String(value || "").trim().toLocaleLowerCase("tr-TR");
 const isOwner = (role) => ["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(upper(role));
 const formatDate = (value) => {
   if (!value) return "Henüz yok";
   const time = new Date(value);
   return Number.isNaN(time.getTime()) ? String(value) : time.toLocaleString("tr-TR");
 };
-
-function accountReadiness(account, available) {
-  const readiness = account.readiness || {};
-  const approved = Boolean(readiness.companyApproved ?? upper(account.approval_status) === "APPROVED");
-  const oauth = Boolean(readiness.oauthConnected ?? account.provider_connected);
-  const sync = Boolean(readiness.syncHealthy);
-  const configured = Boolean(available?.adapterReady && available?.configured);
-  const enabled = Number(readiness.enabledFolders || 0);
-  const completed = Number(readiness.completedFolders || 0);
-  return { approved, oauth, sync, configured, enabled, completed,
-    ready: approved && oauth && sync && configured && upper(account.status) === "ACTIVE" };
-}
 
 function StateMark({ ok, children, warning = false }) {
   return <span className={"mail-admin-state " + (ok ? "is-ok" : warning ? "is-warn" : "is-pending")}>
@@ -106,15 +94,13 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     connected: accounts.filter((a) => Boolean(a.readiness?.oauthConnected)).length,
     ready: accounts.filter((a) => {
       const state = providers.find((item) => upper(item.provider) === upper(a.provider_type));
-      return accountReadiness(a, state).ready;
+      return mailAccountReadiness(a, state).ready;
     }).length,
     pending: approvals.filter((a) => upper(a.status) === "PENDING").length,
   }), [accounts, approvals, providers]);
-  const visible = useMemo(() => accounts.filter((account) =>
-    normalized([account.display_name, account.email_address, account.department_code, account.provider_type].join(" ")).includes(normalized(filter))
-  ), [accounts, filter]);
+  const visible = useMemo(() => accounts.filter((account) => accountMatchesFilter(account, filter)), [accounts, filter]);
   const availableForNew = providerState(form.providerType);
-  const newProviderReady = Boolean(availableForNew?.configured && availableForNew?.adapterReady);
+  const newProviderReady = mailProviderReady(availableForNew);
 
   async function run(label, task) {
     setLoading(true);setNotice("");
@@ -229,7 +215,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
       {!visible.length ? <div className="mail-admin-empty"><b>{accounts.length ? "Aramaya uygun hesap bulunamadı." : "Bu firmada henüz posta kutusu yok."}</b><span>Yeni hesap eklemek için Hesap Ekle sekmesini kullanın. Eski hesaplar silinmez.</span></div> :
         <div className="mail-admin-account-list">{visible.map((account) => {
           const provider = upper(account.provider_type), available = providerState(provider);
-          const state = accountReadiness(account, available), active = upper(account.status);
+          const state = mailAccountReadiness(account, available), active = upper(account.status);
           const defaultSend = Boolean(account.is_default_send), defaultReceive = Boolean(account.is_default_receive);
           const editingThis = editingId === account.id;
           return <article className="mail-admin-account" key={account.id}>
