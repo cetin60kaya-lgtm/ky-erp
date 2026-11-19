@@ -1,0 +1,28 @@
+/* Personel kartında yalnız salt-okunur gündüz/gece çalışma ve ödeme defteri. */
+.gop-person-dialog:has(.ky-person-history){width:min(950px,96vw)!important;max-width:96vw!important}
+.ky-person-history{background:#f8fafc;border:1px solid #d8e4f2;border-radius:9px;padding:12px;margin:10px 0;min-width:0;color:#1f3a5b}
+.ky-person-history-filters{display:flex;align-items:end;gap:8px;flex-wrap:wrap}
+.ky-person-history-filters label{display:flex;flex-direction:column;gap:4px;font-size:11px;font-weight:750;color:#496480;min-width:125px;flex:1}
+.ky-person-history-filters input,.ky-person-history-filters select{border:1px solid #bfd2e8;border-radius:7px;background:#fff;color:#153955;padding:7px;font-size:12px;height:34px;min-width:0}
+.ky-person-history-filters button{display:flex;align-items:center;gap:5px;justify-content:center;padding:8px 10px;border:1px solid #9dbadd;border-radius:7px;background:#eaf2ff;color:#27558a;cursor:pointer;font-size:11px;font-weight:800}
+.ky-person-history-description{font-size:11px;line-height:1.5;color:#5d738d;margin:10px 0}
+.ky-person-history-error{color:#a53b37;font-size:12px;font-weight:700}
+.ky-person-history-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:10px 0}
+.ky-person-history-metrics>div{min-width:0;display:flex;flex-direction:column;gap:5px;padding:10px;border-radius:8px;background:#fff;border:1px solid #dbe5f2}
+.ky-person-history-metrics small{font-size:10px;color:#667d96;font-weight:800}
+.ky-person-history-metrics strong{font-size:16px;color:#184779;overflow-wrap:anywhere}
+.ky-person-history-metrics span{font-size:10px;color:#6e8095;line-height:1.4}
+.ky-person-history-sections{display:grid;grid-template-columns:1fr 1fr;gap:12px;min-width:0}
+.ky-person-history-sections>div{min-width:0}
+.ky-person-history-sections h4{display:flex;justify-content:space-between;gap:5px;align-items:center;font-size:12px;color:#29496c;margin:10px 0}
+.ky-person-history-sections h4 small{font-size:10px;color:#70849a;font-weight:600}
+.ky-person-history-scroll{overflow:auto;max-height:240px;border:1px solid #d9e3f0;border-radius:7px;background:#fff}
+.ky-person-history-scroll p{padding:12px;font-size:11px;color:#6e8198}
+.ky-person-history-scroll table{border-collapse:collapse;width:100%;font-size:10px;min-width:330px}
+.ky-person-history-scroll th,.ky-person-history-scroll td{text-align:left;padding:7px;border-bottom:1px solid #edf0f5;white-space:nowrap}
+.ky-person-history-scroll th{position:sticky;top:0;background:#eaf0f8;color:#395a7a;font-weight:800}
+.ky-person-history-scroll td small{display:block;color:#74869a;margin-top:3px;font-size:9px;white-space:normal}
+.ky-person-history-note{font-size:10px;line-height:1.5;color:#61768d;margin:12px 0 0}
+.gop-person-dialog .gop-person-history-toggle,.gop-card-detail .gop-person-history-toggle{border:1px solid #ccdceb;border-radius:8px;background:#f4f8ff;margin:9px 12px;padding:9px}
+.gop-person-dialog .gop-person-history-toggle>summary,.gop-card-detail .gop-person-history-toggle>summary{font-size:12px;font-weight:800;color:#204c79;cursor:pointer}
+@media(max-width:760px){.ky-person-history-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.ky-person-history-sections{grid-template-columns:1fr}.ky-person-history{padding:8px}.ky-person-history-filters label{min-width:110px}}
