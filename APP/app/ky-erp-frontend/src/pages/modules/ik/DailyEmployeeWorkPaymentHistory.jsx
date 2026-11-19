@@ -96,6 +96,18 @@ export default function DailyEmployeeWorkPaymentHistory({ employeeId, companyId,
         <div><small>Ödenmemiş Hakediş</small><strong>{money(data.openNet)}</strong><span>Ödenmemiş vardiya + açık dönem ek/kesintisi</span></div>
         <div><small>Eski Sistemde Ödendi İşaretli</small><strong>{money(data.legacyMarked)}</strong><span>Ödeme defterinde teyit yok; yukarıdaki ödemeye eklenmez</span></div>
       </div>
+      <div className="ky-person-history-months">
+        <h4>Aylık Çalışma ve Gerçek Ödeme Özeti</h4>
+        <p>Hakedişler çalışma ayına, alınan ödemeler ödeme ayına göre gösterilir; bu iki sütun farklı dönemlere ait olabilir.</p>
+        <div className="ky-person-history-scroll">
+          {data.months?.length ? <table><thead><tr><th>Ay</th><th>Gündüz</th><th>Gece</th><th>Net Hakediş</th><th>Alınan Ödeme</th></tr></thead>
+          <tbody>{data.months.map(item=><tr key={item.month}>
+            <td>{item.month}</td><td>{item.dayCount} · {money(item.dayTotal)}</td>
+            <td>{item.nightCount} · {money(item.nightTotal)}</td><td>{money(item.earnedNet)}</td>
+            <td>{money(item.confirmedPaid)}<small>{item.confirmedPaymentCount} teyitli ödeme</small></td>
+          </tr>)}</tbody></table> : <p>Bu aralıkta çalışma veya kesin ödeme kaydı bulunamadı.</p>}
+        </div>
+      </div>
       <div className="ky-person-history-sections">
         <div>
           <h4>Ödeme Defteri <small>{data.cancelledPaymentCount} iptal ayrıca hariç</small></h4>
