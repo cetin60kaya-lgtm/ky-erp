@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Günlük Personel Girişi geçmiş havuz uyarısı kaldırıldı
+- Kullanıcı kararı: soldaki **"Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi."** mesajı ve önceki kayıtlı aralıklara geçiş düğmeleri hiç görünmeyecek. Yeni tarihte havuzun boş görünmesi, önceki aralıklardaki D1 kayıtlarının taşınmasını veya silinmesini **tetiklemez**.
+- Yalnız canonical `DailyHrWorkspace.jsx` içindeki söz konusu panel, kullanılmayan `otherSavedRanges` UI state ve ilgili ekrana alma kodu kaldırıldı. D1 roster, günlük vardiya, personel kartı, ödeme/ücret motoru, API/Worker, eski aralıklar, tarih-scope güvenliği ve diğer ekran düzeni değişmedi.
+- Sözleşme testi uyarının ve aralık geçiş düğmelerinin yeniden görünmesini engeller; gerçek kullanıcı/D1 yazma kabulü yapılmadıkça iddia edilmez.
+
+
 ## 19.11.2026 — KULLANICI DÜZELTMESİ: Günlük ekran eski hâline; yalnız Hızlı Giriş Personel Ekle
 - Kullanıcı ekran görüntüsüyle PR #610'daki ana sayfa akıllı tek ekran tasarımını açıkça reddetti; eski **Günlük Personel Girişi** (dönem havuzu + orta detay tablo + sağ Günlük Kontrol + eski Hızlı Giriş popup) birebir korunacak. Bu yeni karar aynı tarihteki eski tek ekran planından üstündür.
 - Geri alma dalı `fix/gunluk-eski-ekran-yalniz-hizli-personel-ekle-20261119` güncel production kaynağından açıldı: PR #610 ana ekran, test ve istenmeyen bağımsız SmartSelector/CSS/sıralama dosyaları tersine alındı. Mevcut muhasebe, Gmail, Worker, ücret motoru, ödeme/D1 koduna dokunulmadı.
