@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
+import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
 import { parseDailyExcelRows } from "./gunluk-excel-import";
 
@@ -73,18 +73,14 @@ function datedWages(row: Row, history: Map<string, DailyWageChange[]>) {
  * Ekran, haftalık özet, hakediş/ödeme ve gün kaydı aynı kuralı kullanır.
  */
 function resolvedRecordedWages(row: Row, history: Map<string, DailyWageChange[]>) {
-  const effective = datedWages(row, history);
-  const legacyPaid = text(row.payment_status).toUpperCase() === "PAID"
-    && num(row.ledger_item_count) === 0;
-  const forShift = (shift: "day" | "night") => {
-    const settledCents = row[`settled_${shift}_cents`];
-    if (settledCents !== null && settledCents !== undefined) {
-      return dailyMoneyCents(Number(settledCents) / 100) / 100;
-    }
-    if (legacyPaid) return money(row[`${shift}_wage`]);
-    return shift === "day" ? effective.dayWage : effective.nightWage;
-  };
-  return { dayWage: forShift("day"), nightWage: forShift("night") };
+  return resolveRecordedShiftWages(datedWages(row, history), {
+    paymentStatus: row.payment_status,
+    ledgerItemCount: row.ledger_item_count,
+    savedDayWage: row.day_wage,
+    savedNightWage: row.night_wage,
+    settledDayCents: row.settled_day_cents,
+    settledNightCents: row.settled_night_cents,
+  });
 }
 
 const aliases = new Set([
