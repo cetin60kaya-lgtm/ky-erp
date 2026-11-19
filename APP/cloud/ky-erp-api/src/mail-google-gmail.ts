@@ -350,7 +350,6 @@ export function registerGoogleMailRoutes(app:any){
         const aFirst=text(a.page_last_sync)?1:0,bFirst=text(b.page_last_sync)?1:0;
         return aFirst-bFirst||rank(a)-rank(b)||text(a.page_last_sync).localeCompare(text(b.page_last_sync));
       }).slice(0,GMAIL_FOLDERS_PER_PASS);
-    const profile=(await googleJson(GMAIL+"/profile",token)).payload;
     const summary:any[]=[];let total=0,successfulFolders=0;
     for(const folder of todo){
       const labelId=text(folder.provider_folder_id),previous=text(folder.page_cursor);
