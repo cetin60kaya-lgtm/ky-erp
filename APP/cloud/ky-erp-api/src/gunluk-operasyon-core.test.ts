@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { dailyMoneyCents, dailyRevisionConflict, periodContains, mergeDailyRosterIds, dailyWageAtDate, resolveRecordedShiftWages } from "./gunluk-operasyon-core.ts";
+import { dailyMoneyCents, dailyRevisionConflict, periodContains, mergeDailyRosterIds, dailyWageAtDate, resolveRecordedShiftWages, validDailyWageAmount } from "./gunluk-operasyon-core.ts";
 
 test("new record does not require revision", () => {
   assert.equal(dailyRevisionConflict("", ""), "");
@@ -80,4 +80,13 @@ test("ödeme defteri öncesindeki eski ödemede iki vardiya da tarihsel sabit ka
 });
 test("ödenmiş hatalı kuruş tutarı sessiz sıfıra dönüştürülmez", () => {
   assert.throws(() => resolveRecordedShiftWages({dayWage:1000,nightWage:1500},{settledDayCents:33.4}), /INVALID_SETTLED_WAGE/);
+});
+
+test("personel kartı ücretinde tek kuruş kuralı: geçerli ve geçersiz tutarlar", () => {
+  assert.equal(validDailyWageAmount(1250.55), 1250.55);
+  assert.equal(validDailyWageAmount("1450,50"), null);
+  assert.equal(validDailyWageAmount(-1), null);
+  assert.equal(validDailyWageAmount("abc"), null);
+  assert.equal(validDailyWageAmount(1234.567), null);
+  assert.equal(validDailyWageAmount(0), 0);
 });
