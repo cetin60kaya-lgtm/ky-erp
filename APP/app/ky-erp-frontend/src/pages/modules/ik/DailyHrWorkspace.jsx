@@ -36,6 +36,7 @@ import {
   voidDailyPaymentAdjustment,
   getDailyPeriodPaymentStatus,
   getDailyPeriodLock,
+  getDailyActiveRange,
   getDailyRoster,
   getDailyRevisions,
   getDailySyncState,
@@ -44,6 +45,7 @@ import {
   createDailyPayment,
   previewDailyExcel,
   saveDailyFocusedRecords,
+  saveDailyActiveRange,
   saveDailyRoster,
   setDailyPeriodLock,
   updateDailyEmployee,
@@ -424,6 +426,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const companyId = String(activeMainCompany?.slug || activeMainCompany?.id || "").trim();
   const [employees, setEmployees] = useState([]);
   const [range, setRange] = useState(readRange);
+  const [rangeDraft, setRangeDraft] = useState(readRange);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
   const [shift, setShift] = useState("day");
   const [records, setRecords] = useState([]);
@@ -433,7 +436,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [notes, setNotes] = useState({});
   const [rosterIds, setRosterIds] = useState(() => new Set());
   const [rosterSaved, setRosterSaved] = useState(false);
-  const [otherSavedRanges, setOtherSavedRanges] = useState([]);
+  const [sharedRangeReady, setSharedRangeReady] = useState(false);
+  const [sharedRangeConfigured, setSharedRangeConfigured] = useState(false);
+  const [sharedRangeError, setSharedRangeError] = useState("");
+  const [sharedRangeSaving, setSharedRangeSaving] = useState(false);
   const [addingPersonId, setAddingPersonId] = useState("");
   const [summaryRows, setSummaryRows] = useState([]);
   const [weeklyReadScope, setWeeklyReadScope] = useState("");
@@ -471,6 +477,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [cardAddToRoster, setCardAddToRoster] = useState(false);
   const [cardDialog, setCardDialog] = useState(null);
   const [quick, setQuick] = useState(null);
+  const [quickHistory, setQuickHistory] = useState([]);
+  const [quickHistoryLoading, setQuickHistoryLoading] = useState(false);
   const [quickDayPickerOpen, setQuickDayPickerOpen] = useState(false);
   const [quickRowHeight, setQuickRowHeight] = useState(readQuickRowHeight);
   const [quickCardWidth, setQuickCardWidth] = useState(readQuickCardWidth);
@@ -505,6 +513,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [syncError, setSyncError] = useState("");
   const liveVersionRef = useRef("");
   const dailyRangeRef = useRef(range);
+  const sharedVersionRef = useRef(0);
+  const sharedCompanyRef = useRef(companyId);
+  const sharedReadyRef = useRef(false);
+  const sharedSavingRef = useRef(false);
   const livePollBusyRef = useRef(false);
   const rangeRequestRef = useRef(0);
   const focusedRequestRef = useRef(0);
@@ -522,8 +534,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     focusedScope: focusedReadScope, requiredFocusedScope: expectedFocusedScope,
     rangeLock: rangeLockInfo,
   };
-  const dailyWriteBlocked = Boolean(dailyWriteGate(sharedGate));
-  const rosterWriteBlocked = Boolean(dailyWriteGate({ ...sharedGate, roster: true }));
+  const dailyWriteBlocked = Boolean(dailyWriteGate(sharedGate)) || !sharedRangeReady || !sharedRangeConfigured || !!sharedRangeError;
+  const rosterWriteBlocked = Boolean(dailyWriteGate({ ...sharedGate, roster: true })) || !sharedRangeReady || !sharedRangeConfigured || !!sharedRangeError;
 
   const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);
   const roleOptions = useMemo(() => {
@@ -538,49 +550,126 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const label = roleLabel(raw);
     return roleOptions.find((item) => normalizeText(item) === normalizeText(label)) || label;
   }, [roleOptions]);
-  const setSafeRange = useCallback((next) => {
-    const resolved = typeof next === "function" ? next(range) : next;
-    if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
-    if (rangeSpanDays(resolved.start, resolved.end) > 31) { setError("Günlük Operasyon tek seferde en fazla 31 günlük aralıkla çalışır."); return; }
-    if (!sameRange(resolved, dailyRangeRef.current)) {
+  // Sunucunun firma bazlı dönem kaydı tek otoritedir. Tarayıcı yerel ayarı
+  // yalnız ilk çizim önbelleği; kayda/çıktıya yetki vermez.
+  const applyVerifiedRange = useCallback((serverRange, source = "sync") => {
+    if (!serverRange?.startDate || !serverRange?.endDate || !Number.isSafeInteger(Number(serverRange.version))) return;
+    const next = { start: serverRange.startDate, end: serverRange.endDate };
+    if (rangeSpanDays(next.start, next.end) > 31 || next.end < next.start) return;
+    sharedVersionRef.current = Number(serverRange.version);
+    sharedReadyRef.current = true;
+    setSharedRangeConfigured(true);
+    setSharedRangeReady(true); setSharedRangeError("");
+    setRangeDraft(next);
+    if (!sameRange(next, dailyRangeRef.current)) {
       rangeRequestRef.current += 1;
-      setRosterIds(new Set()); setRosterSaved(false); setOtherSavedRanges([]);
-      setRangeReadScope(""); setWeeklyReadScope(""); setPaymentReadScope("");
-      setPeriodLockKnown(false); setPeriodLockScope("");
-    }
-    dailyRangeRef.current = resolved;
-    setRange(resolved); setPaymentPoolRange(resolved); setPaymentHistoryRange(resolved);
-    writeRange(resolved); setError("");
-    try {
-      const channel = new window.BroadcastChannel(DAILY_SYNC_CHANNEL);
-      channel.postMessage({ type: "date-range", range: resolved, companyId });
-      channel.close();
-    } catch { /* localStorage event remains a fallback */ }
-  }, [companyId, range]);
-  const setSafePaymentRange = useCallback((_target, next) => {
-    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
-    setSafeRange(resolved);
-  }, [setSafeRange]);
-
-  useEffect(() => {
-    const accept = (next) => {
-      if (!next?.start || !next?.end || rangeSpanDays(next.start, next.end) > 31 || next.end < next.start) return;
-      if (sameRange(next, dailyRangeRef.current)) return;
-      rangeRequestRef.current += 1;
-      setRosterIds(new Set()); setRosterSaved(false); setOtherSavedRanges([]);
+      setRosterIds(new Set()); setRosterSaved(false);
       setRangeReadScope(""); setWeeklyReadScope(""); setPaymentReadScope("");
       setPeriodLockKnown(false); setPeriodLockScope("");
       dailyRangeRef.current = next;
       setRange(next); setPaymentPoolRange(next); setPaymentHistoryRange(next);
-      setNotice("Tarih aralığı diğer KY ERP sekmesinden güncellendi.");
+      setLogRange(next);
+      if (source === "remote") setNotice("Ortak dönem başka bilgisayarda değişti; yeni tarih aralığı D1'den yüklendi.");
+    }
+    writeRange(next);
+  }, []);
+
+  const refreshSharedRange = useCallback(async (initial = false) => {
+    if (!companyId || sharedSavingRef.current) return;
+    try {
+      const data = await getDailyActiveRange({ mainCompanyId: companyId }, { forceFresh: true });
+      if (sharedCompanyRef.current !== companyId || sharedSavingRef.current) return;
+      if (data?.configured && Number.isSafeInteger(Number(data.version))) {
+        if (Number(data.version) >= sharedVersionRef.current)
+          applyVerifiedRange(data, initial ? "initial" : "remote");
+      } else if (sharedVersionRef.current === 0) {
+        sharedReadyRef.current = true;
+        setSharedRangeReady(true); setSharedRangeConfigured(false);
+        setSharedRangeError("");
+      }
+    } catch (error) {
+      if (sharedCompanyRef.current !== companyId) return;
+      sharedReadyRef.current = false;
+      setSharedRangeReady(false);
+      setSharedRangeError(error?.message || "Ortak dönem sunucudan doğrulanamadı.");
+    }
+  }, [applyVerifiedRange, companyId]);
+
+  useEffect(() => {
+    sharedCompanyRef.current = companyId;
+    sharedVersionRef.current = 0;
+    sharedReadyRef.current = false;
+    setSharedRangeReady(false); setSharedRangeConfigured(false); setSharedRangeError("");
+    void refreshSharedRange(true);
+    // Farklı PC aynı tarayıcı kanalı üzerinden haberleşmez; D1 sürümü periyodik
+    // ve sekme yeniden odaklandığında kontrol edilir. Veri değişikliği yoktur.
+    const onFocus = () => { void refreshSharedRange(); };
+    const interval = window.setInterval(() => { if (!document.hidden) void refreshSharedRange(); }, 30000);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
     };
-    const onStorage = (event) => { if (event.key === RANGE_KEY && event.newValue) { try { accept(JSON.parse(event.newValue)); } catch { /* geçersiz eski tercih */ } } };
+  }, [companyId, refreshSharedRange]);
+
+  const setSafeRange = useCallback(async (next) => {
+    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
+    if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return false;
+    if (rangeSpanDays(resolved.start, resolved.end) > 31) {
+      setError("Günlük Operasyon en fazla 31 günlük aralıkla çalışır."); return false;
+    }
+    if (!sharedReadyRef.current || sharedSavingRef.current || sharedCompanyRef.current !== companyId) {
+      setError("Ortak tarih aralığı yükleniyor/kaydediliyor. Önce sunucu doğrulaması tamamlanmalı."); return false;
+    }
+    if (sharedVersionRef.current > 0 && sameRange(resolved, dailyRangeRef.current)) return true;
+    if (quick && (!sameSet(quick.ids, quick.baseline) || !sameSet(quick.checked, quick.checkedBaseline || new Set()))) {
+      setError("Hızlı Giriş'te kaydedilmemiş seçim var. Önce vardiyayı kaydedin."); return false;
+    }
+    sharedSavingRef.current = true;
+    setSharedRangeSaving(true); setError("");
+    let retryServerRead = false;
+    try {
+      const saved = await saveDailyActiveRange({
+        mainCompanyId: companyId,
+        startDate: resolved.start, endDate: resolved.end,
+        expectedVersion: sharedVersionRef.current,
+      });
+      if (!saved?.configured || saved.startDate !== resolved.start || saved.endDate !== resolved.end)
+        throw new Error("Ortak dönem D1'de doğrulanamadı.");
+      applyVerifiedRange(saved, "local");
+      try {
+        const channel = new window.BroadcastChannel(DAILY_SYNC_CHANNEL);
+        channel.postMessage({ type:"date-range", range:resolved, companyId, version:saved.version });
+        channel.close();
+      } catch { /* farklı bilgisayarlar D1 sürüm sorgusunu kullanır */ }
+      setNotice(`Ortak dönem ${dateText(resolved.start)}–${dateText(resolved.end)} olarak firmaya kaydedildi.`);
+      return true;
+    } catch (error) {
+      setError(error?.message || "Tarih aralığı kaydedilemedi. Önce ortak dönemi yenileyin.");
+      retryServerRead = true;
+      return false;
+    } finally {
+      sharedSavingRef.current = false; setSharedRangeSaving(false);
+      if (retryServerRead) void refreshSharedRange();
+    }
+  }, [applyVerifiedRange, companyId, quick, refreshSharedRange]);
+  const setSafePaymentRange = useCallback((_target, next) => {
+    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
+    void setSafeRange(resolved);
+  }, [setSafeRange]);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      const data = event.data;
+      if (data?.type === "date-range" && data.companyId === companyId &&
+        Number(data.version) > sharedVersionRef.current) void refreshSharedRange();
+    };
     const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(DAILY_SYNC_CHANNEL) : null;
-    const onMessage = (event) => { if (event.data?.type === "date-range" && event.data?.companyId === companyId) accept(event.data.range); };
-    window.addEventListener("storage", onStorage);
     channel?.addEventListener("message", onMessage);
-    return () => { window.removeEventListener("storage", onStorage); channel?.removeEventListener("message", onMessage); channel?.close(); };
-  }, [companyId]);
+    return () => { channel?.removeEventListener("message", onMessage); channel?.close(); };
+  }, [companyId, refreshSharedRange]);
 
   useEffect(() => { if (selectedDate < range.start || selectedDate > range.end) setSelectedDate(range.start); }, [range.end, range.start, selectedDate]);
 
@@ -617,12 +706,9 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       const savedSet = new Set(savedIds);
       const recordedIds = new Set((attendanceRows || []).filter((row) => rowDay(row) || rowNight(row)).map(rowEmployeeId).filter(Boolean));
       setRosterIds(savedSet);
-      setOtherSavedRanges(!savedSet.size && Array.isArray(roster?.otherRanges)
-        ? roster.otherRanges.filter((entry) => entry?.startDate && entry?.endDate && Number(entry?.employeeCount) > 0)
-        : []);
       setRosterSaved(Boolean(attendanceRows) && ![...recordedIds].some((id) => !savedSet.has(id)));
     } else {
-      setRosterSaved(false); setOtherSavedRanges([]);
+      setRosterSaved(false);
       errors.push(`Personel havuzu: ${rosterResult.status === "rejected" ? rosterResult.reason?.message || "okunamadı" : "sunucu yanıtı geçersiz"}.`);
     }
     setRangeLoadError(errors.join(" "));
@@ -896,7 +982,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   }, [attendance, employeeMap, range.end, range.start, summaryRows, weeklySummaryInScope]);
   const weeklyControlRows = weeklyReconciliation.rows;
-  const weeklyFinancialReady = weeklySummaryInScope
+  const weeklyFinancialReady = sharedRangeReady && sharedRangeConfigured && weeklySummaryInScope
     && rangeReadScope === expectedRangeScope
     && !rangeLoadError
     && !weeklyReconciliation.error
@@ -1235,7 +1321,20 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
   const selectAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set(activeRosterPeople.filter((p) => shift === "day" || personWageAtDate(p, selectedDate).night > 0).map((p) => p.id))); };
   const clearAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set()); setCheckedIds(new Set()); };
-  const thisWeek = () => { const start = startOfWeek(); setSafeRange({ start, end: addDays(start, 6) }); setSelectedDate(localDateKey()); };
+  const thisWeek = async () => { const start = startOfWeek(); if (await setSafeRange({ start, end: addDays(start, 6) })) setSelectedDate(localDateKey()); };
+
+  useEffect(() => {
+    if (!companyId || !quick?.date) { setQuickHistory([]); setQuickHistoryLoading(false); return undefined; }
+    let active = true;
+    const startDate = addDays(quick.date, -14);
+    const endDate = addDays(quick.date, -1);
+    setQuickHistoryLoading(true); setQuickHistory([]);
+    void getDailyAttendance({ mainCompanyId: companyId, startDate, endDate }, { forceFresh: true })
+      .then((rows) => { if (active) setQuickHistory(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (active) setQuickHistory([]); })
+      .finally(() => { if (active) setQuickHistoryLoading(false); });
+    return () => { active = false; };
+  }, [companyId, quick?.date]);
 
   const loadQuickFocus = async (date, mode, preserveQuery = "") => {
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
@@ -1524,11 +1623,32 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     } catch(e) { setError(e?.message || "İşlem iptal edilemedi."); }
     finally { setBusy(false); }
   };
+  // Ödeme ve çıktıda yeniden D1 okuması: diğer PC'nin tarih seçimini
+  // henüz periyodik poll görmediyse yanlış haftanın fişi üretilmez.
+  const verifyPrintAndPaymentRange = useCallback(async (expected = range) => {
+    if (!sharedRangeReady || !sharedRangeConfigured || sharedRangeError || sharedRangeSaving
+      || !sameRange(expected, dailyRangeRef.current))
+      throw new Error("Ortak firma dönemi doğrulanmadı. Önce tarih aralığını D1'den yükleyin.");
+    const current = await getDailyActiveRange({ mainCompanyId: companyId }, { forceFresh: true });
+    if (!current?.configured || current.version !== sharedVersionRef.current
+      || current.startDate !== expected.start || current.endDate !== expected.end) {
+      void refreshSharedRange();
+      throw new Error("Dönem başka bilgisayarda değişmiş. Yanlış haftanın fişini veya ödemesini oluşturmamak için işlem durduruldu.");
+    }
+  }, [companyId, range, refreshSharedRange, sharedRangeConfigured, sharedRangeError, sharedRangeReady, sharedRangeSaving]);
+  const printVerifiedWeeklySummary = async () => {
+    if (!weeklyFinancialReady) return;
+    try {
+      await verifyPrintAndPaymentRange(range);
+      printWeeklySummary(range, days, weeklyControlRows);
+    } catch (error) { setError(error?.message || "Haftalık çıktı aralığı doğrulanmadı."); }
+  };
   const payRow = async (row, printAfter = false) => {
     if (busy || number(row.pendingCheckCount) > 0) return;
     if (!window.confirm(`${row.name || row.fullName} için ${money(row.totalAmount)} fiilen ödendi mi? Onaylarsanız D1'de ÖDENDİ olarak kalıcı kayıt oluşturulur.`)) return;
     setBusy(true); setError("");
     try {
+      await verifyPrintAndPaymentRange(paymentPoolRange);
       const payment = await createDailyPayment({ mainCompanyId: companyId, employeeId: row.employeeId, startDate: paymentPoolRange.start, endDate: paymentPoolRange.end, paymentDate: localDateKey() });
       setNotice(`${payment?.paymentNo || "Ödeme"} · ${row.name || row.fullName} tamamlandı.`);
       await Promise.all([loadPayments(), loadPaymentHistory(), loadRangeData()]);
@@ -1542,6 +1662,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     if (!window.confirm(`${rows.length} personel için toplam ${money(total)} tutarın fiilen ödendiğini onaylıyor musunuz? Bu işlem gerçek ödeme kayıtları oluşturacaktır.`)) return;
     setBusy(true); setError("");
     try {
+      await verifyPrintAndPaymentRange(paymentPoolRange);
       let completed = 0;
       const failed = [];
       for (const row of rows) {
@@ -1563,7 +1684,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     catch (e) { setError(e?.message || "Ödeme iptal edilemedi."); } finally { setBusy(false); }
   };
   // Hakediş çıktısı salt okunurdur: ödeme yalnız kullanıcı 'Tamamla' dediğinde kaydedilir.
-  const printPeriodRows = useCallback((rowsToPrint = []) => {
+  const printPeriodRows = useCallback(async (rowsToPrint = []) => {
     if (busy || !Array.isArray(rowsToPrint) || !rowsToPrint.length) return;
     if (paymentReadScope !== dailyRangeScope(companyId, paymentPoolRange.start, paymentPoolRange.end)
       || paymentLoadError || rowsToPrint.some((row) =>
@@ -1571,8 +1692,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setError("Fişin tarih aralığı veya hakedişi D1 ile doğrulanmadı. Yenilemeden çıktı alınamaz.");
       return;
     }
-    printDailyPaymentSlips(paymentPoolRange, rowsToPrint);
-  }, [busy, companyId, paymentLoadError, paymentPoolRange, paymentReadScope]);
+    try {
+      await verifyPrintAndPaymentRange(paymentPoolRange);
+      printDailyPaymentSlips(paymentPoolRange, rowsToPrint);
+    } catch (error) { setError(error?.message || "Ödeme fişi dönemi doğrulanamadı."); }
+  }, [busy, companyId, paymentLoadError, paymentPoolRange, paymentReadScope, verifyPrintAndPaymentRange]);
   const printPaymentPeriodSlips = useCallback(({ selectedOnly = false } = {}) => {
     const slips = selectedOnly ? paymentPeriodRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))) : paymentPeriodRows;
     printPeriodRows(slips);
@@ -1589,6 +1713,9 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setError(weeklyLoadError || "Haftalık net hakediş sunucudan doğrulanmadı; Excel oluşturulmadı.");
       return;
     }
+    try {
+      await verifyPrintAndPaymentRange(range);
+    } catch (error) { setError(error?.message || "Excel dönemi doğrulanamadı."); return; }
     setBusy(true);
     try {
       // Bulut API'sinde GET /gunluk-operasyon/excel yok; hazır personel matrisinden yerel Excel üret.
@@ -1789,6 +1916,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       {notice ? <div className="gop-notice" role="status">{notice}</div> : null}{error ? <div className="gop-error" role="alert">{error}</div> : null}{syncError ? <div className="gop-sync-warning" role="status"><RefreshCw size={14}/> {syncError}</div> : null}
       {!periodLockVerified && ["daily-dashboard","daily-entry","daily-weekly"].includes(view) ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> {periodLockError || "Dönem kilidi doğrulanıyor. Kontrol tamamlanana kadar değişiklik yapılamaz."}</div> : null}
       {rangeLoadError && ["daily-dashboard","daily-entry","daily-weekly"].includes(view) ? <div className="gop-error" role="alert">{rangeLoadError} Kayıtlar korunuyor; veri kaydedilmeden önce doğrulama gerekli.</div> : null}
+      {!sharedRangeReady || sharedRangeError ? <div className="gop-lock-uncertain" role="status">Ortak dönem doğrulanıyor: ${sharedRangeError || "sunucu yanıtı bekleniyor"}. Doğrulanana kadar kaydetme ve çıktı kapalıdır.</div> : null}
+      {sharedRangeReady && !sharedRangeConfigured && view === "daily-entry" ? <div className="gop-lock-uncertain" role="status">Firmanın ortak dönemi henüz sabitlenmedi. Başlangıç ve bitişi kontrol edip “Bu Dönemi Sabitle” tuşuna basın; diğer cihazlar aynı aralığı açacak.</div> : null}
       {periodLockVerified && !periodLocked && rangeLockInfo && view === "daily-entry" ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> Tarih aralığının başka gününde kapalı dönem var. Seçili açık günün kayıtları düzenlenebilir; dönem personel listesi değiştirilemez.</div> : null}
 
       {view === "daily-entry" ? <div className={`kyop-daily ${shift}`}>
@@ -1796,21 +1925,26 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="kyop-actions">
           <div className="kyop-action-group kyop-date-actions" aria-label="Tarih ve hafta seçimi">
           <div className="kyop-manual-range" aria-label="Tarih aralığını elle seç">
-            <label><span>Başlangıç</span><input type="date" value={range.start} onChange={(e) => { const value = e.target.value; if (!value) return; setSafeRange(value > range.end ? { start: value, end: value } : { ...range, start: value }); }} /></label>
+            <label><span>Başlangıç</span><input type="date" value={rangeDraft.start} onChange={(e) => { const value = e.target.value; if (value) setRangeDraft(current => ({...current,start:value})); }} /></label>
             <i>→</i>
-            <label><span>Bitiş</span><input type="date" value={range.end} onChange={(e) => { const value = e.target.value; if (!value) return; setSafeRange(value < range.start ? { start: value, end: value } : { ...range, end: value }); }} /></label>
-          </div><button type="button" onClick={() => shiftRange(-1)}>‹ Önceki Hafta</button><button type="button" onClick={() => shiftRange(1)}>Sonraki Hafta ›</button>
-          <button type="button" onClick={thisWeek}><CalendarDays size={15}/> Bu Hafta</button>
+            <label><span>Bitiş</span><input type="date" value={rangeDraft.end} onChange={(e) => { const value = e.target.value; if (value) setRangeDraft(current => ({...current,end:value})); }} /></label>
+          </div><button type="button" disabled={!sharedRangeReady || sharedRangeSaving || rangeDraft.end < rangeDraft.start ||
+            (sharedRangeConfigured && sameRange(rangeDraft, range))}
+            onClick={() => void setSafeRange(rangeDraft)}
+            title="Başlangıç ve bitiş tarihlerini tek seferde D1'e kaydeder">
+            {sharedRangeSaving ? "Kaydediliyor…" : sharedRangeConfigured ? "Dönemi Uygula" : "Bu Dönemi Sabitle"}
+          </button><button type="button" onClick={() => shiftRange(-1)}>‹ Önceki Hafta</button><button type="button" onClick={() => shiftRange(1)}>Sonraki Hafta ›</button>
+          <button type="button" disabled={!sharedRangeReady || sharedRangeSaving} onClick={() => void thisWeek()}><CalendarDays size={15}/> Bu Hafta</button>
           </div>
           <div className="kyop-action-group kyop-entry-actions" aria-label="Personel kayıt işlemleri">
           <button type="button" className="primary" onClick={() => void openQuick()}><Zap size={15}/> Hızlı Personel Girişi</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={15}/> Yeni Personel Ekle</button><button type="button" disabled={busy || dailyWriteBlocked} onClick={selectAll}><CheckCircle2 size={15}/> Tümünü Seç</button><button type="button" disabled={busy || dailyWriteBlocked} onClick={clearAll}>Seçimi Kaldır</button><button type="button" onClick={loadFocused}><RefreshCw size={15}/> Kayıtlı Seçimi Yükle</button><button type="button" className="primary" disabled={busy || dailyWriteBlocked} onClick={saveFocused}><Save size={15}/> Günlük Kaydet</button>
           </div>
-          <details className="kyop-extra-tools"><summary><FileSpreadsheet size={15}/> Çıktı ve Excel</summary><div className="kyop-extra-tool-list"><button type="button" disabled={!weeklyFinancialReady} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={15}/> Haftalık Liste Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={15}/> Excel Aktar</button><button type="button" onClick={importExcel}><FileSpreadsheet size={15}/> Excel Yükle</button></div></details>
+          <details className="kyop-extra-tools"><summary><FileSpreadsheet size={15}/> Çıktı ve Excel</summary><div className="kyop-extra-tool-list"><button type="button" disabled={!weeklyFinancialReady} onClick={() => void printVerifiedWeeklySummary()}><Printer size={15}/> Haftalık Liste Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={15}/> Excel Aktar</button><button type="button" onClick={importExcel}><FileSpreadsheet size={15}/> Excel Yükle</button></div></details>
         </div>
         <div className={`kyop-banner ${shift === "night" ? "night" : ""}`}><strong>Güvenli giriş modu:</strong><span>Yalnız {longDateText(selectedDate)} — {shift === "day" ? "Gündüz" : "Gece"} aktif. Hızlı girişte de aynı anda yalnız bir gün düzenlenir.</span>{periodLockVerified && periodLocked ? <b><LockKeyhole size={14}/> DÖNEM KAPALI</b> : null}{!periodLockVerified ? <b><LockKeyhole size={14}/> KİLİT DOĞRULANAMADI</b> : null}</div>
         <div className="kyop-days" aria-label="Tarih aralığı">{daySummaries.map((item) => <button type="button" key={item.date} className={item.date === selectedDate ? "active" : ""} title={`${longDateText(item.date)} · Gündüz ${item.dayCount} · Gece ${item.nightCount} · ${item.people} kişi · çift tıkla hızlı giriş`} onClick={() => setSelectedDate(item.date)} onDoubleClick={() => void openQuick(item.date, shift)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong><em className="kyop-day-counts"><span className="day">G {item.dayCount}</span><span className="night">N {item.nightCount}</span><span className="people">{item.people} kişi</span></em>{item.date === selectedDate ? <i>AKTİF</i> : null}</button>)}</div>
         <div className="kyop-grid">
-          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Dönem Personel Listesi <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div>{!rosterIds.size && !rangeLoadError && otherSavedRanges.length ? <div className="gop-roster-saved-ranges" role="status"><strong>Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi.</strong><span>Kaydedilmiş aralığı aç:</span>{otherSavedRanges.map((item) => <button type="button" key={`${item.startDate}-${item.endDate}`} disabled={busy} onClick={() => setSafeRange({ start: item.startDate, end: item.endDate })}>{dateText(item.startDate)} – {dateText(item.endDate)} · {item.employeeCount} personel</button>)}</div> : null}<div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} disabled={busy || dailyWriteBlocked} title={inRoster ? "Havuzdan çıkarmak için orta tablodaki çöp butonunu kullanın." : "Tarih aralığı havuzuna ekle"} onChange={() => { if (!inRoster) void addPersonToRoster(person); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{addingPersonId === person.id ? "Havuza kaydediliyor…" : inRoster ? "Havuzda · Kayıtlı" : "Havuza ekle"}</em><em>G: {money(personWageAtDate(person, selectedDate).day)} · N: {money(personWageAtDate(person, selectedDate).night)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved || rosterWriteBlocked} onClick={saveRoster}><Save size={15}/> {rosterSaved ? (rosterIds.size ? `Dönem Listesi Kayıtlı (${rosterIds.size})` : "Bu Dönem Havuzu Boş") : `Dönem Listesini Kaydet (${rosterIds.size})`}</button></aside>
+          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Dönem Personel Listesi <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} disabled={busy || dailyWriteBlocked} title={inRoster ? "Havuzdan çıkarmak için orta tablodaki çöp butonunu kullanın." : "Tarih aralığı havuzuna ekle"} onChange={() => { if (!inRoster) void addPersonToRoster(person); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{addingPersonId === person.id ? "Havuza kaydediliyor…" : inRoster ? "Havuzda · Kayıtlı" : "Havuza ekle"}</em><em>G: {money(personWageAtDate(person, selectedDate).day)} · N: {money(personWageAtDate(person, selectedDate).night)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved || rosterWriteBlocked} onClick={saveRoster}><Save size={15}/> {rosterSaved ? (rosterIds.size ? `Dönem Listesi Kayıtlı (${rosterIds.size})` : "Bu Dönem Havuzu Boş") : `Dönem Listesini Kaydet (${rosterIds.size})`}</button></aside>
 
           <main className="kyop-panel kyop-entry"><div className="kyop-entry-head"><div><span>SEÇİLİ GÜNÜN PERSONEL GİRİŞİ</span><h2>{dateText(selectedDate)} · {shift === "day" ? "Gündüz" : "Gece"}</h2><p>Bu tablo yalnız {currentWeekday} günü için gösterilir. Üstte gün seçince liste ve toplamlar aynı güne yenilenir.</p></div><div className="kyop-head-actions"><button type="button" onClick={loadLog}>Log</button><button type="button" className={periodLockVerified && periodLocked ? "locked" : ""} disabled={busy || !periodLockVerified} onClick={togglePeriodLock}>{periodLockVerified && periodLocked ? "Dönemi Aç" : "Dönemi Kapat"}</button><b>{dateText(selectedDate, true)} · {shift === "day" ? "G" : "N"}</b></div></div>
             <div className="kyop-table-wrap"><table><thead><tr><th>Personel / Giriş / Durum</th><th>Vasıf</th><th>Aktif Gün</th><th>Gündüz Ücret</th><th>Gece Ücret</th><th>Not</th><th>İşlem</th></tr></thead><tbody>{groupedEntryPeople.length ? groupedEntryPeople.flatMap(([role, people]) => [<tr className="group" key={`g-${role}`}><td colSpan="7">{role} <b>{people.length} personel</b></td></tr>, ...people.map((person) => { const selected = selectedIds.has(person.id); const reviewed = checkedIds.has(person.id); const historicalWage = personWageAtDate(person, selectedDate); const blocked = shift === "night" && historicalWage.night <= 0; return <tr key={person.id} className={`${selected ? "selected" : ""} ${reviewed ? "checked" : ""}`}><td><div className="kyop-person-cell"><div><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"}</small><em>{!rosterIds.has(person.id) ? (reviewed ? "Dönem listesi dışı kayıt · ✓ Kontrol Edildi" : "Dönem listesi dışı kayıt · Bu Gün Seçildi") : reviewed ? "✓ Kontrol Edildi" : selected ? "Bu Gün Seçildi" : "Bu Gün Yok"}</em></div><span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div></td><td>{person.role || "-"}</td><td>{dateText(selectedDate, true)}</td><td>{money(historicalWage.day)}</td><td>{historicalWage.night > 0 ? money(historicalWage.night) : "-"}</td><td><input value={notes[person.id] || ""} disabled={dailyWriteBlocked || busy} onChange={(e) => setNotes((current) => ({ ...current, [person.id]: e.target.value }))} placeholder="Not"/></td><td><div className="kyop-row-actions"><button type="button" title={selected ? "Gün seçimini kaldır" : "Seçili güne/vardiyaya kaydet"} disabled={blocked || dailyWriteBlocked || busy} className={selected ? "selected" : ""} onClick={() => setPersonSelectedForShift(person, !selected)}><CheckCircle2 size={14}/> {selected ? "Seçildi" : "Seç"}</button><button type="button" title={reviewed ? "Kontrol onayını kaldır" : "Kontrol edildi"} disabled={!selected || blocked || dailyWriteBlocked || busy} className={reviewed ? "selected verified" : "verified"} onClick={() => setPersonReviewed(person, !reviewed)}>✓ {reviewed ? "Onaylandı" : "Kontrol"}</button><button type="button" title="Personel kartını düzenle" onClick={() => setCardDialog({ ...person })}><Pencil size={14}/></button><button type="button" title={rosterIds.has(person.id) ? "Personeli tarih aralığı havuzundan çıkar" : "Dönem listesi dışı kayıt"} disabled={!rosterIds.has(person.id) || rosterWriteBlocked || busy} onClick={() => removePersonFromRoster(person)}><Trash2 size={14}/></button></div></td></tr>; })]) : <tr><td colSpan="7"><div className="kyop-empty-selection"><Users size={28}/><strong>Bu gün için personel seçilmedi</strong><span>Soldaki listeden personel ekleyin veya hızlı giriş ile tek gün ve vardiya seçimi yapın.</span><button type="button" onClick={() => void openQuick(selectedDate, shift)}><Zap size={15}/> Hızlı Giriş Aç</button></div></td></tr>}</tbody></table></div>
@@ -1855,7 +1989,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       </div> : null}
 
       {view === "daily-weekly" && !weeklyFinancialReady ? <div className="gop-error" role="status">{weeklyReconciliation.error || weeklyLoadError || "Haftalık ek ödeme/kesinti ve net tutarlar D1 üzerinden doğrulanıyor. Çıktı ve Excel bu sırada kapalı."}</div> : null}
-      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyFinancialReady || !weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Çalışma Tutarı" value={weeklyFinancialReady ? money(weeklyTotals.base) : "Doğrulanıyor"}/><Stat label="Ek Ödeme (+)" value={weeklyFinancialReady ? money(weeklyTotals.additions) : "—"}/><Stat label="Kesinti (-)" value={weeklyFinancialReady ? money(weeklyTotals.deductions) : "—"}/><Stat label="Net Toplam" value={weeklyFinancialReady ? money(weeklyTotals.total) : "—"}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü · ✓ Onaylandı · • Kontrol bekliyor · – Kayıt yok.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Ek (+)</th><th>Kesinti (-)</th><th>Net Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? (cell.dayChecked ? "on day is-reviewed" : "on day is-pending") : ""} title={cell.day ? (cell.dayChecked ? "Gündüz kontrol edildi" : "Gündüz kontrol bekliyor") : "Gündüz kayıt yok"}>G{cell.day ? (cell.dayChecked ? "✓" : "•") : "–"}</span><span className={cell.night ? (cell.nightChecked ? "on night is-reviewed" : "on night is-pending") : ""} title={cell.night ? (cell.nightChecked ? "Gece kontrol edildi" : "Gece kontrol bekliyor") : "Gece kayıt yok"}>N{cell.night ? (cell.nightChecked ? "✓" : "•") : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>+{weeklyFinancialReady ? money(row.additions) : "—"}</strong></td><td className="money"><strong>−{weeklyFinancialReady ? money(row.deductions) : "—"}</strong></td><td className="money"><strong>{weeklyFinancialReady ? money(row.totalAmount) : "—"}</strong></td></tr>) : <tr><td colSpan={days.length + 6}><Empty>Seçili dönemde çalışma veya ek işlem kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
+      {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyFinancialReady || !weeklyControlRows.length} onClick={() => void printVerifiedWeeklySummary()}><Printer size={16}/> Özet Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Çalışma Tutarı" value={weeklyFinancialReady ? money(weeklyTotals.base) : "Doğrulanıyor"}/><Stat label="Ek Ödeme (+)" value={weeklyFinancialReady ? money(weeklyTotals.additions) : "—"}/><Stat label="Kesinti (-)" value={weeklyFinancialReady ? money(weeklyTotals.deductions) : "—"}/><Stat label="Net Toplam" value={weeklyFinancialReady ? money(weeklyTotals.total) : "—"}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü · ✓ Onaylandı · • Kontrol bekliyor · – Kayıt yok.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Ek (+)</th><th>Kesinti (-)</th><th>Net Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? (cell.dayChecked ? "on day is-reviewed" : "on day is-pending") : ""} title={cell.day ? (cell.dayChecked ? "Gündüz kontrol edildi" : "Gündüz kontrol bekliyor") : "Gündüz kayıt yok"}>G{cell.day ? (cell.dayChecked ? "✓" : "•") : "–"}</span><span className={cell.night ? (cell.nightChecked ? "on night is-reviewed" : "on night is-pending") : ""} title={cell.night ? (cell.nightChecked ? "Gece kontrol edildi" : "Gece kontrol bekliyor") : "Gece kayıt yok"}>N{cell.night ? (cell.nightChecked ? "✓" : "•") : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>+{weeklyFinancialReady ? money(row.additions) : "—"}</strong></td><td className="money"><strong>−{weeklyFinancialReady ? money(row.deductions) : "—"}</strong></td><td className="money"><strong>{weeklyFinancialReady ? money(row.totalAmount) : "—"}</strong></td></tr>) : <tr><td colSpan={days.length + 6}><Empty>Seçili dönemde çalışma veya ek işlem kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
 
       {view === "daily-payments" ? <div className="gop-payments-v2">
         <div className="gop-payment-tabs three">
@@ -1944,7 +2078,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="quick-status-strip"><span className="selected"><i/><b>Seçilen</b><strong>{quick.ids.size}</strong></span><span className="checked"><i/><b>Kontrol</b><strong>{quickChecked}/{quick.ids.size}</strong></span><span className="pending"><i/><b>Bekleyen</b><strong>{quickPending}</strong></span><span className="pool"><i/><b>Toplam Personel</b><strong>{activeRosterPeople.length}</strong></span></div>
         <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-add-bar"><QuickRosterPicker
           people={availableRosterPeople}
-          attendance={attendance}
+          attendance={quickHistory}
+          date={quick.date}
+          shift={quick.shift}
+          historyLoading={quickHistoryLoading}
           busy={busy}
           disabled={rosterWriteBlocked}
           onAdd={addManyFromQuickPool}

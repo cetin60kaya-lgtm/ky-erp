@@ -1,5 +1,21 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Günlük Operasyon son kabul: sağ Personel Ekle + ortak firma dönemi
+- **Kapsam:** Ana Günlük Personel Girişi ve Hızlı Giriş V3 kartları değişmedi. Yalnız Hızlı Giriş içindeki `Personel Ekle` dar kutusu sağa açılan, genişliği 450–860px ayarlanabilen panelle değiştirildi. Var olan personel kartı formuna `Yeni Personel` ile gidilir, ikinci personel veri şeması yoktur.
+- **Sık kullanılanlar:** Mevcut dönem havuzu dışında kalan aktif kişiler, gerçek D1 vardiya geçmişinin son 7/14 takvim günündeki sayısına göre, seçili gündüz/gece vardiyasından salt-okunur hesaplanır. Bu öneri otomatik vardiya, havuz veya ücret kaydı değildir. Çoklu seçilen kişi tek `mode:merge` çağrısıyla havuza eklenir, D1 cevap ID doğrulaması şart.
+- **Tarih farkı kök neden:** Yerel `localStorage` farklı PC'lere aktarılmadığından 14–22 yerine 16–22 görülebiliyordu. Yeni `hr_daily_active_range` yalnız `main_company_id` için firma-geneli seçili tarih tercihini `start_date,end_date,version` olarak tutar. UI ilk açılışta D1'den okur, 30 saniyede ve sekme odaklanınca sürüm yeniler. Başlangıç/bitiş birlikte `Dönemi Uygula` ile sunucuya yazılır; başka PC sürüm değiştirdiyse CAS `409` ve yeniden okuma. `Bu Hafta` sadece tıklamayla değişir; takvim haftası kendiliğinden sıfırlama yapmaz.
+- **İlk kurulum:** D1'de henüz ortak tercih yoksa hiç kimsenin tarayıcı hafta aralığı otomatik ortak doğru kabul edilmez. Kullanıcı başlangıç-bitişi kontrol edip bir kez `Bu Dönemi Sabitle` kullanır; ondan sonra tüm cihazlar D1 tercihine döner. Ortak aralık doğrulanmadan vardiya/roster kaydı ve finansal çıktı kapalıdır.
+- **Eski uyarı:** `Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi` paneli ve gereksiz sunucu diğer-dönem araması kaldırıldı; önceki havuz kayıtları hiçbir şekilde taşınmadı/silinmedi.
+- **Sınır:** Personel isim kartlarına, ücret, bordro, D1 canlı çalışan, vardiya ve ödeme kayıtlarına müdahale yoktur. Personel adlarını tek düzene getirme işi ancak bu kod/CI/yayın ve kullanıcı testinden sonra ayrı incelenecektir.
+- **Kabul:** son GitHub CI, yayınlanan frontend/API ve gerçek oturumlu iki-PC tarih/range doğrulaması ayrı kanıtlanacak; gerçek D1 canlı personel işlem testi yapılmadıysa PASS denmez.
+
+
+## 19.11.2026 — Günlük Personel Girişi geçmiş havuz uyarısı kaldırıldı
+- Kullanıcı kararı: soldaki **"Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi."** mesajı ve önceki kayıtlı aralıklara geçiş düğmeleri hiç görünmeyecek. Yeni tarihte havuzun boş görünmesi, önceki aralıklardaki D1 kayıtlarının taşınmasını veya silinmesini **tetiklemez**.
+- Yalnız canonical `DailyHrWorkspace.jsx` içindeki söz konusu panel, kullanılmayan `otherSavedRanges` UI state ve ilgili ekrana alma kodu kaldırıldı. D1 roster, günlük vardiya, personel kartı, ödeme/ücret motoru, API/Worker, eski aralıklar, tarih-scope güvenliği ve diğer ekran düzeni değişmedi.
+- Sözleşme testi uyarının ve aralık geçiş düğmelerinin yeniden görünmesini engeller; gerçek kullanıcı/D1 yazma kabulü yapılmadıkça iddia edilmez.
+
+
 ## 19.11.2026 — KULLANICI DÜZELTMESİ: Günlük ekran eski hâline; yalnız Hızlı Giriş Personel Ekle
 - Kullanıcı ekran görüntüsüyle PR #610'daki ana sayfa akıllı tek ekran tasarımını açıkça reddetti; eski **Günlük Personel Girişi** (dönem havuzu + orta detay tablo + sağ Günlük Kontrol + eski Hızlı Giriş popup) birebir korunacak. Bu yeni karar aynı tarihteki eski tek ekran planından üstündür.
 - Geri alma dalı `fix/gunluk-eski-ekran-yalniz-hizli-personel-ekle-20261119` güncel production kaynağından açıldı: PR #610 ana ekran, test ve istenmeyen bağımsız SmartSelector/CSS/sıralama dosyaları tersine alındı. Mevcut muhasebe, Gmail, Worker, ücret motoru, ödeme/D1 koduna dokunulmadı.

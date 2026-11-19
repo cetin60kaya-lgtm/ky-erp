@@ -1,5 +1,17 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Günlük Operasyon güncel işler bitirme sırası
+- Önceki uyarı paneli kaldırıldı; küçük Hızlı Giriş Personel Ekle yerine sağdaki genişliği ayarlı panel, Son 7 / Son 14 günün havuz-dışı gerçek çalışan sıklığı ve tek toplu silmesiz D1 merge işlemi kodlandı. Personel kartı için mevcut canonical form korunur.
+- Bir bilgisayarda seçilen 14–22 gibi özel tarih aralığı firma-geneli D1 ortak tercih tablosuyla sürümlü kalır. Başka PC/oturum aynı aralığı okur, yerel 16–22 gibi varsayılanlar canlı kaydı ezmez. D1 henüz kayıtlı değilse önce kullanıcı `Bu Dönemi Sabitle` ile onaylar. Aralık sunucu doğrulaması yoksa kaydetme/Excel/fiş engellidir. Tam CI, production Worker/PWA ve gerçek iki cihaz kabulü ayrı kapılardır.
+- **Sonraki iş**: yalnız kullanıcının onaylayacağı personel isim standardizasyonu; bu revizyonda hiçbir personel adı, ücret, vardiya veya ödeme verisi değiştirilmedi.
+
+
+## 19.11.2026 — Günlük Personel Girişi gereksiz eski havuz uyarısının gizlenmesi
+- Kullanıcı açık isteğiyle "Bu tarih aralığının havuzu boş. Önceki kayıtlar silinmedi." bilgilendirme paneli ve önceki tarih aralıklarına geçiş butonları kaldırıldı.
+- Yalnız frontend görünümü ve buna bağlı kullanılmayan state; gerçek D1 personel havuzu, kayıtlı dönemler, vardiya/gündüz/gece, hesaplar ve Worker değişmez. Tarih aralığı doğru seçilmediyse ekran mevcut kapsamın verilerini göstermeye devam eder; geçmiş kayıtlar başka aralığa otomatik eklenmez.
+- PR/CI/production frontend dosyası kanıtı yayın kabulünden önce ayrı doğrulanır.
+
+
 ## 19.11.2026 — Günlük Personel Girişi acil tasarım geri alma
 - Kullanıcı tek ekran akıllı paneli reddetti. PR #610'un ana ekran değişiklikleri geri alınacak; **önceki ana ekran ve Hızlı Giriş penceresi aynen kalacak**. Yeni seçici yalnız Hızlı Giriş > Personel Ekle alanında yer alacak.
 - Çoklu personel işaretle/tek tuşla havuza ekle; tek silmesiz `mode:merge` D1 çağrısı ve eksiksiz kişi doğrulaması. Sık kullanılanlar mevcut gerçek dönem çalışma kayıtlarından; seçim tek başına vardiya/ücret/ödeme değiştirmez.

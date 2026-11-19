@@ -35,12 +35,16 @@ test("çoklu ekleme tek D1 merge, sunucu doğrulaması ve vardiya bağımsızlı
   assert.match(handler, /setRosterIds\(new Set\(confirmed\)\)/);
   assert.doesNotMatch(handler, /saveDailyFocusedRecords|createDailyPayment/);
   assert.match(picker, /const \[selected, setSelected\] = useState/);
-  assert.match(picker, /await onAdd\(pendingIds\)/);
+  assert.match(picker, /await onAdd\(pending\)/);
   assert.match(picker, /Seçimi Temizle/);
 });
 
 test("açılır personel alanı eskisinin içinde ve kompakt; ana ekranın CSS'i değişmez", () => {
   assert.match(css, /\.gop-quick-dialog \.kyq-roster-panel/);
-  assert.match(css, /max-height:min\(45vh,360px\)/);
+  assert.match(css, /right:0;bottom:0;left:auto/);
+  assert.match(css, /--kyq-panel-width/);
+  assert.match(picker, /Son 7 gün/);
+  assert.match(picker, /Son 14 gün/);
+  assert.match(picker, /<UserPlus size=\{15\}\/> Yeni Personel/);
   assert.match(picker, /aria-expanded=\{open\}/);
 });
