@@ -12,17 +12,17 @@ export const getMailProviders = () =>
 export const getMailOverview = () =>
   apiGet("/mail/overview", { _ts: Date.now() }).then(unwrap);
 
-export const listMailAccounts = () =>
-  apiGet("/mail/accounts", { _ts: Date.now() }).then(unwrap);
+export const listMailAccounts = (mainCompanySlug = "") =>
+  apiGet("/mail/accounts", { _ts: Date.now(), ...(mainCompanySlug ? { mainCompanySlug } : {}) }).then(unwrap);
 
 export const requestMailAccount = (payload = {}) =>
   apiPost("/mail/accounts/request", payload).then(unwrap);
 
-export const listMailApprovals = () =>
-  apiGet("/mail/approvals", { _ts: Date.now() }).then(unwrap);
+export const listMailApprovals = (mainCompanySlug = "") =>
+  apiGet("/mail/approvals", { _ts: Date.now(), ...(mainCompanySlug ? { mainCompanySlug } : {}) }).then(unwrap);
 
-export const decideMailApproval = (id, decision, note = "") =>
-  apiPost(`/mail/approvals/${encodeURIComponent(id)}/decision`, { decision, note }).then(unwrap);
+export const decideMailApproval = (id, decision, note = "", mainCompanySlug = "") =>
+  apiPost(`/mail/approvals/${encodeURIComponent(id)}/decision`, { decision, note, mainCompanySlug }).then(unwrap);
 
 export const listMailMessages = (accountId, params = {}) =>
   apiGet("/mail/messages", { accountId, ...params }).then(unwrap);
@@ -91,11 +91,11 @@ export const searchCommunicationFiles = (q = "") =>
     ? apiGet("/mail/files", { q: q.trim(), take: 150 }).then(unwrap)
     : listCommunicationFiles();
 
-export const startMicrosoftMailOAuth = (accountId) =>
-  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/microsoft/start`, {}).then(unwrap);
+export const startMicrosoftMailOAuth = (accountId, mainCompanySlug = "") =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/microsoft/start`, { mainCompanySlug }).then(unwrap);
 
-export const startGoogleMailOAuth = (accountId) =>
-  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/google/start`, {}).then(unwrap);
+export const startGoogleMailOAuth = (accountId, mainCompanySlug = "") =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/oauth/google/start`, { mainCompanySlug }).then(unwrap);
 
 export const getMailConnection = (accountId) =>
   apiGet(`/mail/accounts/${encodeURIComponent(accountId)}/connection`, { _ts: Date.now() }).then(unwrap);
@@ -103,8 +103,11 @@ export const getMailConnection = (accountId) =>
 export const setMailAccountDefaults = (accountId, values = {}) =>
   apiPut(`/mail/accounts/${encodeURIComponent(accountId)}/defaults`, values).then(unwrap);
 
-export const syncMailAccount = (accountId) =>
-  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
+export const updateMailAccountProfile = (accountId, values = {}) =>
+  apiPut(`/mail/accounts/${encodeURIComponent(accountId)}/profile`, values).then(unwrap);
+
+export const syncMailAccount = (accountId, mainCompanySlug = "") =>
+  apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/sync`, { mainCompanySlug }, { timeoutMs: 120_000 }).then(unwrap);
 
 export const saveMicrosoftOutlookDraft = (draftId) =>
   apiPost(`/mail/drafts/${encodeURIComponent(draftId)}/provider-draft/microsoft`, {}, { timeoutMs: 120_000 }).then(unwrap);

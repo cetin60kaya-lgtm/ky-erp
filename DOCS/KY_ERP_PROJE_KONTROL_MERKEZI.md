@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — E-Posta Hesapları: bütün firmalara ortak dinamik yönetim ekranı / geliştirme
+- Kullanıcının canlı KY ERP ekranındaki Hakan'a özel sabit mail kartları kaldırılarak tek firma bazlı hesap yönetim ekranına geçildi: Posta Kutuları, Hesap Ekle, Onaylar, Sağlayıcı Durumu. Mevcut hesaplar ve posta kayıtları silinmez.
+- API'ye tenant bazlı hesap profili ve varsayılan gönder/al endpointleri eklendi; seçili firma slug'ı arayüzden okunur, yetkili sunucu tekrar kontrol eder. Hesap/OAuth/sağlayıcı sağlığı ayrı tutulur.
+- Kod ve kabul sözleşmesi: [KY_ERP_MAIL_FIRMA_BAZLI_YONETIM_20261119.md](KY_ERP_MAIL_FIRMA_BAZLI_YONETIM_20261119.md). CI, merge, Cloudflare yayın ve gerçek Hotmail OAuth/Gmail 15 klasör kabulü ayrı doğrulanacaktır.
+
+
 ## 19.11.2026 — Outlook tek canonical revizyon / geliştirme PR (CI ve canlı kabul bekliyor)
 - Bir HKN/çoklu DDM → tek posta, geriye dönük eski gönderim kilidi, Model 360 ortak kart, hash doğrulamalı eski Outlook kanıtı, adil Graph cron ve klasör bazlı tam senkron, yarış-korumalı provider taslağı.
 - Mevcut mail D1/Graph/File Hub korunur; yeni depo/servis/secret veya gerçek mail/mali kayıt oluşturulmaz.

@@ -81,6 +81,11 @@ function providerRuntimeReady(c:any, provider:unknown){
     const clientSecret=text(c.env.MICROSOFT_MAIL_CLIENT_SECRET || c.env.MICROSOFT_GRAPH_CLIENT_SECRET);
     return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Microsoft Graph OAuth production ayarı eksik."};
   }
+  if(normalized==="GMAIL"){
+    const clientId=text(c.env.GOOGLE_MAIL_CLIENT_ID || c.env.GOOGLE_DRIVE_CLIENT_ID);
+    const clientSecret=text(c.env.GOOGLE_MAIL_CLIENT_SECRET || c.env.GOOGLE_DRIVE_CLIENT_SECRET);
+    return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Google OAuth / Gmail API production ayarı eksik."};
+  }
   return {configured:false,adapterReady:false,reason:"Bu sağlayıcının KY ERP bağlantı adapterı henüz aktif değil."};
 }
 
@@ -224,9 +229,10 @@ export function registerMailCommunicationRoutes(app:any){
       const companyApproved=upper(row.approval_status)==="APPROVED";
       const oauthConnected=Number(row.provider_connected||0)===1&&Number(row.credential_present||0)===1;
       const enabled=Number(row.sync_enabled_folder_count||0),completed=Number(row.sync_completed_folder_count||0);
-      const syncHealthy=upper(row.provider_type)==="MICROSOFT_365"
-        ? enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0
-        : Number(row.sync_success_count||0)>0&&Number(row.sync_error_count||0)===0;
+      // Yalnız bütün klasörler gerçekten tamamlanınca sağlıklı. Gmail'in ilk 100 mesajlık
+      // INBOX/SENT taraması eksiksiz Gmail arşivi kanıtı değildir; MICROSOFT_DELTA
+      // tamamlanmış klasör sayısına karışmaz.
+      const syncHealthy=enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0;
       return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,completedFolders:completed,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
     return c.json({ok:true,data:rows});
@@ -259,6 +265,54 @@ export function registerMailCommunicationRoutes(app:any){
     await c.env.DB.batch(statements);
     await audit(c,tenant,current,privileged?"MAIL_ACCOUNT_REQUESTED_AUTO_APPROVED":"MAIL_ACCOUNT_REQUESTED",{requestId,provider,type,email,policy,privilegedOwnerBypass:privileged,decisionAuthority:privileged?(appOwner?"SUPER_ADMIN":"COMPANY_ADMIN"):null},accountId);
     return c.json({ok:true,data:{accountId,requestId,status:requestStatus,approvalPolicy:policy,approvalBypass:privileged,provider,accountType:type,emailAddress:email}},201);
+  });
+
+
+  // Firma bazlı posta kutusu düzenleme; provider kimliği ve yetki kapsamı değişmez.
+  app.put("/api/mail/accounts/:id/profile",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(!(ownerRole(current?.role)||companyAdminRole(current?.role)))return c.json(jsonError("MAIL_ACCOUNT_ADMIN_FORBIDDEN","Posta kutusu bilgilerini yalnız firma sahibi veya Süper Yönetici düzenleyebilir."),403);
+    const id=text(c.req.param("id"));
+    const account=await c.env.DB.prepare("SELECT id,display_name,department_code FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(id,tenant).first<AnyRow>();
+    if(!account)return c.json(jsonError("MAIL_ACCOUNT_NOT_FOUND","Bu firmada posta kutusu bulunamadı."),404);
+    if(!Object.prototype.hasOwnProperty.call(body,"displayName")&&!Object.prototype.hasOwnProperty.call(body,"departmentCode"))return c.json(jsonError("MAIL_PROFILE_EMPTY","Düzenlenecek bir alan girin."),422);
+    const name=Object.prototype.hasOwnProperty.call(body,"displayName")?text(body.displayName):text(account.display_name);
+    const dept=Object.prototype.hasOwnProperty.call(body,"departmentCode")?upper(body.departmentCode):text(account.department_code);
+    if(!name||name.length>120)return c.json(jsonError("MAIL_DISPLAY_NAME_INVALID","Hesap adı 1–120 karakter olmalıdır."),422);
+    if(dept.length>40||dept&&!/^[A-Z0-9_-]+$/.test(dept))return c.json(jsonError("MAIL_DEPARTMENT_INVALID","Bölüm kodu 40 karakteri aşamaz; yalnız harf, rakam, - ve _ kullanılabilir."),422);
+    const ts=nowIso();
+    await c.env.DB.prepare("UPDATE mail_accounts SET display_name=?,department_code=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(name,dept||null,ts,id,tenant).run();
+    await audit(c,tenant,current,"MAIL_ACCOUNT_PROFILE_UPDATED",{displayName:name,departmentCode:dept},id);
+    return c.json({ok:true,data:{id,displayName:name,departmentCode:dept,updatedAt:ts}});
+  });
+
+  // Varsayılan hesap yalnız seçili tenant içinde güncellenir; OAuth ve onay zorunludur.
+  app.put("/api/mail/accounts/:id/defaults",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAndTenant(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(!(ownerRole(current?.role)||companyAdminRole(current?.role)))return c.json(jsonError("MAIL_DEFAULT_ADMIN_FORBIDDEN","Varsayılan hesapları yalnız firma sahibi veya Süper Yönetici değiştirebilir."),403);
+    const id=text(c.req.param("id"));
+    const account=await c.env.DB.prepare("SELECT id,provider_type,status,approval_status,provider_connected FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(id,tenant).first<AnyRow>();
+    if(!account)return c.json(jsonError("MAIL_ACCOUNT_NOT_FOUND","Bu firmada posta kutusu bulunamadı."),404);
+    const hasSend=Object.prototype.hasOwnProperty.call(body,"isDefaultSend"),hasReceive=Object.prototype.hasOwnProperty.call(body,"isDefaultReceive");
+    if(!hasSend&&!hasReceive)return c.json(jsonError("MAIL_DEFAULT_EMPTY","Gönderim veya alım tercihi girin."),422);
+    if((hasSend&&typeof body.isDefaultSend!=="boolean")||(hasReceive&&typeof body.isDefaultReceive!=="boolean"))return c.json(jsonError("MAIL_DEFAULT_INVALID","Varsayılan seçimleri true/false olmalıdır."),422);
+    if(body.isDefaultSend===true||body.isDefaultReceive===true){
+      const runtime=providerRuntimeReady(c,account.provider_type);
+      if(upper(account.status)!=="ACTIVE"||upper(account.approval_status)!=="APPROVED"||Number(account.provider_connected)!==1||!runtime.adapterReady||!runtime.configured)
+        return c.json(jsonError("MAIL_DEFAULT_NOT_READY","Varsayılan yapılacak posta kutusu onaylı, aktif ve desteklenen bir OAuth bağlantısı olmalıdır."),409);
+    }
+    const ts=nowIso(),operations:any[]=[];
+    if(hasSend){
+      if(body.isDefaultSend)operations.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_send=0,updated_at=? WHERE main_company_slug=? AND is_default_send=1").bind(ts,tenant));
+      operations.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_send=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(body.isDefaultSend?1:0,ts,id,tenant));
+    }
+    if(hasReceive){
+      if(body.isDefaultReceive)operations.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_receive=0,updated_at=? WHERE main_company_slug=? AND is_default_receive=1").bind(ts,tenant));
+      operations.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_receive=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(body.isDefaultReceive?1:0,ts,id,tenant));
+    }
+    await c.env.DB.batch(operations);
+    await audit(c,tenant,current,"MAIL_ACCOUNT_DEFAULTS_UPDATED",{isDefaultSend:hasSend?body.isDefaultSend:null,isDefaultReceive:hasReceive?body.isDefaultReceive:null},id);
+    return c.json({ok:true,data:{id,isDefaultSend:hasSend?body.isDefaultSend:null,isDefaultReceive:hasReceive?body.isDefaultReceive:null,updatedAt:ts}});
   });
 
   app.get("/api/mail/accounts/:id/members",async(c:any)=>{

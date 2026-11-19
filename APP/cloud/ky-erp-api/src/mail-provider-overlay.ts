@@ -88,16 +88,5 @@ export function registerMailProviderOverlayRoutes(app:any){
     return c.json({ok:true,data:{accountId,requestId,status:requestStatus,approvalPolicy:policy,approvalBypass:elevated,provider:"GMAIL",accountType:type,emailAddress:email,isDefaultSend:defaultSend,isDefaultReceive:defaultReceive}},201);
   });
 
-  app.put("/api/mail/accounts/:id/defaults",async(c:any)=>{
-    const body=await bodyOf(c),a:any=await access(c,body);if(a.error)return a.error;const{current,tenant}=a;
-    if(!(ownerRole(current?.role)||companyAdminRole(current?.role)))return c.json(err("MAIL_DEFAULT_ADMIN_FORBIDDEN","Varsayılan mail hesabını yalnız firma sahibi veya uygulama sahibi değiştirebilir."),403);
-    const accountId=text(c.req.param("id")),account=await c.env.DB.prepare("SELECT id FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1").bind(accountId,tenant).first<AnyRow>();
-    if(!account)return c.json(err("NOT_FOUND","Mail hesabı bulunamadı."),404);
-    const ts=nowIso(),send=bool(body.isDefaultSend),receive=bool(body.isDefaultReceive),statements:any[]=[];
-    if(send)statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_send=0,updated_at=? WHERE main_company_slug=?").bind(ts,tenant));
-    if(receive)statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_receive=0,updated_at=? WHERE main_company_slug=?").bind(ts,tenant));
-    statements.push(c.env.DB.prepare("UPDATE mail_accounts SET is_default_send=?,is_default_receive=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(send?1:0,receive?1:0,ts,accountId,tenant));
-    await c.env.DB.batch(statements);
-    return c.json({ok:true,data:{accountId,isDefaultSend:send,isDefaultReceive:receive}});
-  });
+
 }
