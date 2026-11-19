@@ -606,7 +606,24 @@ async function listRoster(c: Context<AppEnv>) {
     .map((row) => text(row.employee_id))
     .filter((id) => id && knownIds.has(id));
 
-  const data = { startDate: start, endDate: end, employeeIds };
+  // Kayitlar yalniz exact tarih araligina baglidir. Baska araliktaki
+  // personele sessiz vardiya/roster kopyasi yapmadan, kullaniciya kayitli
+  // diger araliklari gostermek icin salt okunur alternatif don.
+  let otherRanges: { startDate: string; endDate: string; employeeCount: number }[] = [];
+  if (!employeeIds.length) {
+    const alternatives = await c.env.DB.prepare(`SELECT r.start_date,r.end_date,COUNT(DISTINCT r.employee_id) AS employee_count
+      FROM hr_daily_range_roster r
+      JOIN hr_daily_employees e ON e.id=r.employee_id AND e.main_company_id=r.main_company_id
+      WHERE r.main_company_id=? AND NOT (r.start_date=? AND r.end_date=?)
+      GROUP BY r.start_date,r.end_date
+      ORDER BY r.end_date DESC,r.start_date DESC LIMIT 5`)
+      .bind(companyId, start, end).all<Row>();
+    otherRanges = (alternatives.results || []).map((row) => ({
+      startDate: dateOnly(row.start_date), endDate: dateOnly(row.end_date),
+      employeeCount: Math.max(0, Math.trunc(num(row.employee_count))),
+    })).filter((row) => row.employeeCount > 0);
+  }
+  const data = { startDate: start, endDate: end, employeeIds, otherRanges };
   return okItems(c, data, employeeIds);
 }
 
