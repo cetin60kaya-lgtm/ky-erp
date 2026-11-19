@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { summarizeDailyPersonnelHistory } from "./gunluk-personnel-history-core.ts";
+import { summarizeDailyPersonnelHistory, monthlyDailyPersonnelHistory } from "./gunluk-personnel-history-core.ts";
 
 test("kişi kartı gündüz/gece, eski işaret ve kesin ödeme defterini ayırır", () => {
   const report = summarizeDailyPersonnelHistory([
@@ -42,4 +42,34 @@ test("aynı kişi farklı dönemlerde de tek ledger hesabı, iptal iki kez sayı
 });
 test("bozuk ödeme kuruşu sessizce sıfırlanmaz", () => {
   assert.throws(() => summarizeDailyPersonnelHistory([], [{status:"PAID",total_amount_cents:1.3}],[]),/INVALID_LEDGER_AMOUNT/);
+});
+
+test("altı aylık bordro görünümünde çalışma ayı ve kesin ödeme ayı ayrı hesaplanır", () => {
+  const result=monthlyDailyPersonnelHistory([
+    {work_date:"2026-08-14",day_shift:1,night_shift:0,day_wage:1500},
+    {work_date:"2026-08-15",day_shift:1,night_shift:1,day_wage:1600,night_wage:2000},
+    {work_date:"2026-09-01",day_shift:0,night_shift:1,night_wage:2500},
+  ],[
+    {paid_date:"2026-09-03",status:"PAID",total_amount_cents:310000},
+    {paid_date:"2026-09-03",status:"CANCELLED",total_amount_cents:200000},
+    {paid_date:"2026-10-02",status:"PAID",total_amount_cents:250000},
+  ],[
+    {period_start:"2026-08-14",kind:"ADD",amount_cents:25000},
+    {period_start:"2026-08-14",kind:"DEDUCT",amount_cents:5000},
+  ]);
+  assert.deepEqual(result.map(row=>row.month),["2026-10","2026-09","2026-08"]);
+  assert.equal(result.find(row=>row.month==="2026-08")?.earnedNet,5300);
+  assert.equal(result.find(row=>row.month==="2026-08")?.dayCount,2);
+  assert.equal(result.find(row=>row.month==="2026-08")?.nightCount,1);
+  assert.equal(result.find(row=>row.month==="2026-09")?.confirmedPaid,3100);
+  assert.equal(result.find(row=>row.month==="2026-10")?.confirmedPaid,2500);
+  assert.equal(result.reduce((sum,row)=>sum+row.confirmedPaid,0),5600);
+});
+test("iptal ödeme aylık toplamı değiştirmez; bozulan ödeme kuruşu reddedilir",()=>{
+  assert.deepEqual(monthlyDailyPersonnelHistory([],[
+    {paid_date:"2026-11-04",status:"CANCELLED",total_amount_cents:40000},
+  ],[]),[]);
+  assert.throws(()=>monthlyDailyPersonnelHistory([],[
+    {paid_date:"2026-11-04",status:"PAID",total_amount_cents:0.33},
+  ],[]), /INVALID_LEDGER_AMOUNT/);
 });
