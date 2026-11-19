@@ -96,6 +96,10 @@ async function verifyAssertion(credential: Row, assertion: Row, challenge: strin
   }
   return auth.counter;
 }
+function freshAuth(current: Row) {
+  const age = Date.now() - Date.parse(text(current.session?.created_at));
+  return Number.isFinite(age) && age >= 0 && age <= 5 * 60 * 1000;
+}
 async function credentialList(c: any, userId: string) {
   const result = await c.env.DB.prepare(
     "SELECT data FROM json_store WHERE scope=? AND json_extract(data,'$.userId')=? ORDER BY updated_at DESC LIMIT 12"
@@ -132,17 +136,37 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
     const current = await getAuthenticatedUser(c);
     if (!current) return fail(c, "UNAUTHORIZED", "Oturum gerekli.", 401);
     const registered = await credentialList(c, text(current.id));
-    return c.json({ ok: true, data: { enabled: registered.length > 0, count: registered.length, credentialIds: registered.map((row: Row) => row.credentialId), rpId: RP_ID } });
+    return c.json({ ok: true, data: { enabled: registered.length > 0, count: registered.length,
+      credentialIds: registered.map((row: Row) => row.credentialId),
+      credentials: registered.map((row: Row) => ({ credentialId: row.credentialId, label: row.label || "Güvenli giriş anahtarı", createdAt: row.createdAt, lastUsedAt: row.lastUsedAt || null })),
+      rpId: RP_ID } });
+  });
+  // User-only revocation: no cross-user credential management, no public key disclosure.
+  app.delete("/api/auth/passkey/credentials/:credentialId", async (c: any) => {
+    const current = await getAuthenticatedUser(c);
+    if (!current) return fail(c, "UNAUTHORIZED", "Oturum gerekli.", 401);
+    if (!originFor(c)) return fail(c, "ORIGIN_DENIED", "Bu uygulama adresinden cihaz yetkisi kaldırılamaz.", 403);
+    if (!freshAuth(current)) return fail(c, "FRESH_LOGIN_REQUIRED", "Giriş anahtarını kaldırmadan önce yeniden güvenli giriş yapın.", 403);
+    const credentialId = text(c.req.param("credentialId"));
+    if (!credentialId || credentialId.length > 512) return fail(c, "CREDENTIAL_INVALID", "Giriş anahtarı tanımlanamadı.", 400);
+    const row = await securityStoreGet(c, SCOPE, credentialId);
+    if (!row || row.active === false || text(row.userId) !== text(current.id)) {
+      return fail(c, "CREDENTIAL_NOT_FOUND", "Bu hesabınıza ait aktif giriş anahtarı bulunamadı.", 404);
+    }
+    const stamp = new Date().toISOString();
+    await securityStorePut(c, SCOPE, credentialId, text(current.mainCompanySlug), { ...row, active: false, revokedAt: stamp });
+    await deps.audit(c, "PASSKEY_DEVICE_REVOKED_SELF", text(current.id), text(current.id), text(current.mainCompanySlug), "", { credentialRef: credentialId.slice(0, 12) });
+    return c.json({ ok: true, data: { credentialId, revoked: true } });
   });
   app.post("/api/auth/passkey/register/start", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return fail(c, "UNAUTHORIZED", "Oturum gerekli.", 401);
     if (!originFor(c)) return fail(c, "ORIGIN_DENIED", "Bu uygulama adresinden giriş anahtarı oluşturulamaz.", 403);
-    const recent = Date.now() - Date.parse(text(current.session?.created_at));
-    // Enrollment requires a recently completed password/MFA login. Long-lived stolen sessions cannot add a credential.
-    if (!Number.isFinite(recent) || recent < 0 || recent > 5 * 60 * 1000) {
-      return fail(c, "FRESH_LOGIN_REQUIRED", "Parmak izi kaydı için son 5 dakika içinde şifre ve MFA ile giriş yapın.", 403);
-    }
+    if (!freshAuth(current)) return fail(c, "FRESH_LOGIN_REQUIRED", "Kayıt için son 5 dakikada şifre ve güvenlik onayıyla giriş yapın.", 403);
+    // A fast passkey login is not enough to enroll another key: bootstrap must use primary authentication.
+    const trust = await securityStoreGet(c, "AUTH_SESSION_TRUST", text(current.session?.id));
+    if (text(trust?.source) === "PASSKEY_LOGIN") return fail(c, "PRIMARY_LOGIN_REQUIRED", "Yeni cihaz kaydı için şifre ve normal güvenlik doğrulaması gerekir.", 403);
+    if ((await credentialList(c, text(current.id))).length >= 8) return fail(c, "PASSKEY_LIMIT", "En fazla 8 giriş anahtarı eklenebilir. Kullanılmayan anahtarı Güvenlik Merkezi'nden kaldırın.", 409);
     if (!(await recentChallengeLimit(c, text(current.id), "PASSKEY_REGISTER"))) return fail(c, "TOO_MANY_REQUESTS", "Çok fazla kurulum denemesi.", 429);
     const challenge = await deps.createChallenge(c, { id: current.id }, "PASSKEY_REGISTER");
     return c.json({ ok: true, data: { challengeId: challenge.id, challengeToken: challenge.challengeToken, rpId: RP_ID,
@@ -151,6 +175,9 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
   app.post("/api/auth/passkey/register/finish", async (c: any) => {
     const current = await getAuthenticatedUser(c);
     if (!current) return fail(c, "UNAUTHORIZED", "Oturum gerekli.", 401);
+    if (!freshAuth(current)) return fail(c, "FRESH_LOGIN_REQUIRED", "Kayıt süresi doldu; normal giriş yapın.", 403);
+    const trust = await securityStoreGet(c, "AUTH_SESSION_TRUST", text(current.session?.id));
+    if (text(trust?.source) === "PASSKEY_LOGIN") return fail(c, "PRIMARY_LOGIN_REQUIRED", "Geçiş anahtarıyla başka anahtar oluşturulamaz.", 403);
     const origin = originFor(c);
     if (!origin) return fail(c, "ORIGIN_DENIED", "Bu uygulama adresinden kayıt tamamlanamaz.", 403);
     const body = await c.req.json().catch(() => ({})) as Row;
@@ -172,7 +199,8 @@ export function registerMobilePasskeyRoutes(app: any, deps: {
       if (prior) throw new Error("CREDENTIAL_ALREADY_USED");
       const record = {
         userId: text(current.id), credentialId, publicKey: text(creation.publicKey), signCount: 0, active: true,
-        rpId: RP_ID, createdAt: new Date().toISOString(), label: "Telefon · Parmak İzi / PIN"
+        rpId: RP_ID, createdAt: new Date().toISOString(),
+        label: /Windows/i.test(text(c.req.header("User-Agent"))) ? "Bilgisayar · Windows Hello" : "Telefon / Tablet · Parmak İzi / PIN"
       };
       record.signCount = await verifyAssertion(record, proof, text(body.challengeToken), origin);
       if (!(await oneUseChallenge(c, challenge))) throw new Error("CHALLENGE_REPLAYED");
