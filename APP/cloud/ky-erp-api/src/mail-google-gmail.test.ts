@@ -268,3 +268,14 @@ test("Firma posta kutusu kayıtlı bağlantıyı silmeden Yeniden Bağla seçene
   assert.match(source,/startGoogleMailOAuth\(account.id, slug\)/);
   assert.match(source,/OAuth: \{active === "REAUTH_REQUIRED"/);
 });
+
+test("Gmail callback sonucunu yanlış Mail Merkezi yerine firma E-Posta Hesapları alanına yollar",()=>{
+  const gmail=read("./mail-google-gmail.ts");
+  assert.match(gmail,/const APP_RETURN = "https:\/\/kyerp\.net\/depolama\/depolama-mail";/);
+  assert.match(gmail,/GMAIL_OAUTH_CALLBACK_FAILURE/);
+  assert.match(gmail,/GMAIL_CREDENTIAL_SAVE_FAILED/);
+  assert.match(gmail,/GMAIL_ACCOUNT_UPDATE_FAILED/);
+  assert.match(gmail,/GOOGLE_GMAIL_API_DISABLED/);
+  assert.match(gmail,/const safe=approved\.has\(codeValue\)\?codeValue:"GOOGLE_OAUTH_FAILED"/);
+  assert.doesNotMatch(gmail,/codeValue\+":"\+message/);
+});

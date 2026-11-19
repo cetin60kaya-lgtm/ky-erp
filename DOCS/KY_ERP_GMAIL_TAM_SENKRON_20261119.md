@@ -32,3 +32,9 @@
 - UI bağlı Gmail hesabında **Google Yetkisini Yenile**, sorun doğrulanmışsa **Yeniden Bağla** düğmesini sunar; yalnız aynı hesap ID'siyle OAuth başlatılır.
 - Google `access_type=offline` + `prompt=consent` zaten mevcut. Callback `refresh_token` gelmeden eski şifreli kimlik bilgisini üzerine yazmaz, yanıltıcı başarı kaydı üretmez.
 - Hangi Gmail/Google OAuth token sorunu yaşandığı canlı provider log ve kullanıcı yönlendirme sonrası kesinleşir; yetkilendirme kullanıcı ekranından yapılır, token/şifre GitHub'a veya sohbete girilmez. Gmail 15/15 kabulü hâlâ açık.
+
+## 19.11.2026 — Google onay ekranı geçildi, KY ERP callback başarısız
+- Gerçek kullanıcı ekranı: `hkndesen@gmail.com` Google hesap seçimi + izin ekranı açıldı; devam sonrası KY ERP Mail Merkezi `Hata: Mail hesabı bağlanamadı` ve `0 hesap / 0 kayıt`. Admin hesap kaydının silindiği kanıtlanmadı; mevcut `REAUTH_REQUIRED` durumu listelemeyi etkileyebilir.
+- Kodda callback `APP_RETURN=.../iletisim/mail-gelen` kullanırken Mail Merkezi `mailError` gerçek kodunu okuyup genel mesajla gizliyor. Artık canonical sonuç adresi `/depolama/depolama-mail`; firma bazlı E-Posta Hesapları paneli yalnız beyaz listedeki güvenli kodu gösterir.
+- Callback CODE_EXCHANGE / GOOGLE_IDENTITY / GMAIL_PROFILE / CREDENTIAL_SAVE / ACCOUNT_UPDATE aşamalarını ayırır; Google API `SERVICE_DISABLED` için açık kod, Google refresh izni yoksa ayrı kod. URL, log ve UI'da token/kişisel Google açıklaması yoktur.
+- Gerçek kök neden yeni callback kodu ve kullanıcı sonucu gelmeden **kesin PASS değildir**. Ekrandaki 0 kayıt yeni e-posta gönderildiğini veya arşivin silindiğini göstermez. OAuth sonrası otomatik mail gönderimi yok.
