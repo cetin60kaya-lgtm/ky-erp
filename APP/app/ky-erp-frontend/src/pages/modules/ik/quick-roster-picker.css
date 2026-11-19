@@ -9,7 +9,7 @@
 .gop-quick-dialog .kyq-roster-open{background:#e9f2ff;border-color:#90b6eb}
 .gop-quick-dialog .kyq-roster-picker button:disabled{opacity:.5;cursor:not-allowed}
 .gop-quick-dialog .kyq-roster-panel{
-  position:absolute;z-index:70;left:0;top:calc(100% + 6px);width:min(620px,calc(100vw - 55px));
+  position:absolute;z-index:70;right:0;top:calc(100% + 6px);width:min(620px,calc(100vw - 55px));
   border:1px solid #a9bfdc;border-radius:10px;background:#fff;
   box-shadow:0 12px 28px rgba(16,38,70,.21);padding:12px;
   max-height:min(45vh,360px);display:flex;flex-direction:column;gap:8px
