@@ -1,4 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
+
+## 19.11.2026 — Günlük Operasyon kalıcı havuz + tek ücret otoritesi
+- Çalışma dalı: `fix/gunluk-havuz-kalici-aralik-butunlugu-20261119`. Üretim D1'e doğrudan yazılmadı; canlı yayın ve gerçek kullanıcı kabulü ayrı doğrulanır.
+- Günlük Operasyon canonical ekranı `DailyHrWorkspace.jsx`, canonical API `gunluk-operasyon-cloud.ts`, veri kaynağı Cloudflare D1'dır. Eski `IkPage.jsx` geliştirme yolu değildir.
+- Havuza Ekle tek POST ile `mode:add` -> D1'de birleşim + yeniden okuma doğrulaması; `Günlük Kaydet` yalnız tarih/vardiya kaydıdır. Havuz kaydı ayrı kalıcıdır. Silme yalnız hedef kişiye uygulanır; logda `ROSTER_ADD/REMOVE` ayrı adla görünür.
+- Ücret otoritesi tek: `gunluk-operasyon-core.ts` içindeki tarih-etkili ücret + kayıtlı/ödenmiş vardiya çözümleyicisi. D1 `weeklySummary` gündüz/gece, baz, ek ödeme/kesinti ve net toplamı aynı kuruş hesap zinciriyle verir. Tarayıcı yalnız mutabakat gösterir; uyuşmazlıkta yazdırma/Excel engellenir.
+- A4 haftalık çıktı 26 personel/sayfa, 189 kişi 8 sayfa. Onlu ödeme fişi ayrı kalır. Kart ücret girişinde negatif, geçersiz veya iki ondalığı aşan miktar reddedilir.
+- Regresyon: tek istekle kalıcı havuz, başka PC verisini koruma, ödenmiş/kısmi ödenmiş tarihli ücret, yanlış toplamı reddetme, A4 sayfa kayıpsızlığı. Tam lint/typecheck/unit/build ve canlı kabul sonuçları PR üzerinde ayrı kanıtlanacak.
+
 ## 19.11.2026 — Gmail 0/15 OAuth yenileme hatası
 - Gerçek kullanıcı ekranında `Gmail oturum anahtarı yenilenemedi; bağlantı kontrolü gerekli` görüldü. Firma bazlı E-Posta Yönetim Merkezi kullanılıyor; gerçek Gmail tam kabulü yok.
 - Aynı Gmail hesabının güvenli Google yeniden yetkilendirmesi ve eksik/iptal refresh token ayrımı düzenlendi. OAuth callback yeni refresh token olmadan mevcut ciphertext'i değiştirmez. Onay ve mail arşivi korunur.
