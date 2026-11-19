@@ -1098,36 +1098,18 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   };
 
-  const setPersonSelectedForShift = async (person, nextSelected) => {
+  // Tek ekran: kart tıklaması D1'e yazmaz, sadece seçili vardiya taslağını değiştirir.
+  const setPersonSelectedForShift = (person, nextSelected) => {
     if (!person?.id || busy || dailyWriteBlocked) return;
-    const currentRecord = recordByEmployee.get(person.id) || {};
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await saveDailyFocusedRecords({
-        mainCompanyId: companyId,
-        date: selectedDate,
-        shift,
-        personnelEntries: [{
-          personelId: person.id,
-          status: nextSelected ? "ACTIVE" : "REMOVE",
-          checked: nextSelected ? false : false,
-          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
-          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
-          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
-          note: nextSelected ? (notes[person.id] || "") : "",
-        }],
-      });
-      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
-      setNotice(
-        nextSelected
-          ? `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} vardiyasına kaydedildi.`
-          : `${person.name} ${dateText(selectedDate)} ${shift === "day" ? "gündüz" : "gece"} kaydı kaldırıldı. Personel havuzda kaldı.`,
-      );
-    } catch (e) {
-      setError(e?.message || "Gün/vardiya kaydı güncellenemedi. Ekranı yenileyip tekrar deneyin.");
-    } finally {
-      setBusy(false);
-    }
+    if (nextSelected && shift === "night" && personWageAtDate(person, selectedDate).night <= 0) return;
+    setSelectedIds((current) => {
+      const ids = new Set(current);
+      if (nextSelected) ids.add(person.id); else ids.delete(person.id);
+      return ids;
+    });
+    if (!nextSelected) setCheckedIds((current) => {
+      const next = new Set(current); next.delete(person.id); return next;
+    });
   };
 
   const removePersonFromRoster = async (person) => {
@@ -1188,32 +1170,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   };
 
-  const setPersonReviewed = async (person, nextChecked) => {
+  const setPersonReviewed = (person, nextChecked) => {
     if (!person?.id || busy || dailyWriteBlocked || !selectedIds.has(person.id)) return;
-    const currentRecord = recordByEmployee.get(person.id) || {};
-    setBusy(true); setError(""); setNotice("");
-    try {
-      await saveDailyFocusedRecords({
-        mainCompanyId: companyId,
-        date: selectedDate,
-        shift,
-        personnelEntries: [{
-          personelId: person.id,
-          status: "ACTIVE",
-          checked: Boolean(nextChecked),
-          expectedUpdatedAt: currentRecord.updatedAt || currentRecord.attendanceUpdatedAt || "",
-          expectedCheckedUpdatedAt: currentRecord.checkedUpdatedAt || "",
-          expectedNoteUpdatedAt: currentRecord.noteUpdatedAt || "",
-          note: notes[person.id] || "",
-        }],
-      });
-      await Promise.all([loadFocused(), loadRangeData(), loadInlineAudit()]);
-      setNotice(`${person.name} kontrol durumu ${nextChecked ? "onaylandı" : "kaldırıldı"}.`);
-    } catch (e) {
-      setError(e?.message || "Kontrol durumu güncellenemedi. Ekranı yenileyip tekrar deneyin.");
-    } finally {
-      setBusy(false);
-    }
+    setCheckedIds((current) => {
+      const next = new Set(current);
+      if (nextChecked) next.add(person.id); else next.delete(person.id);
+      return next;
+    });
+  };
+
+  const addManyToDailyDraft = (ids) => {
+    if (busy || dailyWriteBlocked) return;
+    const peopleById = new Map(employees.filter((person) => person.active !== false).map((person) => [person.id, person]));
+    const safeIds = (Array.isArray(ids) ? ids : []).filter((id) => {
+      const person = peopleById.get(id);
+      return person && (shift === "day" || personWageAtDate(person, selectedDate).night > 0);
+    });
+    setSelectedIds((current) => new Set([...current, ...safeIds]));
+  };
+  const restoreDailyDraft = () => {
+    if (busy || dailyWriteBlocked) return;
+    setSelectedIds(new Set(focusedIds(records)));
+    setCheckedIds(new Set(focusedCheckedIds(records)));
+    setNotes(Object.fromEntries(records.map((row) => [rowEmployeeId(row), row.note || ""])));
+    setNotice("Kaydedilmemiş taslak seçimleri geri alındı; sunucudaki kayıtlar değiştirilmedi.");
+  };
+  const changeDailyFocus = (date, nextShift) => {
+    if (date === selectedDate && nextShift === shift) return;
+    if (dailyDraftDirty && !window.confirm("Kaydedilmemiş seçimler var. Gün veya vardiya değiştirilirse taslak kaybolacak. Devam edilsin mi?")) return;
+    setSelectedDate(date); setShift(nextShift);
   };
 
   const addFromQuickPool = () => addRosterPerson(resolveRosterChoice(quickAddQuery), "quick");
@@ -1223,8 +1208,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     try {
       const missingSelectedPeople = [...selectedIds].filter((id) => !employeeMap.has(id));
       if (missingSelectedPeople.length) throw new Error("Personel listesi eksik yüklendi. Kayıt korunması için ekranı yenileyip tekrar deneyin.");
-      if (!rosterSaved && rosterWriteBlocked) throw new Error("Dönem personel listesi doğrulanamadı veya aralıkta kapalı gün var.");
-      if (!rosterSaved) { const savedRoster = await saveDailyRoster({ mainCompanyId: companyId, startDate: range.start, endDate: range.end, employeeIds: [...effectiveRosterIds], mode: "merge" }); setRosterIds(new Set(Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : effectiveRosterIds)); setRosterSaved(true); }
+      const missingRosterIds = [...selectedIds].filter((id) => !rosterIds.has(id));
+      if ((!rosterSaved || missingRosterIds.length) && rosterWriteBlocked)
+        throw new Error("Dönem personel listesi doğrulanamadı veya aralıkta kapalı gün var.");
+      if (!rosterSaved || missingRosterIds.length) {
+        const savedRoster = await saveDailyRoster({
+          mainCompanyId: companyId, startDate: range.start, endDate: range.end,
+          employeeIds: [...effectiveRosterIds], mode: "merge",
+        });
+        const confirmed = Array.isArray(savedRoster?.employeeIds) ? savedRoster.employeeIds.map(String) : null;
+        if (!confirmed || missingRosterIds.some((id) => !confirmed.includes(id)))
+          throw new Error("Seçilenlerin dönem havuzuna D1 kaydı doğrulanamadı; vardiya kaydı yapılmadı.");
+        setRosterIds(new Set(confirmed)); setRosterSaved(true);
+      }
       // Delta write: başka cihazdaki değişmemiş satırları tekrar yazma.
       const changedPeople = activeRosterPeople.filter((person) => {
         const record = recordByEmployee.get(person.id) || {};
