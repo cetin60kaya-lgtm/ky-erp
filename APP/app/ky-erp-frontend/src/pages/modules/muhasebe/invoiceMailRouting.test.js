@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { documentKey, matchingPdfFiles, matchingRecipientRoutes, parseRecipientEmails, makeInvoiceMailContent, invoiceMailEventId, contactsForInvoiceRoute, routeContactRecipients, makeCariReminderContent } from "./invoiceMailRouting.js";
+import { documentKey, matchingPdfFiles, matchingRecipientRoutes, parseRecipientEmails, makeInvoiceMailContent, invoiceMailEventId, parseDeliveryNumbers, contactsForInvoiceRoute, routeContactRecipients, makeCariReminderContent } from "./invoiceMailRouting.js";
 
 test("HKN ve DDM belgeleri numaraya göre eksiksiz ve kesin eşleşir", () => {
   const files = [
@@ -36,17 +36,18 @@ test("Mail metni yalnız kesin HKN/DDM ve modelden üretilir", () => {
   assert.throws(()=>makeInvoiceMailContent("OSTENES","HKN2026000000909",""));
 });
 
-test("tek HKN/DDM olayı grup, hesap ve kullanıcı değişse de aynı gönderim anahtarını taşır", () => {
-  const expected = "MODEL_INVOICE_MAIL:mecit-hakan:HKN2026000000909:DDM2026000000897";
-  assert.equal(invoiceMailEventId("mecit-hakan", " HKN-2026000000909 ", "DDM 2026000000897"), expected);
-  assert.equal(invoiceMailEventId("mecit-hakan", "HKN2026000000909", "DDM2026000000897"), expected);
-  assert.notEqual(invoiceMailEventId("mecit-hakan", "HKN2026000000909", "DDM2026000000898"), expected);
-  assert.throws(() => invoiceMailEventId("", "HKN2026000000909", "DDM2026000000897"));
+test("bir HKN için birden çok DDM olsa da tek gönderim kimliği",()=>{
+ const h="HKN2026000000909",key="MODEL_INVOICE_MAIL:mecit-hakan:"+h;
+ assert.equal(invoiceMailEventId("mecit-hakan",h,"DDM2026000000897"),key);
+ assert.equal(invoiceMailEventId("mecit-hakan",h,["DDM2026000000897","DDM2026000000898"]),key);
+ assert.deepEqual(parseDeliveryNumbers("DDM2026000000897; DDM2026000000898"),["DDM2026000000897","DDM2026000000898"]);
+ assert.throws(()=>parseDeliveryNumbers("DDM2026000000897;DDM2026000000897"));
+ assert.throws(()=>invoiceMailEventId("",h,"DDM2026000000897"));
 });
 
 test("Otomatik konu model adı + Fatura; mesaj şablonu ayrı düzenlenebilir", () => {
   const result=makeInvoiceMailContent("Model A","HKN2026000000909","DDM2026000000897");
-  assert.equal(result.subject,"Model A Fatura");
+  assert.equal(result.subject,"HKN2026000000909 Fatura");
   assert.match(result.bodyText,/muhasebe işlemlerine almanızı rica ederiz/i);
   assert.match(makeInvoiceMailContent("Model A","HKN2026000000909","DDM2026000000897","SHORT").bodyText,/HKN2026000000909/);
   assert.throws(()=>makeInvoiceMailContent("Model A","HKN2026000000909","DDM2026000000897","INVALID"));
@@ -70,4 +71,11 @@ test("Cari hatırlatmasında Excel'de yok ifadesi kesin ödenmediye dönüşmez"
   assert.match(remind.bodyText,/güncel cari ekstrede görünmemektedir/);
   assert.doesNotMatch(remind.bodyText,/ödenmedi/i);
   assert.throws(()=>makeCariReminderContent("","09"));
+});
+
+test("çok modelli HKN mail şablonu tüm DDMleri içerir, tek modelin malı olduğunu söylemez",()=>{
+ const result=makeInvoiceMailContent("MODEL-A","HKN2026000000909",["DDM2026000000897","DDM2026000000898"]);
+ assert.match(result.bodyText,/DDM2026000000897/);
+ assert.match(result.bodyText,/DDM2026000000898/);
+ assert.doesNotMatch(result.bodyText,/MODEL-A/);
 });

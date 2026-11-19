@@ -30,6 +30,14 @@ export function parseRecipientEmails(value) {
   return [...new Set(emails)];
 }
 
+export function parseDeliveryNumbers(value) {
+  const parts=(Array.isArray(value)?value:String(value||"").split(/[;,\n]+/))
+    .map(v=>documentKey(v)).filter(Boolean);
+  if(!parts.length||parts.length>9||parts.some(n=>!/^DDM[0-9]{8,18}$/.test(n))||new Set(parts).size!==parts.length)
+    throw new Error("Bir ile dokuz farklı DDM irsaliye numarası gerekir.");
+  return parts;
+}
+
 // Subject and message are independent editable fields; selecting a preset never sends mail.
 export const INVOICE_MAIL_TEMPLATES = Object.freeze([
   { id: "STANDARD", label: "Standart fatura bildirimi" },
@@ -38,19 +46,19 @@ export const INVOICE_MAIL_TEMPLATES = Object.freeze([
 ]);
 
 export function makeInvoiceMailContent(modelName, invoiceNo, deliveryNo, templateId = "STANDARD") {
-  const model = String(modelName || "").trim();
-  const hkn = documentKey(invoiceNo);
-  const ddm = documentKey(deliveryNo);
-  if (!/^HKN[0-9]{8,18}$/.test(hkn) || !/^DDM[0-9]{8,18}$/.test(ddm) || !model) {
-    throw new Error("Model, HKN fatura ve DDM irsaliye numarası zorunludur.");
-  }
-  const message = {
-    STANDARD: `Merhaba,\n\n${model} modeline ait ${hkn} numaralı faturamız ve ${ddm} numaralı irsaliyemiz ektedir.\n\nMuhasebe işlemlerine almanızı rica ederiz.\n\nİyi çalışmalar.`,
-    ACCOUNTING: `Merhaba,\n\n${model} modeline ait ${hkn} numaralı fatura ile ${ddm} numaralı irsaliye ektedir. İlgili faturanın muhasebe kayıtlarına alınması konusunda desteğinizi rica ederiz.\n\nİyi çalışmalar.`,
-    SHORT: `Merhaba,\n\n${model} modelimizin ${hkn} numaralı faturası ve ${ddm} numaralı irsaliyesi ektedir.\n\nİyi çalışmalar.`,
+  const hkn=documentKey(invoiceNo),ddm=parseDeliveryNumbers(deliveryNo);
+  if(!/^HKN[0-9]{8,18}$/.test(hkn))throw new Error("Kesin HKN fatura numarası gerekir.");
+  // HKN can include several models. Do not misrepresent the entire invoice
+  // as belonging only to the single model currently open in Model 360.
+  const detail=ddm.join(", ");
+  const plural=ddm.length===1?"irsaliyemiz":"irsaliyelerimiz";
+  const message={
+    STANDARD:"Merhaba,\n\n"+hkn+" numaralı faturamız ve "+detail+" numaralı "+plural+" ektedir.\n\nMuhasebe işlemlerine almanızı rica ederiz.\n\nİyi çalışmalar.",
+    ACCOUNTING:"Merhaba,\n\n"+hkn+" numaralı faturamız ile "+detail+" numaralı ilgili irsaliye belgeleri ektedir. Muhasebe kayıtlarına alınmasını rica ederiz.\n\nİyi çalışmalar.",
+    SHORT:"Merhaba,\n\n"+hkn+" numaralı faturamız ve ilgili "+detail+" numaralı irsaliye belgeleri ektedir.\n\nİyi çalışmalar.",
   };
-  if (!Object.hasOwn(message, templateId)) throw new Error("Bilinmeyen fatura mail şablonu.");
-  return { subject: model + " Fatura", bodyText: message[templateId] };
+  if(!Object.hasOwn(message,templateId))throw new Error("Bilinmeyen fatura mail şablonu.");
+  return {subject:hkn+" Fatura",bodyText:message[templateId]};
 }
 
 const contactKey = (value) => String(value || "").trim().toLocaleUpperCase("tr-TR").replace(/\s+/g, " ");
@@ -89,16 +97,12 @@ export function makeCariReminderContent(modelName, invoiceNo, template = "STANDA
 }
 
 /**
- * One dispatch identity for a specific real invoice/delivery pair.
- * Recipient/account changes are not a reason to send the same document twice.
- * A deliberate re-send requires a separately reviewed workflow.
+ * One HKN = one canonical send. Legacy HKN:DDM jobs are checked server-side.
+ * The DDM list is package evidence, not part of the mail send identity.
  */
 export function invoiceMailEventId(companySlug, invoiceNo, deliveryNo) {
-  const tenant = String(companySlug || "").trim().toLocaleLowerCase("tr-TR");
-  const hkn = documentKey(invoiceNo);
-  const ddm = documentKey(deliveryNo);
-  if (!tenant || !/^HKN[0-9]{8,18}$/.test(hkn) || !/^DDM[0-9]{8,18}$/.test(ddm)) {
-    throw new Error("Gönderim anahtarı için ana firma, HKN ve DDM zorunludur.");
-  }
-  return ["MODEL_INVOICE_MAIL", tenant, hkn, ddm].join(":");
+  const tenant=String(companySlug||"").trim().toLocaleLowerCase("tr-TR"),hkn=documentKey(invoiceNo);
+  parseDeliveryNumbers(deliveryNo);
+  if(!tenant||!/^HKN[0-9]{8,18}$/.test(hkn))throw new Error("Gönderim için ana firma ve HKN zorunludur.");
+  return ["MODEL_INVOICE_MAIL",tenant,hkn].join(":");
 }
