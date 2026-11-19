@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { mailProviderRegistry, normalizeMailProvider } from "./mail-connection-broker.ts";
+import { gmailOAuthClientReadiness } from "./mail-google-client-boundary.ts";
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 
 type AnyRow = Record<string, any>;
@@ -82,9 +83,9 @@ function providerRuntimeReady(c:any, provider:unknown){
     return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Microsoft Graph OAuth production ayarı eksik."};
   }
   if(normalized==="GMAIL"){
-    const clientId=text(c.env.GOOGLE_MAIL_CLIENT_ID || c.env.GOOGLE_DRIVE_CLIENT_ID);
-    const clientSecret=text(c.env.GOOGLE_MAIL_CLIENT_SECRET || c.env.GOOGLE_DRIVE_CLIENT_SECRET);
-    return {configured:Boolean(vaultReady&&clientId&&clientSecret),adapterReady:true,reason:vaultReady&&clientId&&clientSecret?"":"Google OAuth / Gmail API production ayarı eksik."};
+    const gmail=gmailOAuthClientReadiness(c.env),configured=Boolean(vaultReady&&gmail.configured);
+    return {configured,adapterReady:true,configurationMode:gmail.configurationMode,
+      reason:configured?"":!vaultReady?"Güvenli Mail OAuth kasası yapılandırılmamış.":gmail.reason};
   }
   return {configured:false,adapterReady:false,reason:"Bu sağlayıcının KY ERP bağlantı adapterı henüz aktif değil."};
 }
@@ -238,6 +239,25 @@ export function registerMailCommunicationRoutes(app:any){
       return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,completedFolders:completed,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
     return c.json({ok:true,data:rows});
+  });
+
+  // Salt okunur kayıt denetimi: sadece uygulama sahibi; hiçbir kayıt değişmez.
+  app.get("/api/mail/accounts/diagnostics",async(c:any)=>{
+    const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!ownerRole(current?.role))return c.json(jsonError("MAIL_DIAGNOSTICS_FORBIDDEN","Bu denetim yalnız uygulama sahibi içindir."),403);
+    if(!(await mailSchemaReady(c)))return c.json(jsonError("MAIL_SCHEMA_NOT_READY","Mail Core veritabanı hazır değil."),503);
+    const local=await c.env.DB.prepare(
+      "SELECT COUNT(*) n,SUM(CASE WHEN provider_type='GMAIL' THEN 1 ELSE 0 END) gmail_n,"+
+      "SUM(CASE WHEN status='REAUTH_REQUIRED' THEN 1 ELSE 0 END) reauth_n FROM mail_accounts WHERE main_company_slug=?"
+    ).bind(tenant).first<AnyRow>();
+    const elsewhere=(await c.env.DB.prepare(
+      "SELECT main_company_slug tenant,COUNT(*) gmail_n,SUM(CASE WHEN status='REAUTH_REQUIRED' THEN 1 ELSE 0 END) reauth_n "+
+      "FROM mail_accounts WHERE provider_type='GMAIL' GROUP BY main_company_slug ORDER BY gmail_n DESC LIMIT 50"
+    ).all<AnyRow>()).results||[];
+    return c.json({ok:true,data:{requestedTenant:tenant,currentTenantCount:Number(local?.n||0),
+      currentTenantGmailCount:Number(local?.gmail_n||0),currentTenantReconnectCount:Number(local?.reauth_n||0),
+      gmailTenants:elsewhere.map((r:any)=>({tenant:text(r.tenant),count:Number(r.gmail_n||0),reconnectCount:Number(r.reauth_n||0)})),
+      readOnly:true}});
   });
 
   app.post("/api/mail/accounts/request",async(c:any)=>{
