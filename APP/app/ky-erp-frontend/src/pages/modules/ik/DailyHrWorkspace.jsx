@@ -426,6 +426,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const companyId = String(activeMainCompany?.slug || activeMainCompany?.id || "").trim();
   const [employees, setEmployees] = useState([]);
   const [range, setRange] = useState(readRange);
+  const [rangeDraft, setRangeDraft] = useState(readRange);
   const [selectedDate, setSelectedDate] = useState(() => localDateKey());
   const [shift, setShift] = useState("day");
   const [records, setRecords] = useState([]);
@@ -559,6 +560,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     sharedReadyRef.current = true;
     setSharedRangeConfigured(true);
     setSharedRangeReady(true); setSharedRangeError("");
+    setRangeDraft(next);
     if (!sameRange(next, dailyRangeRef.current)) {
       rangeRequestRef.current += 1;
       setRosterIds(new Set()); setRosterSaved(false);
@@ -627,6 +629,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
     sharedSavingRef.current = true;
     setSharedRangeSaving(true); setError("");
+    let retryServerRead = false;
     try {
       const saved = await saveDailyActiveRange({
         mainCompanyId: companyId,
@@ -645,10 +648,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       return true;
     } catch (error) {
       setError(error?.message || "Tarih aralığı kaydedilemedi. Önce ortak dönemi yenileyin.");
-      void refreshSharedRange();
+      retryServerRead = true;
       return false;
     } finally {
       sharedSavingRef.current = false; setSharedRangeSaving(false);
+      if (retryServerRead) void refreshSharedRange();
     }
   }, [applyVerifiedRange, companyId, quick, refreshSharedRange]);
   const setSafePaymentRange = useCallback((_target, next) => {
@@ -1893,10 +1897,15 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className="kyop-actions">
           <div className="kyop-action-group kyop-date-actions" aria-label="Tarih ve hafta seçimi">
           <div className="kyop-manual-range" aria-label="Tarih aralığını elle seç">
-            <label><span>Başlangıç</span><input type="date" value={range.start} onChange={(e) => { const value = e.target.value; if (!value) return; setSafeRange(value > range.end ? { start: value, end: value } : { ...range, start: value }); }} /></label>
+            <label><span>Başlangıç</span><input type="date" value={rangeDraft.start} onChange={(e) => { const value = e.target.value; if (value) setRangeDraft(current => ({...current,start:value})); }} /></label>
             <i>→</i>
-            <label><span>Bitiş</span><input type="date" value={range.end} onChange={(e) => { const value = e.target.value; if (!value) return; setSafeRange(value < range.start ? { start: value, end: value } : { ...range, end: value }); }} /></label>
-          </div>{!sharedRangeConfigured ? <button type="button" disabled={!sharedRangeReady || sharedRangeSaving} onClick={() => void setSafeRange(range)} title="Seçili tarihleri bütün bilgisayarlara kaydet">Bu Dönemi Sabitle</button> : null}<button type="button" onClick={() => shiftRange(-1)}>‹ Önceki Hafta</button><button type="button" onClick={() => shiftRange(1)}>Sonraki Hafta ›</button>
+            <label><span>Bitiş</span><input type="date" value={rangeDraft.end} onChange={(e) => { const value = e.target.value; if (value) setRangeDraft(current => ({...current,end:value})); }} /></label>
+          </div><button type="button" disabled={!sharedRangeReady || sharedRangeSaving || rangeDraft.end < rangeDraft.start ||
+            (sharedRangeConfigured && sameRange(rangeDraft, range))}
+            onClick={() => void setSafeRange(rangeDraft)}
+            title="Başlangıç ve bitiş tarihlerini tek seferde D1'e kaydeder">
+            {sharedRangeSaving ? "Kaydediliyor…" : sharedRangeConfigured ? "Dönemi Uygula" : "Bu Dönemi Sabitle"}
+          </button><button type="button" onClick={() => shiftRange(-1)}>‹ Önceki Hafta</button><button type="button" onClick={() => shiftRange(1)}>Sonraki Hafta ›</button>
           <button type="button" disabled={!sharedRangeReady || sharedRangeSaving} onClick={() => void thisWeek()}><CalendarDays size={15}/> Bu Hafta</button>
           </div>
           <div className="kyop-action-group kyop-entry-actions" aria-label="Personel kayıt işlemleri">
