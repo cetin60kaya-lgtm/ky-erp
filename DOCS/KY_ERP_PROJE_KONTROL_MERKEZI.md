@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Günlük Operasyon ortak dönem, hızlı seçim ve kişi kartında aylık ödeme geçmişi
+- Ana Günlük Personel Girişi eski tasarımda kaldı. İstenmeyen geçmiş tarih aralığı uyarısı ve diğer haftaya geçiş alanı kaldırıldı.
+- Firma ortak D1 dönemi: `hr_daily_active_range`, main_company_id start/end/version; 14–22 Kasım gibi özel seçim bilgisayarlar arasında korunur. Dönem değişikliği compare-and-swap sürüm korumasına sahiptir. İlk kurulum bilinçli sabitleme; D1 doğrulanmadan çalışma yazımı/çıktı kapalı.
+- Hızlı Giriş içindeki Personel Ekle sağdan geniş paneldir; 7/14 gün geçmiş gerçek vardiya sıklığına göre **havuzda olmayan** aktif kişiler sıralanır. Çoklu kişi tek silmesiz merge ile havuza eklenir. Yeni personel mevcut kart formunu kullanır.
+- Personel kartı Çalışma/Ödeme Geçmişi zaten tek employee_id ve D1 ödeme defteriyle bağlıydı. Aylık özet, vardiyaların çalışma ayı ile kesinleşmiş ödemelerin ödeme ayını ayrı gösterir; iptal/legacy ödenmiş işareti alınan paraya dahil değildir. Kişiye ikinci ödeme kaydı veya hesap motoru oluşturulmadı.
+- Sonraki ayrı iş: Kullanıcı onaylı Supi isim standardizasyonu; bu revizyonda hiçbir canlı kişi/ücret/ödeme verisi değiştirilmedi.
+- CI, PR merge, Pages/Worker yayın ve gerçek iki PC oturumlu dönem/ödeme ekran kabulü kanıtlanmadan production PASS yazılmaz.
+
+
 ## 19.11.2026 — Gmail 2/15 görünürlük ve gerçek hata ayrımı
 - Kullanıcı Gmail `hkndesen@gmail.com` yetkili hesabında birkaç saat boyunca `2/15` kaldığını, otomatik turda `0 mesaj işlendi` yazdığını canlı gösterdi. **Bu durum tam senkron PASS değildir.**
 - Kanonik Gmail Worker kod incelemesi: `runGmailMailScheduledSync` 5 dakika cron'a bağlı; her turda 1 klasör/3 mesaj sınırı var. Otomatik başarısız tur, arayüzde `gmailAutoStatus` saklanmasına rağmen gösterilmiyordu. Bir sayfa hata verdiğinde `result.folders[].ok=false` olsa bile `fatal=false` olan yollarda cron `OK` olarak kayıt açabiliyordu. Ayrıca `SYNC_PENDING_PAGINATION` normal bekleme iken `sync_error_count` hatası sayılıyordu.
