@@ -45,3 +45,16 @@ test("Gmail hızlı klasör yenilemesi çoklu etiketlerde aynı kanonik konumu k
   assert.match(source,/const canonical=gmailCanonicalLabel\(known,labelId,known\)/);
   assert.match(source,/const destination=canonical===labelId\?folder:await ensureFolder/);
 });
+
+test("Canlı 500 düzeltmesi: Google ve D1 işleri küçük partilerle yürütülür",()=>{
+ const adapter=read("./mail-google-gmail.ts");
+ const limits=read("./mail-gmail-sync-cursor.ts");
+ assert.match(limits,/GMAIL_PAGE_SIZE = 3/);
+ assert.match(limits,/GMAIL_FOLDERS_PER_PASS = 1/);
+ assert.match(adapter,/DB\.batch\(folderWrites\)/);
+ assert.match(adapter,/DB\.batch\(recipientWrites\)/);
+ assert.match(adapter,/DB\.batch\(attachmentWrites\)/);
+ assert.match(adapter,/GMAIL_SYNC_STAGE_FAILURE/);
+ assert.match(adapter,/GMAIL_REAUTH_REQUIRED/);
+ assert.match(adapter,/GMAIL_SYNC_STEP_FAILED/);
+});

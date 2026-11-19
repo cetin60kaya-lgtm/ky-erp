@@ -186,16 +186,18 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
     await c.env.DB.prepare("INSERT INTO mail_messages(id,main_company_slug,account_id,thread_id,folder_id,provider_message_id,internet_message_id,direction,sender_email,sender_name,subject,body_text,body_html,sent_at,received_at,is_read,is_flagged,has_attachments,provider_metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
       .bind(id,tenant,account.id,threadId||null,folder.id||null,providerMessageId,headers["MESSAGE-ID"]||null,actualDirection,from.email||null,from.name||null,headers.SUBJECT||null,bodies.plain||text(item.snippet)||null,bodies.html||null,actualDirection==="OUTGOING"?stamp:null,actualDirection==="INCOMING"?stamp:null,(Array.isArray(item.labelIds)&&item.labelIds.includes("UNREAD"))?0:1,(Array.isArray(item.labelIds)&&item.labelIds.includes("STARRED"))?1:0,hasAttachments?1:0,JSON.stringify({provider:"GMAIL",labelIds:item.labelIds||[],historyId:text(item.historyId)}),ts,ts).run();
   }
-  await c.env.DB.prepare("DELETE FROM mail_recipients WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
+  const recipientWrites:any[]=[c.env.DB.prepare("DELETE FROM mail_recipients WHERE main_company_slug=? AND message_id=?").bind(tenant,id)];
   for(const [kind,value] of [["TO",headers.TO],["CC",headers.CC],["BCC",headers.BCC]] as any){
-    for(const recipient of splitAddresses(value))await c.env.DB.prepare("INSERT INTO mail_recipients(id,main_company_slug,message_id,recipient_type,email_address,display_name,created_at) VALUES(?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,id,kind,recipient.email,recipient.name||null,ts).run();
+    for(const recipient of splitAddresses(value))recipientWrites.push(c.env.DB.prepare("INSERT INTO mail_recipients(id,main_company_slug,message_id,recipient_type,email_address,display_name,created_at) VALUES(?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(),tenant,id,kind,recipient.email,recipient.name||null,ts));
   }
+  await c.env.DB.batch(recipientWrites);
   // The same message may appear under multiple Gmail labels. Keep existing proof.
   const previous=(await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?")
     .bind(tenant,id).all<AnyRow>()).results||[];
   const oldByProvider=new Map(previous.map((row:any)=>[text(row.provider_attachment_id),row]));
   const seen=new Set<string>();
+  const attachmentWrites:any[]=[];
   const attachmentParts:any[]=[];
   const partHeader=(part:any,name:string)=>{
     const wanted=upper(name);
@@ -218,20 +220,21 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
       let prior:any={};try{prior=JSON.parse(text(old.provider_metadata)||"{}");}catch{}
       const same=text(old.file_name)===name&&text(old.mime_type)===mime&&Number(old.size_bytes||0)===Number(size||0);
       metadata.reviewRequired=!same&&Boolean(old.file_asset_id);
-      await c.env.DB.prepare("UPDATE mail_attachments SET file_name=?,mime_type=?,size_bytes=?,is_inline=?,content_id=?,file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=?")
+      attachmentWrites.push(c.env.DB.prepare("UPDATE mail_attachments SET file_name=?,mime_type=?,size_bytes=?,is_inline=?,content_id=?,file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=?")
         .bind(name,mime,size,part._isInline?1:0,text(part._contentId)||null,same?old.file_asset_id:null,
-          JSON.stringify({...prior,...metadata,removed:false}),old.id,tenant).run();
+          JSON.stringify({...prior,...metadata,removed:false}),old.id,tenant));
     }else{
-      await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-        .bind(crypto.randomUUID(),tenant,id,providerId,null,name,mime,size,part._isInline?1:0,text(part._contentId)||null,JSON.stringify(metadata),ts).run();
+      attachmentWrites.push(c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(),tenant,id,providerId,null,name,mime,size,part._isInline?1:0,text(part._contentId)||null,JSON.stringify(metadata),ts));
     }
   }
   for(const old of previous){
     if(seen.has(text(old.provider_attachment_id)))continue;
     let metadata:any={};try{metadata=JSON.parse(text(old.provider_metadata)||"{}");}catch{}
-    await c.env.DB.prepare("UPDATE mail_attachments SET provider_metadata=? WHERE id=? AND main_company_slug=?")
-      .bind(JSON.stringify({...metadata,removed:true}),old.id,tenant).run();
+    attachmentWrites.push(c.env.DB.prepare("UPDATE mail_attachments SET provider_metadata=? WHERE id=? AND main_company_slug=?")
+      .bind(JSON.stringify({...metadata,removed:true}),old.id,tenant));
   }
+  if(attachmentWrites.length)await c.env.DB.batch(attachmentWrites);
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
 function parseAttachments(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return Array.isArray(v)?v:[];}catch{return[];}}
@@ -319,22 +322,41 @@ export function registerGoogleMailRoutes(app:any){
   });
 
   app.post("/api/mail/accounts/:id/sync/google",async(c:any)=>{
+    let stage="AUTHORIZATION";
+    try{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
     if(!perm(current,"canView"))return c.json(err("MAIL_SYNC_FORBIDDEN","Mail senkronizasyon yetkiniz yok."),403);
     const account=await accountForUser(c,current,tenant,text(c.req.param("id")));
     if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Mail hesabı bulunamadı veya erişim yok."),404);
     if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
 
+    stage="GMAIL_TOKEN";
     const token=(await usableToken(c,tenant,account)).text;
+    stage="GMAIL_LABELS";
     const labelPayload=(await googleJson(GMAIL+"/labels",token)).payload;
     const labels=Array.isArray(labelPayload.labels)?labelPayload.labels:[];
     const folderMap=new Map<string,AnyRow>();
     const typeOf=(id:string)=>({INBOX:"INBOX",SENT:"SENT",DRAFT:"DRAFTS",SPAM:"JUNK",TRASH:"TRASH",STARRED:"STARRED",IMPORTANT:"IMPORTANT"}[id]||"CUSTOM");
+    stage="FOLDER_DISCOVERY";
+    const saved=(await c.env.DB.prepare("SELECT * FROM mail_folders WHERE main_company_slug=? AND account_id=?").bind(tenant,account.id).all<AnyRow>()).results||[];
+    const savedByProvider=new Map(saved.map((row:any)=>[text(row.provider_folder_id),row]));
+    const folderWrites:any[]=[];
     for(const label of labels){
       const id=text(label.id);if(!id)continue;
-      const folder=await ensureFolder(c,tenant,text(account.id),id,text(label.name)||id,typeOf(id));
-      folderMap.set(id,{...folder,folder_type:typeOf(id)});
+      const name=text(label.name)||id,type=typeOf(id),old=savedByProvider.get(id);
+      if(old){
+        folderMap.set(id,{...old,name,folder_type:type});
+        if(text(old.name)!==name||text(old.folder_type)!==type)
+          folderWrites.push(c.env.DB.prepare("UPDATE mail_folders SET name=?,folder_type=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(name,type,nowIso(),old.id,tenant));
+      }else{
+        const newId=crypto.randomUUID(),ts=nowIso();
+        folderWrites.push(c.env.DB.prepare("INSERT INTO mail_folders(id,main_company_slug,account_id,provider_folder_id,parent_folder_id,folder_type,name,sync_enabled,provider_metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?)")
+          .bind(newId,tenant,account.id,id,null,type,name,1,JSON.stringify({provider:"GMAIL"}),ts,ts));
+        folderMap.set(id,{id:newId,provider_folder_id:id,name,folder_type:type,sync_enabled:1});
+      }
     }
+    // D1.batch uses one invocation subrequest rather than one per label.
+    if(folderWrites.length)await c.env.DB.batch(folderWrites);
     // Only rows belonging to an enabled, currently discoverable Gmail label are scanned.
     // Previously linked folders are never deleted or relabeled without explicit consent.
     const folderRows=await c.env.DB.prepare(
@@ -350,6 +372,7 @@ export function registerGoogleMailRoutes(app:any){
         const aFirst=text(a.page_last_sync)?1:0,bFirst=text(b.page_last_sync)?1:0;
         return aFirst-bFirst||rank(a)-rank(b)||text(a.page_last_sync).localeCompare(text(b.page_last_sync));
       }).slice(0,GMAIL_FOLDERS_PER_PASS);
+    stage="GMAIL_PAGES";
     const summary:any[]=[];let total=0,successfulFolders=0;
     for(const folder of todo){
       const labelId=text(folder.provider_folder_id),previous=text(folder.page_cursor);
@@ -380,12 +403,15 @@ export function registerGoogleMailRoutes(app:any){
       const pageState=gmailSyncPageState(previous,nextPageToken,failed);
       const done=pageState.complete,checkpoint=pageState.cursor;
       const ts=nowIso(),lastError=errorText|| (failed?failed+" mesaj işlenemedi.":"SYNC_PENDING_PAGINATION");
+      stage="CURSOR_CHECKPOINT";
       await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
         .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_PAGE",checkpoint,ts,done?ts:null,done?"":lastError,ts).run();
       if(done)successfulFolders++;
       total+=count;
+      stage="GMAIL_PAGES";
       summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,completed:done,pending:Boolean(nextPageToken)||!done,failures,...(errorText?{error:errorText}:{})});
     }
+    stage="SYNC_SUMMARY";
     // A 200/207 result is based on *all enabled provider labels*, not only the first INBOX/SENT page.
     const finished=(await c.env.DB.prepare(
       "SELECT COUNT(*) n FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id "+
@@ -398,6 +424,18 @@ export function registerGoogleMailRoutes(app:any){
     if(partial&&successfulFolders===0&&total===0&&summary.some(r=>!r.ok))
       return c.json(err("MAIL_SYNC_FAILED","Gmail posta kutusu senkronize edilemedi.",{folders:summary}),502);
     return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,completedFolders,totalFolders,discoveredFolders:labels.length,warning:partial?"Gmail klasör sayfalaması henüz bitmedi; 'Senkronize Et' ile kaldığı yerden devam edin.":""}},partial?207:200);
+    }catch(error:any){
+      const providerCode=text(error?.code)||"UNEXPECTED",upstreamStatus=Number(error?.status||0);
+      const reauth=providerCode==="MAIL_REAUTH_REQUIRED"||providerCode==="GOOGLE_TOKEN_FAILED";
+      const rateLimited=upstreamStatus===429;
+      // No OAuth secrets, raw Gmail payloads, addresses, or message bodies in logs.
+      console.error(JSON.stringify({code:"GMAIL_SYNC_STAGE_FAILURE",stage,providerCode}));
+      const code=reauth?"GMAIL_REAUTH_REQUIRED":rateLimited?"GMAIL_RATE_LIMITED":"GMAIL_SYNC_STEP_FAILED";
+      const message=reauth?"Gmail oturum anahtarı yenilenemedi; bağlantı kontrolü gerekli."
+        :rateLimited?"Gmail istek limiti doldu; ilerleme korunuyor."
+        :"Gmail senkronizasyonu "+stage+" aşamasında durdu; ilerleme korunuyor, hesabı sıfırlamayın.";
+      return c.json(err(code,message,{stage}),reauth?409:rateLimited?429:503);
+    }
   });
 
   app.post("/api/mail/accounts/:id/folders/:folderId/sync/google",async(c:any)=>{
