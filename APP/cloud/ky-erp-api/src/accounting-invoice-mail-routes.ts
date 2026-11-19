@@ -258,7 +258,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       }
     }
     const assetIds=[...new Set([...byMessage.values()].flat().map(a=>txt(a.file_asset_id)).filter(Boolean))];
-    const assets=new Map<string,Row>(),canonicalLinkedIds=new Set<string>();
+    const assets=new Map<string,{id:string;file_name:string;sha256?:string}>(),canonicalLinkedIds=new Set<string>();
     // Historical PDFs may belong to DIFFERENT models on the SAME HKN.
     // Verify the entire package using tenant-scoped asset hashes and canonical
     // MODEL relationships, with D1's parameter limit respected.
@@ -267,7 +267,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       const found=await c.env.DB.prepare(
         "SELECT id,file_name,sha256 FROM file_hub_assets WHERE main_company_slug=? AND UPPER(status)='AVAILABLE' AND id IN ("+marks+")"
       ).bind(a.tenant,...ids).all<Row>();
-      for(const f of found.results||[])assets.set(txt(f.id),f);
+      for(const f of found.results||[])assets.set(txt(f.id),{id:txt(f.id),file_name:txt(f.file_name),sha256:txt(f.sha256)});
       const relations=await c.env.DB.prepare(
         "SELECT DISTINCT r.file_asset_id FROM file_hub_relations r JOIN model_records m ON m.main_company_slug=r.main_company_slug AND m.id=r.entity_id AND m.deleted_at IS NULL "+
         "WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.file_asset_id IN ("+marks+")"
