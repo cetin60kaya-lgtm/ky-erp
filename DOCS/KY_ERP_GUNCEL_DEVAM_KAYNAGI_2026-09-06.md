@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Gmail 0/15 sayaç ilk sayfalarda sabit: kontrollü tek tık tarama
+- Gerçek DESEN Gmail OAuth onaylı; ilk iki "Senkronize Et" adımında aynı `0/15 klasör, 3 mesaj işlendi` sonucu göründü. Bu tek başına senkronun takıldığı kanıtı değil: kod `GMAIL_PAGE_SIZE=3` ve `GMAIL_FOLDERS_PER_PASS=1`, bitmemiş etiketler `DONE` sayılmaz, yenilerine öncelik verir.
+- Tek buton artık **en fazla 8 ardışık, ayrı, küçük Worker isteği** çalıştırır; adım, işlenen mesaj **işlem sayısı** (yeni/eşsiz mail sayısı değil), son etiket ve tamamlanan klasör sayısını gösterir. Her adım backend'in gerçek cursor'ına dayanır. Klasör hata, sıfır ilerleme, kullanıcı durdurması ve ekran terk etmede yeni istek durur.
+- Worker maliyetini büyüten sayfa büyüklüğü veya yeni bir D1 şeması eklenmedi. Mail gönderme, silme, Google OAuth, Drive/Firebase veya mevcut hesap verileri değiştirilmedi. Sınırlı her turun sonunda gerekirse kullanıcı yeniden tıklar; sonsuz döngü yok.
+- Kod/test/yayın sonucu ayrıca kontrol edilir; Google 15/15 canlı kabulü **bu kod değişikliğiyle kendiliğinden PASS sayılmaz**.
+
+
 ## 19.11.2026 — Günlük Operasyon havuz/ücret/çıktı tek canonical uygulaması
 - Güncel production tabanından açılmış dal: `fix/gunluk-tek-kaynak-canli-kabul-20261119`. Yalnız mevcut günlük operasyon frontend/Worker, tarihli ücret çekirdeği ve sözleşme testleri güncellendi; paralel sekme/havuz/hakediş sistemi eklenmedi.
 - Havuza Ekle tek D1 yazma+okuma doğrulaması, Günlük Kaydet gün/vardiya; roster üyeliği ile vardiya ücretli çalışması ayrı. Yalnız hedef kişi çıkarma, başka PC kaydını sessiz silmeme.
