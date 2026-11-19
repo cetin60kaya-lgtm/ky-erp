@@ -191,7 +191,7 @@ test("selected date range is shared across operation tabs without overwriting ot
   assert.match(workspace, /const PAYMENT_POOL_RANGE_KEY = RANGE_KEY/);
   assert.match(workspace, /const PAYMENT_HISTORY_RANGE_KEY = RANGE_KEY/);
   assert.match(workspace, /setPaymentPoolRange\(next\); setPaymentHistoryRange\(next\)/);
-  assert.match(workspace, /window\.addEventListener\("storage", onStorage\)/);
+  assert.match(workspace, /window\.addEventListener\("focus", onFocus\)/);
   assert.match(workspace, /event\.data\?\.type === "date-range"/);
 });
 
