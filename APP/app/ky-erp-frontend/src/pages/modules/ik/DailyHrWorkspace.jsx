@@ -51,7 +51,7 @@ import {
 import { printHtmlDocument } from "../../../services/printService";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
-import { dailyWorkDateInRange, reconcileDailyWeeklyReport } from "../../../services/dailyOpsReportIntegrity";
+import { dailyWorkDateInRange, reconcileDailyWeeklyReport, paginateDailyPrintRows } from "../../../services/dailyOpsReportIntegrity";
 import { exportRowsToExcelFile } from "../../../utils/excelExport";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
@@ -346,8 +346,8 @@ function printWeeklyMatrix(title, range, days, rows = []) {
     amount: sum.amount + number(row.totalAmount ?? row.total),
   }), { people: 0, day: 0, night: 0, base: 0, additions: 0, deductions: 0, amount: 0 });
 
-  // Haftalık rapor personel sayısından bağımsız tek A4 yatay sayfada basılır.
-  const pages = [source];
+  // 189+ personel tek sayfaya sıkıştırılmaz; her A4 sayfası en fazla 26 satır içerir.
+  const pages = paginateDailyPrintRows(source, 26);
   const headers = safeDays.map((date) => {
     const weekday = new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "").toLocaleUpperCase("tr-TR");
     return `<th class="date-col"><span>${escapeHtml(weekday)}</span><b>${escapeHtml(dateText(date, true))}</b><small>G / N</small></th>`;
@@ -370,7 +370,7 @@ function printWeeklyMatrix(title, range, days, rows = []) {
     const generalDayCells = dayTotals.map((item) => `<td class="day-total general"><span>G ${item.day}</span><span>N ${item.night}</span></td>`).join("");
     const lastPage = pageIndex === pages.length - 1;
     return `<section class="week-page">
-      <header><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(dateText(printStart))} — ${escapeHtml(dateText(printEnd))}</span></div></header>
+      <header><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(dateText(printStart))} — ${escapeHtml(dateText(printEnd))}</span></div><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header>
       <table>
         <thead><tr><th class="no">No</th><th class="person">Personel</th><th class="role">Vasıf</th>${headers}<th class="count">G</th><th class="count">N</th><th class="total-days">Toplam<br/>Gün</th><th class="extra-money">Ek (+)</th><th class="extra-money">Kesinti (-)</th><th class="total-money">Net Tutar</th></tr></thead>
         <tbody>${body}</tbody>
@@ -385,7 +385,7 @@ function printWeeklyMatrix(title, range, days, rows = []) {
   return printHtmlDocument({
     title,
     html: `<main class="week-print">${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 landscape;margin:3mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:100%}.week-page{width:100%;height:auto;max-height:198mm;display:block;page-break-after:auto;break-after:auto;break-inside:avoid}.week-page>header{min-height:5mm;border:1px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:.4mm 1mm;margin-bottom:.3mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:2mm}.week-page>header strong{font-size:9pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7pt}.week-page th,.week-page td{border:1px solid #667085;padding:.14mm .5mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:6mm;background:#eef2f7}.week-page td{height:4mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:39mm;text-align:left}.week-page .person strong{display:block;font-size:7.2pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:0;font-size:6.2pt;color:#475467}.week-page .role{width:21mm;text-align:left;font-size:7pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:17mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.2pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:7.5pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .extra-money{width:16mm;text-align:right;font-size:6.1pt;white-space:nowrap}.week-page .total-money{width:28mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:4.5mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{html,body,.week-print,.week-page{height:auto!important;overflow:visible!important}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
+    css: `@page{size:A4 landscape;margin:3mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:100%}.week-page{width:100%;height:auto;max-height:198mm;display:block;page-break-after:always;break-after:page;break-inside:avoid}.week-page:last-child{page-break-after:auto;break-after:auto}.week-page>header{min-height:5mm;border:1px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:.4mm 1mm;margin-bottom:.3mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:2mm}.week-page>header strong{font-size:9pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7pt}.week-page th,.week-page td{border:1px solid #667085;padding:.14mm .5mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:6mm;background:#eef2f7}.week-page td{height:4mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:39mm;text-align:left}.week-page .person strong{display:block;font-size:7.2pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:0;font-size:6.2pt;color:#475467}.week-page .role{width:21mm;text-align:left;font-size:7pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:17mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.2pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:7.5pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .extra-money{width:16mm;text-align:right;font-size:6.1pt;white-space:nowrap}.week-page .total-money{width:28mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:4.5mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{html,body,.week-print,.week-page{height:auto!important;overflow:visible!important}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
   });
 }
 function printWeeklySummary(range, days, rows = []) {
@@ -404,6 +404,11 @@ function printPaidPaymentReceipt(row = {}) {
 
 function actionLabel(row = {}) {
   const key = normalizeText(row.action || row.operation || row.eventType || row.type || row.changeType);
+  if (key === "ROSTER_ADD") return "PERSONEL HAVUZA EKLENDİ";
+  if (key === "ROSTER_REMOVE") return "PERSONEL HAVUZDAN ÇIKARILDI";
+  if (key === "EMPLOYEE_CARD_CREATE") return "PERSONEL KARTI OLUŞTURULDU";
+  if (key === "EMPLOYEE_CARD_UPDATE") return "PERSONEL KARTI GÜNCELLENDİ";
+  if (key === "EMPLOYEE_WAGE_CHANGE") return "PERSONEL ÜCRETİ DEĞİŞTİRİLDİ";
   if (key.includes("PAID") || key.includes("ODE") || key.includes("ÖDE")) return "ÖDENDİ";
   if (key.includes("REMOVE") || key.includes("DELETE") || key.includes("SIL")) return "KAYIT KALDIRILDI";
   if (key.includes("CREATE") || key.includes("ADD")) return "KAYIT EKLENDİ";
@@ -427,10 +432,12 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [notes, setNotes] = useState({});
   const [rosterIds, setRosterIds] = useState(() => new Set());
   const [rosterSaved, setRosterSaved] = useState(false);
+  const [addingPersonId, setAddingPersonId] = useState("");
   const [summaryRows, setSummaryRows] = useState([]);
   const [weeklyReadScope, setWeeklyReadScope] = useState("");
   const [weeklyLoadError, setWeeklyLoadError] = useState("");
   const [paymentRows, setPaymentRows] = useState([]);
+  const [paymentReadScope, setPaymentReadScope] = useState("");
   const [periodStatusRows, setPeriodStatusRows] = useState([]);
   const [periodStatusError, setPeriodStatusError] = useState("");
   const [paymentPeriodRows, setPaymentPeriodRows] = useState([]);
@@ -501,6 +508,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const rangeRequestRef = useRef(0);
   const focusedRequestRef = useRef(0);
   const weeklyRequestRef = useRef(0);
+  const paymentRequestRef = useRef(0);
   const logRequestRef = useRef(0);
   const expectedPeriodScope = dailyPeriodScope(companyId, selectedDate, range.start, range.end);
   const expectedRangeScope = dailyRangeScope(companyId, range.start, range.end);
@@ -684,23 +692,26 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadPayments = useCallback(async () => {
     if (!companyId || !["daily-payments", "daily-dashboard"].includes(view)) return;
+    const requestId = ++paymentRequestRef.current;
+    const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
+    const targetScope = dailyRangeScope(companyId, sourceRange.start, sourceRange.end);
     setLoading(true); setPaymentLoadError("");
     if (view === "daily-payments") setError("");
     try {
-      const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
-      const [poolResult, attendanceResult, statusResult, adjustmentsResult] = await Promise.all([
+      const [poolResult, attendanceResult, statusResult, adjustmentsResult, financialResult] = await Promise.all([
         getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }),
         getDailyAttendance({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
         getDailyPeriodPaymentStatus({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }).catch(() => null),
         getDailyPaymentAdjustments({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
+        getDailyWeeklySummary({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
       ]);
-      const poolRows = Array.isArray(poolResult) ? poolResult : [];
-      const attendanceRows = Array.isArray(attendanceResult) ? attendanceResult : [];
-      const allAdjustmentRows = Array.isArray(adjustmentsResult) ? adjustmentsResult : [];
-      setPeriodAdjustmentRows(allAdjustmentRows);
-      setPaymentRows(poolRows);
-      setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
-      setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
+      if (requestId !== paymentRequestRef.current) return;
+      if (!Array.isArray(poolResult) || !Array.isArray(attendanceResult)
+        || !Array.isArray(adjustmentsResult) || !Array.isArray(financialResult))
+        throw new Error("Dönem verileri eksik veya geçersiz; ödeme çıktısı durduruldu.");
+      const poolRows = poolResult;
+      const attendanceRows = attendanceResult;
+      const allAdjustmentRows = adjustmentsResult;
 
       const employeeLookup = new Map(employees.map((person) => [String(person.id), person]));
       const map = new Map();
@@ -751,13 +762,28 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         else if(adjustment.kind==="DEDUCT") current.deductions+=number(adjustment.amount);
         current.items.push(adjustment);groupedExtras.set(key,current);
       }
-      setPaymentPeriodRows([...map.values()].map((row)=>{
-        const extra=groupedExtras.get(String(row.employeeId))||{additions:0,deductions:0,items:[]};
-        return {...row,baseAmount:row.totalAmount,additions:extra.additions,deductions:extra.deductions,
-          adjustments:extra.items,totalAmount:row.totalAmount+extra.additions-extra.deductions};
-      }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr")));
+      // Hakediş kaynağı D1 haftalık mali özettir; tarayıcı ücret toplamı yalnız
+      // çapraz kontrol ve fişin gün-gün kalemlerini göstermek için kullanılır.
+      const verified = reconcileDailyWeeklyReport([...map.values()], financialResult);
+      setPaymentPeriodRows(verified.map((row) => {
+        const local = map.get(String(row.employeeId)) || {};
+        const extra = groupedExtras.get(String(row.employeeId)) || { items: [] };
+        return {
+          ...local, ...row,
+          periodStart: sourceRange.start, periodEnd: sourceRange.end,
+          dayTotal: number(row.dayTotal), nightTotal: number(row.nightTotal),
+          items: local.items || [], adjustments: extra.items,
+        };
+      }));
+      setPeriodAdjustmentRows(allAdjustmentRows);
+      setPaymentRows(poolRows);
+      setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
+      setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
+      setPaymentReadScope(targetScope);
     } catch (e) {
+      if (requestId !== paymentRequestRef.current) return;
       const message = e?.message || "Dönem ödeme verileri alınamadı.";
+      setPaymentReadScope("");
       setPaymentRows([]);
       setPaymentPeriodRows([]);
       setPeriodAdjustmentRows([]);
@@ -765,7 +791,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setPeriodStatusError(message);
       setPaymentLoadError(message);
       if (view === "daily-payments") setError(message);
-    } finally { setLoading(false); }
+    } finally { if (requestId === paymentRequestRef.current) setLoading(false); }
   }, [companyId, employees, paymentPoolRange, range, view]);
   useEffect(() => { void loadPayments(); }, [loadPayments]);
 
@@ -835,7 +861,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   }, [visibleEntryPeople]);
   const selectedRoleCounts = useMemo(() => groupedEntryPeople.map(([role, people]) => ({ role, count: people.filter((person) => selectedIds.has(person.id)).length })).filter((row) => row.count > 0), [groupedEntryPeople, selectedIds]);
   const weeklySummaryInScope = weeklyReadScope === expectedRangeScope;
-  const weeklyControlRows = useMemo(() => {
+  const weeklyReconciliation = useMemo(() => {
     const map = new Map();
     attendance.forEach((row) => {
       const date = rowDate(row);
@@ -852,11 +878,22 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       map.set(employeeId, current);
     });
     const matrixRows = [...map.values()];
-    return weeklySummaryInScope
-      ? reconcileDailyWeeklyReport(matrixRows, summaryRows)
-      : matrixRows.map((row) => ({ ...row, baseAmount: row.totalAmount, additions: 0, deductions: 0, financialVerified: false }));
+    if (!weeklySummaryInScope) {
+      return { rows: matrixRows.map((row) => ({ ...row, baseAmount: row.totalAmount, additions: 0, deductions: 0, financialVerified: false })), error: "" };
+    }
+    try {
+      return { rows: reconcileDailyWeeklyReport(matrixRows, summaryRows), error: "" };
+    } catch (reconcileError) {
+      // Yanlış ücret/fiş gösterip yazdırma yerine sadece ilgili mali görünümü durdur.
+      return { rows: matrixRows.map((row) => ({ ...row, financialVerified: false })), error: reconcileError?.message || "D1 mali mutabakatı başarısız." };
+    }
   }, [attendance, employeeMap, range.end, range.start, summaryRows, weeklySummaryInScope]);
-  const weeklyFinancialReady = weeklySummaryInScope && weeklyControlRows.every((row) => row.financialVerified);
+  const weeklyControlRows = weeklyReconciliation.rows;
+  const weeklyFinancialReady = weeklySummaryInScope
+    && rangeReadScope === expectedRangeScope
+    && !rangeLoadError
+    && !weeklyReconciliation.error
+    && weeklyControlRows.every((row) => row.financialVerified);
   // Geçmiş haftalarda da açık hakediş olabilir; tarih nedeniyle havuzu gizleme.
   const visiblePaymentRows = paymentRows;
   const selectedPaymentRows = useMemo(() => visiblePaymentRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))), [visiblePaymentRows, paymentSelectedIds]);
@@ -989,7 +1026,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const persistRosterAddition = async (employeeId) => persistDailyRosterMember({
     employeeId, mainCompanyId: companyId, startDate: range.start, endDate: range.end,
     localIds: [...effectiveRosterIds],
-    readRoster: getDailyRoster, writeRoster: saveDailyRoster,
+    addRoster: saveDailyRoster,
   });
 
   const addRosterPerson = async (person, target = "main") => {
@@ -1002,9 +1039,11 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const addPersonToRoster = async (person) => {
     if (!person?.id || busy || rosterWriteBlocked || (rosterIds.has(person.id) && rosterSaved)) return false;
-    setBusy(true); setError(""); setNotice("");
+    setBusy(true); setAddingPersonId(person.id); setError(""); setNotice("");
     try {
       const verifiedIds = await persistRosterAddition(person.id);
+      // Bu aralık için eski bir GET yanıtının yeni onaylı havuzu ezmesini engelle.
+      rangeRequestRef.current += 1;
       setRosterIds(verifiedIds);
       setRosterSaved(true);
       setNotice(`${person.name} ${dateText(range.start)}–${dateText(range.end)} personel havuzuna kaydedildi ve D1 üzerinden doğrulandı.`);
@@ -1013,6 +1052,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setError(e?.message || "Personel tarih aralığı havuzuna kaydedilemedi.");
       return false;
     } finally {
+      setAddingPersonId("");
       setBusy(false);
     }
   };
@@ -1350,10 +1390,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
             if (!current) return current;
             return { ...current, ids: new Set([...current.ids, createdId]) };
           });
-        } else if (view === "daily-entry") {
-          setSelectedIds((current) => new Set([...current, createdId]));
         }
-        setNotice("Yeni personel kartı ve dönem havuzu D1 üzerinde kaydedildi. Seçilen gün/vardiya için Kaydet'e basın.");
+        setNotice("Yeni personel kartı ve dönem havuzu D1 üzerinde kaydedildi. Gün/vardiya seçimi ayrıca yapılır.");
       } else {
         setNotice(cardDialog.id ? "Personel kartı güncellendi." : "Yeni günlük personel oluşturuldu.");
       }
@@ -1500,8 +1538,14 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   // Hakediş çıktısı salt okunurdur: ödeme yalnız kullanıcı 'Tamamla' dediğinde kaydedilir.
   const printPeriodRows = useCallback((rowsToPrint = []) => {
     if (busy || !Array.isArray(rowsToPrint) || !rowsToPrint.length) return;
+    if (paymentReadScope !== dailyRangeScope(companyId, paymentPoolRange.start, paymentPoolRange.end)
+      || paymentLoadError || rowsToPrint.some((row) =>
+        !row.financialVerified || row.periodStart !== paymentPoolRange.start || row.periodEnd !== paymentPoolRange.end)) {
+      setError("Fişin tarih aralığı veya hakedişi D1 ile doğrulanmadı. Yenilemeden çıktı alınamaz.");
+      return;
+    }
     printDailyPaymentSlips(paymentPoolRange, rowsToPrint);
-  }, [busy, paymentPoolRange]);
+  }, [busy, companyId, paymentLoadError, paymentPoolRange, paymentReadScope]);
   const printPaymentPeriodSlips = useCallback(({ selectedOnly = false } = {}) => {
     const slips = selectedOnly ? paymentPeriodRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))) : paymentPeriodRows;
     printPeriodRows(slips);
@@ -1739,7 +1783,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         <div className={`kyop-banner ${shift === "night" ? "night" : ""}`}><strong>Güvenli giriş modu:</strong><span>Yalnız {longDateText(selectedDate)} — {shift === "day" ? "Gündüz" : "Gece"} aktif. Hızlı girişte de aynı anda yalnız bir gün düzenlenir.</span>{periodLockVerified && periodLocked ? <b><LockKeyhole size={14}/> DÖNEM KAPALI</b> : null}{!periodLockVerified ? <b><LockKeyhole size={14}/> KİLİT DOĞRULANAMADI</b> : null}</div>
         <div className="kyop-days" aria-label="Tarih aralığı">{daySummaries.map((item) => <button type="button" key={item.date} className={item.date === selectedDate ? "active" : ""} title={`${longDateText(item.date)} · Gündüz ${item.dayCount} · Gece ${item.nightCount} · ${item.people} kişi · çift tıkla hızlı giriş`} onClick={() => setSelectedDate(item.date)} onDoubleClick={() => void openQuick(item.date, shift)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong><em className="kyop-day-counts"><span className="day">G {item.dayCount}</span><span className="night">N {item.nightCount}</span><span className="people">{item.people} kişi</span></em>{item.date === selectedDate ? <i>AKTİF</i> : null}</button>)}</div>
         <div className="kyop-grid">
-          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Dönem Personel Listesi <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} disabled={busy || dailyWriteBlocked} title={inRoster ? "Havuzdan çıkarmak için orta tablodaki çöp butonunu kullanın." : "Tarih aralığı havuzuna ekle"} onChange={() => { if (!inRoster) void addPersonToRoster(person); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{inRoster ? "Havuzda" : "Havuza ekle"}</em><em>G: {money(personWageAtDate(person, selectedDate).day)} · N: {money(personWageAtDate(person, selectedDate).night)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved || rosterWriteBlocked} onClick={saveRoster}><Save size={15}/> {rosterSaved ? `Dönem Listesi Kayıtlı (${rosterIds.size})` : `Dönem Listesini Kaydet (${rosterIds.size})`}</button></aside>
+          <aside className="kyop-panel kyop-pool"><div className="kyop-panel-head"><Users size={16}/> Dönem Personel Listesi <b>{rosterIds.size} / {employees.filter((person) => person.active !== false).length}</b></div><div className="kyop-pool-top"><label className="kyop-search"><Search size={14}/><input value={poolAddQuery} onChange={(e) => setPoolAddQuery(e.target.value)} placeholder="Personel ara"/></label><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><Plus size={14}/> Personel</button></div><div className="kyop-pool-list">{poolPeople.length ? poolPeople.map((person) => { const inRoster = rosterIds.has(person.id); return <label key={person.id} className={inRoster ? "included" : ""}><input type="checkbox" checked={inRoster} disabled={busy || dailyWriteBlocked} title={inRoster ? "Havuzdan çıkarmak için orta tablodaki çöp butonunu kullanın." : "Tarih aralığı havuzuna ekle"} onChange={() => { if (!inRoster) void addPersonToRoster(person); }}/><span><strong>{person.personnelNo ? `${person.personnelNo} · ` : ""}{person.name}</strong><small>{person.role || "Vasıfsız"}</small><em>{addingPersonId === person.id ? "Havuza kaydediliyor…" : inRoster ? "Havuzda · Kayıtlı" : "Havuza ekle"}</em><em>G: {money(personWageAtDate(person, selectedDate).day)} · N: {money(personWageAtDate(person, selectedDate).night)}</em></span></label>; }) : <Empty>Personel bulunamadı.</Empty>}</div><button type="button" className="primary full" disabled={busy || rosterSaved || rosterWriteBlocked} onClick={saveRoster}><Save size={15}/> {rosterSaved ? (rosterIds.size ? `Dönem Listesi Kayıtlı (${rosterIds.size})` : "Bu Dönem Havuzu Boş") : `Dönem Listesini Kaydet (${rosterIds.size})`}</button></aside>
 
           <main className="kyop-panel kyop-entry"><div className="kyop-entry-head"><div><span>SEÇİLİ GÜNÜN PERSONEL GİRİŞİ</span><h2>{dateText(selectedDate)} · {shift === "day" ? "Gündüz" : "Gece"}</h2><p>Bu tablo yalnız {currentWeekday} günü için gösterilir. Üstte gün seçince liste ve toplamlar aynı güne yenilenir.</p></div><div className="kyop-head-actions"><button type="button" onClick={loadLog}>Log</button><button type="button" className={periodLockVerified && periodLocked ? "locked" : ""} disabled={busy || !periodLockVerified} onClick={togglePeriodLock}>{periodLockVerified && periodLocked ? "Dönemi Aç" : "Dönemi Kapat"}</button><b>{dateText(selectedDate, true)} · {shift === "day" ? "G" : "N"}</b></div></div>
             <div className="kyop-table-wrap"><table><thead><tr><th>Personel / Giriş / Durum</th><th>Vasıf</th><th>Aktif Gün</th><th>Gündüz Ücret</th><th>Gece Ücret</th><th>Not</th><th>İşlem</th></tr></thead><tbody>{groupedEntryPeople.length ? groupedEntryPeople.flatMap(([role, people]) => [<tr className="group" key={`g-${role}`}><td colSpan="7">{role} <b>{people.length} personel</b></td></tr>, ...people.map((person) => { const selected = selectedIds.has(person.id); const reviewed = checkedIds.has(person.id); const historicalWage = personWageAtDate(person, selectedDate); const blocked = shift === "night" && historicalWage.night <= 0; return <tr key={person.id} className={`${selected ? "selected" : ""} ${reviewed ? "checked" : ""}`}><td><div className="kyop-person-cell"><div><strong>{person.name}</strong><small>{person.personnelNo || "Kod yok"}</small><em>{!rosterIds.has(person.id) ? (reviewed ? "Dönem listesi dışı kayıt · ✓ Kontrol Edildi" : "Dönem listesi dışı kayıt · Bu Gün Seçildi") : reviewed ? "✓ Kontrol Edildi" : selected ? "Bu Gün Seçildi" : "Bu Gün Yok"}</em></div><span className={`kyop-row-shift ${shift}`}>{shift === "day" ? "GÜNDÜZ" : "GECE"}</span></div></td><td>{person.role || "-"}</td><td>{dateText(selectedDate, true)}</td><td>{money(historicalWage.day)}</td><td>{historicalWage.night > 0 ? money(historicalWage.night) : "-"}</td><td><input value={notes[person.id] || ""} disabled={dailyWriteBlocked || busy} onChange={(e) => setNotes((current) => ({ ...current, [person.id]: e.target.value }))} placeholder="Not"/></td><td><div className="kyop-row-actions"><button type="button" title={selected ? "Gün seçimini kaldır" : "Seçili güne/vardiyaya kaydet"} disabled={blocked || dailyWriteBlocked || busy} className={selected ? "selected" : ""} onClick={() => setPersonSelectedForShift(person, !selected)}><CheckCircle2 size={14}/> {selected ? "Seçildi" : "Seç"}</button><button type="button" title={reviewed ? "Kontrol onayını kaldır" : "Kontrol edildi"} disabled={!selected || blocked || dailyWriteBlocked || busy} className={reviewed ? "selected verified" : "verified"} onClick={() => setPersonReviewed(person, !reviewed)}>✓ {reviewed ? "Onaylandı" : "Kontrol"}</button><button type="button" title="Personel kartını düzenle" onClick={() => setCardDialog({ ...person })}><Pencil size={14}/></button><button type="button" title={rosterIds.has(person.id) ? "Personeli tarih aralığı havuzundan çıkar" : "Dönem listesi dışı kayıt"} disabled={!rosterIds.has(person.id) || rosterWriteBlocked || busy} onClick={() => removePersonFromRoster(person)}><Trash2 size={14}/></button></div></td></tr>; })]) : <tr><td colSpan="7"><div className="kyop-empty-selection"><Users size={28}/><strong>Bu gün için personel seçilmedi</strong><span>Soldaki listeden personel ekleyin veya hızlı giriş ile tek gün ve vardiya seçimi yapın.</span><button type="button" onClick={() => void openQuick(selectedDate, shift)}><Zap size={15}/> Hızlı Giriş Aç</button></div></td></tr>}</tbody></table></div>
@@ -1752,19 +1796,19 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       {view === "daily-dashboard" ? <div className="gop-dashboard">
         <div className="gop-dashboard-filter"><div className="gop-preset-buttons"><button type="button" onClick={() => dashboardPreset("live")}>● Canlı</button><button type="button" onClick={() => dashboardPreset("today")}>Bugün</button><button type="button" onClick={() => dashboardPreset("week")}>Bu Hafta</button><button type="button" onClick={() => dashboardPreset("last")}>Geçen Hafta</button><button type="button" onClick={() => dashboardPreset("month")}>Bu Ay</button><button type="button" onClick={() => dashboardPreset("lastMonth")}>Geçen Ay</button></div>{rangeControls}</div>
         <section className="gop-owner-strip" aria-label="Yönetici hızlı özeti">
-          <div className="owner-total"><span>YÖNETİCİ ÖZETİ</span><small>{dateText(range.start)} — {dateText(range.end)}</small><strong>{money(rangeTotals.total)}</strong><em>Toplam hakediş</em></div>
+          <div className="owner-total"><span>YÖNETİCİ ÖZETİ</span><small>{dateText(range.start)} — {dateText(range.end)}</small><strong>{weeklyFinancialReady ? money(weeklyTotals.total) : "Doğrulanıyor"}</strong><em>Net hakediş · D1</em></div>
           <div><span>ÖDENDİ</span><strong>{dashboardPaidAmount === null ? "Doğrulanamadı" : money(dashboardPaidAmount)}</strong><small>{periodStatusError ? "Ödeme kaydı kontrol bekliyor" : `${periodPaymentStatus.paid} personel`}</small></div>
           <div><span>BEKLEYEN</span><strong>{money(openPaymentMetrics.amount)}</strong><small>{openPaymentMetrics.people} personel</small></div>
           <div><span>KONTROL</span><strong>{weeklyPending}</strong><small>{weeklyPending ? "vardiya kontrol bekliyor" : "tamamlandı"}</small></div>
         </section>
-        <div className="gop-dashboard-stats"><Stat label="Çalışan Personel" value={dashboardPeople} hint={`${dateText(range.start)} — ${dateText(range.end)}`}/><Stat label="Toplam Vardiya" value={rangeTotals.day + rangeTotals.night} hint={`G ${rangeTotals.day} · N ${rangeTotals.night}`}/><Stat label="Kontrol Bekleyen" value={weeklyPending} hint={weeklyPending ? "İnceleme gerekli" : "Kontroller tamam"}/><Stat label="Ödeme Bekleyen" value={openPaymentMetrics.people} hint={money(openPaymentMetrics.amount)}/><Stat label="Dönem Toplamı" value={money(rangeTotals.total)} hint={`Ödenen ${money(dashboardPaidAmount)}`}/></div>
+        <div className="gop-dashboard-stats"><Stat label="Çalışan Personel" value={dashboardPeople} hint={`${dateText(range.start)} — ${dateText(range.end)}`}/><Stat label="Toplam Vardiya" value={rangeTotals.day + rangeTotals.night} hint={`G ${rangeTotals.day} · N ${rangeTotals.night}`}/><Stat label="Kontrol Bekleyen" value={weeklyPending} hint={weeklyPending ? "İnceleme gerekli" : "Kontroller tamam"}/><Stat label="Ödeme Bekleyen" value={openPaymentMetrics.people} hint={money(openPaymentMetrics.amount)}/><Stat label="Dönem Toplamı" value={weeklyFinancialReady ? money(weeklyTotals.total) : "Doğrulanıyor"} hint={`Ödenen ${dashboardPaidAmount === null ? "Doğrulanamadı" : money(dashboardPaidAmount)}`}/></div>
         <div className="gop-dashboard-grid">
           <section className="gop-dashboard-main"><div className="gop-section-title"><div><strong>Günlük Durum</strong><span>Seçili aralıktaki son 7 gün</span></div><span className="gop-live-chip">● Canlı senkron</span></div><div className="gop-dashboard-days">{dashboardDays.length ? dashboardDays.map((item) => <article key={item.date}><div><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${item.date}T12:00:00`))}</small><strong>{dateText(item.date, true)}</strong></div><dl><div className="day"><dt>Gündüz</dt><dd>{item.dayCount}</dd></div><div className="night"><dt>Gece</dt><dd>{item.nightCount}</dd></div><div><dt>Personel</dt><dd>{item.people}</dd></div></dl><b>{money(item.total)}</b></article>) : <Empty>Bu aralıkta günlük kayıt yok.</Empty>}</div></section>
           <aside className="gop-dashboard-side"><div className="gop-section-title"><div><strong>Yönetici Bilgilendirme</strong><span>Öncelikli kontrol noktaları</span></div></div><div className="gop-alert-list">{dashboardWarnings.length ? dashboardWarnings.map((warning, index) => <div key={index} className="warn">{warning}</div>) : <div className="ok">Bu dönem için kritik uyarı yok.</div>}</div><div className="gop-dashboard-mini"><div><span>Aktif personel</span><b>{employees.filter((person) => person.active !== false).length}</b></div><div><span>Ödenen personel</span><b>{periodPaymentStatus.paid}</b></div><div><span>Bekleyen tutar</span><b>{money(openPaymentMetrics.amount)}</b></div></div></aside>
         </div>
         <div className="gop-dashboard-details">
           <details open={dashboardOpen === "roles"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "roles" : "")}><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.length ? roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>) : <Empty>Kayıt yok.</Empty>}</div></details>
-          <details open={dashboardOpen === "payments"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "payments" : "")}><summary>Maliyet & Ödeme <span>{money(rangeTotals.total)}</span></summary><div className="gop-cost-overview"><div><span>Gündüz vardiya</span><b>{rangeTotals.day}</b></div><div><span>Gece vardiya</span><b>{rangeTotals.night}</b></div><div><span>Dönem toplamı</span><b>{money(rangeTotals.total)}</b></div><div><span>Ödeme bekleyen</span><b>{money(openPaymentMetrics.amount)}</b></div></div></details>
+          <details open={dashboardOpen === "payments"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "payments" : "")}><summary>Maliyet & Ödeme <span>{weeklyFinancialReady ? money(weeklyTotals.total) : "Doğrulanıyor"}</span></summary><div className="gop-cost-overview"><div><span>Gündüz vardiya</span><b>{rangeTotals.day}</b></div><div><span>Gece vardiya</span><b>{rangeTotals.night}</b></div><div><span>Dönem net hakediş</span><b>{weeklyFinancialReady ? money(weeklyTotals.total) : "Doğrulanıyor"}</b></div><div><span>Ödeme bekleyen</span><b>{money(openPaymentMetrics.amount)}</b></div></div></details>
           <details open={dashboardOpen === "recent"} onToggle={(e) => setDashboardOpen(e.currentTarget.open ? "recent" : "")}><summary>Son Kayıtlar <span>{recentOperations.length}</span></summary><div className="gop-recent-list">{recentOperations.length ? recentOperations.map((row, index) => { const person = employeeMap.get(rowEmployeeId(row)); return <div key={`${rowEmployeeId(row)}-${rowDate(row)}-${index}`}><span><strong>{person?.name || row.name || row.fullName || "Personel"}</strong><small>{dateText(rowDate(row))}</small></span><b>{rowDay(row) ? "G" : ""}{rowDay(row) && rowNight(row) ? " + " : ""}{rowNight(row) ? "N" : ""}</b><em>{dateTimeText(row.updatedAt || row.createdAt)}</em></div>; }) : <Empty>Kayıt yok.</Empty>}</div></details>
         </div>
       </div> : null}
@@ -1783,7 +1827,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </section>
       </div> : null}
 
-      {view === "daily-weekly" && !weeklyFinancialReady ? <div className="gop-error" role="status">{weeklyLoadError || "Haftalık ek ödeme/kesinti ve net tutarlar D1 üzerinden doğrulanıyor. Çıktı ve Excel bu sırada kapalı."}</div> : null}
+      {view === "daily-weekly" && !weeklyFinancialReady ? <div className="gop-error" role="status">{weeklyReconciliation.error || weeklyLoadError || "Haftalık ek ödeme/kesinti ve net tutarlar D1 üzerinden doğrulanıyor. Çıktı ve Excel bu sırada kapalı."}</div> : null}
       {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyFinancialReady || !weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Çalışma Tutarı" value={weeklyFinancialReady ? money(weeklyTotals.base) : "Doğrulanıyor"}/><Stat label="Ek Ödeme (+)" value={weeklyFinancialReady ? money(weeklyTotals.additions) : "—"}/><Stat label="Kesinti (-)" value={weeklyFinancialReady ? money(weeklyTotals.deductions) : "—"}/><Stat label="Net Toplam" value={weeklyFinancialReady ? money(weeklyTotals.total) : "—"}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü · ✓ Onaylandı · • Kontrol bekliyor · – Kayıt yok.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Ek (+)</th><th>Kesinti (-)</th><th>Net Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? (cell.dayChecked ? "on day is-reviewed" : "on day is-pending") : ""} title={cell.day ? (cell.dayChecked ? "Gündüz kontrol edildi" : "Gündüz kontrol bekliyor") : "Gündüz kayıt yok"}>G{cell.day ? (cell.dayChecked ? "✓" : "•") : "–"}</span><span className={cell.night ? (cell.nightChecked ? "on night is-reviewed" : "on night is-pending") : ""} title={cell.night ? (cell.nightChecked ? "Gece kontrol edildi" : "Gece kontrol bekliyor") : "Gece kayıt yok"}>N{cell.night ? (cell.nightChecked ? "✓" : "•") : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>+{weeklyFinancialReady ? money(row.additions) : "—"}</strong></td><td className="money"><strong>−{weeklyFinancialReady ? money(row.deductions) : "—"}</strong></td><td className="money"><strong>{weeklyFinancialReady ? money(row.totalAmount) : "—"}</strong></td></tr>) : <tr><td colSpan={days.length + 6}><Empty>Seçili dönemde çalışma veya ek işlem kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
 
       {view === "daily-payments" ? <div className="gop-payments-v2">
