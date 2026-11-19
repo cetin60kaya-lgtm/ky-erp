@@ -1,4 +1,10 @@
 # KY ERP — PROJE KONTROL MERKEZİ
+
+## 19.11.2026 — Gmail OAuth projesi Drive'dan ayrıldı, 0 hesap teşhisi eklendi
+- Gmail ayrı `GOOGLE_MAIL_CLIENT_ID` / `GOOGLE_MAIL_CLIENT_SECRET` olmadan Drive OAuth istemcisine otomatik geri düşmez; mevcut Drive / Firebase kimlik bilgileri korunur. Mail projesine ait ayrı Web OAuth istemcisi Cloudflare'da doğrulanmalıdır.
+- “0 posta kutusu” görünmesi hesap silinmesi kanıtı değildir. Yetkili uygulama sahibi için firma kapsamındaki kayıt sayılarını ve diğer Gmail firma kapsamlarını okuyacak salt okunur denetim eklendi; otomatik hesap oluşturma/taşıma/silme yok.
+- Belge: [KY_ERP_GMAIL_TAM_SENKRON_20261119.md](KY_ERP_GMAIL_TAM_SENKRON_20261119.md). Test, canonical merge, Cloudflare deploy, secrets eşleşmesi, gerçek OAuth ve 15/15 senkron ayrı kabul edilir.
+
 ## 19.11.2026 — Gmail 0/15 OAuth yenileme hatası
 - Gerçek kullanıcı ekranında `Gmail oturum anahtarı yenilenemedi; bağlantı kontrolü gerekli` görüldü. Firma bazlı E-Posta Yönetim Merkezi kullanılıyor; gerçek Gmail tam kabulü yok.
 - Aynı Gmail hesabının güvenli Google yeniden yetkilendirmesi ve eksik/iptal refresh token ayrımı düzenlendi. OAuth callback yeni refresh token olmadan mevcut ciphertext'i değiştirmez. Onay ve mail arşivi korunur.
