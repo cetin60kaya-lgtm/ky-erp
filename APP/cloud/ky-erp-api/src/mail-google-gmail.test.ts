@@ -311,3 +311,23 @@ test("Mail readiness requires both full Gmail archive and live history checkpoin
   assert.match(ui,/Şimdi Tara \(isteğe bağlı\)/);
   assert.match(ui,/window\.setInterval/);
 });
+
+test("Gmail cron treats a failed page as ERROR, does not report a false zero-message success",()=>{
+  const source=read("./mail-google-gmail.ts");
+  assert.match(source,/if\(result\.folders\.some\(\(folder:any\)=>!folder\.ok\)\)/);
+  assert.match(source,/await record\(reason,\{processed,completed,total,lastFolder,stage\}\)/);
+  assert.match(source,/reason:code\|\|""/);
+  assert.match(source,/gmailSafeFailure\(error\)/);
+  assert.match(source,/lastError=failed\?/);
+  assert.doesNotMatch(source,/lastError=errorText\|\| \(failed\?failed\+" mesaj işlenemedi\.":"SYNC_PENDING_PAGINATION"\)/);
+});
+test("Gmail UI exposes verified error state and stops calling bad pages 'automatic success'",()=>{
+  const core=read("./mail-communication-core.ts");
+  const page=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
+  assert.match(core,/gmailAutoFailureReason/);
+  assert.match(core,/gmailAutoStage/);
+  assert.match(core,/gmailPageFailureReason/);
+  assert.match(core,/SYNC_PENDING_PAGINATION/);
+  assert.match(page,/gmailAutoStatus === "ERROR"/);
+  assert.match(page,/Gmail otomatik senkronizasyonu ilerleyemedi/);
+});
