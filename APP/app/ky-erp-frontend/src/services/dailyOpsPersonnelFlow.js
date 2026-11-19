@@ -12,12 +12,20 @@ export function dailyRosterIds(payload) {
 
 export async function persistDailyRosterMember({
   employeeId, mainCompanyId, startDate, endDate, localIds = [],
-  readRoster, writeRoster,
+  readRoster, writeRoster, addRoster,
 }) {
   const id = String(employeeId || "").trim();
   if (!id || !mainCompanyId || !startDate || !endDate)
     throw new Error("Personel veya tarih aralığı eksik; dönem kaydı yapılamadı.");
   const params = { mainCompanyId, startDate, endDate };
+  // Tek POST: sunucu hedef üyeyi ekler ve D1'den tekrar okuyarak doğrular.
+  // Önce GET + POST + tekrar GET zinciri yüksek gecikme oluşturuyordu.
+  if (typeof addRoster === "function") {
+    const confirmed = dailyRosterIds(await addRoster({ ...params, mode: "add", addEmployeeId: id }));
+    if (!confirmed.includes(id))
+      throw new Error("Sunucu personelin dönem havuzuna kaydedildiğini doğrulamadı.");
+    return new Set(confirmed);
+  }
   const existing = dailyRosterIds(await readRoster(params));
   const requested = [...new Set([...existing, ...localIds].map((value) => String(value || "").trim()).filter(Boolean))];
   if (!requested.includes(id)) requested.push(id);
