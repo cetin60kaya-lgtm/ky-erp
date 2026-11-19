@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { mailProviderRegistry, normalizeMailProvider } from "./mail-connection-broker.ts";
+import { gmailOAuthClientReadiness } from "./mail-google-client-boundary.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -41,8 +42,9 @@ function runtime(c:any,provider:unknown){
     return{configured:Boolean(vault&&id&&secret),adapterReady:true,reason:vault&&id&&secret?"":"Microsoft Graph OAuth production ayarı eksik."};
   }
   if(p==="GMAIL"){
-    const id=text(c.env.GOOGLE_MAIL_CLIENT_ID||c.env.GOOGLE_DRIVE_CLIENT_ID),secret=text(c.env.GOOGLE_MAIL_CLIENT_SECRET||c.env.GOOGLE_DRIVE_CLIENT_SECRET);
-    return{configured:Boolean(vault&&id&&secret),adapterReady:true,reason:vault&&id&&secret?"":"Google OAuth / Gmail API production ayarı eksik."};
+    const gmail=gmailOAuthClientReadiness(c.env),configured=Boolean(vault&&gmail.configured);
+    return{configured,adapterReady:true,configurationMode:gmail.configurationMode,
+      reason:configured?"":!vault?"Güvenli Mail OAuth kasası yapılandırılmamış.":gmail.reason};
   }
   return{configured:false,adapterReady:false,reason:"Bu sağlayıcının KY ERP bağlantı adapterı henüz aktif değil."};
 }
