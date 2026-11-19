@@ -116,3 +116,12 @@ test("exact roster remains independent; empty range exposes other saved ranges w
   assert.doesNotMatch(roster, /INSERT INTO hr_daily_range_roster/);
   assert.doesNotMatch(roster, /DELETE FROM hr_daily_range_roster/);
 });
+
+
+test("public API health advertises non-sensitive daily operation release capabilities", () => {
+  const source = readFileSync(new URL("./index.ts", import.meta.url), "utf8");
+  assert.match(source, /dailyRosterPersistence: "d1-verified-single-request-v1"/);
+  assert.match(source, /dailyRosterRangeRecovery: "saved-range-chooser-v1"/);
+  assert.match(source, /dailyWageEngine: "effective-dated-ledger-v1"/);
+  assert.match(source, /dailyPrintIntegrity: "d1-day-night-net-v1"/);
+});

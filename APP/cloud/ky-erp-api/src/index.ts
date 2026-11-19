@@ -1109,7 +1109,19 @@ async function buildDispatchControl(c: Context<AppEnv>) {
 }
 
 app.get("/api/health", (c) =>
-  c.json({ ok: true, service: "ky-erp-api", database: "d1", release: "accounting-write-hotfix-20260923" }),
+  c.json({
+    ok: true,
+    service: "ky-erp-api",
+    database: "d1",
+    release: "accounting-write-hotfix-20260923",
+    // Safe public markers for deployment verification, not tenant data.
+    capabilities: {
+      dailyRosterPersistence: "d1-verified-single-request-v1",
+      dailyRosterRangeRecovery: "saved-range-chooser-v1",
+      dailyWageEngine: "effective-dated-ledger-v1",
+      dailyPrintIntegrity: "d1-day-night-net-v1",
+    },
+  }),
 );
 
 // Public read-only fixed-target diagnostic, not an authentication or SSRF endpoint.
