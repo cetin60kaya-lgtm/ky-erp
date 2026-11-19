@@ -6,6 +6,7 @@ import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
 import { gmailCanonicalLabel, gmailReadPageToken, gmailSyncPageState, GMAIL_PAGE_SIZE, GMAIL_FOLDERS_PER_PASS } from "./mail-gmail-sync-cursor.ts";
 import { gmailOAuthClientReadiness } from "./mail-google-client-boundary.ts";
 import { gmailHistoryCursor, gmailHistoryQueuePage, gmailHistoryAdvance } from "./mail-gmail-history-cursor.ts";
+import { gmailSafeStage, gmailSafeFailure } from "./mail-gmail-diagnostics.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -464,7 +465,7 @@ async function syncGmailAccountStep(c:any,tenant:string,account:AnyRow,actorId="
       url.searchParams.set("labelIds",labelId);
       if(["SPAM","TRASH"].includes(labelId))url.searchParams.set("includeSpamTrash","true");
       if(pageToken)url.searchParams.set("pageToken",pageToken);
-      let count=0,failed=0,nextPageToken="",errorText="";const failures:any[]=[];
+      let count=0,failed=0,nextPageToken="",errorText="",safeErrorCode="";const failures:any[]=[];
       try{
         const list=(await googleJson(url.toString(),token)).payload;
         nextPageToken=text(list.nextPageToken);
@@ -475,23 +476,23 @@ async function syncGmailAccountStep(c:any,tenant:string,account:AnyRow,actorId="
             await persistMessage(c,tenant,account,folderMap.get(primary)||folder,full,"AUTO");
             count++;
           }catch(error:any){
-            failed++;
-            if(failures.length<5)failures.push({providerMessageId:text(item.id),error:text(error?.message)||"Mesaj işlenemedi."});
+            failed++;safeErrorCode=gmailSafeFailure(error);
+            if(failures.length<5)failures.push({code:safeErrorCode});
           }
         }
       }catch(error:any){
-        failed++;errorText=text(error?.message)||"Gmail sayfası okunamadı.";
+        failed++;safeErrorCode=gmailSafeFailure(error);errorText="Gmail sağlayıcı sayfası okunamadı.";
       }
       const pageState=gmailSyncPageState(previous,nextPageToken,failed);
       const done=pageState.complete,checkpoint=pageState.cursor;
-      const ts=nowIso(),lastError=errorText|| (failed?failed+" mesaj işlenemedi.":"SYNC_PENDING_PAGINATION");
+      const ts=nowIso(),lastError=failed?(errorText?"GMAIL_PAGE_REQUEST_FAILED":"GMAIL_MESSAGE_PERSIST_FAILED"):"";
       onStage("CURSOR_CHECKPOINT");
       await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
         .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_PAGE",checkpoint,ts,done?ts:null,done?"":lastError,ts).run();
       if(done)successfulFolders++;
       total+=count;
       onStage("GMAIL_PAGES");
-      summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,completed:done,pending:Boolean(nextPageToken)||!done,failures,...(errorText?{error:errorText}:{})});
+      summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,completed:done,pending:Boolean(nextPageToken)||!done,failures,...(failed?{errorCode:safeErrorCode||"GMAIL_MESSAGE_PERSIST_FAILED"}:{})});
     }
     onStage("SYNC_SUMMARY");
     // A 200/207 result is based on *all enabled provider labels*, not only the first INBOX/SENT page.
@@ -556,30 +557,32 @@ export async function runGmailMailScheduledSync(env:Cloudflare.Env){
       "INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) "+
       "VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) "+
       "DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_error=excluded.last_error,updated_at=excluded.updated_at"
-    ).bind(crypto.randomUUID(),tenant,account.id,folderId,"GMAIL_CRON",JSON.stringify({state:code?"ERROR":"OK",...progress}),ts,code?null:ts,code,ts).run();
+    ).bind(crypto.randomUUID(),tenant,account.id,folderId,"GMAIL_CRON",JSON.stringify({state:code?"ERROR":"OK",reason:code||"",...progress}),ts,code?null:ts,code,ts).run();
   };
+  let stage="GMAIL_TOKEN";
   try{
     let processed=0,completed=0,total=0,steps=0,partial=true,lastFolder="";
     for(let i=0;i<1;i++){
-      const result=await syncGmailAccountStep(c,tenant,account);
+      const result=await syncGmailAccountStep(c,tenant,account,"",(value)=>{stage=gmailSafeStage(value);});
       steps++;processed+=Number(result.total||0);
       completed=result.completedFolders;total=result.totalFolders;partial=result.partial;
       lastFolder=text(result.folders?.[0]?.name)||lastFolder;
-      if(result.fatal){
-        await record("GMAIL_PAGE_FAILED",{processed,completed,total,lastFolder});
-        return {accountCount:1,processed,steps,completed,total,partial:true,failed:true,reason:"GMAIL_PAGE_FAILED"};
+      if(result.folders.some((folder:any)=>!folder.ok)){
+        const reason=text(result.folders.find((folder:any)=>!folder.ok)?.errorCode)||"GMAIL_PAGE_FAILED";
+        await record(reason,{processed,completed,total,lastFolder,stage});
+        return {accountCount:1,processed,steps,completed,total,partial:true,failed:true,reason};
       }
-      if(!partial||!result.folders.length||result.folders.some((folder:any)=>!folder.ok))break;
+      if(!partial||!result.folders.length)break;
       if(Number(result.total||0)===0&&!result.folders.some((folder:any)=>folder.completed))break;
     }
-    await record("",{processed,completed,total,lastFolder});
+    await record("",{processed,completed,total,lastFolder,stage});
     return {accountCount:1,processed,steps,completed,total,partial};
   }catch(error:any){
-    // A failed account is retried after 15 minutes; other tenants remain eligible.
-    const code=["MAIL_REAUTH_REQUIRED","GOOGLE_MAIL_CONFIG_MISSING","GOOGLE_TOKEN_FAILED"].includes(text(error?.code))
-      ?text(error.code):"GMAIL_AUTO_SYNC_FAILED";
-    await record(code).catch(()=>{});
-    return {accountCount:1,processed:0,failed:true,reason:code};
+    // Secure failure classification; no provider messages, credentials, IDs or
+    // email addresses leak to the company mail account status.
+    const reason=gmailSafeFailure(error);
+    await record(reason,{stage:gmailSafeStage(stage)}).catch(()=>{});
+    return {accountCount:1,processed:0,failed:true,reason};
   }
 }
 
