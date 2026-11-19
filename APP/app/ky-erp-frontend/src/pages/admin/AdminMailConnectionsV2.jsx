@@ -98,10 +98,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     setLoading(false);
   }, [slug]);
 
-  useEffect(() => {
-    setTab("accounts");setFilter("");setEditingId("");setForm(INITIAL_FORM);
-    load();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   const providerState = (type) => providers.find((item) => upper(item.provider) === upper(type)) || null;
   const counts = useMemo(() => ({
