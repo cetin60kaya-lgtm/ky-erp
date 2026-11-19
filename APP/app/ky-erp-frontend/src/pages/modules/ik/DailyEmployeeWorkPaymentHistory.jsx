@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { getDailyEmployeeWorkPaymentHistory } from "../../../services/dailyOpsApi";
 import "./daily-employee-work-history.css";
@@ -22,19 +22,25 @@ export default function DailyEmployeeWorkPaymentHistory({ employeeId, companyId,
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const latestRequest = useRef(0);
   const load = useCallback(async (quiet = false) => {
     if (!employeeId || !companyId || !dates.start || !dates.end || dates.end < dates.start) return;
-    if (!quiet) setLoading(true);
+    const requestId = ++latestRequest.current;
+    if (!quiet) { setLoading(true); setData(null); }
     try {
       const result = await getDailyEmployeeWorkPaymentHistory(employeeId, {
         mainCompanyId: companyId,
         startDate: dates.start, endDate: dates.end,
       }, { forceFresh: true });
-      setData(result); setError("");
+      if (latestRequest.current === requestId) { setData(result); setError(""); }
     } catch (cause) {
-      setData(null);
-      setError(cause?.message || "Personel geçmişi doğrulanamadı.");
-    } finally { if (!quiet) setLoading(false); }
+      if (latestRequest.current === requestId) {
+        setData(null);
+        setError(cause?.message || "Personel geçmişi doğrulanamadı.");
+      }
+    } finally {
+      if (latestRequest.current === requestId && !quiet) setLoading(false);
+    }
   }, [companyId, dates.end, dates.start, employeeId]);
 
   useEffect(() => {
@@ -52,14 +58,14 @@ export default function DailyEmployeeWorkPaymentHistory({ employeeId, companyId,
       ? new window.BroadcastChannel("kyerp.dailyOperations.live.v1") : null;
     channel?.addEventListener("message", onMutation);
     return () => {
-      current = false; window.clearInterval(interval);
+      current = false; latestRequest.current += 1; window.clearInterval(interval);
       window.removeEventListener("focus", onFocus);
       channel?.removeEventListener("message", onMutation); channel?.close();
     };
   }, [load]);
 
   const choose = (next) => {
-    setMode(next);
+    setMode(next); setData(null);
     if (next === "six") setDates({start:monthsBefore(today,6),end:today});
     else if (next === "year") setDates({start:monthsBefore(today,12),end:today});
     else if (next === "all") setDates({start:"1900-01-01",end:today});
@@ -74,8 +80,8 @@ export default function DailyEmployeeWorkPaymentHistory({ employeeId, companyId,
           <option value="custom">Özel Aralık</option>
         </select>
       </label>
-      <label>Başlangıç<input type="date" value={dates.start} onChange={e=>{setMode("custom");setDates(s=>({...s,start:e.target.value}));}}/></label>
-      <label>Bitiş<input type="date" value={dates.end} onChange={e=>{setMode("custom");setDates(s=>({...s,end:e.target.value}));}}/></label>
+      <label>Başlangıç<input type="date" value={dates.start} onChange={e=>{setMode("custom");setData(null);setDates(s=>({...s,start:e.target.value}));}}/></label>
+      <label>Bitiş<input type="date" value={dates.end} onChange={e=>{setMode("custom");setData(null);setDates(s=>({...s,end:e.target.value}));}}/></label>
       <button type="button" onClick={()=>void load()} disabled={loading || !dates.start || dates.end < dates.start}><RefreshCw size={14}/> Yenile</button>
     </div>
     <p className="ky-person-history-description">Çalışma/hakediş çalışma tarihine göre, yapılan ödemeler ödeme tarihine göre gösterilir. Kaydedilmiş personel kimliği esas alınır.</p>
