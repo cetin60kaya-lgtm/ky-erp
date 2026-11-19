@@ -68,7 +68,13 @@ async function tokenPost(c:any,values:Record<string,string>){
   const cfg=clientConfig(c);
   const response=await fetch(TOKEN,{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded","Accept":"application/json"},body:new URLSearchParams({...values,client_id:cfg.clientId,client_secret:cfg.clientSecret})});
   const payload=await response.json().catch(()=>({})) as AnyRow;
-  if(!response.ok||!text(payload.access_token))throw Object.assign(new Error(text(payload.error_description||payload.error)||"Google token isteği reddedildi."),{code:"GOOGLE_TOKEN_FAILED",status:response.status});
+  if(!response.ok||!text(payload.access_token)){
+    // Only bounded Google error codes may leave the adapter; provider descriptions
+    // and OAuth secrets are never written to logs or error responses.
+    const reason=text(payload.error);
+    const providerCode=["invalid_grant","invalid_client","unauthorized_client","invalid_request","temporarily_unavailable"].includes(reason)?reason:"unknown";
+    throw Object.assign(new Error("Google OAuth token yanıtı doğrulanamadı."),{code:"GOOGLE_TOKEN_FAILED",status:response.status,providerCode});
+  }
   return payload;
 }
 async function googleJson(url:string,accessToken:string,init:RequestInit={}){
@@ -102,14 +108,38 @@ async function saveCredential(c:any,tenant:string,accountId:string,value:AnyRow,
   await c.env.DB.prepare("INSERT INTO mail_account_credentials(account_id,main_company_slug,ciphertext,nonce,key_version,provider_metadata,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(account_id) DO UPDATE SET main_company_slug=excluded.main_company_slug,ciphertext=excluded.ciphertext,nonce=excluded.nonce,key_version=excluded.key_version,provider_metadata=excluded.provider_metadata,updated_at=excluded.updated_at")
     .bind(accountId,tenant,sealed.ciphertext,sealed.nonce,sealed.keyVersion,JSON.stringify(metadata||{}),ts).run();
 }
+async function markGmailReconnectRequired(c:any,tenant:string,accountId:string,reason:string){
+  // The account and encrypted credential row are retained. Do not revoke or
+  // delete the mailbox, attachments, sent history or company approval.
+  await c.env.DB.prepare("UPDATE mail_accounts SET status='REAUTH_REQUIRED',provider_connected=0,updated_at=? WHERE id=? AND main_company_slug=?")
+    .bind(nowIso(),accountId,tenant).run();
+  await audit(c,tenant,"",accountId,"MAIL_GOOGLE_REAUTH_REQUIRED",{reason});
+}
 async function usableToken(c:any,tenant:string,account:AnyRow){
   const packed=await credentialRow(c,tenant,text(account.id));
-  if(!packed)throw Object.assign(new Error("Gmail bağlantı anahtarı bulunamadı."),{code:"MAIL_REAUTH_REQUIRED"});
+  if(!packed){
+    await markGmailReconnectRequired(c,tenant,text(account.id),"CREDENTIAL_MISSING");
+    throw Object.assign(new Error("Gmail yetkisinin tekrar onaylanması gerekiyor."),{code:"MAIL_REAUTH_REQUIRED"});
+  }
   let cred=packed.credential;
   const expires=Date.parse(text(cred.expiresAt));
-  if(Number.isFinite(expires)&&expires>Date.now()+120000)return{text:cred.accessToken,credential:cred};
-  if(!text(cred.refreshToken))throw Object.assign(new Error("Google yenileme anahtarı bulunamadı; hesabı yeniden bağlayın."),{code:"MAIL_REAUTH_REQUIRED"});
-  const payload=await tokenPost(c,{grant_type:"refresh_token",refresh_token:text(cred.refreshToken)});
+  if(text(cred.accessToken)&&Number.isFinite(expires)&&expires>Date.now()+120000)return{text:cred.accessToken,credential:cred};
+  if(!text(cred.refreshToken)){
+    await markGmailReconnectRequired(c,tenant,text(account.id),"REFRESH_TOKEN_MISSING");
+    throw Object.assign(new Error("Gmail yenileme izni bulunamadı."),{code:"MAIL_REAUTH_REQUIRED"});
+  }
+  let payload:AnyRow;
+  try{
+    payload=await tokenPost(c,{grant_type:"refresh_token",refresh_token:text(cred.refreshToken)});
+  }catch(error:any){
+    if(text(error?.providerCode)==="invalid_grant"){
+      await markGmailReconnectRequired(c,tenant,text(account.id),"REFRESH_GRANT_INVALID");
+      throw Object.assign(new Error("Google yenileme izni geçersiz; aynı Gmail hesabının yeniden yetkilendirilmesi gerekiyor."),{code:"MAIL_REAUTH_REQUIRED"});
+    }
+    // invalid_client, Google 5xx and transient network errors must not erase
+    // a potentially valid account or be misclassified as a revoked grant.
+    throw error;
+  }
   cred={...cred,accessToken:text(payload.access_token),refreshToken:text(payload.refresh_token)||text(cred.refreshToken),expiresAt:new Date(Date.now()+Math.max(60,Number(payload.expires_in||3600))*1000).toISOString(),scope:text(payload.scope)||text(cred.scope),tokenType:text(payload.token_type)||"Bearer"};
   await saveCredential(c,tenant,text(account.id),cred,{provider:"GMAIL",refreshedAt:nowIso()});
   return{text:cred.accessToken,credential:cred};
@@ -311,6 +341,10 @@ export function registerGoogleMailRoutes(app:any){
       const payload=await tokenPost(c,{grant_type:"authorization_code",code,redirect_uri:CALLBACK,code_verifier:verifier});
       const accessToken=text(payload.access_token),profile=(await googleJson(USERINFO,accessToken)).payload,connectedEmail=text(profile.email).toLowerCase(),mailbox=text(row.email_address).toLowerCase();
       if(!connectedEmail||connectedEmail!==mailbox)return fail("Seçilen Google hesabı talep edilen posta kutusuyla eşleşmiyor.","GOOGLE_ACCOUNT_MISMATCH");
+      // Consent alone is insufficient: without an offline refresh grant the
+      // next scheduled token expiry would immediately break this connection.
+      // Reject before overwriting any existing encrypted working credential.
+      if(!text(payload.refresh_token))return fail("Google kalıcı yenileme izni vermedi. Hesap yetkisini Google ekranından tekrar onaylayın.","GOOGLE_REFRESH_TOKEN_MISSING");
       await googleJson(GMAIL+"/profile",accessToken);
       const cred={accessToken,refreshToken:text(payload.refresh_token),expiresAt:new Date(Date.now()+Math.max(60,Number(payload.expires_in||3600))*1000).toISOString(),scope:text(payload.scope)||SCOPES,tokenType:text(payload.token_type)||"Bearer",connectedUserId:text(profile.sub)||connectedEmail,connectedEmail,mailboxAddress:mailbox};
       await saveCredential(c,text(row.main_company_slug),text(row.account_id),cred,{provider:"GMAIL",connectedEmail,mailboxAddress:mailbox});
@@ -426,14 +460,16 @@ export function registerGoogleMailRoutes(app:any){
     return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,completedFolders,totalFolders,discoveredFolders:labels.length,warning:partial?"Gmail klasör sayfalaması henüz bitmedi; 'Senkronize Et' ile kaldığı yerden devam edin.":""}},partial?207:200);
     }catch(error:any){
       const providerCode=text(error?.code)||"UNEXPECTED",upstreamStatus=Number(error?.status||0);
-      const reauth=providerCode==="MAIL_REAUTH_REQUIRED"||providerCode==="GOOGLE_TOKEN_FAILED";
+      const reauth=providerCode==="MAIL_REAUTH_REQUIRED";
+      const providerSetup=providerCode==="GOOGLE_MAIL_CONFIG_MISSING"||
+        (providerCode==="GOOGLE_TOKEN_FAILED"&&["invalid_client","unauthorized_client"].includes(text(error?.providerCode)));
       const rateLimited=upstreamStatus===429;
       // No OAuth secrets, raw Gmail payloads, addresses, or message bodies in logs.
       console.error(JSON.stringify({code:"GMAIL_SYNC_STAGE_FAILURE",stage,providerCode}));
-      const code=reauth?"GMAIL_REAUTH_REQUIRED":rateLimited?"GMAIL_RATE_LIMITED":"GMAIL_SYNC_STEP_FAILED";
-      const message=reauth?"Gmail oturum anahtarı yenilenemedi; bağlantı kontrolü gerekli."
+      const code=reauth?"GMAIL_REAUTH_REQUIRED":providerSetup?"GMAIL_PROVIDER_CONFIG_REQUIRED":rateLimited?"GMAIL_RATE_LIMITED":"GMAIL_SYNC_STEP_FAILED";
+      const message=reauth?"Gmail bağlantısının yenileme izni geçersiz. Aynı hesaptaki Yeniden Bağla düğmesiyle Google iznini tekrar onaylayın.":providerSetup?"Gmail sağlayıcısının OAuth uygulama ayarları kontrol edilmeli; hesabı silmeyin."
         :rateLimited?"Gmail istek limiti doldu; ilerleme korunuyor."
-        :"Gmail senkronizasyonu "+stage+" aşamasında durdu; ilerleme korunuyor, hesabı sıfırlamayın.";
+        :"Gmail senkronizasyonu "+stage+" aşamasında durdu; mevcut hesap ve ilerleme korunuyor.";
       return c.json(err(code,message,{stage}),reauth?409:rateLimited?429:503);
     }
   });

@@ -1,4 +1,10 @@
 # KY ERP — PROJE KONTROL MERKEZİ
+## 19.11.2026 — Gmail 0/15 OAuth yenileme hatası
+- Gerçek kullanıcı ekranında `Gmail oturum anahtarı yenilenemedi; bağlantı kontrolü gerekli` görüldü. Firma bazlı E-Posta Yönetim Merkezi kullanılıyor; gerçek Gmail tam kabulü yok.
+- Aynı Gmail hesabının güvenli Google yeniden yetkilendirmesi ve eksik/iptal refresh token ayrımı düzenlendi. OAuth callback yeni refresh token olmadan mevcut ciphertext'i değiştirmez. Onay ve mail arşivi korunur.
+- Kaynak: [KY_ERP_GMAIL_TAM_SENKRON_20261119.md](KY_ERP_GMAIL_TAM_SENKRON_20261119.md). Kod, otomatik test, yayın ve gerçek Google consent ayrı kanıtlanır.
+
+
 
 ## 19.11.2026 — Gmail gerçek kullanıcı ekranı: 0/15 klasör; sayfalı ilk arşiv senkron düzeltmesi
 - Firma bazlı E-Posta Yönetim Merkezi (PR #599) gerçek tarayıcıda açıldı; 4 sekmeli tasarım ve DESEN Gmail kartı kontrol edildi. Onay/OAuth/provider hazır, fakat **0/15 klasör**, **0 hazır hesap**: Gmail arşivi kabulü henüz PASS değil.
