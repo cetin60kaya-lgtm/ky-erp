@@ -19,6 +19,14 @@ const bytes = (value) => {
 export function isMobilePasskeySupported() {
   return Boolean(window.isSecureContext && window.PublicKeyCredential && navigator.credentials?.create && navigator.credentials?.get);
 }
+// Both Windows Hello and phone platform authenticators are supported.
+// The operating system selects fingerprint/face/PIN; the browser never reads the biometric.
+export async function hasPlatformPasskeyAuthenticator() {
+  if (!isMobilePasskeySupported()) return false;
+  if (typeof window.PublicKeyCredential?.isUserVerifyingPlatformAuthenticatorAvailable !== "function") return false;
+  try { return Boolean(await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()); }
+  catch { return false; }
+}
 export function isMobileAppPage() {
   const standalone = window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone === true;
   return Boolean(standalone || /Android|iPhone|iPad|iPod|Mobile/i.test(String(navigator.userAgent || "")));
