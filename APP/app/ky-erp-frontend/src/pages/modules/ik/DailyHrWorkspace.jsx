@@ -36,6 +36,7 @@ import {
   voidDailyPaymentAdjustment,
   getDailyPeriodPaymentStatus,
   getDailyPeriodLock,
+  getDailyActiveRange,
   getDailyRoster,
   getDailyRevisions,
   getDailySyncState,
@@ -44,6 +45,7 @@ import {
   createDailyPayment,
   previewDailyExcel,
   saveDailyFocusedRecords,
+  saveDailyActiveRange,
   saveDailyRoster,
   setDailyPeriodLock,
   updateDailyEmployee,
@@ -433,6 +435,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [notes, setNotes] = useState({});
   const [rosterIds, setRosterIds] = useState(() => new Set());
   const [rosterSaved, setRosterSaved] = useState(false);
+  const [sharedRangeReady, setSharedRangeReady] = useState(false);
+  const [sharedRangeConfigured, setSharedRangeConfigured] = useState(false);
+  const [sharedRangeError, setSharedRangeError] = useState("");
+  const [sharedRangeSaving, setSharedRangeSaving] = useState(false);
   const [addingPersonId, setAddingPersonId] = useState("");
   const [summaryRows, setSummaryRows] = useState([]);
   const [weeklyReadScope, setWeeklyReadScope] = useState("");
@@ -504,6 +510,10 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [syncError, setSyncError] = useState("");
   const liveVersionRef = useRef("");
   const dailyRangeRef = useRef(range);
+  const sharedVersionRef = useRef(0);
+  const sharedCompanyRef = useRef(companyId);
+  const sharedReadyRef = useRef(false);
+  const sharedSavingRef = useRef(false);
   const livePollBusyRef = useRef(false);
   const rangeRequestRef = useRef(0);
   const focusedRequestRef = useRef(0);
@@ -521,8 +531,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     focusedScope: focusedReadScope, requiredFocusedScope: expectedFocusedScope,
     rangeLock: rangeLockInfo,
   };
-  const dailyWriteBlocked = Boolean(dailyWriteGate(sharedGate));
-  const rosterWriteBlocked = Boolean(dailyWriteGate({ ...sharedGate, roster: true }));
+  const dailyWriteBlocked = Boolean(dailyWriteGate(sharedGate)) || !sharedRangeReady || !sharedRangeConfigured || !!sharedRangeError;
+  const rosterWriteBlocked = Boolean(dailyWriteGate({ ...sharedGate, roster: true })) || !sharedRangeReady || !sharedRangeConfigured || !!sharedRangeError;
 
   const days = useMemo(() => rangeDays(range.start, range.end), [range.end, range.start]);
   const roleOptions = useMemo(() => {
@@ -537,49 +547,123 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const label = roleLabel(raw);
     return roleOptions.find((item) => normalizeText(item) === normalizeText(label)) || label;
   }, [roleOptions]);
-  const setSafeRange = useCallback((next) => {
-    const resolved = typeof next === "function" ? next(range) : next;
-    if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return;
-    if (rangeSpanDays(resolved.start, resolved.end) > 31) { setError("Günlük Operasyon tek seferde en fazla 31 günlük aralıkla çalışır."); return; }
-    if (!sameRange(resolved, dailyRangeRef.current)) {
-      rangeRequestRef.current += 1;
-      setRosterIds(new Set()); setRosterSaved(false);
-      setRangeReadScope(""); setWeeklyReadScope(""); setPaymentReadScope("");
-      setPeriodLockKnown(false); setPeriodLockScope("");
-    }
-    dailyRangeRef.current = resolved;
-    setRange(resolved); setPaymentPoolRange(resolved); setPaymentHistoryRange(resolved);
-    writeRange(resolved); setError("");
-    try {
-      const channel = new window.BroadcastChannel(DAILY_SYNC_CHANNEL);
-      channel.postMessage({ type: "date-range", range: resolved, companyId });
-      channel.close();
-    } catch { /* localStorage event remains a fallback */ }
-  }, [companyId, range]);
-  const setSafePaymentRange = useCallback((_target, next) => {
-    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
-    setSafeRange(resolved);
-  }, [setSafeRange]);
-
-  useEffect(() => {
-    const accept = (next) => {
-      if (!next?.start || !next?.end || rangeSpanDays(next.start, next.end) > 31 || next.end < next.start) return;
-      if (sameRange(next, dailyRangeRef.current)) return;
+  // Sunucunun firma bazlı dönem kaydı tek otoritedir. Tarayıcı yerel ayarı
+  // yalnız ilk çizim önbelleği; kayda/çıktıya yetki vermez.
+  const applyVerifiedRange = useCallback((serverRange, source = "sync") => {
+    if (!serverRange?.startDate || !serverRange?.endDate || !Number.isSafeInteger(Number(serverRange.version))) return;
+    const next = { start: serverRange.startDate, end: serverRange.endDate };
+    if (rangeSpanDays(next.start, next.end) > 31 || next.end < next.start) return;
+    sharedVersionRef.current = Number(serverRange.version);
+    sharedReadyRef.current = true;
+    setSharedRangeConfigured(true);
+    setSharedRangeReady(true); setSharedRangeError("");
+    if (!sameRange(next, dailyRangeRef.current)) {
       rangeRequestRef.current += 1;
       setRosterIds(new Set()); setRosterSaved(false);
       setRangeReadScope(""); setWeeklyReadScope(""); setPaymentReadScope("");
       setPeriodLockKnown(false); setPeriodLockScope("");
       dailyRangeRef.current = next;
       setRange(next); setPaymentPoolRange(next); setPaymentHistoryRange(next);
-      setNotice("Tarih aralığı diğer KY ERP sekmesinden güncellendi.");
+      setLogRange(next);
+      if (source === "remote") setNotice("Ortak dönem başka bilgisayarda değişti; yeni tarih aralığı D1'den yüklendi.");
+    }
+    writeRange(next);
+  }, []);
+
+  const refreshSharedRange = useCallback(async (initial = false) => {
+    if (!companyId || sharedSavingRef.current) return;
+    try {
+      const data = await getDailyActiveRange({ mainCompanyId: companyId }, { forceFresh: true });
+      if (sharedCompanyRef.current !== companyId || sharedSavingRef.current) return;
+      if (data?.configured && Number.isSafeInteger(Number(data.version))) {
+        if (Number(data.version) >= sharedVersionRef.current)
+          applyVerifiedRange(data, initial ? "initial" : "remote");
+      } else if (sharedVersionRef.current === 0) {
+        sharedReadyRef.current = true;
+        setSharedRangeReady(true); setSharedRangeConfigured(false);
+        setSharedRangeError("");
+      }
+    } catch (error) {
+      if (sharedCompanyRef.current !== companyId) return;
+      sharedReadyRef.current = false;
+      setSharedRangeReady(false);
+      setSharedRangeError(error?.message || "Ortak dönem sunucudan doğrulanamadı.");
+    }
+  }, [applyVerifiedRange, companyId]);
+
+  useEffect(() => {
+    sharedCompanyRef.current = companyId;
+    sharedVersionRef.current = 0;
+    sharedReadyRef.current = false;
+    setSharedRangeReady(false); setSharedRangeConfigured(false); setSharedRangeError("");
+    void refreshSharedRange(true);
+    // Farklı PC aynı tarayıcı kanalı üzerinden haberleşmez; D1 sürümü periyodik
+    // ve sekme yeniden odaklandığında kontrol edilir. Veri değişikliği yoktur.
+    const onFocus = () => { void refreshSharedRange(); };
+    const interval = window.setInterval(() => { if (!document.hidden) void refreshSharedRange(); }, 30000);
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onFocus);
     };
-    const onStorage = (event) => { if (event.key === RANGE_KEY && event.newValue) { try { accept(JSON.parse(event.newValue)); } catch { /* geçersiz eski tercih */ } } };
+  }, [companyId, refreshSharedRange]);
+
+  const setSafeRange = useCallback(async (next) => {
+    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
+    if (!resolved?.start || !resolved?.end || resolved.end < resolved.start) return false;
+    if (rangeSpanDays(resolved.start, resolved.end) > 31) {
+      setError("Günlük Operasyon en fazla 31 günlük aralıkla çalışır."); return false;
+    }
+    if (!sharedReadyRef.current || sharedSavingRef.current || sharedCompanyRef.current !== companyId) {
+      setError("Ortak tarih aralığı yükleniyor/kaydediliyor. Önce sunucu doğrulaması tamamlanmalı."); return false;
+    }
+    if (sharedVersionRef.current > 0 && sameRange(resolved, dailyRangeRef.current)) return true;
+    if (quick && (!sameSet(quick.ids, quick.baseline) || !sameSet(quick.checked, quick.checkedBaseline || new Set()))) {
+      setError("Hızlı Giriş'te kaydedilmemiş seçim var. Önce vardiyayı kaydedin."); return false;
+    }
+    sharedSavingRef.current = true;
+    setSharedRangeSaving(true); setError("");
+    try {
+      const saved = await saveDailyActiveRange({
+        mainCompanyId: companyId,
+        startDate: resolved.start, endDate: resolved.end,
+        expectedVersion: sharedVersionRef.current,
+      });
+      if (!saved?.configured || saved.startDate !== resolved.start || saved.endDate !== resolved.end)
+        throw new Error("Ortak dönem D1'de doğrulanamadı.");
+      applyVerifiedRange(saved, "local");
+      try {
+        const channel = new window.BroadcastChannel(DAILY_SYNC_CHANNEL);
+        channel.postMessage({ type:"date-range", range:resolved, companyId, version:saved.version });
+        channel.close();
+      } catch { /* farklı bilgisayarlar D1 sürüm sorgusunu kullanır */ }
+      setNotice(`Ortak dönem ${dateText(resolved.start)}–${dateText(resolved.end)} olarak firmaya kaydedildi.`);
+      return true;
+    } catch (error) {
+      setError(error?.message || "Tarih aralığı kaydedilemedi. Önce ortak dönemi yenileyin.");
+      void refreshSharedRange();
+      return false;
+    } finally {
+      sharedSavingRef.current = false; setSharedRangeSaving(false);
+    }
+  }, [applyVerifiedRange, companyId, quick, refreshSharedRange]);
+  const setSafePaymentRange = useCallback((_target, next) => {
+    const resolved = typeof next === "function" ? next(dailyRangeRef.current) : next;
+    void setSafeRange(resolved);
+  }, [setSafeRange]);
+
+  useEffect(() => {
+    const onMessage = (event) => {
+      const data = event.data;
+      if (data?.type === "date-range" && data.companyId === companyId &&
+        Number(data.version) > sharedVersionRef.current) void refreshSharedRange();
+    };
     const channel = typeof window.BroadcastChannel === "function" ? new window.BroadcastChannel(DAILY_SYNC_CHANNEL) : null;
-    const onMessage = (event) => { if (event.data?.type === "date-range" && event.data?.companyId === companyId) accept(event.data.range); };
-    window.addEventListener("storage", onStorage);
     channel?.addEventListener("message", onMessage);
-    return () => { window.removeEventListener("storage", onStorage); channel?.removeEventListener("message", onMessage); channel?.close(); };
-  }, [companyId]);
+    return () => { channel?.removeEventListener("message", onMessage); channel?.close(); };
+  }, [companyId, refreshSharedRange]);
 
   useEffect(() => { if (selectedDate < range.start || selectedDate > range.end) setSelectedDate(range.start); }, [range.end, range.start, selectedDate]);
 
@@ -892,7 +976,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   }, [attendance, employeeMap, range.end, range.start, summaryRows, weeklySummaryInScope]);
   const weeklyControlRows = weeklyReconciliation.rows;
-  const weeklyFinancialReady = weeklySummaryInScope
+  const weeklyFinancialReady = sharedRangeReady && sharedRangeConfigured && weeklySummaryInScope
     && rangeReadScope === expectedRangeScope
     && !rangeLoadError
     && !weeklyReconciliation.error
@@ -1231,7 +1315,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
   const selectAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set(activeRosterPeople.filter((p) => shift === "day" || personWageAtDate(p, selectedDate).night > 0).map((p) => p.id))); };
   const clearAll = () => { if (busy || dailyWriteBlocked) return; setSelectedIds(new Set()); setCheckedIds(new Set()); };
-  const thisWeek = () => { const start = startOfWeek(); setSafeRange({ start, end: addDays(start, 6) }); setSelectedDate(localDateKey()); };
+  const thisWeek = async () => { const start = startOfWeek(); if (await setSafeRange({ start, end: addDays(start, 6) })) setSelectedDate(localDateKey()); };
 
   const loadQuickFocus = async (date, mode, preserveQuery = "") => {
     const rows = await getDailyFocusedRecords({ mainCompanyId: companyId, date, shift: mode });
@@ -1785,6 +1869,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       {notice ? <div className="gop-notice" role="status">{notice}</div> : null}{error ? <div className="gop-error" role="alert">{error}</div> : null}{syncError ? <div className="gop-sync-warning" role="status"><RefreshCw size={14}/> {syncError}</div> : null}
       {!periodLockVerified && ["daily-dashboard","daily-entry","daily-weekly"].includes(view) ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> {periodLockError || "Dönem kilidi doğrulanıyor. Kontrol tamamlanana kadar değişiklik yapılamaz."}</div> : null}
       {rangeLoadError && ["daily-dashboard","daily-entry","daily-weekly"].includes(view) ? <div className="gop-error" role="alert">{rangeLoadError} Kayıtlar korunuyor; veri kaydedilmeden önce doğrulama gerekli.</div> : null}
+      {!sharedRangeReady || sharedRangeError ? <div className="gop-lock-uncertain" role="status">Ortak dönem doğrulanıyor: ${sharedRangeError || "sunucu yanıtı bekleniyor"}. Doğrulanana kadar kaydetme ve çıktı kapalıdır.</div> : null}
+      {sharedRangeReady && !sharedRangeConfigured && view === "daily-entry" ? <div className="gop-lock-uncertain" role="status">Firmanın ortak dönemi henüz sabitlenmedi. Başlangıç ve bitişi kontrol edip “Bu Dönemi Sabitle” tuşuna basın; diğer cihazlar aynı aralığı açacak.</div> : null}
       {periodLockVerified && !periodLocked && rangeLockInfo && view === "daily-entry" ? <div className="gop-lock-uncertain" role="status"><LockKeyhole size={15}/> Tarih aralığının başka gününde kapalı dönem var. Seçili açık günün kayıtları düzenlenebilir; dönem personel listesi değiştirilemez.</div> : null}
 
       {view === "daily-entry" ? <div className={`kyop-daily ${shift}`}>
@@ -1795,8 +1881,8 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
             <label><span>Başlangıç</span><input type="date" value={range.start} onChange={(e) => { const value = e.target.value; if (!value) return; setSafeRange(value > range.end ? { start: value, end: value } : { ...range, start: value }); }} /></label>
             <i>→</i>
             <label><span>Bitiş</span><input type="date" value={range.end} onChange={(e) => { const value = e.target.value; if (!value) return; setSafeRange(value < range.start ? { start: value, end: value } : { ...range, end: value }); }} /></label>
-          </div><button type="button" onClick={() => shiftRange(-1)}>‹ Önceki Hafta</button><button type="button" onClick={() => shiftRange(1)}>Sonraki Hafta ›</button>
-          <button type="button" onClick={thisWeek}><CalendarDays size={15}/> Bu Hafta</button>
+          </div>{!sharedRangeConfigured ? <button type="button" disabled={!sharedRangeReady || sharedRangeSaving} onClick={() => void setSafeRange(range)} title="Seçili tarihleri bütün bilgisayarlara kaydet">Bu Dönemi Sabitle</button> : null}<button type="button" onClick={() => shiftRange(-1)}>‹ Önceki Hafta</button><button type="button" onClick={() => shiftRange(1)}>Sonraki Hafta ›</button>
+          <button type="button" disabled={!sharedRangeReady || sharedRangeSaving} onClick={() => void thisWeek()}><CalendarDays size={15}/> Bu Hafta</button>
           </div>
           <div className="kyop-action-group kyop-entry-actions" aria-label="Personel kayıt işlemleri">
           <button type="button" className="primary" onClick={() => void openQuick()}><Zap size={15}/> Hızlı Personel Girişi</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={15}/> Yeni Personel Ekle</button><button type="button" disabled={busy || dailyWriteBlocked} onClick={selectAll}><CheckCircle2 size={15}/> Tümünü Seç</button><button type="button" disabled={busy || dailyWriteBlocked} onClick={clearAll}>Seçimi Kaldır</button><button type="button" onClick={loadFocused}><RefreshCw size={15}/> Kayıtlı Seçimi Yükle</button><button type="button" className="primary" disabled={busy || dailyWriteBlocked} onClick={saveFocused}><Save size={15}/> Günlük Kaydet</button>
