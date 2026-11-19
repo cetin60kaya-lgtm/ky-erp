@@ -17,8 +17,8 @@ test("daily operations quick entry keeps existing personnel visible and protects
 test("daily entry keeps manual start/end range, double-click quick entry and wide day dropdown", () => {
   assert.match(workspace, /kyop-manual-range/);
   assert.match(workspace, /aria-label="Tarih aralığını elle seç"/);
-  assert.match(workspace, /<span>Başlangıç<\/span><input type="date" value=\{range\.start\}/);
-  assert.match(workspace, /<span>Bitiş<\/span><input type="date" value=\{range\.end\}/);
+  assert.match(workspace, /<span>Başlangıç<\/span><input type="date" value=\{rangeDraft\.start\}/);
+  assert.match(workspace, /<span>Bitiş<\/span><input type="date" value=\{rangeDraft\.end\}/);
   assert.match(workspace, /shiftRange\(-1\)/);
   assert.match(workspace, /shiftRange\(1\)/);
   assert.match(workspace, /onDoubleClick=\{\(\) => void openQuick\(item\.date, shift\)\}/);
@@ -221,7 +221,7 @@ test("daily view has real D1 audit log under work area and no duplicated weekly 
   assert.match(workspace, /gop-daily-audit-list/);
   assert.match(workspace, /Tüm Geçmiş ve Ayrıntılar/);
   assert.doesNotMatch(workspace, /onClick=\{\(\) => printWeeklyControlList\(range, days, weeklyControlRows\)\}/);
-  assert.match(workspace, /onClick=\{\(\) => printWeeklySummary\(range, days, weeklyControlRows\)\}/);
+  assert.match(workspace, /onClick=\{\(\) => void printVerifiedWeeklySummary\(\)\}/);
 });
 
 test("date range scope stays isolated and no previous-roster warning or navigation is rendered", () => {
@@ -231,4 +231,13 @@ test("date range scope stays isolated and no previous-roster warning or navigati
   assert.doesNotMatch(workspace, /otherSavedRanges|setOtherSavedRanges|gop-roster-saved-ranges/);
   assert.doesNotMatch(workspace, /Bu tarih aralığının havuzu boş|Kaydedilmiş aralığı aç:/);
   assert.doesNotMatch(workspace, /setSafeRange\(\{ start: item\.startDate, end: item\.endDate \}\)/);
+});
+
+test("dönem değişikliği anlık kaydetme, haftalık çıktı, Excel ve ödeme öncesinde D1 ile tekrar doğrulanır", () => {
+  assert.match(workspace, /const verifyPrintAndPaymentRange = async/);
+  assert.match(workspace, /getDailyActiveRange\(\{ mainCompanyId: companyId \}, \{ forceFresh: true \}\)/);
+  assert.match(workspace, /current\.version !== sharedVersionRef\.current/);
+  assert.match(workspace, /await verifyPrintAndPaymentRange\(paymentPoolRange\)/);
+  assert.match(workspace, /await verifyPrintAndPaymentRange\(range\)/);
+  assert.match(workspace, /sharedRangeReady && sharedRangeConfigured/);
 });
