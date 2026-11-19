@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, validDailyWageAmount, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
-import { summarizeDailyPersonnelHistory } from "./gunluk-personnel-history-core";
+import { summarizeDailyPersonnelHistory, monthlyDailyPersonnelHistory } from "./gunluk-personnel-history-core";
 import { parseDailyExcelRows } from "./gunluk-excel-import";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -2117,7 +2117,9 @@ async function employeeWorkPaymentHistory(c: Context<AppEnv>) {
       .bind(companyId,employeeId,start,end).all<Row>(),
   ]);
   const payments=paymentsResult.results || [];
-  const totals=summarizeDailyPersonnelHistory(worked,payments,adjustmentsResult.results || []);
+  const adjustments=adjustmentsResult.results || [];
+  const totals=summarizeDailyPersonnelHistory(worked,payments,adjustments);
+  const months=monthlyDailyPersonnelHistory(worked,payments,adjustments);
   const paymentRecords=payments.slice(0,100).map((row)=>({
     id:text(row.id),paymentNo:text(row.payment_no),
     paidDate:dateOnly(row.paid_date),periodStart:dateOnly(row.period_start),
@@ -2130,6 +2132,7 @@ async function employeeWorkPaymentHistory(c: Context<AppEnv>) {
     employeeId, employeeName:text(employee.full_name),
     role:text(employee.qualification),startDate:start,endDate:end,
     ...totals,
+    months,
     days:totals.shifts.slice(0,90),
     daysTruncated:totals.shifts.length>90,
     payments:paymentRecords,
