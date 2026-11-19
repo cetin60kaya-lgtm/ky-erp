@@ -6,141 +6,301 @@ import {
   listMailApprovals,
   requestMailAccount,
   setMailAccountDefaults,
-  startGoogleMailOAuth,
   startMicrosoftMailOAuth,
   syncMailAccount,
+  updateMailAccountProfile,
 } from "../../services/mailApi";
 import { useAuth } from "../../context/AuthContext";
-import "./AdminMailConnections.css";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
+import "./AdminMailConnections.css";
 
-const providerLabel = (value) => ({
-  MICROSOFT_365: "Microsoft 365 / Outlook",
+const PROVIDER_NAMES = {
+  MICROSOFT_365: "Microsoft 365 / Outlook / Hotmail",
   GMAIL: "Gmail / Google Workspace",
   JMAP: "JMAP",
-  IMAP_SMTP: "Standart IMAP / SMTP",
-}[String(value || "").toUpperCase()] || value || "Mail");
-const accountTypeLabel = (value) => ({ PERSONAL: "Kişisel", SHARED: "Ortak Posta Kutusu", DEPARTMENT: "Bölüm Posta Kutusu" }[String(value || "").toUpperCase()] || value || "—");
-const statusLabel = (value) => ({ ACTIVE:"Aktif",PENDING:"Onay Bekliyor",DISCONNECTED:"Bağlantı Bekliyor",REAUTH_REQUIRED:"Yeniden Bağlanmalı",SUSPENDED:"Askıda",APPROVED:"Onaylandı",REJECTED:"Reddedildi" }[String(value || "").toUpperCase()] || value || "—");
-const ownerRole = (value) => ["SUPER_ADMIN","ADMIN"].includes(String(value || "").toUpperCase());
-const companyOwnerRole = (value) => String(value || "").toUpperCase() === "COMPANY_ADMIN";
-const norm = (value) => String(value || "").trim().toLowerCase();
-
-const HAKAN_PRESETS = [
-  {
-    key: "HAKAN_MAIN",
-    title: "Hakan Emprime Ana Mail",
-    providerType: "MICROSOFT_365",
-    accountType: "PERSONAL",
-    emailAddress: "hkngursu@hotmail.com",
-    displayName: "Hakan Emprime",
-    departmentCode: "YONETIM",
-    isDefaultSend: true,
-    isDefaultReceive: true,
-    note: "Firma ana gönderme ve alma hesabı.",
-  },
-  {
-    key: "DESEN",
-    title: "Desen Maili",
-    providerType: "GMAIL",
-    accountType: "DEPARTMENT",
-    emailAddress: "hkndesen@gmail.com",
-    displayName: "Hakan Emprime Desen",
-    departmentCode: "DESEN",
-    isDefaultSend: false,
-    isDefaultReceive: false,
-    note: "DESEN bölümü posta kutusu. Bağlantı ve hesap kullanımı firma sahibi / işveren onayıyla açılır.",
-  },
+  IMAP_SMTP: "IMAP / SMTP",
+};
+const ACCOUNT_TYPES = [
+  { value: "PERSONAL", label: "Kişisel hesap" },
+  { value: "SHARED", label: "Ortak posta kutusu" },
+  { value: "DEPARTMENT", label: "Bölüm posta kutusu" },
 ];
+const ACCOUNT_STATUS = {
+  ACTIVE: "Aktif",
+  PENDING: "Onay bekliyor",
+  DISCONNECTED: "Bağlantı bekliyor",
+  REAUTH_REQUIRED: "Yeniden bağlantı gerekli",
+  SUSPENDED: "Askıda",
+  REJECTED: "Reddedildi",
+};
+const INITIAL_FORM = {
+  displayName: "", emailAddress: "", providerType: "MICROSOFT_365",
+  accountType: "PERSONAL", departmentCode: "",
+};
+const upper = (value) => String(value || "").trim().toUpperCase();
+const normalized = (value) => String(value || "").trim().toLocaleLowerCase("tr-TR");
+const isOwner = (role) => ["SUPER_ADMIN", "ADMIN", "COMPANY_ADMIN"].includes(upper(role));
+const formatDate = (value) => {
+  if (!value) return "Henüz yok";
+  const time = new Date(value);
+  return Number.isNaN(time.getTime()) ? String(value) : time.toLocaleString("tr-TR");
+};
+
+function accountReadiness(account, available) {
+  const readiness = account.readiness || {};
+  const approved = Boolean(readiness.companyApproved ?? upper(account.approval_status) === "APPROVED");
+  const oauth = Boolean(readiness.oauthConnected ?? account.provider_connected);
+  const sync = Boolean(readiness.syncHealthy);
+  const configured = Boolean(available?.adapterReady && available?.configured);
+  const enabled = Number(readiness.enabledFolders || 0);
+  const completed = Number(readiness.completedFolders || 0);
+  return { approved, oauth, sync, configured, enabled, completed,
+    ready: approved && oauth && sync && configured && upper(account.status) === "ACTIVE" };
+}
+
+function StateMark({ ok, children, warning = false }) {
+  return <span className={"mail-admin-state " + (ok ? "is-ok" : warning ? "is-warn" : "is-pending")}>
+    <span aria-hidden="true" className="mail-admin-state-dot" />{children}
+  </span>;
+}
 
 export default function AdminMailConnectionsV2({ activeMainCompany, openModule }) {
   const { user } = useAuth();
-  const [accounts,setAccounts] = useState([]);
-  const [approvals,setApprovals] = useState([]);
-  const [providers,setProviders] = useState([]);
-  const [loading,setLoading] = useState(false);
-  const [notice,setNotice] = useState("");
   const slug = String(activeMainCompany?.slug || "").trim();
-  const companyName = activeMainCompany?.name || activeMainCompany?.title || slug || "Aktif Firma";
-  const role = String(user?.role || "").toUpperCase();
-  const appOwner = ownerRole(role), companyOwner = companyOwnerRole(role);
-  const elevated = appOwner || companyOwner;
-  const canApproveDecision = elevated;
-  const isHakan = /hakan|mecit/.test(norm(`${slug} ${companyName}`));
+  const companyName = activeMainCompany?.name || activeMainCompany?.title || slug || "Firma seçilmedi";
+  const canManage = isOwner(user?.role);
+  const [accounts, setAccounts] = useState([]);
+  const [approvals, setApprovals] = useState([]);
+  const [providers, setProviders] = useState([]);
+  const [tab, setTab] = useState("accounts");
+  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [notice, setNotice] = useState("");
+  const [form, setForm] = useState(INITIAL_FORM);
+  const [editingId, setEditingId] = useState("");
+  const [editing, setEditing] = useState({ displayName: "", departmentCode: "" });
 
   const load = useCallback(async () => {
-    if (!slug) { setNotice("Hata: E-posta hesaplarını yönetmek için aktif firma seçilmelidir."); return; }
+    if (!slug) {
+      setAccounts([]);setApprovals([]);setProviders([]);
+      setNotice("Hata: E-posta hesaplarını görmek için aktif firma seçin.");
+      return;
+    }
     setLoading(true);
-    const rows = await Promise.allSettled([listMailAccounts(),listMailApprovals(),getMailProviders()]);
-    if(rows[0].status==="fulfilled")setAccounts(Array.isArray(rows[0].value)?rows[0].value:[]);
-    if(rows[1].status==="fulfilled")setApprovals(Array.isArray(rows[1].value)?rows[1].value:[]);
-    if(rows[2].status==="fulfilled")setProviders(Array.isArray(rows[2].value?.providers)?rows[2].value.providers:[]);
-    const failed=rows.filter((row)=>row.status==="rejected");
-    setNotice(failed.length?"Bazı mail yönetim bilgileri alınamadı. Erişilebilen kayıtlar gösteriliyor.":"");
+    const result = await Promise.allSettled([
+      listMailAccounts(slug), listMailApprovals(slug), getMailProviders(),
+    ]);
+    const errors = result.filter((item) => item.status === "rejected");
+    setAccounts(result[0].status === "fulfilled" && Array.isArray(result[0].value) ? result[0].value : []);
+    setApprovals(result[1].status === "fulfilled" && Array.isArray(result[1].value) ? result[1].value : []);
+    setProviders(result[2].status === "fulfilled" && Array.isArray(result[2].value?.providers) ? result[2].value.providers : []);
+    setNotice(errors.length ? "Hata: Firma posta kutularının bazı bilgileri alınamadı. Eksik sonuçları tam bağlantı olarak kabul etmeyin." : "");
     setLoading(false);
-  },[slug]);
-  useEffect(()=>{load();},[load]);
+  }, [slug]);
 
-  const stats=useMemo(()=>({
-    total:accounts.length,
-    active:accounts.filter((row)=>String(row.status||"").toUpperCase()==="ACTIVE").length,
-    pending:accounts.filter((row)=>String(row.approval_status||row.approvalStatus||"").toUpperCase()==="PENDING").length,
-    connected:accounts.filter((row)=>Boolean(row.provider_connected??row.providerConnected)).length,
-  }),[accounts]);
-  const providerState=(provider)=>providers.find((row)=>String(row.provider||"").toUpperCase()===String(provider||"").toUpperCase())||null;
-  const accountForPreset=(preset)=>accounts.find((row)=>norm(row.email_address||row.emailAddress)===norm(preset.emailAddress))||null;
+  useEffect(() => {
+    setTab("accounts");setFilter("");setEditingId("");setForm(INITIAL_FORM);
+    load();
+  }, [load]);
 
-  async function createPreset(preset){
+  const providerState = (type) => providers.find((item) => upper(item.provider) === upper(type)) || null;
+  const counts = useMemo(() => ({
+    total: accounts.length,
+    connected: accounts.filter((a) => Boolean(a.readiness?.oauthConnected)).length,
+    ready: accounts.filter((a) => {
+      const state = providers.find((item) => upper(item.provider) === upper(a.provider_type));
+      return accountReadiness(a, state).ready;
+    }).length,
+    pending: approvals.filter((a) => upper(a.status) === "PENDING").length,
+  }), [accounts, approvals, providers]);
+  const visible = useMemo(() => accounts.filter((account) =>
+    normalized([account.display_name, account.email_address, account.department_code, account.provider_type].join(" ")).includes(normalized(filter))
+  ), [accounts, filter]);
+  const availableForNew = providerState(form.providerType);
+  const newProviderReady = Boolean(availableForNew?.configured && availableForNew?.adapterReady);
+
+  async function run(label, task) {
     setLoading(true);setNotice("");
-    try{
-      const state=providerState(preset.providerType);
-      if(state && (!state.adapterReady || !state.configured)) throw new Error(state.reason || `${providerLabel(preset.providerType)} bağlantı ayarı hazır değil.`);
-      const result=await requestMailAccount(preset);
-      if(result?.accountId && elevated && (preset.isDefaultSend || preset.isDefaultReceive)){
-        await setMailAccountDefaults(result.accountId,{isDefaultSend:preset.isDefaultSend,isDefaultReceive:preset.isDefaultReceive});
-      }
-      setNotice(`${preset.title} talebi oluşturuldu. Firma Sahibi / İşveren onayı gerekiyor.`);
+    try {
+      await task();
       await load();
-    }catch(error){setNotice(`Hata: ${error?.message || "Mail hesabı talebi oluşturulamadı."}`);setLoading(false);}
+      setNotice(label);
+      return true;
+    } catch (error) {
+      setNotice("Hata: " + (error?.message || "İşlem tamamlanamadı."));
+      setLoading(false);
+      return false;
+    }
   }
-  async function connect(account){
+
+  async function createAccount(event) {
+    event.preventDefault();
+    if (!canManage || !newProviderReady) return;
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.emailAddress.trim())) {
+      setNotice("Hata: Geçerli bir e-posta adresi yazın.");
+      return;
+    }
+    const done = await run("Posta kutusu talebi kaydedildi. OAuth ve senkronizasyon ayrı adımlardır.", async () => {
+      await requestMailAccount({ ...form, displayName: form.displayName.trim(), emailAddress: form.emailAddress.trim().toLowerCase(),
+        departmentCode: upper(form.departmentCode), mainCompanySlug: slug });
+    });
+    if (done) { setForm(INITIAL_FORM);setTab("accounts"); }
+  }
+
+  function startEdit(account) {
+    setEditingId(account.id);
+    setEditing({ displayName: account.display_name || account.email_address || "", departmentCode: account.department_code || "" });
+  }
+
+  async function saveProfile(account) {
+    const done = await run("Posta kutusunun adı ve bölüm etiketi güncellendi.", async () => {
+      await updateMailAccountProfile(account.id, { displayName: editing.displayName.trim(),
+        departmentCode: upper(editing.departmentCode), mainCompanySlug: slug });
+    });
+    if (done) setEditingId("");
+  }
+
+  async function changeDefault(account, type, enabled) {
+    const label = type === "isDefaultSend" ? "gönderim" : "alım";
+    await run("Firma için varsayılan " + label + " hesabı güncellendi.", async () => {
+      await setMailAccountDefaults(account.id, { [type]: enabled, mainCompanySlug: slug });
+    });
+  }
+
+  async function connect(account) {
+    if (upper(account.provider_type) !== "MICROSOFT_365") return;
     setLoading(true);setNotice("");
-    try{
-      const provider=String(account.provider_type||account.providerType||"").toUpperCase();
-      const result=provider==="GMAIL"?await startGoogleMailOAuth(account.id):await startMicrosoftMailOAuth(account.id);
-      if(!result?.authorizeUrl)throw new Error("OAuth giriş adresi alınamadı.");
+    try {
+      const result = await startMicrosoftMailOAuth(account.id, slug);
+      if (!result?.authorizeUrl) throw new Error("Microsoft OAuth bağlantısı alınamadı.");
       window.location.assign(result.authorizeUrl);
-    }catch(error){setNotice(`Hata: ${error?.message || "Mail hesabı bağlantısı başlatılamadı."}`);setLoading(false);}
+    } catch (error) {
+      setNotice("Hata: " + (error?.message || "Microsoft hesabı bağlantısı başlatılamadı."));
+      setLoading(false);
+    }
   }
-  async function sync(account){
-    setLoading(true);setNotice("");
-    try{const result=await syncMailAccount(account.id);const count=(Array.isArray(result?.folders)?result.folders:[]).reduce((sum,row)=>sum+Number(row.count||0),0);setNotice(result?.partial?`Senkronizasyon devam ediyor: ${count} kayıt işlendi; bazı klasörlerde nextLink kaldı. Tekrar başlatıldığında kaldığı yerden sürecek.`:`Klasör senkronizasyonu tamamlandı. ${count} kayıt işlendi.`);await load();}
-    catch(error){setNotice(`Hata: ${error?.message || "Senkronizasyon tamamlanamadı."}`);setLoading(false);}
+
+  async function synchronize(account) {
+    await run("Senkronizasyon isteği tamamlandı; klasörlerin tam kabul durumunu aşağıdan kontrol edin.", async () => {
+      const result = await syncMailAccount(account.id, slug);
+      if (result?.partial) throw new Error("Klasörlerde sayfalama devam ediyor. Senkronizasyon eksik, sonraki çalışmada devam etmeli.");
+    });
   }
-  async function defaults(account,send,receive){
-    setLoading(true);setNotice("");
-    try{await setMailAccountDefaults(account.id,{isDefaultSend:send,isDefaultReceive:receive});setNotice("Varsayılan mail hesabı ayarı güncellendi.");await load();}
-    catch(error){setNotice(`Hata: ${error?.message || "Varsayılan hesap ayarı güncellenemedi."}`);setLoading(false);}
-  }
-  async function decide(request,decision){
-    setLoading(true);setNotice("");
-    try{await decideMailApproval(request.id,decision);setNotice(decision==="APPROVE"?"Mail bağlantı onayı kaydedildi.":"Mail bağlantı talebi reddedildi.");await load();}
-    catch(error){setNotice(`Hata: ${error?.message || "Onay işlemi tamamlanamadı."}`);setLoading(false);}
+
+  async function decide(approval, decision) {
+    const done = await run(decision === "APPROVE" ? "Hesap onayı kaydedildi." : "Hesap talebi reddedildi.", async () => {
+      await decideMailApproval(approval.id, decision, "", slug);
+    });
+    if (done) setTab("approvals");
   }
 
   return <div className="mail-admin-page">
-    <section className="mail-admin-hero"><div><small>BAĞLANTILAR & DEPOLAMA / E-POSTA HESAPLARI</small><h2>Kurumsal Mail Bağlantıları</h2><p><b>{companyName}</b> için Outlook / Microsoft 365 ve Gmail posta kutuları burada bağlanır, onaylanır ve varsayılanları seçilir. Günlük kullanım <b>Mail & Dosyalar</b> bölümündedir.</p></div><button type="button" onClick={()=>openModule?.("iletisim",{tabKey:"mail-gelen"})}>Mail Merkezini Aç</button></section>
-    <IntegrationFlowSteps kind="MAIL" stage={accounts.some((row)=>String(row.status||"").toUpperCase()==="ACTIVE" && Boolean(row.provider_connected??row.providerConnected)) ? 3 : accounts.length ? 2 : 1} />
-    <p className="mail-admin-flow-note">Outlook ve Gmail şifresi KY ERP'ye girilmez. Sağlayıcı hesabı Microsoft/Google OAuth ekranında onaylanır; ardından posta kutusunun <b>Aktif + OAuth bağlı</b> olduğu kontrol edilir. Bağlı hesap tek başına mail gönderme izni değildir.</p>
-    {notice?<div className={`mail-admin-notice ${notice.startsWith("Hata:")?"bad":"ok"}`}>{notice}</div>:null}
-    <section className="mail-admin-stats"><div><span>Toplam Hesap</span><strong>{stats.total}</strong><small>Kişisel + bölüm</small></div><div><span>Aktif</span><strong>{stats.active}</strong><small>Kullanıma hazır</small></div><div><span>Onay Bekleyen</span><strong>{stats.pending}</strong><small>Firma sahibi / Süper Yönetici</small></div><div><span>OAuth Bağlı</span><strong>{stats.connected}</strong><small>Provider doğrulandı</small></div></section>
-
-    {isHakan?<section className="mail-admin-card"><div className="mail-admin-card-head"><div><h3>Hakan Emprime Hazır Mail Düzeni</h3><p>Firma ana maili ve DESEN posta kutusu sabit profille tanımlanır; yanlış bölüm/provider seçimi engellenir.</p></div></div><div className="mail-admin-approvals">
-      {HAKAN_PRESETS.map((preset)=>{const account=accountForPreset(preset),state=providerState(preset.providerType),connected=Boolean(account?.provider_connected??account?.providerConnected),status=String(account?.status||"").toUpperCase();return <div className="approval" key={preset.key}><div><b>{preset.title}</b><span>{preset.emailAddress} · {providerLabel(preset.providerType)} · {accountTypeLabel(preset.accountType)} · {preset.departmentCode}</span><small>{preset.note} {state&&!state.configured?` ${state.reason||"OAuth ayarı gerekli."}`:""} {account?.readiness?` · Firma onayı: ${account.readiness.companyApproved?"Evet":"Bekliyor"} · OAuth: ${account.readiness.oauthConnected?"Doğrulandı":"Bağlı değil"} · Tam senkron: ${account.readiness.syncHealthy?"Doğrulandı":"Bekliyor"} (${account.readiness.completedFolders??0}/${account.readiness.enabledFolders??0} klasör)${account.readiness.lastSyncSuccessAt?" · Son kabul: "+account.readiness.lastSyncSuccessAt.slice(0,16):""}`:""}</small></div><div className="actions">{!account?<button type="button" onClick={()=>createPreset(preset)} disabled={loading||state?.adapterReady===false||state?.configured===false}>Talebi Oluştur</button>:<><span>{statusLabel(status)} · {connected?"OAuth bağlı":"OAuth bekliyor"}</span>{!connected&&["MICROSOFT_365","GMAIL"].includes(preset.providerType)?<button type="button" onClick={()=>connect(account)} disabled={loading}>Hesabı Bağla</button>:null}{connected?<button type="button" className="secondary" onClick={()=>sync(account)} disabled={loading}>Senkronize Et</button>:null}{elevated&&preset.key==="HAKAN_MAIN"?<button type="button" className="secondary" onClick={()=>defaults(account,true,true)} disabled={loading}>Ana Gönder/Al</button>:null}</>}</div></div>;})}
-    </div></section>:null}
-
-    <section className="mail-admin-card"><div className="mail-admin-card-head"><div><h3>Posta Kutuları</h3><p>Hesap bağlantısı, OAuth durumu ve senkronizasyon sağlığı.</p></div><button type="button" className="secondary" disabled={loading} onClick={load}>Yenile</button></div>{accounts.length?<div className="mail-admin-table"><div className="head"><span>Hesap</span><span>Tür</span><span>Sağlayıcı</span><span>Durum</span><span>İşlem</span></div>{accounts.map((row)=>{const provider=String(row.provider_type||row.providerType||"").toUpperCase(),status=String(row.status||"").toUpperCase(),connected=Boolean(row.provider_connected??row.providerConnected);return <div className="row" key={row.id}><span><b>{row.display_name||row.displayName||row.email_address||row.emailAddress}</b><small>{row.email_address||row.emailAddress}{row.is_default_send?" · Varsayılan gönderim":""}{row.is_default_receive?" · Varsayılan alım":""}</small></span><span>{accountTypeLabel(row.account_type||row.accountType)}</span><span>{providerLabel(provider)}</span><span><b>{statusLabel(status)}</b><small>{connected?"OAuth bağlı":"OAuth bekliyor"}{row.readiness?` · Onay: ${row.readiness.companyApproved?"Var":"Bekliyor"} · İlk tam senkron: ${row.readiness.syncHealthy?"Tamam":"Eksik"}${row.readiness.lastSyncSuccessAt?" · "+row.readiness.lastSyncSuccessAt.slice(0,16):""}`:""}</small></span><span className="actions">{["MICROSOFT_365","GMAIL"].includes(provider)&&!connected?<button type="button" onClick={()=>connect(row)} disabled={loading}>Hesabı Bağla</button>:null}{connected?<button type="button" className="secondary" onClick={()=>sync(row)} disabled={loading}>Senkronize Et</button>:null}</span></div>;})}</div>:<div className="mail-admin-empty"><b>Henüz mail hesabı yok.</b><span>Hakan Emprime hazır profillerinden veya Mail & Dosyalar bölümünden hesap talebi oluşturabilirsiniz.</span></div>}</section>
-
-    <section className="mail-admin-card"><div className="mail-admin-card-head"><div><h3>Bekleyen Mail Onayları</h3><p>Posta kutusu bağlantıları ilgili firma sahibi / işveren veya Süper Yönetici tarafından onaylanır.</p></div></div>{approvals.filter((row)=>String(row.status||"").toUpperCase()==="PENDING").length?<div className="mail-admin-approvals">{approvals.filter((row)=>String(row.status||"").toUpperCase()==="PENDING").map((row)=>{return <div className="approval" key={row.id}><div><b>{row.display_name||row.email_address||"Mail hesabı"}</b><span>{providerLabel(row.provider_type)} · {accountTypeLabel(row.account_type)} · Firma Sahibi Onayı</span><small>Karar yetkisi firma sahibi / işveren (COMPANY_ADMIN) veya Süper Yöneticidedir.</small></div><div className="actions">{canApproveDecision?<><button type="button" onClick={()=>decide(row,"APPROVE")} disabled={loading}>Onayla</button><button type="button" className="danger" onClick={()=>decide(row,"REJECT")} disabled={loading}>Reddet</button></>:<span>Firma sahibi / Süper Yönetici onayı bekleniyor</span>}</div></div>;})}</div>:<div className="mail-admin-empty compact">Bekleyen mail bağlantı onayı yok.</div>}</section>
+    <section className="mail-admin-hero">
+      <div className="mail-admin-hero-copy">
+        <small>AYARLAR & SİSTEM / BAĞLANTILAR / E-POSTA HESAPLARI</small>
+        <h2>E-Posta Yönetim Merkezi</h2>
+        <p><strong>{companyName}</strong> için hesap ekleme, bölüm atama, onay, OAuth ve klasör senkronizasyonu tek ekrandan yönetilir. Her firmanın hesapları birbirinden ayrıdır.</p>
+        <div className="mail-admin-company"><span aria-hidden="true">▣</span> Aktif firma: <strong>{companyName}</strong><span className="mail-admin-company-hint">Firma değişimini KY ERP firma seçiminden yapın.</span></div>
+      </div>
+      <div className="mail-admin-hero-actions">
+        <button className="secondary" type="button" onClick={load} disabled={loading || !slug}>Yenile</button>
+        <button type="button" onClick={() => openModule?.("iletisim", { tabKey: "mail-gelen" })}>Mail Merkezini Aç</button>
+      </div>
+    </section>
+    <IntegrationFlowSteps kind="MAIL" stage={counts.ready > 0 ? 3 : counts.connected > 0 ? 2 : 1} />
+    {notice && <div role="status" className={"mail-admin-notice " + (notice.startsWith("Hata:") ? "bad" : "ok")}>{notice}</div>}
+    <div className="mail-admin-stats">
+      <div><span>Bu firmanın hesapları</span><strong>{counts.total}</strong><small>Kişisel, ortak ve bölüm</small></div>
+      <div><span>OAuth doğrulanan</span><strong>{counts.connected}</strong><small>Bağlantı kanıtı bulunan</small></div>
+      <div><span>Tam kullanıma hazır</span><strong>{counts.ready}</strong><small>Onay + OAuth + tam senkron</small></div>
+      <div><span>Onay bekleyen</span><strong>{counts.pending}</strong><small>Firma yetkilisi kararı</small></div>
+    </div>
+    <nav className="mail-admin-tabs" aria-label="E-posta hesap yönetimi">
+      <button type="button" className={tab === "accounts" ? "selected" : ""} onClick={() => setTab("accounts")}>Posta Kutuları <span>{counts.total}</span></button>
+      {canManage && <button type="button" className={tab === "add" ? "selected" : ""} onClick={() => setTab("add")}>+ Hesap Ekle</button>}
+      <button type="button" className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Onaylar <span>{counts.pending}</span></button>
+      <button type="button" className={tab === "providers" ? "selected" : ""} onClick={() => setTab("providers")}>Sağlayıcı Durumu</button>
+    </nav>
+    {tab === "accounts" && <section className="mail-admin-card">
+      <div className="mail-admin-card-head">
+        <div><h3>Firma Posta Kutuları</h3><p>Bağlı hesapları düzenleyin, varsayılan gönderim/alım hesabını seçin; eski e-postalar korunur.</p></div>
+        <div className="mail-admin-toolbar">
+          <input aria-label="Posta kutusu ara" placeholder="Hesap veya bölüm ara..." value={filter} onChange={(event) => setFilter(event.target.value)} />
+          {canManage && <button type="button" onClick={() => setTab("add")} disabled={!slug}>+ Yeni Hesap</button>}
+        </div>
+      </div>
+      {!visible.length ? <div className="mail-admin-empty"><b>{accounts.length ? "Aramaya uygun hesap bulunamadı." : "Bu firmada henüz posta kutusu yok."}</b><span>Yeni hesap eklemek için Hesap Ekle sekmesini kullanın. Eski hesaplar silinmez.</span></div> :
+        <div className="mail-admin-account-list">{visible.map((account) => {
+          const provider = upper(account.provider_type), available = providerState(provider);
+          const state = accountReadiness(account, available), active = upper(account.status);
+          const defaultSend = Boolean(account.is_default_send), defaultReceive = Boolean(account.is_default_receive);
+          const editingThis = editingId === account.id;
+          return <article className="mail-admin-account" key={account.id}>
+            <div className="mail-admin-account-main">
+              <div className="mail-admin-avatar" aria-hidden="true">{(account.display_name || account.email_address || "M").charAt(0).toLocaleUpperCase("tr-TR")}</div>
+              <div className="mail-admin-identity">
+                <div className="mail-admin-account-title"><strong>{account.display_name || account.email_address}</strong><span className={"mail-admin-status " + (state.ready ? "ready" : "waiting")}>{state.ready ? "Hazır" : ACCOUNT_STATUS[active] || "Kontrol gerekli"}</span></div>
+                <span className="mail-admin-address">{account.email_address}</span>
+                <div className="mail-admin-meta"><span>{PROVIDER_NAMES[provider] || provider}</span><span>{ACCOUNT_TYPES.find((item) => item.value === account.account_type)?.label || account.account_type}</span><span>Bölüm: {account.department_code || "Atanmamış"}</span></div>
+                <div className="mail-admin-default-flags">{defaultSend && <span>Varsayılan gönderim</span>}{defaultReceive && <span>Varsayılan alım</span>}</div>
+              </div>
+              <div className="mail-admin-account-actions">
+                {canManage && <button type="button" className="secondary" disabled={loading} onClick={() => editingThis ? setEditingId("") : startEdit(account)}>{editingThis ? "Kapat" : "Düzenle"}</button>}
+                {state.approved && !state.oauth && state.configured && provider === "MICROSOFT_365" && <button type="button" disabled={loading} onClick={() => connect(account)}>Microsoft'a Bağla</button>}
+                {state.oauth && state.configured && provider === "MICROSOFT_365" && <button type="button" className="secondary" disabled={loading} onClick={() => synchronize(account)}>Senkronize Et</button>}
+              </div>
+            </div>
+            <div className="mail-admin-health">
+              <StateMark ok={state.approved}>Firma onayı: {state.approved ? "Onaylandı" : "Bekliyor"}</StateMark>
+              <StateMark ok={state.oauth}>OAuth: {state.oauth ? "Bağlı" : "Bekliyor"}</StateMark>
+              <StateMark ok={state.sync}>Tam senkron: {state.sync ? "Tamam" : "Bekliyor"} ({state.completed}/{state.enabled})</StateMark>
+              <StateMark ok={state.configured} warning={!state.configured}>Sağlayıcı: {state.configured ? "Hazır" : "Ayar gerekli"}</StateMark>
+              <span className="mail-admin-last-sync">Son tam işlem: {formatDate(account.readiness?.lastSyncSuccessAt)}</span>
+            </div>
+            {!state.configured && <div className="mail-admin-account-warning">{available?.reason || "Bu sağlayıcı için canlı OAuth/adapter ayarı hazır değil."} Mevcut hesap ve arşiv silinmedi; bağlantı ve yeni senkron kapalı.</div>}
+            {editingThis && <div className="mail-admin-edit-panel">
+              <div><label htmlFor={"display-" + account.id}>Görünen hesap adı</label><input id={"display-" + account.id} maxLength={120} value={editing.displayName} onChange={(event) => setEditing((value) => ({ ...value, displayName: event.target.value }))} /></div>
+              <div><label htmlFor={"department-" + account.id}>Bölüm kodu (isteğe bağlı)</label><input id={"department-" + account.id} maxLength={40} placeholder="Örn. MUHASEBE" value={editing.departmentCode} onChange={(event) => setEditing((value) => ({ ...value, departmentCode: event.target.value }))} /></div>
+              <div className="mail-admin-edit-note">Mail adresi, sağlayıcı ve hesap türü güvenlik nedeniyle burada değiştirilmez. Yeni kimlik için yeni hesap eklenir.</div>
+              <button type="button" disabled={loading || !editing.displayName.trim()} onClick={() => saveProfile(account)}>Bilgileri Kaydet</button>
+              <button type="button" className="secondary" disabled={loading} onClick={() => setEditingId("")}>Vazgeç</button>
+              <div className="mail-admin-default-actions">
+                <b>Firma varsayılanları</b>
+                <button type="button" className="secondary" disabled={loading || (!state.configured || !state.oauth || !state.approved) && !defaultSend} onClick={() => changeDefault(account, "isDefaultSend", !defaultSend)}>{defaultSend ? "Gönderim varsayılanını kaldır" : "Gönderim varsayılanı yap"}</button>
+                <button type="button" className="secondary" disabled={loading || (!state.configured || !state.oauth || !state.approved) && !defaultReceive} onClick={() => changeDefault(account, "isDefaultReceive", !defaultReceive)}>{defaultReceive ? "Alım varsayılanını kaldır" : "Alım varsayılanı yap"}</button>
+              </div>
+            </div>}
+          </article>;
+        })}</div>}
+    </section>}
+    {tab === "add" && canManage && <section className="mail-admin-card">
+      <div className="mail-admin-card-head"><div><h3>Yeni Posta Kutusu Ekle</h3><p>Yalnız <strong>{companyName}</strong> firmasına eklenir. Bağlantı ve posta gönderimi kendiliğinden başlamaz.</p></div></div>
+      <form className="mail-admin-new-form" onSubmit={createAccount}>
+        <div className="mail-admin-field"><label htmlFor="mail-new-name">Hesap adı</label><input id="mail-new-name" required maxLength={120} placeholder="Örn. Firma Muhasebe" value={form.displayName} onChange={(event) => setForm((v) => ({ ...v, displayName: event.target.value }))} /></div>
+        <div className="mail-admin-field"><label htmlFor="mail-new-email">E-posta adresi</label><input id="mail-new-email" required type="email" placeholder="ornek@firma.com" value={form.emailAddress} onChange={(event) => setForm((v) => ({ ...v, emailAddress: event.target.value }))} /></div>
+        <div className="mail-admin-field"><label htmlFor="mail-new-provider">Sağlayıcı</label><select id="mail-new-provider" value={form.providerType} onChange={(event) => setForm((v) => ({ ...v, providerType: event.target.value }))}>{Object.entries(PROVIDER_NAMES).map(([key, title]) => <option key={key} value={key}>{title}</option>)}</select></div>
+        <div className="mail-admin-field"><label htmlFor="mail-new-type">Posta kutusu türü</label><select id="mail-new-type" value={form.accountType} onChange={(event) => setForm((v) => ({ ...v, accountType: event.target.value }))}>{ACCOUNT_TYPES.map((item) => <option key={item.value} value={item.value}>{item.label}</option>)}</select></div>
+        <div className="mail-admin-field"><label htmlFor="mail-new-dept">Bölüm kodu (isteğe bağlı)</label><input id="mail-new-dept" maxLength={40} placeholder="Örn. DESEN" value={form.departmentCode} onChange={(event) => setForm((v) => ({ ...v, departmentCode: event.target.value }))} /></div>
+        <div className="mail-admin-form-help">
+          <StateMark ok={newProviderReady} warning={!newProviderReady}>{newProviderReady ? "Sağlayıcı kurulu ve hazır" : "Sağlayıcı henüz hazır değil"}</StateMark>
+          {!newProviderReady && <p>{availableForNew?.reason || "Sağlayıcı bilgisi alınamadı. Yeni bağlantı kurulmaz."}</p>}
+          <p>Önce hesap talebi ve firma onayı; sonra sağlayıcının kendi OAuth ekranı; en son klasör senkronizasyonu. Şifre/token girilmez.</p>
+        </div>
+        <div className="mail-admin-form-actions"><button type="submit" disabled={loading || !slug || !newProviderReady}>Hesap Talebini Oluştur</button><button type="button" className="secondary" disabled={loading} onClick={() => setTab("accounts")}>İptal</button></div>
+      </form>
+    </section>}
+    {tab === "approvals" && <section className="mail-admin-card">
+      <div className="mail-admin-card-head"><div><h3>Posta Kutusu Onayları</h3><p>Yeni bağlantılar, hesap sahibinin OAuth izni ve yetkili firma onayı olmadan kullanılmaz.</p></div></div>
+      {approvals.filter((row) => upper(row.status) === "PENDING").length === 0 ? <div className="mail-admin-empty compact">Bekleyen posta kutusu onayı yok.</div> :
+        <div className="mail-admin-approvals">{approvals.filter((row) => upper(row.status) === "PENDING").map((row) => <div className="approval" key={row.id}><div><b>{row.display_name || row.email_address}</b><span>{row.email_address} · {PROVIDER_NAMES[upper(row.provider_type)] || row.provider_type} · {row.department_code || "Genel"}</span><small>Talep sahibi: {row.requested_by_name || "—"}. Kararı yetkili firma sahibi / Süper Yönetici verir.</small></div><div className="actions">{canManage ? <><button type="button" disabled={loading} onClick={() => decide(row, "APPROVE")}>Onayla</button><button type="button" className="danger" disabled={loading} onClick={() => decide(row, "REJECT")}>Reddet</button></> : <span>Yetkili onayı bekleniyor</span>}</div></div>)}</div>}
+    </section>}
+    {tab === "providers" && <section className="mail-admin-card">
+      <div className="mail-admin-card-head"><div><h3>Sağlayıcı ve Bağlantı Durumu</h3><p>Katalog bütün firmalar için ortaktır; her firmanın hesap bağlantıları özeldir.</p></div></div>
+      <div className="mail-admin-provider-list">{Object.entries(PROVIDER_NAMES).map(([key, label]) => {
+        const provider = providerState(key), ready = Boolean(provider?.configured && provider?.adapterReady);
+        return <div className="mail-admin-provider" key={key}><div><strong>{label}</strong><small>{provider?.reason || (ready ? "OAuth ve adapter yapılandırıldı." : "Bu sağlayıcı için canlı bağlantı desteği hazır değil.")}</small></div><StateMark ok={ready}>{ready ? "Hazır" : "Kurulum gerekli"}</StateMark></div>;
+      })}</div>
+      <div className="mail-admin-provider-note">Sağlayıcı durumları sunucudan okunur. Bir hesabın eski kaydının “Aktif” görünmesi, sağlayıcı adapterının bugün çalıştığı anlamına gelmez.</div>
+    </section>}
   </div>;
 }
