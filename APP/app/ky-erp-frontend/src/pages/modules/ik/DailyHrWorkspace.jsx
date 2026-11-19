@@ -827,10 +827,25 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const savedDailyIds = useMemo(() => focusedIds(records), [records]);
   const savedDailyChecked = useMemo(() => focusedCheckedIds(records), [records]);
   const noteDraftDirty = [...new Set([...rosterIds, ...selectedIds])].some((id) =>
-    String(notes[id] || "") !== String(recordByIdValue(records, id, "note") || ""));
+    String(notes[id] || "") !== String(records.find((row) => rowEmployeeId(row) === id)?.note || ""));
   const dailyDraftDirty = !sameSet(selectedIds, savedDailyIds)
     || !sameSet(checkedIds, savedDailyChecked) || noteDraftDirty;
   useEffect(() => { dailyDraftDirtyRef.current = dailyDraftDirty; }, [dailyDraftDirty]);
+  // Tek ek istek: yalnız geçmiş 30 günlük gerçek vardiya kayıtlarından
+  // sık kullanılanlar önerisi üretir. D1'e yazmaz, hata olursa mevcut dönem yeterlidir.
+  useEffect(() => {
+    if (!companyId || view !== "daily-entry" || !range.start) { setPriorAttendance([]); return undefined; }
+    let cancelled = false;
+    setPriorAttendance([]);
+    const from = addDays(range.start, -30);
+    const to = addDays(range.start, -1);
+    if (!from || !to) return undefined;
+    void getDailyAttendance({ mainCompanyId: companyId, startDate: from, endDate: to })
+      .then((rows) => { if (!cancelled) setPriorAttendance(Array.isArray(rows) ? rows : []); })
+      .catch(() => { if (!cancelled) setPriorAttendance([]); });
+    return () => { cancelled = true; };
+  }, [companyId, range.start, view]);
+
   const attendanceRosterIds = useMemo(() => new Set(attendance
     .filter((row) => {
       const date = rowDate(row);
