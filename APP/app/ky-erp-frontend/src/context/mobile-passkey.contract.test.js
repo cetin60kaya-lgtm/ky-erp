@@ -47,3 +47,16 @@ test("PRO ERP button opens native biometric prompt before any password form when
  assert.match(login,/initialFlow = null/);
  assert.match(login,/initialFlow\?\.stage \? initialFlow/);
 });
+
+test("approved desktop browsers offer Windows Hello without removing KY PRO mobile entry", () => {
+  const helper = read("./mobilePasskeyClient.js");
+  const offer = read("./MobilePasskeyOffer.jsx");
+  const login = read("../pages/LoginPage.jsx");
+  const pro = read("../pro/main.jsx");
+  assert.match(helper, /isUserVerifyingPlatformAuthenticatorAvailable/);
+  assert.match(offer, /hasPlatformPasskeyAuthenticator/);
+  assert.match(offer, /Windows Hello Girişini Etkinleştir/);
+  assert.match(login, /Windows Hello \/ Parmak İzi \/ PIN ile Giriş/);
+  assert.match(login, /useState\(\(\) => rememberedMobileUser\(\)\)/);
+  assert.match(pro, /await loginMobilePasskey\(identity\)/);
+});
