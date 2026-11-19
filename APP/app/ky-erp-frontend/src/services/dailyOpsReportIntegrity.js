@@ -31,9 +31,16 @@ export function reconcileDailyWeeklyReport(matrixRows, financialRows) {
     const additions = Number(row.additions ?? 0);
     const deductions = Number(row.deductions ?? 0);
     const netAmount = Number(row.totalAmount ?? row.total);
-    if (![baseAmount, additions, deductions, netAmount].every(Number.isFinite))
+    const hasShiftTotals = row.dayTotal != null && row.nightTotal != null;
+    const dayTotal = Number(hasShiftTotals ? row.dayTotal : byId.get(id)?.dayTotal ?? 0);
+    const nightTotal = Number(hasShiftTotals ? row.nightTotal : byId.get(id)?.nightTotal ?? 0);
+    if (![baseAmount, additions, deductions, netAmount, dayTotal, nightTotal].every(Number.isFinite)
+        || baseAmount < 0 || additions < 0 || deductions < 0 || dayTotal < 0 || nightTotal < 0)
       throw new Error("Haftalık mali sonuçta geçersiz tutar var.");
-    if (Math.abs(Math.round((baseAmount + additions - deductions) * 100) - Math.round(netAmount * 100)) > 1)
+    const cents = (value) => Math.round(value * 100);
+    if (hasShiftTotals && Math.abs(cents(dayTotal) + cents(nightTotal) - cents(baseAmount)) > 1)
+      throw new Error("D1 gündüz/gece alt toplamı baz hakedişle uyuşmuyor.");
+    if (cents(baseAmount) + cents(additions) - cents(deductions) !== cents(netAmount))
       throw new Error("Haftalık ek ödeme/kesinti tutarı net hakedişle uyuşmuyor.");
     const old = byId.get(id) || {};
     if (byId.has(id)) {
@@ -59,8 +66,7 @@ export function reconcileDailyWeeklyReport(matrixRows, financialRows) {
       days: old.days || {},
       dayCount: Number(row.dayCount ?? old.dayCount ?? 0),
       nightCount: Number(row.nightCount ?? old.nightCount ?? 0),
-      dayTotal: Number(old.dayTotal ?? 0),
-      nightTotal: Number(old.nightTotal ?? 0),
+      dayTotal, nightTotal,
       baseAmount, additions, deductions, totalAmount: netAmount,
       financialVerified: true,
     });
