@@ -49,6 +49,7 @@ import {
   updateDailyEmployee,
 } from "../../../services/dailyOpsApi";
 import { printHtmlDocument } from "../../../services/printService";
+import QuickRosterPicker from "./QuickRosterPicker";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
 import { dailyWorkDateInRange, reconcileDailyWeeklyReport, paginateDailyPrintRows } from "../../../services/dailyOpsReportIntegrity";
@@ -467,7 +468,6 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [dashboardOpen, setDashboardOpen] = useState("");
   const [query] = useState("");
   const [poolAddQuery, setPoolAddQuery] = useState("");
-  const [quickAddQuery, setQuickAddQuery] = useState("");
   const [cardAddToRoster, setCardAddToRoster] = useState(false);
   const [cardDialog, setCardDialog] = useState(null);
   const [quick, setQuick] = useState(null);
@@ -837,13 +837,6 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     const needle = poolAddQuery.trim().toLocaleLowerCase("tr-TR");
     return employees.filter((person) => person.active !== false).filter((person) => !needle || `${person.name} ${person.personnelNo} ${person.role} ${person.broker}`.toLocaleLowerCase("tr-TR").includes(needle));
   }, [employees, poolAddQuery]);
-  const resolveRosterChoice = useCallback((raw, candidates = availableRosterPeople) => {
-    const needle = normalizeText(raw);
-    if (!needle) return null;
-    return candidates.find((person) => normalizeText(person.personnelNo) === needle || normalizeText(person.name) === needle)
-      || candidates.find((person) => `${normalizeText(person.personnelNo)} ${normalizeText(person.name)}`.includes(needle))
-      || null;
-  }, [availableRosterPeople]);
   const visibleEntryPeople = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase("tr-TR");
     return employees
@@ -1043,14 +1036,6 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     addRoster: saveDailyRoster,
   });
 
-  const addRosterPerson = async (person, target = "main") => {
-    if (!person?.id) { setError("Listeden eklenecek personeli seçin."); return; }
-    const added = await addPersonToRoster(person);
-    if (added) {
-      if (target === "quick") setQuickAddQuery(""); else setPoolAddQuery("");
-    }
-  };
-
   const addPersonToRoster = async (person) => {
     if (!person?.id || busy || rosterWriteBlocked || (rosterIds.has(person.id) && rosterSaved)) return false;
     setBusy(true); setAddingPersonId(person.id); setError(""); setNotice("");
@@ -1189,7 +1174,35 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
     }
   };
 
-  const addFromQuickPool = () => addRosterPerson(resolveRosterChoice(quickAddQuery), "quick");
+  // Yalnız Hızlı Giriş penceresinin Personel Ekle işlemi: tek ve silmeyen
+  // D1 merge isteği, vardiya seçimi veya ücret hesabı değiştirilmez.
+  const addManyFromQuickPool = async (requestedIds) => {
+    if (busy || rosterWriteBlocked || !Array.isArray(requestedIds) || !requestedIds.length) return false;
+    const available = new Set(availableRosterPeople.map((person) => String(person.id)));
+    const ids = [...new Set(requestedIds.map(String))];
+    if (ids.some((id) => !available.has(id))) {
+      setError("Personel listesi başka cihazda değişmiş. Havuz listesini yenileyip yeniden seçin.");
+      return false;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const saved = await saveDailyRoster({
+        mainCompanyId: companyId, startDate: range.start, endDate: range.end,
+        mode: "merge", employeeIds: [...new Set([...effectiveRosterIds, ...ids])],
+      });
+      const confirmed = Array.isArray(saved?.employeeIds) ? saved.employeeIds.map(String) : null;
+      if (!confirmed || ids.some((id) => !confirmed.includes(id)))
+        throw new Error("Havuz kaydı sunucuda doğrulanmadı. Seçimler korunuyor; tekrar kontrol edin.");
+      rangeRequestRef.current += 1;
+      setRosterIds(new Set(confirmed));
+      setRosterSaved(true);
+      setNotice(`${ids.length} personel dönem listesine tek işlemde eklendi ve D1 üzerinden doğrulandı. Vardiya kaydı değişmedi.`);
+      return true;
+    } catch (e) {
+      setError(e?.message || "Seçilen personeller havuza eklenemedi.");
+      return false;
+    } finally { setBusy(false); }
+  };
 
   const saveFocused = async () => {
     if (busy || dailyWriteBlocked) return; setBusy(true); setError(""); setNotice("");
@@ -1929,7 +1942,14 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
           {quickDayPickerOpen ? <div className="quick-day-popover"><div className="quick-day-popover-head"><strong>{dateText(range.start)} — {dateText(range.end)}</strong><span>{quickDirty ? "Kaydedilmemiş seçimler varken gün değiştirilemez." : "Günü seçin; pencere otomatik kapanır."}</span></div><div className="quick-day-popover-grid">{days.map((date) => { const summary = daySummaryByDate.get(date) || { dayCount: 0, nightCount: 0, people: 0, total: 0 }; return <button type="button" key={date} className={date === quick.date ? "active" : ""} disabled={quickDirty || busy} onClick={() => changeQuickFocus(date, quick.shift)}><small>{new Intl.DateTimeFormat("tr-TR", { weekday: "long" }).format(new Date(`${date}T12:00:00`))}</small><strong>{dateText(date, true)}</strong><span><b className="day">G {summary.dayCount}</b><b className="night">N {summary.nightCount}</b></span><em>{summary.people} kişi · {money(summary.total)}</em></button>; })}</div></div> : null}
         </div>
         <div className="quick-status-strip"><span className="selected"><i/><b>Seçilen</b><strong>{quick.ids.size}</strong></span><span className="checked"><i/><b>Kontrol</b><strong>{quickChecked}/{quick.ids.size}</strong></span><span className="pending"><i/><b>Bekleyen</b><strong>{quickPending}</strong></span><span className="pool"><i/><b>Toplam Personel</b><strong>{activeRosterPeople.length}</strong></span></div>
-        <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-add-bar"><label className="gop-search"><Search size={14}/><input list="quick-roster-candidates" value={quickAddQuery} onChange={(e) => setQuickAddQuery(e.target.value)} placeholder="Listeye eklenecek personeli ara..."/></label><datalist id="quick-roster-candidates">{availableRosterPeople.map((person) => <option key={person.id} value={person.personnelNo || person.name}>{person.name} · {person.role || "Vasıfsız"}</option>)}</datalist><button type="button" disabled={!quickAddQuery.trim() || rosterWriteBlocked || busy} onClick={addFromQuickPool}><Plus size={13}/> Listeye Ekle</button><button type="button" onClick={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}><UserPlus size={13}/> Yeni Personel</button></div><div className="quick-legend"><span className="sel-dot"/> Seçildi <span className="ok-dot"/> Kontrol edildi <span className="save-dot"/> Kayıtlı</div></div>
+        <div className="quick-controls"><label className="gop-search"><Search size={14}/><input value={quick.query} onChange={(e) => setQuick({ ...quick, query: e.target.value })} placeholder="Personel, kod veya vasıf ara"/></label><div className="quick-add-bar"><QuickRosterPicker
+          people={availableRosterPeople}
+          attendance={attendance}
+          busy={busy}
+          disabled={rosterWriteBlocked}
+          onAdd={addManyFromQuickPool}
+          onNew={() => { setCardAddToRoster(true); setCardDialog({ ...EMPTY_PERSON }); }}
+        /></div><div className="quick-legend"><span className="sel-dot"/> Seçildi <span className="ok-dot"/> Kontrol edildi <span className="save-dot"/> Kayıtlı</div></div>
         <div className="quick-groups">{quickGroups.length ? quickGroups.map(([role, people]) => { const selectable = people.filter((person) => quick.shift === "day" || personWageAtDate(person, quick.date).night > 0); const selectedCount = selectable.filter((person) => quick.ids.has(person.id)).length; const allSelected = selectable.length > 0 && selectedCount === selectable.length; return <section className="quick-group" key={role}><div className="quick-group-head"><strong>{role}</strong><span>{selectedCount} / {selectable.length} seçildi</span><button type="button" onClick={() => setQuick((current) => { const ids = new Set(current.ids); const checked = new Set(current.checked); selectable.forEach((person) => { if (allSelected) { ids.delete(person.id); checked.delete(person.id); } else ids.add(person.id); }); return { ...current, ids, checked }; })}>{allSelected ? "Vasıf Seçimini Kaldır" : "Vasıfın Tümünü Seç"}</button></div><div className="quick-person-grid">{people.map((person) => { const selected = quick.ids.has(person.id); const checked = quick.checked.has(person.id); const historicalWage = personWageAtDate(person, quick.date); const blocked = quick.shift === "night" && historicalWage.night <= 0; return <article key={person.id} data-ky-quick-card-v2="20261017" data-ky-quick-layout="compact-v3" className={`kyq2-card ${selected ? "is-selected" : ""} ${checked ? "is-checked" : ""} ${blocked ? "is-blocked" : ""}`}>
   <div className="kyq2-identity-row">
     <span className="kyq2-avatar" aria-hidden="true">{quick.shift === "day" ? "G" : "N"}</span>
