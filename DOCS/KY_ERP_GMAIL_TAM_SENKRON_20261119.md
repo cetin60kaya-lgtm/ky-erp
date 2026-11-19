@@ -47,3 +47,9 @@
 - Sabit Gmail dönüş URI: `https://api.kyerp.net/api/auth/mail/oauth/google/callback`. Mail projesi OAuth Web uygulamasının Authorized redirect URIs alanında bulunmalı. Google Cloud proje kimliği seçimi ve Worker istemcisinin eşleşmesi kullanıcı Cloudflare arayüzünde doğrulanacak.
 - “0 posta kutusu” sonucu, sunucunun `REAUTH_REQUIRED` durumundaki hesapları filtrelemesinden kaynaklanmıyor; veritabanı kaydının varlığını tek başına dışlamıyor. Uygulama sahibi için `GET /api/mail/accounts/diagnostics` salt okunur; aktif tenant + her Gmail tenant kapsamı için yalnız toplamları verir. Mail adresi/mesaj/secret döndürmez; başka firma hesabını otomatik taşımaz.
 - Canlı kabul: Google Mail secrets ayrı yapılandırılmadan OAuth ve 15/15 senkron **PASS değildir**. Gerçek D1 kayıt teşhisi ve posta kutusu örnekleri ayrıca doğrulanacak.
+
+## 19.11.2026 — Gmail 0/15 sayaç ilk sayfalarda sabit: kontrollü tek tık tarama
+- Gerçek DESEN Gmail OAuth onaylı; ilk iki "Senkronize Et" adımında aynı `0/15 klasör, 3 mesaj işlendi` sonucu göründü. Bu tek başına senkronun takıldığı kanıtı değil: kod `GMAIL_PAGE_SIZE=3` ve `GMAIL_FOLDERS_PER_PASS=1`, bitmemiş etiketler `DONE` sayılmaz, yenilerine öncelik verir.
+- Tek buton artık **en fazla 8 ardışık, ayrı, küçük Worker isteği** çalıştırır; adım, işlenen mesaj **işlem sayısı** (yeni/eşsiz mail sayısı değil), son etiket ve tamamlanan klasör sayısını gösterir. Her adım backend'in gerçek cursor'ına dayanır. Klasör hata, sıfır ilerleme, kullanıcı durdurması ve ekran terk etmede yeni istek durur.
+- Worker maliyetini büyüten sayfa büyüklüğü veya yeni bir D1 şeması eklenmedi. Mail gönderme, silme, Google OAuth, Drive/Firebase veya mevcut hesap verileri değiştirilmedi. Sınırlı her turun sonunda gerekirse kullanıcı yeniden tıklar; sonsuz döngü yok.
+- Kod/test/yayın sonucu ayrıca kontrol edilir; Google 15/15 canlı kabulü **bu kod değişikliğiyle kendiliğinden PASS sayılmaz**.
