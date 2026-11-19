@@ -64,6 +64,29 @@ function datedWages(row: Row, history: Map<string, DailyWageChange[]>) {
   );
 }
 
+/**
+ * Günlük Operasyon tek ücret otoritesi.
+ * 1. Ödenmiş vardiyada ödeme defterinin değişmez kuruş tutarı,
+ * 2. Ledger öncesi tarihsel ödemede sabitlenmiş eski ücret,
+ * 3. Diğer bütün gün/vardiyalarda tarih-etkili personel ücret geçmişi.
+ *
+ * Ekran, haftalık özet, hakediş/ödeme ve gün kaydı aynı kuralı kullanır.
+ */
+function resolvedRecordedWages(row: Row, history: Map<string, DailyWageChange[]>) {
+  const effective = datedWages(row, history);
+  const legacyPaid = text(row.payment_status).toUpperCase() === "PAID"
+    && num(row.ledger_item_count) === 0;
+  const forShift = (shift: "day" | "night") => {
+    const settledCents = row[`settled_${shift}_cents`];
+    if (settledCents !== null && settledCents !== undefined) {
+      return dailyMoneyCents(Number(settledCents) / 100) / 100;
+    }
+    if (legacyPaid) return money(row[`${shift}_wage`]);
+    return shift === "day" ? effective.dayWage : effective.nightWage;
+  };
+  return { dayWage: forShift("day"), nightWage: forShift("night") };
+}
+
 const aliases = new Set([
   "",
   "mecit-hakan",
@@ -489,10 +512,7 @@ async function listAttendance(c: Context<AppEnv>) {
 
   const history = await wageHistory(c, companyId);
   const rows = (result.results || []).map((row) => {
-    const active = datedWages(row, history);
-    const legacyPaid = text(row.payment_status).toUpperCase() === "PAID" && num(row.ledger_item_count) === 0;
-    const dw = row.settled_day_cents != null ? Number(row.settled_day_cents) / 100 : legacyPaid ? money(row.day_wage) : active.dayWage;
-    const nw = row.settled_night_cents != null ? Number(row.settled_night_cents) / 100 : legacyPaid ? money(row.night_wage) : active.nightWage;
+    const { dayWage: dw, nightWage: nw } = resolvedRecordedWages(row, history);
     return {
       ...attendanceDto({ ...row, day_wage: dw, night_wage: nw,
         total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) }),
@@ -700,10 +720,12 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
   }
 
   const liveIds=(currentResult.results || []).map((row)=>text(row.id)).filter(Boolean);
-  const paidItems=liveIds.length ? await c.env.DB.prepare(`SELECT attendance_id,shift,amount_cents FROM hr_daily_payment_items
-    WHERE main_company_id=? AND active=1 AND attendance_id IN (${liveIds.map(()=>"?").join(",")})`)
+  const paidItems=liveIds.length ? await c.env.DB.prepare(`SELECT attendance_id,shift,amount_cents,active FROM hr_daily_payment_items
+    WHERE main_company_id=? AND attendance_id IN (${liveIds.map(()=>"?").join(",")})`)
     .bind(companyId,...liveIds).all<Row>() : {results:[] as Row[]};
-  const paidAmountMap=new Map((paidItems.results || []).map((row)=>[`${text(row.attendance_id)}|${text(row.shift)}`,Number(row.amount_cents)/100]));
+  const ledgerAttendanceIds = new Set((paidItems.results || []).map((row) => text(row.attendance_id)));
+  const paidAmountMap = new Map((paidItems.results || []).filter((row) => flag(row.active))
+    .map((row) => [`${text(row.attendance_id)}|${text(row.shift)}`, Number(row.amount_cents) / 100]));
   const paidSet=new Set(paidAmountMap.keys());
   for(const row of rows) {
     const current=currentByKey.get(`${row.employeeId}|${row.workDate}`);
@@ -732,14 +754,17 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
 
     if (!current && !day && !night) continue;
 
-    const isPaid = text(current?.payment_status).toUpperCase() === "PAID";
-    const active = datedWages({
+    const { dayWage, nightWage } = resolvedRecordedWages({
       employee_id: row.employeeId, work_date: row.workDate,
       card_day_wage: person.day_wage, card_night_wage: person.night_wage,
       day_wage: current?.day_wage, night_wage: current?.night_wage,
+      payment_status: current?.payment_status,
+      ledger_item_count: ledgerAttendanceIds.has(text(current?.id)) ? 1 : 0,
+      settled_day_cents: paidAmountMap.has(`${text(current?.id)}|day`)
+        ? dailyMoneyCents(paidAmountMap.get(`${text(current?.id)}|day`)) : null,
+      settled_night_cents: paidAmountMap.has(`${text(current?.id)}|night`)
+        ? dailyMoneyCents(paidAmountMap.get(`${text(current?.id)}|night`)) : null,
     }, effectiveWageHistory);
-    const dayWage = isPaid ? money(current?.day_wage) : paidAmountMap.has(`${text(current?.id)}|day`) ? money(paidAmountMap.get(`${text(current?.id)}|day`)) : active.dayWage;
-    const nightWage = isPaid ? money(current?.night_wage) : paidAmountMap.has(`${text(current?.id)}|night`) ? money(paidAmountMap.get(`${text(current?.id)}|night`)) : active.nightWage;
     const totalAmount = money((day ? dayWage : 0) + (night ? nightWage : 0));
     const paymentStatus = text(row.paymentStatus || current?.payment_status) || "WAITING";
     const timestamp = nowIso();
@@ -1897,11 +1922,8 @@ async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: s
     .bind(companyId,companyId,companyId,companyId,start,end,employeeId,employeeId).all<Row>();
   const history=await wageHistory(c,companyId);
   return (result.results || []).map((row)=>{
-    const active=datedWages(row,history);
-    const legacy=text(row.payment_status).toUpperCase()==="PAID" && num(row.ledger_item_count)===0;
-    const dw=row.settled_day_cents!=null ? Number(row.settled_day_cents)/100 : legacy ? money(row.day_wage) : active.dayWage;
-    const nw=row.settled_night_cents!=null ? Number(row.settled_night_cents)/100 : legacy ? money(row.night_wage) : active.nightWage;
-    return {...row,day_wage:dw,night_wage:nw} as Row;
+    const { dayWage, nightWage } = resolvedRecordedWages(row, history);
+    return { ...row, day_wage: dayWage, night_wage: nightWage } as Row;
   });
 }
 
