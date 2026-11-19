@@ -31,11 +31,32 @@ export function reconcileDailyWeeklyReport(matrixRows, financialRows) {
     const additions = Number(row.additions ?? 0);
     const deductions = Number(row.deductions ?? 0);
     const netAmount = Number(row.totalAmount ?? row.total);
-    if (![baseAmount, additions, deductions, netAmount].every(Number.isFinite))
+    const hasShiftTotals = row.dayTotal != null && row.nightTotal != null;
+    const dayTotal = Number(hasShiftTotals ? row.dayTotal : byId.get(id)?.dayTotal ?? 0);
+    const nightTotal = Number(hasShiftTotals ? row.nightTotal : byId.get(id)?.nightTotal ?? 0);
+    if (![baseAmount, additions, deductions, netAmount, dayTotal, nightTotal].every(Number.isFinite)
+        || baseAmount < 0 || additions < 0 || deductions < 0 || dayTotal < 0 || nightTotal < 0)
       throw new Error("Haftalık mali sonuçta geçersiz tutar var.");
-    if (Math.abs(Math.round((baseAmount + additions - deductions) * 100) - Math.round(netAmount * 100)) > 1)
+    const cents = (value) => Math.round(value * 100);
+    if (hasShiftTotals && Math.abs(cents(dayTotal) + cents(nightTotal) - cents(baseAmount)) > 1)
+      throw new Error("D1 gündüz/gece alt toplamı baz hakedişle uyuşmuyor.");
+    if (cents(baseAmount) + cents(additions) - cents(deductions) !== cents(netAmount))
       throw new Error("Haftalık ek ödeme/kesinti tutarı net hakedişle uyuşmuyor.");
     const old = byId.get(id) || {};
+    if (byId.has(id)) {
+      // Haftalık yazdırmada vardiya sayısı ve baz hakediş iki ayrı kaynaktan
+      // farklı geliyorsa yanlış çıktıyı engelle; kişi kartındaki güncel
+      // ücretten geçmiş çalışma tutarı tahmin edilmez.
+      const dayCount = Number(row.dayCount ?? old.dayCount ?? 0);
+      const nightCount = Number(row.nightCount ?? old.nightCount ?? 0);
+      if (![dayCount, nightCount].every(Number.isSafeInteger) || dayCount < 0 || nightCount < 0
+        || dayCount !== Number(old.dayCount ?? 0) || nightCount !== Number(old.nightCount ?? 0))
+        throw new Error("Haftalık vardiya sayıları D1 hakediş özetiyle uyuşmuyor.");
+      const matrixCents = Math.round(Number(old.totalAmount ?? 0) * 100);
+      if (!Number.isFinite(matrixCents)
+        || Math.abs(matrixCents - Math.round(baseAmount * 100)) > 1)
+        throw new Error("Gündüz/gece ücret toplamı D1 baz hakedişiyle uyuşmuyor.");
+    }
     byId.set(id, {
       ...old,
       employeeId: id,
@@ -45,11 +66,19 @@ export function reconcileDailyWeeklyReport(matrixRows, financialRows) {
       days: old.days || {},
       dayCount: Number(row.dayCount ?? old.dayCount ?? 0),
       nightCount: Number(row.nightCount ?? old.nightCount ?? 0),
-      dayTotal: Number(old.dayTotal ?? 0),
-      nightTotal: Number(old.nightTotal ?? 0),
+      dayTotal, nightTotal,
       baseAmount, additions, deductions, totalAmount: netAmount,
       financialVerified: true,
     });
   }
   return [...byId.values()].sort((a, b) => String(a.name).localeCompare(String(b.name), "tr"));
+}
+
+/** A4 yatay haftalık listede 26 kişiden fazlası kesilmeden ayrı sayfaya geçer. */
+export function paginateDailyPrintRows(rows, perPage = 26) {
+  if (!Array.isArray(rows)) throw new Error("Yazdırılacak personel listesi geçersiz.");
+  const size = Math.max(1, Math.min(50, Math.trunc(Number(perPage)) || 26));
+  const result = [];
+  for (let start = 0; start < rows.length; start += size) result.push(rows.slice(start, start + size));
+  return result;
 }

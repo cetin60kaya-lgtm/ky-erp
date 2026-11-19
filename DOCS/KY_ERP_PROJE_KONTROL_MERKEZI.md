@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Günlük Operasyon tek D1 kayıt/ücret motoru, hızlı kalıcı havuz
+- Canlı kabul dalı: `fix/gunluk-tek-kaynak-canli-kabul-20261119` (güncel canonical production HEAD kaynaklı). Eski PR #604 superseded; Gmail ve diğer eşzamanlı ana dal değişiklikleri korunur.
+- `DailyHrWorkspace` tek frontend, `gunluk-operasyon-cloud.ts` tek Worker API, `gunluk-operasyon-core.ts` tek tarihli/ödenmiş ücret çözücüsü, `ky-erp-db` canonical D1 veri otoritesidir.
+- **Havuza Ekle** bir HTTP çağrısı ile D1 persist + yeniden okuma doğrulaması yapar; `Günlük Kaydet` sadece gün/vardiya kaydıdır. Merge silme yapmaz; yalnız açık hedef kişi çıkarılabilir. Liste özel aralıkta tutulur; geçmiş aralık kayıtları silinmez.
+- Gündüz/gece D1 alt toplamları, baz hakediş, ek ödeme, kesinti ve net kuruş hesabı tek Worker motorunda. A4, fiş, Excel doğrulanmamış mali veriyle çıktı üretemez. Haftalık çıktı 26 personel/sayfa, 10'lu ödeme fişi ayrı.
+- Tam frontend/Worker CI, PR merge SHA, production Pages/Worker deploy ve gerçek kullanıcı refresh testi geçmeden **CANLI PASS** yazılmaz. Üretim veri sıfırlama, yersiz migration, gerçek ödeme/mali kayıt veya şifre/secret aktarımı yok.
+
+
 ## 19.11.2026 — Gmail OAuth projesi Drive'dan ayrıldı, 0 hesap teşhisi eklendi
 - Gmail ayrı `GOOGLE_MAIL_CLIENT_ID` / `GOOGLE_MAIL_CLIENT_SECRET` olmadan Drive OAuth istemcisine otomatik geri düşmez; mevcut Drive / Firebase kimlik bilgileri korunur. Mail projesine ait ayrı Web OAuth istemcisi Cloudflare'da doğrulanmalıdır.
 - “0 posta kutusu” görünmesi hesap silinmesi kanıtı değildir. Yetkili uygulama sahibi için firma kapsamındaki kayıt sayılarını ve diğer Gmail firma kapsamlarını okuyacak salt okunur denetim eklendi; otomatik hesap oluşturma/taşıma/silme yok.

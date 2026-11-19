@@ -35,3 +35,26 @@ test("merge never duplicates staff IDs", async () => {
   });
   assert.equal(result.size, 2);
 });
+
+test("havuza ekleme tek POST ile D1 doğrulanmış yanıtı kullanır, üç ağ isteği beklemez", async () => {
+  let calls = 0;
+  const ids = await persistDailyRosterMember({
+    ...params,
+    addRoster: async (body) => {
+      calls++;
+      assert.equal(body.mode, "add");
+      assert.equal(body.addEmployeeId, "new-employee");
+      assert.equal(body.mainCompanyId, "hakan");
+      return { employeeIds: ["existing", "new-employee"] };
+    },
+    readRoster: async () => { throw new Error("Eski okuma yolu kullanılmamalı."); },
+    writeRoster: async () => { throw new Error("Eski yazma yolu kullanılmamalı."); },
+  });
+  assert.equal(calls, 1);
+  assert.deepEqual([...ids], ["existing", "new-employee"]);
+});
+test("sunucuda görünmeyen havuz kaydı başarılı gösterilmez", async () => {
+  await assert.rejects(() => persistDailyRosterMember({
+    ...params, addRoster: async () => ({ employeeIds: ["existing"] }),
+  }), /doğrulamadı/);
+});

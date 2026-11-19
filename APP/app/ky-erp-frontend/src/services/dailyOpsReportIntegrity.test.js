@@ -37,3 +37,58 @@ test("invalid or inconsistent D1 financial amounts never enter the printable wee
   assert.throws(() => reconcileDailyWeeklyReport([], [{ employeeId: "p1", baseAmount: 100, additions: 20, deductions: 3, totalAmount: 100 }]), /uyuşmuyor/);
   assert.throws(() => reconcileDailyWeeklyReport([], [{ employeeId: "p1", baseAmount: "bad", totalAmount: 100 }]), /geçersiz/);
 });
+
+test("vardiya adetleri farklıysa haftalık/fiş basımı için mali kayıt onayı verilmez", () => {
+  assert.throws(() => reconcileDailyWeeklyReport([
+    { employeeId: "p1", dayCount: 2, nightCount: 1, totalAmount: 3000 },
+  ], [
+    { employeeId: "p1", dayCount: 3, nightCount: 1, baseAmount: 3000, additions: 0, deductions: 0, totalAmount: 3000 },
+  ]), /vardiya sayıları/);
+});
+test("personelin gün-gece toplamı ile sunucudaki baz tutar farklıysa çıktı durur", () => {
+  assert.throws(() => reconcileDailyWeeklyReport([
+    { employeeId: "p1", dayCount: 2, nightCount: 1, totalAmount: 3000 },
+  ], [
+    { employeeId: "p1", dayCount: 2, nightCount: 1, baseAmount: 3100, additions: 0, deductions: 0, totalAmount: 3100 },
+  ]), /baz hakedişiyle/);
+});
+test("aynı personel farklı gün ve gece vardiyalarında doğru fiş neti verir", () => {
+  const rows = reconcileDailyWeeklyReport([
+    { employeeId: "p1", name: "Çalışan", dayCount: 2, nightCount: 1, dayTotal: 2500, nightTotal: 1800, totalAmount: 4300 },
+  ], [
+    { employeeId: "p1", dayCount: 2, nightCount: 1, baseAmount: 4300, additions: 200, deductions: 50, totalAmount: 4450 },
+  ]);
+  assert.equal(rows[0].totalAmount, 4450);
+  assert.equal(rows[0].dayTotal, 2500);
+  assert.equal(rows[0].nightTotal, 1800);
+  assert.equal(rows[0].financialVerified, true);
+});
+
+test("D1 gündüz/gece alt toplamlarını kanonik olarak verir ve çıktı aynı rakamları taşır", () => {
+  const rows=reconcileDailyWeeklyReport([
+    {employeeId:"p1",dayCount:2,nightCount:1,dayTotal:2500,nightTotal:1800,totalAmount:4300},
+  ],[
+    {employeeId:"p1",dayCount:2,nightCount:1,dayTotal:2500,nightTotal:1800,
+      baseAmount:4300,additions:125.2,deductions:45.1,totalAmount:4380.1},
+  ]);
+  assert.equal(rows[0].dayTotal,2500);
+  assert.equal(rows[0].nightTotal,1800);
+  assert.equal(rows[0].totalAmount,4380.1);
+  assert.equal(rows[0].financialVerified,true);
+});
+test("sunucu gündüz/gece alt toplamı baz hakedişiyle uyuşmazsa hiçbir fiş onaylanmaz", () => {
+  assert.throws(()=>reconcileDailyWeeklyReport([],[
+    {employeeId:"p1",dayCount:1,nightCount:1,dayTotal:1500,nightTotal:1600,
+      baseAmount:3200,additions:0,deductions:0,totalAmount:3200},
+  ]),/D1 gündüz\/gece alt toplamı/);
+});
+
+test("189 personellik haftalık çıktı her kişiyi A4 sayfasına eksiksiz alır", async () => {
+  const { paginateDailyPrintRows } = await import("./dailyOpsReportIntegrity.js");
+  const rows = Array.from({ length: 189 }, (_, index) => ({ employeeId: `e${index + 1}` }));
+  const pages = paginateDailyPrintRows(rows, 26);
+  assert.equal(pages.length, 8);
+  assert.equal(pages[0].length, 26);
+  assert.equal(pages.at(-1).length, 7);
+  assert.deepEqual(pages.flat().map((row) => row.employeeId), rows.map((row) => row.employeeId));
+});

@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Günlük Operasyon havuz/ücret/çıktı tek canonical uygulaması
+- Güncel production tabanından açılmış dal: `fix/gunluk-tek-kaynak-canli-kabul-20261119`. Yalnız mevcut günlük operasyon frontend/Worker, tarihli ücret çekirdeği ve sözleşme testleri güncellendi; paralel sekme/havuz/hakediş sistemi eklenmedi.
+- Havuza Ekle tek D1 yazma+okuma doğrulaması, Günlük Kaydet gün/vardiya; roster üyeliği ile vardiya ücretli çalışması ayrı. Yalnız hedef kişi çıkarma, başka PC kaydını sessiz silmeme.
+- Eski ödenmiş ücret snapshot'ı korunur; açık ve yeni vardiyada geçerlilik tarihli ücret kullanılır. D1 tek para kaynağı; gündüz/gece/baz/ek/kesinti/net mutabakatı olmadan fiş/Excel/haftalık A4 basılmaz.
+- Tam gerçek CI, güvenli PR birleşmesi, Cloudflare Pages/Worker production commit kanıtı ve gerçek iki PC yenileme/kayıt kabulü ayrı doğrulanır. Üretim D1 değişmedi.
+
+
 ## 19.11.2026 — Gmail OAuth projesi Drive'dan ayrıldı, 0 hesap teşhisi eklendi
 - Gmail ayrı `GOOGLE_MAIL_CLIENT_ID` / `GOOGLE_MAIL_CLIENT_SECRET` olmadan Drive OAuth istemcisine otomatik geri düşmez; mevcut Drive / Firebase kimlik bilgileri korunur. Mail projesine ait ayrı Web OAuth istemcisi Cloudflare'da doğrulanmalıdır.
 - “0 posta kutusu” görünmesi hesap silinmesi kanıtı değildir. Yetkili uygulama sahibi için firma kapsamındaki kayıt sayılarını ve diğer Gmail firma kapsamlarını okuyacak salt okunur denetim eklendi; otomatik hesap oluşturma/taşıma/silme yok.
