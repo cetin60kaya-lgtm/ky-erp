@@ -51,7 +51,7 @@ import {
 import { printHtmlDocument } from "../../../services/printService";
 import { dailyPeriodScope, dailyRangeScope, dailyFocusedScope, assessDailyPeriodLocks, dailyWriteGate } from "../../../services/dailyOpsIntegrity";
 import { persistDailyRosterMember } from "../../../services/dailyOpsPersonnelFlow";
-import { dailyWorkDateInRange, reconcileDailyWeeklyReport } from "../../../services/dailyOpsReportIntegrity";
+import { dailyWorkDateInRange, reconcileDailyWeeklyReport, paginateDailyPrintRows } from "../../../services/dailyOpsReportIntegrity";
 import { exportRowsToExcelFile } from "../../../utils/excelExport";
 import "./daily-hr-workspace.css";
 import "./daily-hr-workspace-final.css";
@@ -346,8 +346,8 @@ function printWeeklyMatrix(title, range, days, rows = []) {
     amount: sum.amount + number(row.totalAmount ?? row.total),
   }), { people: 0, day: 0, night: 0, base: 0, additions: 0, deductions: 0, amount: 0 });
 
-  // Haftalık rapor personel sayısından bağımsız tek A4 yatay sayfada basılır.
-  const pages = [source];
+  // 189+ personel tek sayfaya sıkıştırılmaz; her A4 sayfası en fazla 26 satır içerir.
+  const pages = paginateDailyPrintRows(source, 26);
   const headers = safeDays.map((date) => {
     const weekday = new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`)).replace(".", "").toLocaleUpperCase("tr-TR");
     return `<th class="date-col"><span>${escapeHtml(weekday)}</span><b>${escapeHtml(dateText(date, true))}</b><small>G / N</small></th>`;
@@ -370,7 +370,7 @@ function printWeeklyMatrix(title, range, days, rows = []) {
     const generalDayCells = dayTotals.map((item) => `<td class="day-total general"><span>G ${item.day}</span><span>N ${item.night}</span></td>`).join("");
     const lastPage = pageIndex === pages.length - 1;
     return `<section class="week-page">
-      <header><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(dateText(printStart))} — ${escapeHtml(dateText(printEnd))}</span></div></header>
+      <header><div><strong>${escapeHtml(title)}</strong><span>${escapeHtml(dateText(printStart))} — ${escapeHtml(dateText(printEnd))}</span></div><em>Sayfa ${pageIndex + 1} / ${pages.length}</em></header>
       <table>
         <thead><tr><th class="no">No</th><th class="person">Personel</th><th class="role">Vasıf</th>${headers}<th class="count">G</th><th class="count">N</th><th class="total-days">Toplam<br/>Gün</th><th class="extra-money">Ek (+)</th><th class="extra-money">Kesinti (-)</th><th class="total-money">Net Tutar</th></tr></thead>
         <tbody>${body}</tbody>
@@ -385,7 +385,7 @@ function printWeeklyMatrix(title, range, days, rows = []) {
   return printHtmlDocument({
     title,
     html: `<main class="week-print">${html || '<p>Kayıt yok.</p>'}</main>`,
-    css: `@page{size:A4 landscape;margin:3mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:100%}.week-page{width:100%;height:auto;max-height:198mm;display:block;page-break-after:auto;break-after:auto;break-inside:avoid}.week-page>header{min-height:5mm;border:1px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:.4mm 1mm;margin-bottom:.3mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:2mm}.week-page>header strong{font-size:9pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7pt}.week-page th,.week-page td{border:1px solid #667085;padding:.14mm .5mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:6mm;background:#eef2f7}.week-page td{height:4mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:39mm;text-align:left}.week-page .person strong{display:block;font-size:7.2pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:0;font-size:6.2pt;color:#475467}.week-page .role{width:21mm;text-align:left;font-size:7pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:17mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.2pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:7.5pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .extra-money{width:16mm;text-align:right;font-size:6.1pt;white-space:nowrap}.week-page .total-money{width:28mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:4.5mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{html,body,.week-print,.week-page{height:auto!important;overflow:visible!important}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
+    css: `@page{size:A4 landscape;margin:3mm}*{box-sizing:border-box}html,body{margin:0;padding:0;font-family:Arial,sans-serif;color:#101828;background:#fff}.week-print{width:100%}.week-page{width:100%;height:auto;max-height:198mm;display:block;page-break-after:always;break-after:page;break-inside:avoid}.week-page:last-child{page-break-after:auto;break-after:auto}.week-page>header{min-height:5mm;border:1px solid #111827;display:flex;align-items:center;justify-content:space-between;padding:.4mm 1mm;margin-bottom:.3mm;background:#f8fafc}.week-page>header div{display:flex;align-items:baseline;gap:2mm}.week-page>header strong{font-size:9pt;letter-spacing:.01em}.week-page>header span,.week-page>header em{font-size:7.5pt;font-style:normal;white-space:nowrap}.week-page table{width:100%;border-collapse:collapse;table-layout:fixed;font-size:7pt}.week-page th,.week-page td{border:1px solid #667085;padding:.14mm .5mm;line-height:1.05;vertical-align:middle}.week-page th{font-weight:900;text-align:center;height:6mm;background:#eef2f7}.week-page td{height:4mm}.week-page .no{width:6mm;text-align:center}.week-page .person{width:39mm;text-align:left}.week-page .person strong{display:block;font-size:7.2pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .person small{display:block;margin-top:0;font-size:6.2pt;color:#475467}.week-page .role{width:21mm;text-align:left;font-size:7pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.week-page .date-col{width:17mm}.week-page .date-col span,.week-page .date-col b,.week-page .date-col small{display:block}.week-page .date-col span{font-size:7pt}.week-page .date-col b{font-size:7.2pt;margin-top:.4mm}.week-page .date-col small{font-size:5.5pt;margin-top:.35mm;color:#667085}.work-cell{padding:.2mm!important;text-align:center}.work-cell>span{display:inline-flex;align-items:center;justify-content:center;gap:.45mm;width:50%;font-size:7.6pt;font-weight:900;white-space:nowrap}.work-cell>span+span{border-left:1px solid #98a2b3}.work-cell b{font-size:7pt}.work-cell i{font-style:normal;font-size:7.5pt;font-weight:900}.work-cell .day.on{color:#c2410c}.work-cell .night.on{color:#3730a3}.work-cell .off{color:#98a2b3}.week-page .count{width:10mm;text-align:center}.week-page .total-days{width:14mm;text-align:center}.week-page .extra-money{width:16mm;text-align:right;font-size:6.1pt;white-space:nowrap}.week-page .total-money{width:28mm;text-align:right}.week-page th.total-money{text-align:center}.week-page td.total-money strong{font-size:8.6pt;white-space:nowrap}.week-page tfoot td{height:4.5mm;font-weight:900;background:#f8fafc}.week-page tfoot .day-total{text-align:center;padding:.3mm!important}.week-page tfoot .day-total span{display:block;font-size:6.6pt;line-height:1.15}.week-page tfoot .page-total td{border-top:1.5px solid #111827}.week-page tfoot .grand-total td{border-top:2px solid #111827;border-bottom:2px solid #111827;background:#eaf2ff;font-size:8.4pt}.week-page tfoot .grand-total .total-money strong{font-size:10pt}.week-page tfoot .general span{font-weight:900}@media print{html,body,.week-print,.week-page{height:auto!important;overflow:visible!important}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}body{-webkit-print-color-adjust:exact;print-color-adjust:exact}}`,
   });
 }
 function printWeeklySummary(range, days, rows = []) {
@@ -861,7 +861,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   }, [visibleEntryPeople]);
   const selectedRoleCounts = useMemo(() => groupedEntryPeople.map(([role, people]) => ({ role, count: people.filter((person) => selectedIds.has(person.id)).length })).filter((row) => row.count > 0), [groupedEntryPeople, selectedIds]);
   const weeklySummaryInScope = weeklyReadScope === expectedRangeScope;
-  const weeklyControlRows = useMemo(() => {
+  const weeklyReconciliation = useMemo(() => {
     const map = new Map();
     attendance.forEach((row) => {
       const date = rowDate(row);
@@ -878,13 +878,21 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       map.set(employeeId, current);
     });
     const matrixRows = [...map.values()];
-    return weeklySummaryInScope
-      ? reconcileDailyWeeklyReport(matrixRows, summaryRows)
-      : matrixRows.map((row) => ({ ...row, baseAmount: row.totalAmount, additions: 0, deductions: 0, financialVerified: false }));
+    if (!weeklySummaryInScope) {
+      return { rows: matrixRows.map((row) => ({ ...row, baseAmount: row.totalAmount, additions: 0, deductions: 0, financialVerified: false })), error: "" };
+    }
+    try {
+      return { rows: reconcileDailyWeeklyReport(matrixRows, summaryRows), error: "" };
+    } catch (reconcileError) {
+      // Yanlış ücret/fiş gösterip yazdırma yerine sadece ilgili mali görünümü durdur.
+      return { rows: matrixRows.map((row) => ({ ...row, financialVerified: false })), error: reconcileError?.message || "D1 mali mutabakatı başarısız." };
+    }
   }, [attendance, employeeMap, range.end, range.start, summaryRows, weeklySummaryInScope]);
+  const weeklyControlRows = weeklyReconciliation.rows;
   const weeklyFinancialReady = weeklySummaryInScope
     && rangeReadScope === expectedRangeScope
     && !rangeLoadError
+    && !weeklyReconciliation.error
     && weeklyControlRows.every((row) => row.financialVerified);
   // Geçmiş haftalarda da açık hakediş olabilir; tarih nedeniyle havuzu gizleme.
   const visiblePaymentRows = paymentRows;
@@ -1819,7 +1827,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         </section>
       </div> : null}
 
-      {view === "daily-weekly" && !weeklyFinancialReady ? <div className="gop-error" role="status">{weeklyLoadError || "Haftalık ek ödeme/kesinti ve net tutarlar D1 üzerinden doğrulanıyor. Çıktı ve Excel bu sırada kapalı."}</div> : null}
+      {view === "daily-weekly" && !weeklyFinancialReady ? <div className="gop-error" role="status">{weeklyReconciliation.error || weeklyLoadError || "Haftalık ek ödeme/kesinti ve net tutarlar D1 üzerinden doğrulanıyor. Çıktı ve Excel bu sırada kapalı."}</div> : null}
       {view === "daily-weekly" ? <><div className="gop-toolbar-card">{rangeControls}<div className="gop-print-actions"><button type="button" disabled={!weeklyFinancialReady || !weeklyControlRows.length} onClick={() => printWeeklySummary(range, days, weeklyControlRows)}><Printer size={16}/> Özet Yazdır</button><button type="button" disabled={!weeklyFinancialReady} onClick={exportExcel}><FileSpreadsheet size={16}/> Excel</button></div></div><div className="gop-week-stats"><Stat label="Çalışan" value={weeklyTotals.people}/><Stat label="Toplam Gün" value={weeklyTotals.day + weeklyTotals.night}/><Stat label="Gündüz" value={weeklyTotals.day}/><Stat label="Gece" value={weeklyTotals.night}/><Stat label="Kontrol Bekleyen" value={weeklyPending}/><Stat label="Çalışma Tutarı" value={weeklyFinancialReady ? money(weeklyTotals.base) : "Doğrulanıyor"}/><Stat label="Ek Ödeme (+)" value={weeklyFinancialReady ? money(weeklyTotals.additions) : "—"}/><Stat label="Kesinti (-)" value={weeklyFinancialReady ? money(weeklyTotals.deductions) : "—"}/><Stat label="Net Toplam" value={weeklyFinancialReady ? money(weeklyTotals.total) : "—"}/></div><div className="gop-card gop-week-card"><div className="gop-card-head"><div><h2>Dönem Kontrol Matrisi</h2><span>{dateText(range.start)} — {dateText(range.end)} · Gün gün çalışma ve hakediş kontrolü · ✓ Onaylandı · • Kontrol bekliyor · – Kayıt yok.</span></div></div><div className="gop-week-matrix"><table><thead><tr><th className="person">Personel</th><th className="role">Vasıf</th>{days.map((date) => <th key={date}><span>{new Intl.DateTimeFormat("tr-TR", { weekday: "short" }).format(new Date(`${date}T12:00:00`))}</span><b>{dateText(date, true)}</b></th>)}<th>Toplam Gün</th><th>Ek (+)</th><th>Kesinti (-)</th><th>Net Toplam</th></tr></thead><tbody>{weeklyControlRows.length ? weeklyControlRows.map((row) => <tr key={row.employeeId}><td className="person"><strong>{row.name}</strong><small>{row.personnelNo || ""}</small><small className="gop-week-rate">G: {wageRangeLabel(row, "day", days)} · N: {wageRangeLabel(row, "night", days)}</small></td><td className="role">{row.role || "-"}</td>{days.map((date) => { const cell = row.days?.[date] || {}; return <td key={date} className="shift-cell"><span className={cell.day ? (cell.dayChecked ? "on day is-reviewed" : "on day is-pending") : ""} title={cell.day ? (cell.dayChecked ? "Gündüz kontrol edildi" : "Gündüz kontrol bekliyor") : "Gündüz kayıt yok"}>G{cell.day ? (cell.dayChecked ? "✓" : "•") : "–"}</span><span className={cell.night ? (cell.nightChecked ? "on night is-reviewed" : "on night is-pending") : ""} title={cell.night ? (cell.nightChecked ? "Gece kontrol edildi" : "Gece kontrol bekliyor") : "Gece kayıt yok"}>N{cell.night ? (cell.nightChecked ? "✓" : "•") : "–"}</span></td>; })}<td className="total-day"><strong>{number(row.dayCount) + number(row.nightCount)}</strong></td><td className="money"><strong>+{weeklyFinancialReady ? money(row.additions) : "—"}</strong></td><td className="money"><strong>−{weeklyFinancialReady ? money(row.deductions) : "—"}</strong></td><td className="money"><strong>{weeklyFinancialReady ? money(row.totalAmount) : "—"}</strong></td></tr>) : <tr><td colSpan={days.length + 6}><Empty>Seçili dönemde çalışma veya ek işlem kaydı yok.</Empty></td></tr>}</tbody></table></div><details className="gop-week-detail"><summary>Vasıf Dağılımı <span>{roleOverview.length} grup</span></summary><div className="gop-role-overview">{roleOverview.map(([role, count]) => <div key={role}><span>{role}</span><b>{count}</b></div>)}</div></details></div></> : null}
 
       {view === "daily-payments" ? <div className="gop-payments-v2">
