@@ -23,6 +23,53 @@ const amountCents = (value: unknown) => {
   return n;
 };
 
+/**
+ * Personel kartında aylık tek görünüm: ayın hakedişi çalışma tarihine,
+ * teyitli ödeme ise ödeme tarihine göre gruplanır. Bunlar ayrı mali
+ * metriklerdir; kesinlikle birbiri yerine kullanılmaz.
+ */
+export function monthlyDailyPersonnelHistory(
+  worked: HistoryRow[], payments: HistoryRow[], adjustments: HistoryRow[],
+) {
+  type Month = {month:string;dayCount:number;nightCount:number;dayCents:number;nightCents:number;
+    additionCents:number;deductionCents:number;paidCents:number;paidCount:number};
+  const byMonth = new Map<string,Month>();
+  const ensure = (date: unknown) => {
+    const key=str(date).slice(0,7);
+    if (!/^\d{4}-\d{2}$/.test(key)) throw new Error("INVALID_HISTORY_MONTH");
+    if (!byMonth.has(key)) byMonth.set(key,{month:key,dayCount:0,nightCount:0,
+      dayCents:0,nightCents:0,additionCents:0,deductionCents:0,paidCents:0,paidCount:0});
+    return byMonth.get(key)!;
+  };
+  for (const row of worked) {
+    const isDay=bool(row.day_shift),isNight=bool(row.night_shift);
+    if (!isDay && !isNight) continue;
+    const month=ensure(row.work_date);
+    if(isDay){month.dayCount++;month.dayCents+=cents(row.day_wage);}
+    if(isNight){month.nightCount++;month.nightCents+=cents(row.night_wage);}
+  }
+  for(const adjustment of adjustments) {
+    const month=ensure(adjustment.period_start);
+    const amount=amountCents(adjustment.amount_cents);
+    if(amount<0) throw new Error("INVALID_ADJUSTMENT");
+    if(str(adjustment.kind).toUpperCase()==="ADD") month.additionCents+=amount;
+    else if(str(adjustment.kind).toUpperCase()==="DEDUCT") month.deductionCents+=amount;
+    else throw new Error("INVALID_ADJUSTMENT");
+  }
+  for(const payment of payments) {
+    if(str(payment.status).toUpperCase()!=="PAID") continue;
+    const month=ensure(payment.paid_date);
+    month.paidCents+=amountCents(payment.total_amount_cents);
+    month.paidCount++;
+  }
+  return [...byMonth.values()].sort((a,b)=>b.month.localeCompare(a.month)).map(row=>({
+    month:row.month,dayCount:row.dayCount,nightCount:row.nightCount,
+    dayTotal:row.dayCents/100,nightTotal:row.nightCents/100,
+    earnedNet:(row.dayCents+row.nightCents+row.additionCents-row.deductionCents)/100,
+    confirmedPaid:row.paidCents/100,confirmedPaymentCount:row.paidCount,
+  }));
+}
+
 export function summarizeDailyPersonnelHistory(
   worked: HistoryRow[], payments: HistoryRow[], adjustments: HistoryRow[],
 ) {
