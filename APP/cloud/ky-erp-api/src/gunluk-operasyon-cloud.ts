@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, type DailyWageChange } from "./gunluk-operasyon-core";
+import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, validDailyWageAmount, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
 import { parseDailyExcelRows } from "./gunluk-excel-import";
 
@@ -62,6 +62,25 @@ function datedWages(row: Row, history: Map<string, DailyWageChange[]>) {
     { dayWage: money(row.card_day_wage ?? row.day_wage), nightWage: money(row.card_night_wage ?? row.night_wage) },
     dateOnly(row.work_date), events,
   );
+}
+
+/**
+ * Günlük Operasyon tek ücret otoritesi.
+ * 1. Ödenmiş vardiyada ödeme defterinin değişmez kuruş tutarı,
+ * 2. Ledger öncesi tarihsel ödemede sabitlenmiş eski ücret,
+ * 3. Diğer bütün gün/vardiyalarda tarih-etkili personel ücret geçmişi.
+ *
+ * Ekran, haftalık özet, hakediş/ödeme ve gün kaydı aynı kuralı kullanır.
+ */
+function resolvedRecordedWages(row: Row, history: Map<string, DailyWageChange[]>) {
+  return resolveRecordedShiftWages(datedWages(row, history), {
+    paymentStatus: row.payment_status,
+    ledgerItemCount: row.ledger_item_count,
+    savedDayWage: row.day_wage,
+    savedNightWage: row.night_wage,
+    settledDayCents: row.settled_day_cents,
+    settledNightCents: row.settled_night_cents,
+  });
 }
 
 const aliases = new Set([
@@ -489,10 +508,7 @@ async function listAttendance(c: Context<AppEnv>) {
 
   const history = await wageHistory(c, companyId);
   const rows = (result.results || []).map((row) => {
-    const active = datedWages(row, history);
-    const legacyPaid = text(row.payment_status).toUpperCase() === "PAID" && num(row.ledger_item_count) === 0;
-    const dw = row.settled_day_cents != null ? Number(row.settled_day_cents) / 100 : legacyPaid ? money(row.day_wage) : active.dayWage;
-    const nw = row.settled_night_cents != null ? Number(row.settled_night_cents) / 100 : legacyPaid ? money(row.night_wage) : active.nightWage;
+    const { dayWage: dw, nightWage: nw } = resolvedRecordedWages(row, history);
     return {
       ...attendanceDto({ ...row, day_wage: dw, night_wage: nw,
         total_amount: money((flag(row.day_shift) ? dw : 0) + (flag(row.night_shift) ? nw : 0)) }),
@@ -700,10 +716,12 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
   }
 
   const liveIds=(currentResult.results || []).map((row)=>text(row.id)).filter(Boolean);
-  const paidItems=liveIds.length ? await c.env.DB.prepare(`SELECT attendance_id,shift,amount_cents FROM hr_daily_payment_items
-    WHERE main_company_id=? AND active=1 AND attendance_id IN (${liveIds.map(()=>"?").join(",")})`)
+  const paidItems=liveIds.length ? await c.env.DB.prepare(`SELECT attendance_id,shift,amount_cents,active FROM hr_daily_payment_items
+    WHERE main_company_id=? AND attendance_id IN (${liveIds.map(()=>"?").join(",")})`)
     .bind(companyId,...liveIds).all<Row>() : {results:[] as Row[]};
-  const paidAmountMap=new Map((paidItems.results || []).map((row)=>[`${text(row.attendance_id)}|${text(row.shift)}`,Number(row.amount_cents)/100]));
+  const ledgerAttendanceIds = new Set((paidItems.results || []).map((row) => text(row.attendance_id)));
+  const paidAmountMap = new Map((paidItems.results || []).filter((row) => flag(row.active))
+    .map((row) => [`${text(row.attendance_id)}|${text(row.shift)}`, Number(row.amount_cents) / 100]));
   const paidSet=new Set(paidAmountMap.keys());
   for(const row of rows) {
     const current=currentByKey.get(`${row.employeeId}|${row.workDate}`);
@@ -732,14 +750,17 @@ async function writeRows(c: Context<AppEnv>, body: Row, rawRows: Row[], source: 
 
     if (!current && !day && !night) continue;
 
-    const isPaid = text(current?.payment_status).toUpperCase() === "PAID";
-    const active = datedWages({
+    const { dayWage, nightWage } = resolvedRecordedWages({
       employee_id: row.employeeId, work_date: row.workDate,
       card_day_wage: person.day_wage, card_night_wage: person.night_wage,
       day_wage: current?.day_wage, night_wage: current?.night_wage,
+      payment_status: current?.payment_status,
+      ledger_item_count: ledgerAttendanceIds.has(text(current?.id)) ? 1 : 0,
+      settled_day_cents: paidAmountMap.has(`${text(current?.id)}|day`)
+        ? dailyMoneyCents(paidAmountMap.get(`${text(current?.id)}|day`)) : null,
+      settled_night_cents: paidAmountMap.has(`${text(current?.id)}|night`)
+        ? dailyMoneyCents(paidAmountMap.get(`${text(current?.id)}|night`)) : null,
     }, effectiveWageHistory);
-    const dayWage = isPaid ? money(current?.day_wage) : paidAmountMap.has(`${text(current?.id)}|day`) ? money(paidAmountMap.get(`${text(current?.id)}|day`)) : active.dayWage;
-    const nightWage = isPaid ? money(current?.night_wage) : paidAmountMap.has(`${text(current?.id)}|night`) ? money(paidAmountMap.get(`${text(current?.id)}|night`)) : active.nightWage;
     const totalAmount = money((day ? dayWage : 0) + (night ? nightWage : 0));
     const paymentStatus = text(row.paymentStatus || current?.payment_status) || "WAITING";
     const timestamp = nowIso();
@@ -1218,9 +1239,15 @@ async function saveRoster(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const start = dateOnly(body.startDate || body.start);
   const end = dateOnly(body.endDate || body.end || start);
-  const requested = Array.isArray(body.employeeIds)
-    ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
-    : [];
+  const mode = text(body.mode).toLowerCase() || "merge";
+  const addMemberId = text(body.addEmployeeId);
+  if (mode === "add" && !addMemberId)
+    return fail(c, 400, "ADD_EMPLOYEE_REQUIRED", "Havuza eklenecek personel belirtilmedi.");
+  const requested = mode === "add"
+    ? [addMemberId]
+    : Array.isArray(body.employeeIds)
+      ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
+      : [];
 
   if (!validDate(start) || !validDate(end) || end < start) {
     return fail(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
@@ -1249,14 +1276,13 @@ async function saveRoster(c: Context<AppEnv>) {
   const existing = existingResult.results || [];
   const existingIds = new Set(existing.map((row) => text(row.employee_id)));
   // DİĞER PC verisini silme: ekleme yalnız birleşim; çıkarma yalnız hedef kişinin kaldırılmasıdır.
-  const mode = text(body.mode).toLowerCase();
   const removalId = text(body.removeEmployeeId);
   if (mode === "remove" && !removalId) return fail(c, 400, "REMOVE_EMPLOYEE_REQUIRED", "Çıkarılacak personel belirtilmedi.");
-  const finalIds = mode === "merge"
-    ? [...new Set([...existingIds, ...requested])]
-    : mode === "remove"
-      ? [...existingIds].filter((id) => id !== removalId)
-      : [...new Set(requested)];
+  if (!["merge", "add", "remove"].includes(mode))
+    return fail(c, 400, "ROSTER_MODE_INVALID", "Personel listesi yalnız ekle/birleştir veya hedef kişiyi çıkar moduyla değiştirilebilir.");
+  const finalIds = mode === "remove"
+    ? [...existingIds].filter((id) => id !== removalId)
+    : [...new Set([...existingIds, ...requested])];
   const finalSet = new Set(finalIds);
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
@@ -1310,8 +1336,18 @@ async function saveRoster(c: Context<AppEnv>) {
   }
 
   if (statements.length) await c.env.DB.batch(statements);
-  const data = { startDate: start, endDate: end, employeeIds: finalIds };
-  return okItems(c, data, finalIds);
+  // D1 işlem sonucunu aynı HTTP cevabında yeniden okuyarak doğrula.
+  // Kullanıcı ikinci ve üçüncü ağ isteğini beklemez; yanlış pozitif "kaydedildi" gösterilmez.
+  const verified = await c.env.DB.prepare(`SELECT employee_id FROM hr_daily_range_roster
+    WHERE main_company_id=? AND start_date=? AND end_date=?`)
+    .bind(companyId, start, end).all<Row>();
+  const verifiedIds = [...new Set((verified.results || []).map((row) => text(row.employee_id)).filter(Boolean))];
+  if (mode === "add" && !verifiedIds.includes(addMemberId))
+    return fail(c, 409, "ROSTER_NOT_CONFIRMED", "Personel kaydı sunucudan tekrar doğrulanamadı.");
+  if (mode === "remove" && verifiedIds.includes(removalId))
+    return fail(c, 409, "ROSTER_REMOVE_NOT_CONFIRMED", "Personel hâlâ dönem havuzunda, işlem yeniden kontrol edilmeli.");
+  const data = { startDate: start, endDate: end, employeeIds: verifiedIds };
+  return okItems(c, data, verifiedIds);
 }
 
 async function auditGet(c: Context<AppEnv>) {
@@ -1618,8 +1654,10 @@ async function createEmployee(c: Context<AppEnv>) {
   const id = text(body.id) || crypto.randomUUID();
   const timestamp = nowIso();
   const qualification = text(body.qualification || body.role) || null;
-  const dayWage = money(body.dayWage ?? body.dayRate);
-  const nightWage = money(body.nightWage ?? body.nightRate);
+  const dayWage = validDailyWageAmount(body.dayWage ?? body.dayRate ?? 0);
+  const nightWage = validDailyWageAmount(body.nightWage ?? body.nightRate ?? 0);
+  if (dayWage === null || nightWage === null)
+    return fail(c,400,"WAGE_INVALID","Gündüz/gece ücreti sıfır veya pozitif, en fazla iki ondalıklı geçerli tutar olmalıdır.");
   const broker = text(body.broker) || null;
   const status = text(body.status) || "ACTIVE";
   const actor = await actorOf(c);
@@ -1647,8 +1685,10 @@ async function updateEmployee(c: Context<AppEnv>) {
   if (!fullName) return fail(c,400,"FULL_NAME_REQUIRED","Ad soyad zorunludur.");
   const timestamp=nowIso();
   const qualification=text(body.qualification ?? body.role ?? current.qualification) || null;
-  const dayWage=money(body.dayWage ?? body.dayRate ?? current.day_wage);
-  const nightWage=money(body.nightWage ?? body.nightRate ?? current.night_wage);
+  const dayWage=validDailyWageAmount(body.dayWage ?? body.dayRate ?? current.day_wage);
+  const nightWage=validDailyWageAmount(body.nightWage ?? body.nightRate ?? current.night_wage);
+  if (dayWage === null || nightWage === null)
+    return fail(c,400,"WAGE_INVALID","Gündüz/gece ücreti sıfır veya pozitif, en fazla iki ondalıklı geçerli tutar olmalıdır.");
   const wageChanged = dayWage !== money(current.day_wage) || nightWage !== money(current.night_wage);
   const effectiveDate = dateOnly(body.wageEffectiveDate || currentWageWeekStart());
   if (wageChanged && !validDate(effectiveDate)) return fail(c,400,"WAGE_DATE_INVALID","Ücretin geçerli olacağı tarih zorunludur.");
@@ -1706,17 +1746,17 @@ async function weeklySummary(c: Context<AppEnv>) {
   const map=new Map<string,Row>();
   for(const row of source) {
     const id=text(row.employee_id);
-    const item=map.get(id) || {id:`${id}-${start}`,employeeId:id,fullName:text(row.full_name),name:text(row.full_name),qualification:text(row.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end};
+    const item=map.get(id) || {id:`${id}-${start}`,employeeId:id,fullName:text(row.full_name),name:text(row.full_name),qualification:text(row.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,dayTotal:0,nightTotal:0,totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end};
     if(flag(row.day_shift)) {
       item.dayCount++;
       item.dayWage=money(row.day_wage);
-      item.totalAmount=money(item.totalAmount+money(row.day_wage));
+      item.dayTotal=money(num(item.dayTotal)+money(row.day_wage));
       if(flag(row.day_paid_item) || (text(row.payment_status)==="PAID" && num(row.ledger_item_count)===0)) item.paidAmount=money(item.paidAmount+money(row.day_wage));
     }
     if(flag(row.night_shift)) {
       item.nightCount++;
       item.nightWage=money(row.night_wage);
-      item.totalAmount=money(item.totalAmount+money(row.night_wage));
+      item.nightTotal=money(num(item.nightTotal)+money(row.night_wage));
       if(flag(row.night_paid_item) || (text(row.payment_status)==="PAID" && num(row.ledger_item_count)===0)) item.paidAmount=money(item.paidAmount+money(row.night_wage));
     }
     map.set(id,item);
@@ -1733,7 +1773,7 @@ async function weeklySummary(c: Context<AppEnv>) {
     const id=text(extra.employee_id);
     const item=map.get(id) || {
       id:`${id}-${start}`,employeeId:id,fullName:text(extra.full_name),name:text(extra.full_name),
-      qualification:text(extra.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,
+      qualification:text(extra.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,dayTotal:0,nightTotal:0,
       totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end,
     };
     const amount=money(Number(extra.amount_cents || 0)/100);
@@ -1742,11 +1782,16 @@ async function weeklySummary(c: Context<AppEnv>) {
     map.set(id,item);
   }
   const rows: Row[]=[...map.values()].map((row): Row=>{
-    const baseAmount=money(row.totalAmount);
+    const dayTotal=money(row.dayTotal);
+    const nightTotal=money(row.nightTotal);
+    const baseCents=dailyMoneyCents(dayTotal)+dailyMoneyCents(nightTotal);
     const additionsAmount=money(row.additions);
     const deductionsAmount=money(row.deductions);
-    const netAmount=money(baseAmount+additionsAmount-deductionsAmount);
-    return {...row,baseAmount,additions:additionsAmount,deductions:deductionsAmount,
+    const adjustments: {kind: "ADD" | "DEDUCT";amount_cents: number}[] = [];
+    if(additionsAmount>0) adjustments.push({kind:"ADD",amount_cents:dailyMoneyCents(additionsAmount)});
+    if(deductionsAmount>0) adjustments.push({kind:"DEDUCT",amount_cents:dailyMoneyCents(deductionsAmount)});
+    const netAmount=dailyAdjustmentNetCents(baseCents,adjustments)/100;
+    return {...row,dayTotal,nightTotal,baseAmount:baseCents/100,additions:additionsAmount,deductions:deductionsAmount,
       totalAmount:netAmount,total:netAmount};
   }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr"));
   return okItems(c,rows,rows);
@@ -1882,11 +1927,8 @@ async function paymentSourceRows(c: Context<AppEnv>, companyId: string, start: s
     .bind(companyId,companyId,companyId,companyId,start,end,employeeId,employeeId).all<Row>();
   const history=await wageHistory(c,companyId);
   return (result.results || []).map((row)=>{
-    const active=datedWages(row,history);
-    const legacy=text(row.payment_status).toUpperCase()==="PAID" && num(row.ledger_item_count)===0;
-    const dw=row.settled_day_cents!=null ? Number(row.settled_day_cents)/100 : legacy ? money(row.day_wage) : active.dayWage;
-    const nw=row.settled_night_cents!=null ? Number(row.settled_night_cents)/100 : legacy ? money(row.night_wage) : active.nightWage;
-    return {...row,day_wage:dw,night_wage:nw} as Row;
+    const { dayWage, nightWage } = resolvedRecordedWages(row, history);
+    return { ...row, day_wage: dayWage, night_wage: nightWage } as Row;
   });
 }
 
