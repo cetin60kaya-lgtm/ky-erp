@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Gmail tam otomatik tarama + artımlı değişiklik takibi
+- Kullanıcı canlı ekranda 2/15'in 2–3 saat boyunca değişmediğini gösterdi: gerçek sorun 5 dakika cron'unun yalnız Microsoft Graph/Drive/diğer görevleri çalıştırması, Gmail sayfalama fonksiyonuna **hiç otomatik bağlanmaması**ydı.
+- Var olan `main-entry-security.scheduled` içindeki `*/5` cron'a `runGmailMailScheduledSync(env)` eklendi. İlişkili mail hesabı **APPROVED+ACTIVE+provider_connected** zorunlu; maksimum 1 hesap ve 1 × 3 mesaj sayfası/cron; D1 Workers Free 50 sorgu/sunucu çağrısı sınırını korur. OAuth secrets yenilenmesi güvenli kasada, tenant izolasyonu mevcut. Üretimde hesap/mektup silme, mail gönderme, yeni servis/ücretli cron/migration yok.
+- Manuel `Senkronize Et` ve otomatik cron aynı **tek Gmail sayfa motorunu** kullanır; `GMAIL_PAGE` imleci ve önceden tamamlanan klasörler korunur. Hata olduğunda 15 dakikalık hesap bazlı bekleme; diğer firmalar bloke edilmez.
+- Backfill başlamadan `/profile historyId` şeffaf D1 imleci olarak alınır; tüm Gmail klasörleri tamamlandığında `/history` (added/label changes) değişiklikleri ayrı kuyruktan işler. Sayfa tokenı, bekleyen Gmail mesaj kimlikleri bitmeden ileri alınmaz. Gmail eski history id için 404 döndürürse mesajları silmeden güvenli tam sayfa taramasını yeniden açar.
+- Firma bazlı e-posta arayüzü 60 saniyede bir **salt okunur** şekilde otomatik ilerleme durumunu yeniler (yalnız ekrandayken ve tarama eksikken); en son 5dk cron zamanı, taranan etiket ve kaç mesaj işleme kaydı olduğunu gösterir. Tek tuş artık isteğe bağlı manuel hızlandırma olarak kalır.
+- **Canlı kabul:** Son GitHub Actions/PR/Cloudflare Worker+Pages yayın SHA kanıtı ve gerçek HKN Gmail D1 cursor ilerlemesi görülmeden 15/15 ya da yeni gelen e-posta kanıtı PASS denmez. İşNet/e-Belge/muhasebe gerçek fatura kesimi, cari fiş, müşteri maili bu değişiklikte yok.
+- Resmî referans: Google Gmail API `users.history.list` en son `historyId` ile çalışır; eski imleç 404 ise yeniden tam tarama gerekir. Cloudflare Free D1 Worker başına 50 sorgu sınırı uygulanır.
+
+
 ## 19.11.2026 — KULLANICI DÜZELTMESİ: Günlük ekran eski hâline; yalnız Hızlı Giriş Personel Ekle
 - Kullanıcı ekran görüntüsüyle PR #610'daki ana sayfa akıllı tek ekran tasarımını açıkça reddetti; eski **Günlük Personel Girişi** (dönem havuzu + orta detay tablo + sağ Günlük Kontrol + eski Hızlı Giriş popup) birebir korunacak. Bu yeni karar aynı tarihteki eski tek ekran planından üstündür.
 - Geri alma dalı `fix/gunluk-eski-ekran-yalniz-hizli-personel-ekle-20261119` güncel production kaynağından açıldı: PR #610 ana ekran, test ve istenmeyen bağımsız SmartSelector/CSS/sıralama dosyaları tersine alındı. Mevcut muhasebe, Gmail, Worker, ücret motoru, ödeme/D1 koduna dokunulmadı.
