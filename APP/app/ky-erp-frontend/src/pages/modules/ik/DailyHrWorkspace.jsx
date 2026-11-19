@@ -1625,7 +1625,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   };
   // Ödeme ve çıktıda yeniden D1 okuması: diğer PC'nin tarih seçimini
   // henüz periyodik poll görmediyse yanlış haftanın fişi üretilmez.
-  const verifyPrintAndPaymentRange = async (expected = range) => {
+  const verifyPrintAndPaymentRange = useCallback(async (expected = range) => {
     if (!sharedRangeReady || !sharedRangeConfigured || sharedRangeError || sharedRangeSaving
       || !sameRange(expected, dailyRangeRef.current))
       throw new Error("Ortak firma dönemi doğrulanmadı. Önce tarih aralığını D1'den yükleyin.");
@@ -1635,7 +1635,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       void refreshSharedRange();
       throw new Error("Dönem başka bilgisayarda değişmiş. Yanlış haftanın fişini veya ödemesini oluşturmamak için işlem durduruldu.");
     }
-  };
+  }, [companyId, range, refreshSharedRange, sharedRangeConfigured, sharedRangeError, sharedRangeReady, sharedRangeSaving]);
   const printVerifiedWeeklySummary = async () => {
     if (!weeklyFinancialReady) return;
     try {
