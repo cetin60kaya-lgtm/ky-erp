@@ -2,7 +2,7 @@
 import { compare } from "bcryptjs";
 import { registerMobilePasskeyRoutes } from "./auth-mobile-passkey";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { AUTH_SECURITY_SCOPES, securityStorePut as securityStorePut } from "./auth-security-core";
+import { AUTH_SECURITY_SCOPES, securityStoreGet as securityStoreGet, securityStorePut as securityStorePut } from "./auth-security-core";
 import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
 import {
   cancelPhoneApproval,
@@ -508,7 +508,15 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
   }
   await audit(c, "SESSION_CREATED_POLICY", user.id, user.id, text(security.main_company_slug), sid, { policy, ttl, expiresAt });
   const kySecurityCodeVerified = Boolean(source.kySecurityCodeVerified);
-  if (kySecurityCodeVerified) {
+  const passkeyVerified = Boolean(source.passkeyVerified);
+  if (passkeyVerified) {
+    try {
+      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, {
+        sessionId: sid, userId: text(user.id), status: "VERIFIED", source: "PASSKEY_LOGIN", decidedAt: timestamp,
+      });
+      await audit(c, "SESSION_VERIFIED_BY_PASSKEY", user.id, user.id, text(security.main_company_slug), sid);
+    } catch (error) { logAuthError(c, "PASSKEY_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid }); }
+  } else if (kySecurityCodeVerified) {
     try {
       await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, {
         sessionId: sid,
@@ -532,7 +540,7 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
       await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", user.id, user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
     } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
   }
-  if (!kySecurityCodeVerified && !text(source.phoneApprovalId)) {
+  if (!passkeyVerified && !kySecurityCodeVerified && !text(source.phoneApprovalId)) {
     // Girişte yönetici onayı kapali ise oturum sonradan tekrar onaya dusmez.
     // Giris onayi verilmis bir oturum icin de ikinci bir onay kuyruğu acilmaz.
     const managerReviewRequired = Boolean(security.approval_required) && !isSuper(role) && !isCompanyAdmin(role);
