@@ -70,3 +70,11 @@ test("security center can list and remove only the current user's platform keys"
   assert.match(panel, /Parmak İzi \/ Windows Hello Giriş Anahtarlarım/);
   assert.match(panel, /revokePasskey/);
 });
+
+test("KY PRO security center exposes authenticated passkey inventory and safe self-revocation",()=>{
+  const proSecurity=read("../pro/SecurityCenter.jsx");
+  assert.match(proSecurity,/listOwnPasskeyCredentials/);
+  assert.match(proSecurity,/revokeOwnPasskeyCredential/);
+  assert.match(proSecurity,/if\(!isAuthenticated\)/);
+  assert.match(proSecurity,/\["keys","Hızlı Giriş",KeyRound\]/);
+});
