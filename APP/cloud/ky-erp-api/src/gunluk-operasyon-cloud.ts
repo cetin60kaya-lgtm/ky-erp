@@ -1746,17 +1746,17 @@ async function weeklySummary(c: Context<AppEnv>) {
   const map=new Map<string,Row>();
   for(const row of source) {
     const id=text(row.employee_id);
-    const item=map.get(id) || {id:`${id}-${start}`,employeeId:id,fullName:text(row.full_name),name:text(row.full_name),qualification:text(row.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end};
+    const item=map.get(id) || {id:`${id}-${start}`,employeeId:id,fullName:text(row.full_name),name:text(row.full_name),qualification:text(row.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,dayTotal:0,nightTotal:0,totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end};
     if(flag(row.day_shift)) {
       item.dayCount++;
       item.dayWage=money(row.day_wage);
-      item.totalAmount=money(item.totalAmount+money(row.day_wage));
+      item.dayTotal=money(num(item.dayTotal)+money(row.day_wage));
       if(flag(row.day_paid_item) || (text(row.payment_status)==="PAID" && num(row.ledger_item_count)===0)) item.paidAmount=money(item.paidAmount+money(row.day_wage));
     }
     if(flag(row.night_shift)) {
       item.nightCount++;
       item.nightWage=money(row.night_wage);
-      item.totalAmount=money(item.totalAmount+money(row.night_wage));
+      item.nightTotal=money(num(item.nightTotal)+money(row.night_wage));
       if(flag(row.night_paid_item) || (text(row.payment_status)==="PAID" && num(row.ledger_item_count)===0)) item.paidAmount=money(item.paidAmount+money(row.night_wage));
     }
     map.set(id,item);
@@ -1773,7 +1773,7 @@ async function weeklySummary(c: Context<AppEnv>) {
     const id=text(extra.employee_id);
     const item=map.get(id) || {
       id:`${id}-${start}`,employeeId:id,fullName:text(extra.full_name),name:text(extra.full_name),
-      qualification:text(extra.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,
+      qualification:text(extra.qualification),dayWage:0,nightWage:0,dayCount:0,nightCount:0,dayTotal:0,nightTotal:0,
       totalAmount:0,paidAmount:0,weekStart:start,weekEnd:end,
     };
     const amount=money(Number(extra.amount_cents || 0)/100);
@@ -1782,11 +1782,16 @@ async function weeklySummary(c: Context<AppEnv>) {
     map.set(id,item);
   }
   const rows: Row[]=[...map.values()].map((row): Row=>{
-    const baseAmount=money(row.totalAmount);
+    const dayTotal=money(row.dayTotal);
+    const nightTotal=money(row.nightTotal);
+    const baseCents=dailyMoneyCents(dayTotal)+dailyMoneyCents(nightTotal);
     const additionsAmount=money(row.additions);
     const deductionsAmount=money(row.deductions);
-    const netAmount=money(baseAmount+additionsAmount-deductionsAmount);
-    return {...row,baseAmount,additions:additionsAmount,deductions:deductionsAmount,
+    const adjustments: {kind: "ADD" | "DEDUCT";amount_cents: number}[] = [];
+    if(additionsAmount>0) adjustments.push({kind:"ADD",amount_cents:dailyMoneyCents(additionsAmount)});
+    if(deductionsAmount>0) adjustments.push({kind:"DEDUCT",amount_cents:dailyMoneyCents(deductionsAmount)});
+    const netAmount=dailyAdjustmentNetCents(baseCents,adjustments)/100;
+    return {...row,dayTotal,nightTotal,baseAmount:baseCents/100,additions:additionsAmount,deductions:deductionsAmount,
       totalAmount:netAmount,total:netAmount};
   }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr"));
   return okItems(c,rows,rows);
