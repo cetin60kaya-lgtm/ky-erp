@@ -1,46 +1,74 @@
-/* Tek degisiklik: eski Hizli Giris ekraninin PERSONEL EKLE alani.
-   Ana tablo, kart grid, dialog olculeri ve ucret gorunumu etkilenmez. */
-.gop-quick-dialog .kyq-roster-picker{display:flex;align-items:center;gap:6px;position:relative;min-width:0}
-.gop-quick-dialog .kyq-roster-open,.gop-quick-dialog .kyq-roster-new{
-  display:inline-flex;align-items:center;justify-content:center;gap:5px;white-space:nowrap;
-  padding:7px 9px;border:1px solid #b5cbe8;border-radius:7px;background:#f8fbff;color:#234b7f;
-  font-size:11px;font-weight:800;cursor:pointer
+/* Hızlı Giriş içindeki Personel Ekle: sağdan genişleyen tek panel.
+   Ana Günlük Personel Girişi sayfasını veya ücret kartlarını değiştirmez. */
+.gop-quick-dialog{position:relative!important}
+.gop-quick-dialog .quick-controls,
+.gop-quick-dialog .quick-add-bar,
+.gop-quick-dialog .kyq-roster-picker{position:static!important;overflow:visible}
+.gop-quick-dialog .kyq-roster-open{
+  display:inline-flex;align-items:center;gap:7px;padding:8px 12px;
+  border:1px solid #97b7e4;border-radius:7px;background:#e9f2ff;
+  color:#20518c;font-size:12px;font-weight:800;cursor:pointer
 }
-.gop-quick-dialog .kyq-roster-open{background:#e9f2ff;border-color:#90b6eb}
-.gop-quick-dialog .kyq-roster-picker button:disabled{opacity:.5;cursor:not-allowed}
 .gop-quick-dialog .kyq-roster-panel{
-  position:absolute;z-index:70;right:0;top:calc(100% + 6px);width:min(620px,calc(100vw - 55px));
-  border:1px solid #a9bfdc;border-radius:10px;background:#fff;
-  box-shadow:0 12px 28px rgba(16,38,70,.21);padding:12px;
-  max-height:min(45vh,360px);display:flex;flex-direction:column;gap:8px
+  position:absolute!important;z-index:100;top:0;right:0;bottom:0;left:auto;
+  display:flex;flex-direction:column;gap:12px;
+  width:min(var(--kyq-panel-width,630px),calc(100% - 8px));
+  min-width:0;max-width:96%;max-height:100%;
+  padding:18px 16px 13px;
+  border-left:3px solid #689ddd;border-radius:0 10px 10px 0;
+  background:#fff;box-shadow:-17px 0 35px rgba(17,35,63,.25);
+  overflow:hidden;isolation:isolate
 }
-.gop-quick-dialog .kyq-roster-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-.gop-quick-dialog .kyq-roster-header>div{display:flex;flex-direction:column;gap:3px}
-.gop-quick-dialog .kyq-roster-header strong{font-size:13px;color:#1c3f68}
-.gop-quick-dialog .kyq-roster-header small{font-size:11px;color:#64748b;line-height:1.4}
-.gop-quick-dialog .kyq-roster-header button{border:0;background:none;padding:4px;cursor:pointer}
-.gop-quick-dialog .kyq-roster-search{height:37px;border:1px solid #bcd0e7;border-radius:7px;padding:0 9px;display:flex;align-items:center;gap:7px}
-.gop-quick-dialog .kyq-roster-search input{flex:1;min-width:0;border:0;outline:0;background:transparent;color:#17344e;font-size:12px;height:34px}
-.gop-quick-dialog .kyq-roster-filters{display:flex;gap:5px;flex-wrap:wrap}
-.gop-quick-dialog .kyq-roster-filters button{border:1px solid #d0ddeb;background:#f8fafc;color:#425e7c;border-radius:5px;padding:5px 8px;cursor:pointer;font-size:10px;font-weight:800}
-.gop-quick-dialog .kyq-roster-filters button.active{color:#144c91;background:#eaf3ff;border-color:#82b0ec}
-.gop-quick-dialog .kyq-roster-list{flex:1;min-height:60px;overflow-y:auto;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;gap:5px;scrollbar-width:thin}
-.gop-quick-dialog .kyq-roster-list label{display:flex;align-items:center;gap:7px;padding:7px 8px;border:1px solid #dde5ef;border-radius:7px;background:#fff;cursor:pointer;min-width:0}
-.gop-quick-dialog .kyq-roster-list label.selected{border-color:#e59137;background:#fff6eb}
-.gop-quick-dialog .kyq-roster-list label input{width:16px;height:16px;flex:none;accent-color:#e98a24}
-.gop-quick-dialog .kyq-roster-list label span{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
-.gop-quick-dialog .kyq-roster-list label strong{font-size:11px;color:#193b62;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
-.gop-quick-dialog .kyq-roster-list label small{font-size:10px;color:#6d7d90;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
-.gop-quick-dialog .kyq-roster-list label svg{color:#c27721;flex:none}
-.gop-quick-dialog .kyq-roster-empty{font-size:11px;color:#69788a;padding:8px}
-.gop-quick-dialog .kyq-roster-actions{display:flex;justify-content:space-between;align-items:center;gap:8px;border-top:1px solid #e3eaf3;padding-top:8px}
-.gop-quick-dialog .kyq-roster-actions span{font-size:11px;font-weight:800;color:#3a5270}
-.gop-quick-dialog .kyq-roster-actions .kyq-roster-submit{background:#2565c5;border:1px solid #2157a5;border-radius:7px;color:#fff;font-size:12px;font-weight:800;padding:8px 12px;display:flex;align-items:center;gap:6px;cursor:pointer}
-@media(max-width:700px){
- .gop-quick-dialog .kyq-roster-panel{left:auto;right:0;max-height:55vh}
- .gop-quick-dialog .kyq-roster-list{grid-template-columns:1fr}
- .gop-quick-dialog .kyq-roster-new{font-size:10px}
+.gop-quick-dialog .kyq-roster-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.gop-quick-dialog .kyq-roster-header>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.gop-quick-dialog .kyq-roster-header small{font-size:10px;font-weight:900;letter-spacing:.08em;color:#35669b}
+.gop-quick-dialog .kyq-roster-header strong{font-size:18px;color:#1e3859;line-height:1.2}
+.gop-quick-dialog .kyq-roster-header span{font-size:12px;line-height:1.4;color:#64748b}
+.gop-quick-dialog .kyq-roster-header button{background:transparent;border:0;color:#465e7b;padding:5px;cursor:pointer}
+.gop-quick-dialog .kyq-roster-width{display:flex;align-items:center;justify-content:space-between;gap:12px;border-top:1px solid #edf1f6;padding-top:10px}
+.gop-quick-dialog .kyq-roster-width label{display:flex;align-items:center;gap:9px;min-width:0;font-size:11px;color:#60758e}
+.gop-quick-dialog .kyq-roster-width input{width:130px;accent-color:#2565c5}
+.gop-quick-dialog .kyq-roster-width b{font-size:11px;color:#24548a}
+.gop-quick-dialog .kyq-roster-width button{display:inline-flex;align-items:center;gap:6px;background:#eaf3ff;border:1px solid #a6c6f1;border-radius:7px;color:#1f5190;cursor:pointer;white-space:nowrap;padding:8px 11px;font-size:12px;font-weight:800}
+.gop-quick-dialog .kyq-roster-search{display:flex;align-items:center;gap:9px;height:43px;border:1px solid #aec8e8;border-radius:8px;padding:0 11px;color:#69809d}
+.gop-quick-dialog .kyq-roster-search input{flex:1;min-width:0;border:0;background:transparent;color:#183a5e;font-size:13px;height:40px;outline:0}
+.gop-quick-dialog .kyq-roster-filters{display:flex;flex-wrap:wrap;gap:6px}
+.gop-quick-dialog .kyq-roster-filters button{border:1px solid #d5dfed;border-radius:6px;padding:7px 9px;background:#f8fafc;color:#486783;font-size:11px;font-weight:750;cursor:pointer}
+.gop-quick-dialog .kyq-roster-filters button.active{background:#e5f0ff;color:#1b4f91;border-color:#8ab2eb}
+.gop-quick-dialog .kyq-roster-panel button:disabled{opacity:.48;cursor:not-allowed}
+.gop-quick-dialog .kyq-roster-panel button:focus-visible,
+.gop-quick-dialog .kyq-roster-panel input:focus-visible{outline:3px solid #93c5fd;outline-offset:2px}
+.gop-quick-dialog .kyq-roster-help{font-size:11px;color:#54718f;margin:0}
+.gop-quick-dialog .kyq-roster-list{
+  min-height:100px;flex:1;overflow:auto;overscroll-behavior:contain;
+  display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-content:start;
+  gap:8px;padding:2px 3px 2px 0;scrollbar-width:thin
 }
-
-/* Personel secimi kendi Hizli Giris penceresi icinde, kartlarin ustunde acilir. */
-.gop-quick-dialog .quick-controls{position:relative!important;z-index:65!important;overflow:visible!important}
+.gop-quick-dialog .kyq-roster-list label{
+  display:flex;align-items:center;gap:8px;min-width:0;
+  padding:9px;border:1px solid #dce6f0;border-radius:8px;background:#fff;cursor:pointer
+}
+.gop-quick-dialog .kyq-roster-list label.selected{border-color:#e8a452;background:#fff7ec}
+.gop-quick-dialog .kyq-roster-list label input{flex:none;width:17px;height:17px;accent-color:#df8627}
+.gop-quick-dialog .kyq-roster-list label span{display:flex;flex:1;min-width:0;flex-direction:column;gap:3px}
+.gop-quick-dialog .kyq-roster-list label strong{font-size:12px;color:#1d3959;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.gop-quick-dialog .kyq-roster-list label small{font-size:10px;color:#6b7d92;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.gop-quick-dialog .kyq-roster-list label em{font-style:normal;font-size:10px;color:#277353;font-weight:750}
+.gop-quick-dialog .kyq-roster-list label svg{color:#cb7a23;flex:none}
+.gop-quick-dialog .kyq-roster-empty{font-size:12px;color:#6c7e93;padding:12px}
+.gop-quick-dialog .kyq-roster-actions{
+  padding-top:13px;border-top:1px solid #e0e9f4;
+  display:flex;align-items:center;justify-content:space-between;gap:10px
+}
+.gop-quick-dialog .kyq-roster-actions>b{color:#345778;font-size:12px}
+.gop-quick-dialog .kyq-roster-submit{
+  padding:10px 15px;display:inline-flex;align-items:center;gap:7px;
+  border:1px solid #20549d;border-radius:8px;background:#2565c5;color:#fff;
+  cursor:pointer;font-size:13px;font-weight:900
+}
+@media(max-width:760px){
+  .gop-quick-dialog .kyq-roster-panel{width:100%;max-width:100%;padding:12px;border-radius:8px}
+  .gop-quick-dialog .kyq-roster-list{grid-template-columns:1fr}
+  .gop-quick-dialog .kyq-roster-width{flex-wrap:wrap}
+  .gop-quick-dialog .kyq-roster-header strong{font-size:16px}
+}
