@@ -1218,9 +1218,15 @@ async function saveRoster(c: Context<AppEnv>) {
   const companyId = companyIdOf(c, body);
   const start = dateOnly(body.startDate || body.start);
   const end = dateOnly(body.endDate || body.end || start);
-  const requested = Array.isArray(body.employeeIds)
-    ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
-    : [];
+  const mode = text(body.mode).toLowerCase() || "merge";
+  const addMemberId = text(body.addEmployeeId);
+  if (mode === "add" && !addMemberId)
+    return fail(c, 400, "ADD_EMPLOYEE_REQUIRED", "Havuza eklenecek personel belirtilmedi.");
+  const requested = mode === "add"
+    ? [addMemberId]
+    : Array.isArray(body.employeeIds)
+      ? [...new Set(body.employeeIds.map(text).filter(Boolean))]
+      : [];
 
   if (!validDate(start) || !validDate(end) || end < start) {
     return fail(c, 400, "DATE_RANGE_REQUIRED", "Geçerli tarih aralığı seçilmedi.");
@@ -1249,14 +1255,13 @@ async function saveRoster(c: Context<AppEnv>) {
   const existing = existingResult.results || [];
   const existingIds = new Set(existing.map((row) => text(row.employee_id)));
   // DİĞER PC verisini silme: ekleme yalnız birleşim; çıkarma yalnız hedef kişinin kaldırılmasıdır.
-  const mode = text(body.mode).toLowerCase();
   const removalId = text(body.removeEmployeeId);
   if (mode === "remove" && !removalId) return fail(c, 400, "REMOVE_EMPLOYEE_REQUIRED", "Çıkarılacak personel belirtilmedi.");
-  const finalIds = mode === "merge"
-    ? [...new Set([...existingIds, ...requested])]
-    : mode === "remove"
-      ? [...existingIds].filter((id) => id !== removalId)
-      : [...new Set(requested)];
+  if (!["merge", "add", "remove"].includes(mode))
+    return fail(c, 400, "ROSTER_MODE_INVALID", "Personel listesi yalnız ekle/birleştir veya hedef kişiyi çıkar moduyla değiştirilebilir.");
+  const finalIds = mode === "remove"
+    ? [...existingIds].filter((id) => id !== removalId)
+    : [...new Set([...existingIds, ...requested])];
   const finalSet = new Set(finalIds);
   const actor = await actorOf(c);
   const statements: D1PreparedStatement[] = [];
@@ -1310,8 +1315,18 @@ async function saveRoster(c: Context<AppEnv>) {
   }
 
   if (statements.length) await c.env.DB.batch(statements);
-  const data = { startDate: start, endDate: end, employeeIds: finalIds };
-  return okItems(c, data, finalIds);
+  // D1 işlem sonucunu aynı HTTP cevabında yeniden okuyarak doğrula.
+  // Kullanıcı ikinci ve üçüncü ağ isteğini beklemez; yanlış pozitif "kaydedildi" gösterilmez.
+  const verified = await c.env.DB.prepare(`SELECT employee_id FROM hr_daily_range_roster
+    WHERE main_company_id=? AND start_date=? AND end_date=?`)
+    .bind(companyId, start, end).all<Row>();
+  const verifiedIds = [...new Set((verified.results || []).map((row) => text(row.employee_id)).filter(Boolean))];
+  if (mode === "add" && !verifiedIds.includes(addMemberId))
+    return fail(c, 409, "ROSTER_NOT_CONFIRMED", "Personel kaydı sunucudan tekrar doğrulanamadı.");
+  if (mode === "remove" && verifiedIds.includes(removalId))
+    return fail(c, 409, "ROSTER_REMOVE_NOT_CONFIRMED", "Personel hâlâ dönem havuzunda, işlem yeniden kontrol edilmeli.");
+  const data = { startDate: start, endDate: end, employeeIds: verifiedIds };
+  return okItems(c, data, verifiedIds);
 }
 
 async function auditGet(c: Context<AppEnv>) {
