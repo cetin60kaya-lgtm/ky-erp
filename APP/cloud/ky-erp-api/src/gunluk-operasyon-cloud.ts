@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, type DailyWageChange } from "./gunluk-operasyon-core";
+import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, validDailyWageAmount, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
 import { parseDailyExcelRows } from "./gunluk-excel-import";
 
@@ -1654,8 +1654,10 @@ async function createEmployee(c: Context<AppEnv>) {
   const id = text(body.id) || crypto.randomUUID();
   const timestamp = nowIso();
   const qualification = text(body.qualification || body.role) || null;
-  const dayWage = money(body.dayWage ?? body.dayRate);
-  const nightWage = money(body.nightWage ?? body.nightRate);
+  const dayWage = validDailyWageAmount(body.dayWage ?? body.dayRate ?? 0);
+  const nightWage = validDailyWageAmount(body.nightWage ?? body.nightRate ?? 0);
+  if (dayWage === null || nightWage === null)
+    return fail(c,400,"WAGE_INVALID","Gündüz/gece ücreti sıfır veya pozitif, en fazla iki ondalıklı geçerli tutar olmalıdır.");
   const broker = text(body.broker) || null;
   const status = text(body.status) || "ACTIVE";
   const actor = await actorOf(c);
@@ -1683,8 +1685,10 @@ async function updateEmployee(c: Context<AppEnv>) {
   if (!fullName) return fail(c,400,"FULL_NAME_REQUIRED","Ad soyad zorunludur.");
   const timestamp=nowIso();
   const qualification=text(body.qualification ?? body.role ?? current.qualification) || null;
-  const dayWage=money(body.dayWage ?? body.dayRate ?? current.day_wage);
-  const nightWage=money(body.nightWage ?? body.nightRate ?? current.night_wage);
+  const dayWage=validDailyWageAmount(body.dayWage ?? body.dayRate ?? current.day_wage);
+  const nightWage=validDailyWageAmount(body.nightWage ?? body.nightRate ?? current.night_wage);
+  if (dayWage === null || nightWage === null)
+    return fail(c,400,"WAGE_INVALID","Gündüz/gece ücreti sıfır veya pozitif, en fazla iki ondalıklı geçerli tutar olmalıdır.");
   const wageChanged = dayWage !== money(current.day_wage) || nightWage !== money(current.night_wage);
   const effectiveDate = dateOnly(body.wageEffectiveDate || currentWageWeekStart());
   if (wageChanged && !validDate(effectiveDate)) return fail(c,400,"WAGE_DATE_INVALID","Ücretin geçerli olacağı tarih zorunludur.");
