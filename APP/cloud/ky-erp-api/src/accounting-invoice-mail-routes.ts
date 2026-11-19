@@ -3,7 +3,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerInvoiceWeeklyReconciliationRoutes } from "./accounting-invoice-weekly-reconciliation";
-import {invoiceMailCommonModelIds,invoiceMailDocumentFromFile,invoiceMailOutlookFileEvidence,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix,invoiceMailIsLegacyOrCanonicalKey,invoiceMailAttachmentProved} from "./invoice-mail-model-evidence";
+import {invoiceMailCommonModelIds,invoiceMailDocumentFromFile,invoiceMailOutlookFileEvidence,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix,invoiceMailIsLegacyOrCanonicalKey,invoiceMailPackageVerified} from "./invoice-mail-model-evidence";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -230,7 +230,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     const fileRows=await c.env.DB.prepare(
       "SELECT DISTINCT f.id,f.file_name,f.sha256 FROM file_hub_relations r JOIN file_hub_assets f ON f.id=r.file_asset_id AND f.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.entity_id=? AND UPPER(f.status)='AVAILABLE'"
     ).bind(a.tenant,modelId).all<Row>();
-    const assets=new Map<string,Row>((fileRows.results||[]).map(row=>[txt(row.id),row]));
+    const modelAssetIds=new Set((fileRows.results||[]).map(row=>txt(row.id)));
     const hkn=[...new Set((fileRows.results||[]).map(r=>invoiceMailDocumentFromFile(r.file_name,"HKN")).filter(Boolean))];
     const ddm=[...new Set((fileRows.results||[]).map(r=>invoiceMailDocumentFromFile(r.file_name,"DDM")).filter(Boolean))];
     if(!hkn.length||!ddm.length)return c.json({ok:true,data:{items:[],scanned:0,limited:false,source:"OUTLOOK_ATTACHMENT_EVIDENCE"}});
@@ -257,18 +257,28 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
         list.push(row);byMessage.set(key,list);
       }
     }
+    const assetIds=[...new Set([...byMessage.values()].flat().map(a=>txt(a.file_asset_id)).filter(Boolean))];
+    const assets=new Map<string,Row>(),canonicalLinkedIds=new Set<string>();
+    // Historical PDFs may belong to DIFFERENT models on the SAME HKN.
+    // Verify the entire package using tenant-scoped asset hashes and canonical
+    // MODEL relationships, with D1's parameter limit respected.
+    for(let offset=0;offset<assetIds.length;offset+=90){
+      const ids=assetIds.slice(offset,offset+90),marks=ids.map(()=>"?").join(",");
+      const found=await c.env.DB.prepare(
+        "SELECT id,file_name,sha256 FROM file_hub_assets WHERE main_company_slug=? AND UPPER(status)='AVAILABLE' AND id IN ("+marks+")"
+      ).bind(a.tenant,...ids).all<Row>();
+      for(const f of found.results||[])assets.set(txt(f.id),f);
+      const relations=await c.env.DB.prepare(
+        "SELECT DISTINCT r.file_asset_id FROM file_hub_relations r JOIN model_records m ON m.main_company_slug=r.main_company_slug AND m.id=r.entity_id AND m.deleted_at IS NULL "+
+        "WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.file_asset_id IN ("+marks+")"
+      ).bind(a.tenant,...ids).all<Row>();
+      for(const relation of relations.results||[])canonicalLinkedIds.add(txt(relation.file_asset_id));
+    }
     const items=messages.map(m=>{
       const attachments=byMessage.get(txt(m.id))||[];
       const evidence=invoiceMailOutlookFileEvidence(attachments.map(att=>txt(att.file_name)),hkn,ddm);
       if(!evidence)return null;
-      const relevant=attachments.filter(att=>invoiceMailDocumentFromFile(att.file_name,"HKN")===evidence.invoiceNo||
-        evidence.matchingDeliveryNos.includes(invoiceMailDocumentFromFile(att.file_name,"DDM")));
-      const proved=relevant.length===evidence.matchingDeliveryNos.length+1&&relevant.every(att=>{
-        let metadata:Row={};try{metadata=JSON.parse(txt(att.provider_metadata)||"{}");}catch{}
-        const asset=assets.get(txt(att.file_asset_id));
-        return invoiceMailAttachmentProved({fileAssetId:txt(att.file_asset_id),fileName:txt(att.file_name),sha256:txt(metadata.sha256)},
-          asset?{id:txt(asset.id),sha256:txt(asset.sha256),fileName:txt(asset.file_name)}:undefined);
-      });
+      const proved=invoiceMailPackageVerified(attachments,evidence,assets,modelAssetIds,canonicalLinkedIds);
       return {id:txt(m.id),invoiceNo:evidence.invoiceNo,deliveryNo:evidence.deliveryNo,
         deliveryNos:evidence.deliveryNos,matchedDeliveryNos:evidence.matchingDeliveryNos,subject:txt(m.subject),sentAt:txt(m.sent_at),
         providerMessageId:txt(m.provider_message_id),status:"OUTLOOK_SYNCED_SENT",

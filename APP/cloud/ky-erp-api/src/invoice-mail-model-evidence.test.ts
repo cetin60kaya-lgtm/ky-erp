@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {invoiceMailDocumentFromFile,invoiceMailCommonModelIds,invoiceMailOutlookFileEvidence,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix,invoiceMailIsLegacyOrCanonicalKey,invoiceMailAttachmentProved} from "./invoice-mail-model-evidence.ts";
+import {invoiceMailDocumentFromFile,invoiceMailCommonModelIds,invoiceMailOutlookFileEvidence,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix,invoiceMailIsLegacyOrCanonicalKey,invoiceMailAttachmentProved,invoiceMailPackageVerified} from "./invoice-mail-model-evidence.ts";
 test("Exact document identities never accept neighboring invoice digits",()=>{
   assert.equal(invoiceMailDocumentFromFile("HKN2026000000989 (1).pdf","HKN"),"HKN2026000000989");
   assert.equal(invoiceMailDocumentFromFile("HKN20260000009890.pdf","HKN"),"HKN20260000009890");
@@ -40,4 +40,20 @@ test("Filename-only or different hash never upgrades historical sent-mail eviden
   assert.equal(invoiceMailAttachmentProved({fileName:asset.fileName,sha256:h},asset),false);
   assert.equal(invoiceMailAttachmentProved({fileName:asset.fileName,fileAssetId:"file-1",sha256:other},asset),false);
   assert.equal(invoiceMailAttachmentProved({fileName:"HKN2026000000990.pdf",fileAssetId:"file-1",sha256:h},asset),false);
+});
+
+test("Historical shared-HKN Outlook package is verifiable from either model; every PDF must be proven",()=>{
+ const hash="a".repeat(64),h="HKN2026000000989.pdf",d1="DDM2026000000974.pdf",d2="DDM2026000000975.pdf";
+ const assets=new Map([["h",{id:"h",file_name:h,sha256:hash}],["d1",{id:"d1",file_name:d1,sha256:hash}],["d2",{id:"d2",file_name:d2,sha256:hash}]]);
+ const linked=new Set(["h","d1","d2"]);
+ const pdfs=[{file_asset_id:"h",file_name:h,provider_metadata:JSON.stringify({sha256:hash})},
+ {file_asset_id:"d1",file_name:d1,provider_metadata:JSON.stringify({sha256:hash})},
+ {file_asset_id:"d2",file_name:d2,provider_metadata:JSON.stringify({sha256:hash})}];
+ const a=invoiceMailOutlookFileEvidence([h,d1,d2],["HKN2026000000989"],["DDM2026000000974"]);
+ const b=invoiceMailOutlookFileEvidence([h,d1,d2],["HKN2026000000989"],["DDM2026000000975"]);
+ assert.equal(invoiceMailPackageVerified(pdfs,a,assets,new Set(["h","d1"]),linked),true);
+ assert.equal(invoiceMailPackageVerified(pdfs,b,assets,new Set(["h","d2"]),linked),true);
+ assert.equal(invoiceMailPackageVerified(pdfs,a,assets,new Set(["h"]),linked),false);
+ assert.equal(invoiceMailPackageVerified(pdfs,a,assets,new Set(["h","d1"]),new Set(["h","d1"])),false);
+ assert.equal(invoiceMailPackageVerified([{...pdfs[0],provider_metadata:"{}"},pdfs[1],pdfs[2]],a,assets,new Set(["h","d1"]),linked),false);
 });

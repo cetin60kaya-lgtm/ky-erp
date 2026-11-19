@@ -243,15 +243,17 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
         const groups=await Promise.all(deliveryNos.map(no=>listCommunicationFiles({q:no,take:100})));
         if(cancelled)return;
         const files=groups.flatMap(result=>Array.isArray(unwrap(result))?unwrap(result):[]);
-        const matches=[...new Map(files.filter(file=>deliveryNos.some(no=>matchingPdfFiles([file],no,"DDM").length===1)&&
-          (!modelId||modelFiles.some(rel=>rel.id===file.id))).map(file=>[file.id,file])).values()];
+        // The HKN is shared: another model can own a DDM from this same invoice package.
+        // Each PDF is still tenant/permission scoped by /mail/files and checked server-side.
+        const matches=[...new Map(files.filter(file=>deliveryNos.some(no=>matchingPdfFiles([file],no,"DDM").length===1))
+          .map(file=>[file.id,file])).values()];
         const selected={};
         deliveryNos.forEach(no=>{const found=matchingPdfFiles(matches,no,"DDM");if(found.length===1)selected[no]=found[0].id;});
         setDeliveryFiles(matches);setDeliveryAssetIds(selected);
       }catch(e){if(!cancelled)setError(e?.message||"DDM PDF dosyaları bulunamadı.");}
     },300);
     return()=>{cancelled=true;window.clearTimeout(timer);};
-  },[deliveryNos,companySlug,modelId,modelFiles]);
+  },[deliveryNos,companySlug]);
 
   const editRoute = (row) => {
     setRouteForm({ id: row.id, customerName: row.customerName, groupCode: row.groupCode,

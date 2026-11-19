@@ -20,11 +20,12 @@ test("D1 history is batched under 100 bindings; filename-only evidence is review
  const history=read("./accounting-invoice-mail-routes.ts");
  assert.match(history,/offset\+=90/);
  assert.match(history,/verificationStatus:proved\?"VERIFIED":"REVIEW_REQUIRED"/);
- assert.match(history,/invoiceMailAttachmentProved/);
+ assert.match(history,/invoiceMailPackageVerified/);
  assert.match(history,/invoiceMailLegacyKeyPrefix/);
  assert.match(history,/deliveryAssets/);
  assert.match(history,/messages\.slice\(offset,offset\+90\)/);
  assert.match(history,/\.bind\(a\.tenant,\.\.\.ids\)/);
+ assert.match(history,/assetIds\.slice\(offset,offset\+90\)/);
 });
 test("Only fully completed folders can report healthy Microsoft account",()=>{
  const core=read("./mail-communication-core.ts");

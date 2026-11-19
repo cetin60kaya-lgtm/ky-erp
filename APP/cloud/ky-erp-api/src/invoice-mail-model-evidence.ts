@@ -41,3 +41,30 @@ asset:{id:string;sha256?:string;fileName?:string}|undefined){
     (invoiceMailDocumentFromFile(attachment.fileName,"HKN")===invoiceMailDocumentFromFile(asset.fileName,"HKN")&&Boolean(invoiceMailDocumentFromFile(asset.fileName,"HKN"))||
      invoiceMailDocumentFromFile(attachment.fileName,"DDM")===invoiceMailDocumentFromFile(asset.fileName,"DDM")&&Boolean(invoiceMailDocumentFromFile(asset.fileName,"DDM"))));
 }
+
+// A whole Outlook package is VERIFIED only when every PDF has tenant-owned
+// SHA-256 proof and a canonical MODEL relation. The viewed model must own the
+// HKN and at least one of its related DDMs; other DDMs may belong to other models.
+export function invoiceMailPackageVerified(
+  attachments:Array<{file_name?:string;file_asset_id?:string;provider_metadata?:string}>,
+  evidence:{invoiceNo:string;deliveryNos:string[];matchingDeliveryNos:string[]},
+  assets:Map<string,{id:string;file_name:string;sha256?:string}>,
+  modelAssetIds:Set<string>,canonicalLinkedAssetIds:Set<string>
+){
+  const hkn=attachments.filter(a=>invoiceMailDocumentFromFile(a.file_name,"HKN")===evidence.invoiceNo);
+  const delivery=evidence.deliveryNos.map(no=>attachments.filter(a=>invoiceMailDocumentFromFile(a.file_name,"DDM")===no));
+  if(hkn.length!==1||delivery.some(rows=>rows.length!==1))return false;
+  const pdfs=[hkn[0],...delivery.map(rows=>rows[0])];
+  if(!modelAssetIds.has(txt(hkn[0].file_asset_id))||
+    !delivery.some((rows,i)=>evidence.matchingDeliveryNos.includes(evidence.deliveryNos[i])&&
+      modelAssetIds.has(txt(rows[0].file_asset_id))))return false;
+  return pdfs.every(att=>{
+    const id=txt(att.file_asset_id),asset=assets.get(id);
+    if(!canonicalLinkedAssetIds.has(id)||!asset)return false;
+    let metadata:Record<string,unknown>={};
+    try{metadata=JSON.parse(txt(att.provider_metadata)||"{}");}catch{return false;}
+    return invoiceMailAttachmentProved({
+      fileAssetId:id,fileName:txt(att.file_name),sha256:txt(metadata.sha256)
+    },{id:asset.id,fileName:asset.file_name,sha256:asset.sha256});
+  });
+}
