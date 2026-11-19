@@ -122,6 +122,30 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const shownAccounts = useMemo(() => loadedSlug === slug ? accounts : [], [loadedSlug, slug, accounts]);
   const shownApprovals = useMemo(() => loadedSlug === slug ? approvals : [], [loadedSlug, slug, approvals]);
 
+  const gmailNeedsArchive = shownAccounts.some((account) =>
+    upper(account.provider_type) === "GMAIL" &&
+    Boolean(account.readiness?.oauthConnected) &&
+    !account.readiness?.syncHealthy
+  );
+  // Show the server-owned progress without asking the user to keep clicking.
+  // This timer only refreshes the read-only status while the page is visible.
+  useEffect(() => {
+    if (!slug || !gmailNeedsArchive || loading || syncBatchRunning) return;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState === "hidden") return;
+      const sequence = loadSequence.current;
+      try {
+        const result = await listMailAccounts(slug);
+        if (sequence === loadSequence.current && Array.isArray(result)) setAccounts(result);
+      } catch {
+        // No false readiness; the last known status remains visible.
+      }
+    }, 60000);
+    return () => window.clearInterval(timer);
+  }, [slug, gmailNeedsArchive, loading, syncBatchRunning]);
+
+
+
   const providerState = (type) => providers.find((item) => upper(item.provider) === upper(type)) || null;
   const counts = useMemo(() => ({
     total: shownAccounts.length,
@@ -229,7 +253,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
         setNotice(result.reason === "completed"
           ? "Gmail tam senkron sunucu tarafından doğrulandı. " + progress
           : result.reason === "limit"
-            ? "Bu kontrollü tarama turu tamamlandı. " + progress + " Kaldığı yerden sürdürmek için Senkronize Et'e bas."
+            ? "Bu isteğe bağlı tarama turu tamamlandı. " + progress + " Sunucudaki otomatik görev de kaldığı yerden devam eder."
             : result.reason === "cancelled"
               ? "Gmail taraması kullanıcı tarafından durduruldu. İlerleme kaydedildi. " + progress
               : "Gmail taraması güvenli biçimde durduruldu (" + result.reason + "). " + progress + " Hata veya ilerleme durumunu kontrol edin.");
@@ -314,15 +338,16 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
               <div className="mail-admin-account-actions">
                 {canManage && <button type="button" className="secondary" disabled={loading} onClick={() => editingThis ? setEditingId("") : startEdit(account)}>{editingThis ? "Kapat" : "Düzenle"}</button>}
                 {state.approved && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && (!state.oauth || provider === "GMAIL") && <button type="button" disabled={loading} onClick={() => connect(account)}>{active === "REAUTH_REQUIRED" ? "Yeniden Bağla" : state.oauth ? "Google Yetkisini Yenile" : "Hesabı Bağla"}</button>}
-                {state.oauth && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && <button type="button" className="secondary" disabled={loading} onClick={() => synchronize(account)}>Senkronize Et</button>}
+                {state.oauth && state.configured && ["MICROSOFT_365", "GMAIL"].includes(provider) && <button type="button" className="secondary" disabled={loading} onClick={() => synchronize(account)}>{provider === "GMAIL" ? "Şimdi Tara (isteğe bağlı)" : "Senkronize Et"}</button>}
               </div>
             </div>
             <div className="mail-admin-health">
               <StateMark ok={state.approved}>Firma onayı: {state.approved ? "Onaylandı" : "Bekliyor"}</StateMark>
               <StateMark ok={state.oauth && active !== "REAUTH_REQUIRED"}>OAuth: {active === "REAUTH_REQUIRED" ? "Yeniden onay gerekli" : state.oauth ? "Kayıtlı bağlantı" : "Bekliyor"}</StateMark>
               <StateMark ok={state.sync}>Tam senkron: {state.sync ? "Tamam" : "Bekliyor"} ({state.completed}/{state.enabled})</StateMark>
+              {provider === "GMAIL" && state.oauth && state.configured && !state.sync && <span className="mail-admin-last-sync">Gmail arşivi otomatik taranır (5 dakikalık tur); tekrar tıklaman gerekmez. Son otomatik tur: {formatDate(account.readiness?.gmailAutoLastAt)}. Bu turda {Number(account.readiness?.gmailAutoProcessed || 0)} mesaj kaydı işlendi.{account.readiness?.gmailAutoLastFolder ? " Son etiket: " + account.readiness.gmailAutoLastFolder + "." : ""}{state.completed === state.enabled && !account.readiness?.gmailHistoryLive ? " İlk arşiv tamam; yeni mail değişiklikleri eşitleniyor." : ""}</span>}
               <StateMark ok={state.configured} warning={!state.configured}>Sağlayıcı: {state.configured ? "Hazır" : "Ayar gerekli"}</StateMark>
-              <span className="mail-admin-last-sync">Son tam işlem: {formatDate(account.readiness?.lastSyncSuccessAt)}</span>
+              <span className="mail-admin-last-sync">Son başarılı tarama: {formatDate(account.readiness?.lastSyncSuccessAt)}</span>
             </div>
             {!state.configured && <div className="mail-admin-account-warning">{available?.reason || "Bu sağlayıcı için canlı OAuth/adapter ayarı hazır değil."} Mevcut hesap ve arşiv silinmedi; bağlantı ve yeni senkron kapalı.</div>}
             {editingThis && <div className="mail-admin-edit-panel">

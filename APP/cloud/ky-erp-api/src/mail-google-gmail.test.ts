@@ -197,7 +197,8 @@ test("Gmail partial sync keeps successful mail data usable instead of surfacing 
   const gmail=read("./mail-google-gmail.ts");
   assert.match(gmail,/successfulFolders/);
   assert.match(gmail,/partial,total,folders:summary/);
-  assert.match(gmail,/ok:true,data:\{accountId:account\.id,partial/);
+  assert.match(gmail,/return \{accountId:account\.id,partial,total,folders:summary/);
+  assert.match(gmail,/return c\.json\(\{ok:true,data:result\},result\.partial\?207:200\)/);
   assert.match(gmail,/failed\+\+/);
   assert.match(gmail,/failures\.length<5/);
   assert.match(gmail,/MAIL_SYNC_FAILED/);
@@ -280,4 +281,33 @@ test("Gmail callback sonucunu yanlış Mail Merkezi yerine firma E-Posta Hesapla
   assert.match(gmail,/GOOGLE_GMAIL_API_DISABLED/);
   assert.match(gmail,/const safe=approved\.has\(codeValue\)\?codeValue:"GOOGLE_OAUTH_FAILED"/);
   assert.doesNotMatch(gmail,/codeValue\+":"\+message/);
+});
+
+test("Gmail historical and incremental mail sync are scheduled without new credentials or sending",()=>{
+  const gmail=read("./mail-google-gmail.ts");
+  const entry=read("./main-entry-security.ts");
+  const wrangler=read("../wrangler.jsonc");
+  assert.match(entry,/runGmailMailScheduledSync\(env\)/);
+  assert.match(entry,/ctx\.waitUntil\(runGmailMailScheduledSync/);
+  assert.match(wrangler,/"crons": \["\*\/5 \* \* \* \*"\]/);
+  assert.match(gmail,/export async function runGmailMailScheduledSync/);
+  assert.match(gmail,/syncGmailAccountStep\(c,tenant,account/);
+  assert.match(gmail,/GMAIL_CRON/);
+  assert.match(gmail,/GMAIL_HISTORY/);
+  assert.match(gmail,/GMAIL_PAGE/);
+  assert.match(gmail,/gmailHistoryQueuePage/);
+  assert.match(gmail,/gmailHistoryAdvance/);
+  assert.match(gmail,/if\(Number\(error\?\.status\)!==404\)throw error/);
+  assert.match(gmail,/mail_folders WHERE main_company_slug=\? AND account_id=\?/);
+  assert.doesNotMatch(gmail,/revokeToken|DELETE FROM mail_messages/);
+});
+test("Mail readiness requires both full Gmail archive and live history checkpoint",()=>{
+  const core=read("./mail-communication-core.ts");
+  assert.match(core,/gmail_history_cursor/);
+  assert.match(core,/gmailHistoryLive/);
+  assert.match(core,/microsoft\|\|gmailHistoryLive/);
+  const ui=read("../../../app/ky-erp-frontend/src/pages/admin/AdminMailConnectionsV2.jsx");
+  assert.match(ui,/gmailAutoLastAt/);
+  assert.match(ui,/Şimdi Tara \(isteğe bağlı\)/);
+  assert.match(ui,/window\.setInterval/);
 });

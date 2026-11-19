@@ -12,6 +12,7 @@ import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
 import { runSecurityWorkspaceReminderSweep } from "./auth-security-mobile-control";
 import { runFileHubCloudScheduledSync } from "./file-hub-cloud-oauth";
 import { runMicrosoftMailScheduledSync } from "./mail-microsoft-graph";
+import { runGmailMailScheduledSync } from "./mail-google-gmail";
 import { runFileHubAccountingDocumentIntake } from "./file-hub-accounting-intake.ts";
 import { retryPhysicalOperations } from "./accounting-physical-journal";
 
@@ -126,6 +127,11 @@ export default {
     // Bounded 1-account/2-folder/1-page continuation: no new OAuth, no sending.
     ctx.waitUntil(runMicrosoftMailScheduledSync(env).catch(() => {
       console.error("MICROSOFT_MAIL_SCHEDULED_SYNC_FAILED");
+    }));
+    // Gmail archive continuation uses the same existing five-minute cron;
+    // no scheduled mail send, no new cron plan and no access to other providers.
+    ctx.waitUntil(runGmailMailScheduledSync(env).catch(() => {
+      console.error("GMAIL_MAIL_SCHEDULED_SYNC_FAILED");
     }));
     ctx.waitUntil(retryPhysicalOperations(env).then((result)=>{
       if(result.processed || result.status!=="OK")console.log(JSON.stringify({
