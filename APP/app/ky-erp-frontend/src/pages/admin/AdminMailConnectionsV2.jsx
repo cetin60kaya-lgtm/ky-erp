@@ -345,9 +345,9 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
               <StateMark ok={state.approved}>Firma onayı: {state.approved ? "Onaylandı" : "Bekliyor"}</StateMark>
               <StateMark ok={state.oauth && active !== "REAUTH_REQUIRED"}>OAuth: {active === "REAUTH_REQUIRED" ? "Yeniden onay gerekli" : state.oauth ? "Kayıtlı bağlantı" : "Bekliyor"}</StateMark>
               <StateMark ok={state.sync}>Tam senkron: {state.sync ? "Tamam" : "Bekliyor"} ({state.completed}/{state.enabled})</StateMark>
-              {provider === "GMAIL" && state.oauth && state.configured && !state.sync && <span className="mail-admin-last-sync">Gmail arşivi: otomatik tarama etkin (5 dakikalık sistem turu). İlerleme bu ekranda kendiliğinden güncellenir; tekrar tıklaman gerekmez.</span>}
+              {provider === "GMAIL" && state.oauth && state.configured && !state.sync && <span className="mail-admin-last-sync">Gmail arşivi otomatik taranır (5 dakikalık tur); tekrar tıklaman gerekmez. Son otomatik tur: {formatDate(account.readiness?.gmailAutoLastAt)}. Bu turda {Number(account.readiness?.gmailAutoProcessed || 0)} mesaj kaydı işlendi.{account.readiness?.gmailAutoLastFolder ? " Son etiket: " + account.readiness.gmailAutoLastFolder + "." : ""}{state.completed === state.enabled && !account.readiness?.gmailHistoryLive ? " İlk arşiv tamam; yeni mail değişiklikleri eşitleniyor." : ""}</span>}
               <StateMark ok={state.configured} warning={!state.configured}>Sağlayıcı: {state.configured ? "Hazır" : "Ayar gerekli"}</StateMark>
-              <span className="mail-admin-last-sync">Son tam işlem: {formatDate(account.readiness?.lastSyncSuccessAt)}</span>
+              <span className="mail-admin-last-sync">Son başarılı tarama: {formatDate(account.readiness?.lastSyncSuccessAt)}</span>
             </div>
             {!state.configured && <div className="mail-admin-account-warning">{available?.reason || "Bu sağlayıcı için canlı OAuth/adapter ayarı hazır değil."} Mevcut hesap ve arşiv silinmedi; bağlantı ve yeni senkron kapalı.</div>}
             {editingThis && <div className="mail-admin-edit-panel">
