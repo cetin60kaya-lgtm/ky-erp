@@ -79,6 +79,8 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const [editingId, setEditingId] = useState("");
   const [editing, setEditing] = useState({ displayName: "", departmentCode: "" });
 
+  useEffect(() => () => { syncStopRequested.current = true; }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const feedback = gmailOAuthFeedback(params);
