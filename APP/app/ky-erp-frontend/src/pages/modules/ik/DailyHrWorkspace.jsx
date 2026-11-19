@@ -437,6 +437,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const [weeklyReadScope, setWeeklyReadScope] = useState("");
   const [weeklyLoadError, setWeeklyLoadError] = useState("");
   const [paymentRows, setPaymentRows] = useState([]);
+  const [paymentReadScope, setPaymentReadScope] = useState("");
   const [periodStatusRows, setPeriodStatusRows] = useState([]);
   const [periodStatusError, setPeriodStatusError] = useState("");
   const [paymentPeriodRows, setPaymentPeriodRows] = useState([]);
@@ -507,6 +508,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   const rangeRequestRef = useRef(0);
   const focusedRequestRef = useRef(0);
   const weeklyRequestRef = useRef(0);
+  const paymentRequestRef = useRef(0);
   const logRequestRef = useRef(0);
   const expectedPeriodScope = dailyPeriodScope(companyId, selectedDate, range.start, range.end);
   const expectedRangeScope = dailyRangeScope(companyId, range.start, range.end);
@@ -690,23 +692,26 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
 
   const loadPayments = useCallback(async () => {
     if (!companyId || !["daily-payments", "daily-dashboard"].includes(view)) return;
+    const requestId = ++paymentRequestRef.current;
+    const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
+    const targetScope = dailyRangeScope(companyId, sourceRange.start, sourceRange.end);
     setLoading(true); setPaymentLoadError("");
     if (view === "daily-payments") setError("");
     try {
-      const sourceRange = view === "daily-dashboard" ? range : paymentPoolRange;
-      const [poolResult, attendanceResult, statusResult, adjustmentsResult] = await Promise.all([
+      const [poolResult, attendanceResult, statusResult, adjustmentsResult, financialResult] = await Promise.all([
         getDailyPaymentPool({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }),
         getDailyAttendance({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
         getDailyPeriodPaymentStatus({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }).catch(() => null),
         getDailyPaymentAdjustments({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
+        getDailyWeeklySummary({ mainCompanyId: companyId, startDate: sourceRange.start, endDate: sourceRange.end }, { forceFresh: true }),
       ]);
-      const poolRows = Array.isArray(poolResult) ? poolResult : [];
-      const attendanceRows = Array.isArray(attendanceResult) ? attendanceResult : [];
-      const allAdjustmentRows = Array.isArray(adjustmentsResult) ? adjustmentsResult : [];
-      setPeriodAdjustmentRows(allAdjustmentRows);
-      setPaymentRows(poolRows);
-      setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
-      setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
+      if (requestId !== paymentRequestRef.current) return;
+      if (!Array.isArray(poolResult) || !Array.isArray(attendanceResult)
+        || !Array.isArray(adjustmentsResult) || !Array.isArray(financialResult))
+        throw new Error("Dönem verileri eksik veya geçersiz; ödeme çıktısı durduruldu.");
+      const poolRows = poolResult;
+      const attendanceRows = attendanceResult;
+      const allAdjustmentRows = adjustmentsResult;
 
       const employeeLookup = new Map(employees.map((person) => [String(person.id), person]));
       const map = new Map();
@@ -757,13 +762,28 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
         else if(adjustment.kind==="DEDUCT") current.deductions+=number(adjustment.amount);
         current.items.push(adjustment);groupedExtras.set(key,current);
       }
-      setPaymentPeriodRows([...map.values()].map((row)=>{
-        const extra=groupedExtras.get(String(row.employeeId))||{additions:0,deductions:0,items:[]};
-        return {...row,baseAmount:row.totalAmount,additions:extra.additions,deductions:extra.deductions,
-          adjustments:extra.items,totalAmount:row.totalAmount+extra.additions-extra.deductions};
-      }).sort((a,b)=>String(a.name).localeCompare(String(b.name),"tr")));
+      // Hakediş kaynağı D1 haftalık mali özettir; tarayıcı ücret toplamı yalnız
+      // çapraz kontrol ve fişin gün-gün kalemlerini göstermek için kullanılır.
+      const verified = reconcileDailyWeeklyReport([...map.values()], financialResult);
+      setPaymentPeriodRows(verified.map((row) => {
+        const local = map.get(String(row.employeeId)) || {};
+        const extra = groupedExtras.get(String(row.employeeId)) || { items: [] };
+        return {
+          ...local, ...row,
+          periodStart: sourceRange.start, periodEnd: sourceRange.end,
+          dayTotal: number(local.dayTotal), nightTotal: number(local.nightTotal),
+          items: local.items || [], adjustments: extra.items,
+        };
+      }));
+      setPeriodAdjustmentRows(allAdjustmentRows);
+      setPaymentRows(poolRows);
+      setPeriodStatusRows(Array.isArray(statusResult) ? statusResult : []);
+      setPeriodStatusError(Array.isArray(statusResult) ? "" : "Ödeme durumu doğrulanamadı; tamamlandı kabul edilmeyecek.");
+      setPaymentReadScope(targetScope);
     } catch (e) {
+      if (requestId !== paymentRequestRef.current) return;
       const message = e?.message || "Dönem ödeme verileri alınamadı.";
+      setPaymentReadScope("");
       setPaymentRows([]);
       setPaymentPeriodRows([]);
       setPeriodAdjustmentRows([]);
@@ -771,7 +791,7 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
       setPeriodStatusError(message);
       setPaymentLoadError(message);
       if (view === "daily-payments") setError(message);
-    } finally { setLoading(false); }
+    } finally { if (requestId === paymentRequestRef.current) setLoading(false); }
   }, [companyId, employees, paymentPoolRange, range, view]);
   useEffect(() => { void loadPayments(); }, [loadPayments]);
 
@@ -1510,8 +1530,14 @@ export default function DailyHrWorkspace({ activeTab = "daily-entry", activeMain
   // Hakediş çıktısı salt okunurdur: ödeme yalnız kullanıcı 'Tamamla' dediğinde kaydedilir.
   const printPeriodRows = useCallback((rowsToPrint = []) => {
     if (busy || !Array.isArray(rowsToPrint) || !rowsToPrint.length) return;
+    if (paymentReadScope !== dailyRangeScope(companyId, paymentPoolRange.start, paymentPoolRange.end)
+      || paymentLoadError || rowsToPrint.some((row) =>
+        !row.financialVerified || row.periodStart !== paymentPoolRange.start || row.periodEnd !== paymentPoolRange.end)) {
+      setError("Fişin tarih aralığı veya hakedişi D1 ile doğrulanmadı. Yenilemeden çıktı alınamaz.");
+      return;
+    }
     printDailyPaymentSlips(paymentPoolRange, rowsToPrint);
-  }, [busy, paymentPoolRange]);
+  }, [busy, companyId, paymentLoadError, paymentPoolRange, paymentReadScope]);
   const printPaymentPeriodSlips = useCallback(({ selectedOnly = false } = {}) => {
     const slips = selectedOnly ? paymentPeriodRows.filter((row) => paymentSelectedIds.has(String(row.employeeId))) : paymentPeriodRows;
     printPeriodRows(slips);
