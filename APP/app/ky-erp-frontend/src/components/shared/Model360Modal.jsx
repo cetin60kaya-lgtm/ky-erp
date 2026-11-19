@@ -1,7 +1,7 @@
 import {useCallback,useEffect,useMemo,useState} from "react";
 import {AlertTriangle,CheckCircle2,Factory,FileCheck2,ImageOff,Layers3,Mail,Palette,RefreshCcw,Save,X} from "lucide-react";
 import {useAuth} from "../../context/AuthContext";
-import {apiGet} from "../../utils/api";
+import {apiGet,apiPost} from "../../utils/api";
 import {createProductionCenterEntry,getProductionCenterModel} from "../../services/productionCenterApi";
 import {getDesignModel} from "../../services/desenWorkflowApi";
 import {listBoyahaneJobs,patchBoyahaneJob} from "../../services/boyahaneWorkflowApi";
@@ -9,7 +9,7 @@ import {productionImagePath} from "../../pages/imalat/productionModelImage";
 import ModelFilesPanel from "./ModelFilesPanel";
 import ModelDocumentCenter from "./ModelDocumentCenter";
 import InvoiceMailWorkspace from "../../pages/modules/muhasebe/InvoiceMailWorkspace";
-import {MODEL360_TABS,model360Access,model360LinkedInvoices,model360DeliveryForInvoice,model360Warnings,model360QuantityReview} from "./model360Rules";
+import {MODEL360_TABS,model360Access,model360LinkedInvoices,model360DeliveryForInvoice,model360DeliveriesForInvoice,model360Warnings,model360QuantityReview} from "./model360Rules";
 import "./model360.css";
 
 const unwrap = (v) => v?.data?.data ?? v?.data ?? v ?? {};
@@ -118,6 +118,7 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const docs=array(data.documents?.items);
   const mailHistory=array(data.mail);
   const outlookEvidence=array(data.outlookEvidence?.items);
+  const [evidenceBusy,setEvidenceBusy]=useState("");
   const dyehouseJobs=array(data.dyehouse).filter(job=>modelMatchesJob(job,modelId));
   const imageSources=[...new Set([production?.imageUrl,design?.mainImage?.previewUrl,design?.mainImage?.thumbnailUrl,identity?.imageUrl]
     .map(productionImagePath).filter(Boolean))];
@@ -130,6 +131,18 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
   const picked=invoices.find(row=>row.id===selectedInvoice)||null;
   const canWriteEntry=writeProduction&&!production?.isVirtual&&Boolean(production?.id);
   const regions=array(production?.printRegions).map(row=>row.regionName).filter(Boolean);
+
+  async function verifyOutlookEvidence(item){
+    if(!item?.id||evidenceBusy)return;
+    setEvidenceBusy(String(item.id));setMessage("");
+    try{
+      const result=await apiPost("/mail/messages/"+encodeURIComponent(item.id)+"/verify-evidence/microsoft",{});
+      const detail=result?.data?.data??result?.data??result;
+      setMessage(detail?.complete?"Outlook PDF SHA-256 kanıtı File Hub ile doğrulandı.":"PDF kanıtı eksik; REVIEW_REQUIRED olarak korunuyor.");
+      refresh();
+    }catch(e){setMessage(e?.message||"Outlook PDF doğrulaması başarısız.");}
+    finally{setEvidenceBusy("");}
+  }
 
   async function saveProduction(event) {
     event.preventDefault();
@@ -280,13 +293,18 @@ export default function Model360Modal({modelId,initialTab="general",activeMainCo
             {invoices.length?<div className="m360-mail-pick"><label>Mail hazırlanacak HKN faturası<select value={selectedInvoice} onChange={e=>setSelectedInvoice(e.target.value)}><option value="">Fatura seç</option>{invoices.map(row=><option key={row.id} value={row.id}>{row.number} · {row.date||""}</option>)}</select></label></div>:<Empty>Mail hazırlamak için bu modele bağlanmış gerçek giden HKN faturası bulunmalı.</Empty>}
             {picked?<InvoiceMailWorkspace key={modelId+":"+picked.id} activeMainCompany={activeMainCompany} selectedInvoice={{
               document_no:picked.number,delivery_no:model360DeliveryForInvoice(picked,docs),
+              delivery_nos:model360DeliveriesForInvoice(picked,docs),
               model_id:modelId,model_name:name,party_name:company,
             }}/>:null}
             <h4>KY ERP'de kayıtlı Outlook gönderim geçmişi</h4>
             {mailHistory.length?<div className="m360-doc-list">{mailHistory.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo||"HKN"}</b><small>{item.deliveryNo||""} · {array(item.modelIds).length} bağlı model</small></span><span>{item.status||"Kayıt"}</span><small>{item.recordedAt?.slice(0,16)||""}</small></div>)}</div>:<Empty>KY ERP üzerinden kanıtlanmış gönderim kaydı bulunamadı.</Empty>}
             <h4>Outlook Gönderilenler · Eski manuel gönderimler</h4>
             <p className="m360-info-note">Yalnız Outlook Gönderilenler'deki ve her iki HKN/DDM PDF eki bu modele kesin bağlı olan mesajlar salt okunur gösterilir. Teslim/okundu bilgisi değildir.</p>
-            {outlookEvidence.length?<div className="m360-doc-list">{outlookEvidence.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo}</b><small>{item.deliveryNo} · {item.subject||"Konu yok"}</small></span><span>Outlook · Gönderilmiş</span><small>{String(item.sentAt||"").slice(0,16).replace("T"," ")}</small></div>)}</div>:<Empty>Her iki PDF ile doğrulanmış eski Outlook maili bulunamadı veya posta geçmişi henüz senkronize edilmedi.</Empty>}
+            {outlookEvidence.length?<div className="m360-doc-list">{outlookEvidence.map((item,index)=><div className="m360-doc-row" key={item.id||index}><span><b>{item.invoiceNo}</b><small>{(item.deliveryNos||[item.deliveryNo]).join(", ")} · {item.subject||"Konu yok"}</small></span>
+              <span>{item.verificationStatus==="VERIFIED"?"SHA kanıtlı":"REVIEW_REQUIRED"}</span>
+              {item.verificationStatus!=="VERIFIED"?<button type="button" disabled={Boolean(evidenceBusy)} onClick={()=>void verifyOutlookEvidence(item)}>PDF Kanıtını Doğrula</button>:null}
+              <small>{String(item.sentAt||"").slice(0,16).replace("T"," ")}</small></div>)}</div>:<Empty>Her iki PDF ile doğrulanmış eski Outlook maili bulunamadı veya posta geçmişi henüz senkronize edilmedi.</Empty>}
+            {message?<p role="status">{message}</p>:null}
             {data.outlookEvidence?.limited?<p className="m360-error">İlk 200 Outlook gönderimi incelendi; daha eski kayıtlar için tamamlanmış geçmiş senkronizasyonu gerekir.</p>:null}
             {errors.outlookEvidence?<ErrorNotice text={"Outlook geçmişi: "+errors.outlookEvidence}/>:null}
           </section>:<Empty>Fatura maili için muhasebe/iletişim yetkiniz bulunmuyor.</Empty>)}
