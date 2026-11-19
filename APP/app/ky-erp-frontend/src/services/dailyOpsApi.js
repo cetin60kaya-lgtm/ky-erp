@@ -95,6 +95,11 @@ export async function getDailyPeriodPaymentStatus(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/period-status`, params, freshOptions(options)));
 }
 
+export async function getDailyEmployeeWorkPaymentHistory(employeeId, params = {}, options = {}) {
+  if (!employeeId) throw new Error("Personel kimliği zorunludur.");
+  return unwrap(await apiGet(`${ROOT}/employees/${encodeURIComponent(employeeId)}/history`, params, freshOptions(options)));
+}
+
 export async function getDailyPaymentHistory(params = {}, options = {}) {
   return unwrap(await apiGet(`${ROOT}/payments/history`, params, freshOptions(options)));
 }
