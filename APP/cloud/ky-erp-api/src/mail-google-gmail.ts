@@ -191,7 +191,11 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
     for(const recipient of splitAddresses(value))await c.env.DB.prepare("INSERT INTO mail_recipients(id,main_company_slug,message_id,recipient_type,email_address,display_name,created_at) VALUES(?,?,?,?,?,?,?)")
       .bind(crypto.randomUUID(),tenant,id,kind,recipient.email,recipient.name||null,ts).run();
   }
-  await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,id).run();
+  // The same message may appear under multiple Gmail labels. Keep existing proof.
+  const previous=(await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?")
+    .bind(tenant,id).all<AnyRow>()).results||[];
+  const oldByProvider=new Map(previous.map((row:any)=>[text(row.provider_attachment_id),row]));
+  const seen=new Set<string>();
   const attachmentParts:any[]=[];
   const partHeader=(part:any,name:string)=>{
     const wanted=upper(name);
@@ -206,9 +210,27 @@ async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,i
   };
   collect(item.payload||{});
   for(const part of attachmentParts){
-    const mime=text(part.mimeType)||"application/octet-stream",fallbackName=part._contentId?`inline-${text(part.partId)||crypto.randomUUID()}`:"ek";
-    await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,id,text(part._providerAttachmentId),null,text(part.filename)||fallbackName,mime,Number(part?.body?.size||0)||null,part._isInline?1:0,text(part._contentId)||null,JSON.stringify({provider:"GMAIL",partId:text(part.partId),inlineBodyData:Boolean(text(part?.body?.data))}),ts).run();
+    const providerId=text(part._providerAttachmentId),mime=text(part.mimeType)||"application/octet-stream",fallbackName=part._contentId?"inline-"+(text(part.partId)||providerId):"ek";
+    const name=text(part.filename)||fallbackName,size=Number(part?.body?.size||0)||null,old=oldByProvider.get(providerId);
+    seen.add(providerId);
+    const metadata:any={provider:"GMAIL",partId:text(part.partId),inlineBodyData:Boolean(text(part?.body?.data))};
+    if(old){
+      let prior:any={};try{prior=JSON.parse(text(old.provider_metadata)||"{}");}catch{}
+      const same=text(old.file_name)===name&&text(old.mime_type)===mime&&Number(old.size_bytes||0)===Number(size||0);
+      metadata.reviewRequired=!same&&Boolean(old.file_asset_id);
+      await c.env.DB.prepare("UPDATE mail_attachments SET file_name=?,mime_type=?,size_bytes=?,is_inline=?,content_id=?,file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=?")
+        .bind(name,mime,size,part._isInline?1:0,text(part._contentId)||null,same?old.file_asset_id:null,
+          JSON.stringify({...prior,...metadata,removed:false}),old.id,tenant).run();
+    }else{
+      await c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+        .bind(crypto.randomUUID(),tenant,id,providerId,null,name,mime,size,part._isInline?1:0,text(part._contentId)||null,JSON.stringify(metadata),ts).run();
+    }
+  }
+  for(const old of previous){
+    if(seen.has(text(old.provider_attachment_id)))continue;
+    let metadata:any={};try{metadata=JSON.parse(text(old.provider_metadata)||"{}");}catch{}
+    await c.env.DB.prepare("UPDATE mail_attachments SET provider_metadata=? WHERE id=? AND main_company_slug=?")
+      .bind(JSON.stringify({...metadata,removed:true}),old.id,tenant).run();
   }
 }
 function parseRecipients(raw:unknown){try{const v=typeof raw==="string"?JSON.parse(raw):raw;return v&&typeof v==="object"?v:{};}catch{return{};}}
