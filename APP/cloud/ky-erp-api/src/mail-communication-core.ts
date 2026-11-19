@@ -487,8 +487,8 @@ export function registerMailCommunicationRoutes(app:any){
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail taslaklarını görüntüleme yetkiniz yok."),403);
     const r=ownerRole(current?.role)||companyAdminRole(current?.role)
-      ?await c.env.DB.prepare("SELECT d.* FROM mail_drafts d WHERE d.main_company_slug=? AND d.status='DRAFT' ORDER BY d.updated_at DESC LIMIT 200").bind(tenant).all<AnyRow>()
-      :await c.env.DB.prepare("SELECT d.* FROM mail_drafts d JOIN mail_account_members m ON m.account_id=d.account_id AND m.main_company_slug=d.main_company_slug WHERE d.main_company_slug=? AND d.status='DRAFT' AND m.user_id=? AND m.can_view=1 ORDER BY d.updated_at DESC LIMIT 200").bind(tenant,text(current?.id)).all<AnyRow>();
+      ?await c.env.DB.prepare("SELECT d.* FROM mail_drafts d WHERE d.main_company_slug=? AND d.status IN ('DRAFT','PROVIDER_DRAFT') ORDER BY d.updated_at DESC LIMIT 200").bind(tenant).all<AnyRow>()
+      :await c.env.DB.prepare("SELECT d.* FROM mail_drafts d JOIN mail_account_members m ON m.account_id=d.account_id AND m.main_company_slug=d.main_company_slug WHERE d.main_company_slug=? AND d.status IN ('DRAFT','PROVIDER_DRAFT') AND m.user_id=? AND m.can_view=1 ORDER BY d.updated_at DESC LIMIT 200").bind(tenant,text(current?.id)).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
   });
 

@@ -457,6 +457,51 @@ export function registerMicrosoftMailRoutes(app:any){
     return new Response(bytes,{status:200,headers});
   });
 
+  // Explicit user "Taslak Kaydet": save the same draft in Outlook's Drafts.
+  // This does NOT send a message and does not create a second ERP mail record.
+  app.post("/api/mail/drafts/:id/provider-draft/microsoft",async(c:any)=>{
+    const a:any=await currentAccess(c);if(a.error)return a.error;
+    const{current,tenant}=a,draftId=text(c.req.param("id"));
+    if(!perm(current,"canCreate"))return c.json(err("MAIL_DRAFT_FORBIDDEN","Taslak oluşturma yetkisi yok."),403);
+    const draft=await c.env.DB.prepare(
+      "SELECT d.*,a.provider_type,a.status account_status,a.provider_connected,a.account_type,a.email_address FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.id=? AND d.main_company_slug=? LIMIT 1"
+    ).bind(draftId,tenant).first<AnyRow>();
+    if(!draft)return c.json(err("DRAFT_NOT_FOUND","Taslak bulunamadı."),404);
+    if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunda taslak hazırlama yetkiniz yok."),403);
+    if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)
+      return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Outlook hesabı bağlı ve onaylı değil."),409);
+    if(["SENT","SEND_REVIEW_REQUIRED"].includes(upper(draft.status)))
+      return c.json(err("MAIL_DRAFT_ALREADY_PROCESSED","Gönderilmiş veya incelenecek taslak Outlook'ta yeniden oluşturulamaz."),409);
+    if(text(draft.provider_draft_id))return c.json({ok:true,data:{draftId,providerDraftId:text(draft.provider_draft_id),status:"PROVIDER_DRAFT",idempotent:true,sent:false}});
+    let assets:any[]=[];
+    try{assets=await resolveDraftAttachments(c,tenant,parseAttachments(draft.attachment_refs_json));}
+    catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Taslak ekleri doğrulanamadı."),Number(error?.status)||502);}
+    const recipients=parseRecipients(draft.recipients_json),account=await c.env.DB.prepare(
+      "SELECT * FROM mail_accounts WHERE id=? AND main_company_slug=? LIMIT 1"
+    ).bind(draft.account_id,tenant).first<AnyRow>();
+    try{
+      const token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account);
+      const message={subject:text(draft.subject),body:{contentType:text(draft.body_html)?"HTML":"Text",content:text(draft.body_html||draft.body_text)},
+        toRecipients:localRecipients(recipients.to),ccRecipients:localRecipients(recipients.cc),bccRecipients:localRecipients(recipients.bcc),transactionId:draftId};
+      const original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id));
+      const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
+      const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;
+      const providerDraftId=text(created.id);
+      if(!providerDraftId)throw Object.assign(new Error("Outlook taslak kimliği alınamadı."),{code:"MICROSOFT_PROVIDER_DRAFT_MISSING"});
+      // Persist before attaching, so an attachment failure can safely resume
+      // the SAME Outlook draft (no duplicate draft on user retry).
+      const updated=await c.env.DB.prepare(
+        "UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=? AND provider_draft_id IS NULL AND status='DRAFT'"
+      ).bind(providerDraftId,nowIso(),draftId,tenant).run();
+      if(!Number(updated.meta?.changes||0))
+        return c.json(err("MAIL_DRAFT_RACE_REVIEW","Taslak başka bir işlemde değişti. Gönderim başlatılmadı."),409);
+      await syncMicrosoftDraftAttachments(base,providerDraftId,token,assets);
+      return c.json({ok:true,data:{draftId,providerDraftId,status:"PROVIDER_DRAFT",sent:false}});
+    }catch(error:any){
+      return c.json(err(text(error?.code)||"MICROSOFT_DRAFT_SYNC_FAILED",text(error?.message)||"Outlook taslağı kaydedilemedi."),Number(error?.status)||502);
+    }
+  });
+
   app.post("/api/mail/drafts/:id/send",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a,draftId=text(c.req.param("id"));
     const draft=await c.env.DB.prepare("SELECT d.*,a.provider_type,a.status account_status,a.provider_connected,a.email_address,a.account_type FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.id=? AND d.main_company_slug=? LIMIT 1").bind(draftId,tenant).first<AnyRow>();

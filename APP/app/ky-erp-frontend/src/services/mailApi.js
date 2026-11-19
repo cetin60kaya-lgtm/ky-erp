@@ -106,5 +106,8 @@ export const setMailAccountDefaults = (accountId, values = {}) =>
 export const syncMailAccount = (accountId) =>
   apiPost(`/mail/accounts/${encodeURIComponent(accountId)}/sync`, {}, { timeoutMs: 120_000 }).then(unwrap);
 
+export const saveMicrosoftOutlookDraft = (draftId) =>
+  apiPost(`/mail/drafts/${encodeURIComponent(draftId)}/provider-draft/microsoft`, {}, { timeoutMs: 120_000 }).then(unwrap);
+
 export const sendMailDraft = (draftId, logicalEventId = "") =>
   apiPost(`/mail/drafts/${encodeURIComponent(draftId)}/send`, { logicalEventId }, { timeoutMs: 60_000 }).then(unwrap);
