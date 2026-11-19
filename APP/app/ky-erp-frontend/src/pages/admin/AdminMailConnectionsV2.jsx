@@ -125,7 +125,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const gmailNeedsArchive = shownAccounts.some((account) =>
     upper(account.provider_type) === "GMAIL" &&
     Boolean(account.readiness?.oauthConnected) &&
-    !Boolean(account.readiness?.syncHealthy)
+    !account.readiness?.syncHealthy
   );
   // Show the server-owned progress without asking the user to keep clicking.
   // This timer only refreshes the read-only status while the page is visible.
