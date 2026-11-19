@@ -1,5 +1,6 @@
-export const GMAIL_PAGE_SIZE = 40;
-export const GMAIL_FOLDERS_PER_PASS = 3;
+// Bound work for free-plan Cloudflare Worker subrequest/D1 query limits.
+export const GMAIL_PAGE_SIZE = 3;
+export const GMAIL_FOLDERS_PER_PASS = 1;
 
 const OTHER_LABELS = new Set(["UNREAD","STARRED","IMPORTANT","CHAT","CATEGORY_PERSONAL","CATEGORY_SOCIAL","CATEGORY_PROMOTIONS","CATEGORY_UPDATES","CATEGORY_FORUMS"]);
 const STANDARD_FOLDERS = ["TRASH","SPAM","DRAFT","SENT","INBOX"];

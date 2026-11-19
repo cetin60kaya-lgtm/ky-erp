@@ -18,3 +18,9 @@
 - 15 klasörün tamamlanması **birden çok kullanıcı başlatması** gerektirebilir; çok büyük arşivler kısa süreli istek sınırı nedeniyle tek tıkla bitmez.
 - Bu aşama **ilk arşiv taraması** içindir. Tamamen bitmiş arşivden sonraki güncel değişikliklerin otomatik Gmail history/delta takibi ayrıca canlı kabul gerektirir. Desteklenmeyen 'her gün kendiliğinden tam senkron' sözü verilmez.
 - Tamamlandı denmesi için eşleşen gerçek Gmail OAuth, 15/15 cursor başarı, gelen-giden mail örnekleri, ek PDF kanıtı ve gerçek kullanıcının ekranı kontrol edilmeli. Test/Cloudflare başarıları bu gerçek Gmail kabulünün yerine geçmez.
+
+## 19.11.2026 — Gerçek kullanıcı 500 hatası ve kotaya uygun düzeltme
+- Canlı KY ERP ekranında DESEN Gmail senkronu "Hata: Internal Server Error", 0/15. Gerçek sunucu hata logu görülmedi; kök neden kesin değildir.
+- Önceki işlem 3 klasör x 40 mesaj ve gereksiz klasör sorguları içeriyordu. Cloudflare Free planında 50 dış istek, 50 D1 query/Worker isteği kotası bulunduğundan sınır aşımı ciddi olasılıktır.
+- Yeni güvenli adım: 1 klasör x en fazla 3 mesaj; Gmail nextPageToken kaldığı yerden. Klasörler tek sorguda okunur, yalnız yenileri/ değişenleri toplu yazılır. To/CC/BCC ve ek kaydı D1.batch kullanır.
+- GMAIL_TOKEN, GMAIL_LABELS, FOLDER_DISCOVERY, GMAIL_PAGES, CURSOR_CHECKPOINT, SYNC_SUMMARY aşamaları hata kodu ile ayrılır. Token ve mail içeriği loglanmaz. Gerçek Gmail kullanıcı testi ayrıca gereklidir.
