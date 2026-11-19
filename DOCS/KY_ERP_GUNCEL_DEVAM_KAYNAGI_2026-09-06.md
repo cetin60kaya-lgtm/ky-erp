@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Günlük Operasyon tek ücret/havuz kayıt düzeni
+- Kaynak: `fix/gunluk-havuz-kalici-aralik-butunlugu-20261119`. Yalnız canonical `DailyHrWorkspace` + `gunluk-operasyon-cloud` + `gunluk-operasyon-core` + ortak servis/testler değişti; paralel İK ekranı üretilmedi.
+- Havuza Ekle: D1 yazımı + aynı istek içinde sunucu doğrulaması; Günlük Kaydet: seçili gün/vardiya, havuzu etkilemez. Tek-personel çıkarma dışında toplu sessiz silme yok. Eski tam tarih aralığı kayıtları olduğu gibi korunur.
+- Ücret tek motoru: tarih-etkili kart değeri / ödenmiş vardiya kuruş sabiti / eski ödemede eski ücret. D1 gün-gece alt toplam + baz + ek/kesinti + net; fiş, haftalık A4 ve Excel çapraz mutabakat geçmeden basılmaz.
+- Yazdırma: haftalık yatay A4 26 personel/sayfa; 10'lu dikey ödeme fişi ayrı. Geçersiz ücret kartta reddedilir, gerçek D1 kabulü ve üretim yayını ayrıca kanıtlanır.
+
+
 ## 19.11.2026 — Gmail gerçek kullanıcı ekranı: 0/15 klasör; sayfalı ilk arşiv senkron düzeltmesi
 - Firma bazlı E-Posta Yönetim Merkezi (PR #599) gerçek tarayıcıda açıldı; 4 sekmeli tasarım ve DESEN Gmail kartı kontrol edildi. Onay/OAuth/provider hazır, fakat **0/15 klasör**, **0 hazır hesap**: Gmail arşivi kabulü henüz PASS değil.
 - İlk 100 Gelen/Sent sınırının 15 Gmail etiketini tamamlaması mümkün değildi. Mevcut OAuth ve Mail Core korunarak `GMAIL_PAGE` ile kademeli sayfalama, gerçek klasör tamamlanma sayacı, çok etiketli mesajı bir defa konumlama ve tekrar senkronizasyonda File Hub ek kanıtını koruma üzerinde çalışıldı.
