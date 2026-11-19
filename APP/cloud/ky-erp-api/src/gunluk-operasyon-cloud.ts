@@ -202,6 +202,13 @@ function ensureSchema(c: Context<AppEnv>) {
         created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(attendance_id, revision)
       )`),
+      c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_active_range (
+        main_company_id TEXT PRIMARY KEY,
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        version INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`),
       c.env.DB.prepare(`CREATE TABLE IF NOT EXISTS hr_daily_period_lock (
         id TEXT PRIMARY KEY,
         main_company_id TEXT NOT NULL,
@@ -579,6 +586,56 @@ async function listFocused(c: Context<AppEnv>) {
   }));
 
   return okItems(c, rows, rows);
+}
+
+/**
+ * Firma bazında TEK aktif rapor/dönem aralığı; personel, vardiya veya ödeme
+ * tablolarını değiştirmez. Sürüm eşleşmesi başka PC'deki yeni seçimi korur.
+ */
+async function getActiveDailyRange(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const companyId = companyIdOf(c);
+  const row = await c.env.DB.prepare(`SELECT start_date,end_date,version,updated_at
+    FROM hr_daily_active_range WHERE main_company_id=?`).bind(companyId).first<Row>();
+  if (!row) return ok(c,{ configured:false, version:0 });
+  return ok(c,{
+    configured:true, startDate:dateOnly(row.start_date), endDate:dateOnly(row.end_date),
+    version:num(row.version), updatedAt:text(row.updated_at),
+  });
+}
+async function saveActiveDailyRange(c: Context<AppEnv>) {
+  await ensureSchema(c);
+  const body = await bodyOf(c);
+  const companyId = companyIdOf(c,body);
+  const start = dateOnly(body.startDate);
+  const end = dateOnly(body.endDate);
+  const startMs=Date.parse(start+"T12:00:00Z");
+  const endMs=Date.parse(end+"T12:00:00Z");
+  if (!validDate(start) || !validDate(end) || !Number.isFinite(startMs)
+    || !Number.isFinite(endMs) || endMs<startMs || endMs-startMs>30*86400000)
+    return fail(c,400,"INVALID_SHARED_RANGE","Ortak günlük dönem 1 ile 31 gün arasında olmalıdır.");
+  const expected=Number(body.expectedVersion);
+  if (!Number.isSafeInteger(expected) || expected<0)
+    return fail(c,400,"RANGE_REVISION_REQUIRED","Tarih aralığı sürümü belirtilmelidir.");
+  const result=await c.env.DB.prepare(`INSERT INTO hr_daily_active_range
+    (main_company_id,start_date,end_date,version,updated_at)
+    VALUES(?,?,?,1,CURRENT_TIMESTAMP)
+    ON CONFLICT(main_company_id) DO UPDATE SET
+      start_date=excluded.start_date,end_date=excluded.end_date,
+      version=hr_daily_active_range.version+1,updated_at=CURRENT_TIMESTAMP
+    WHERE hr_daily_active_range.version=?`)
+    .bind(companyId,start,end,expected).run();
+  const saved=await c.env.DB.prepare(`SELECT start_date,end_date,version,updated_at
+    FROM hr_daily_active_range WHERE main_company_id=?`).bind(companyId).first<Row>();
+  // İlk kurulum yalnız beklenen sürüm=0 için mümkün; aynı anda ikinci kurucu
+  // başarılı görünmesin. SQL changes=0 veya kayıt beklenenden farklıysa conflict.
+  const created=expected===0 && num(saved?.version)===1 && dateOnly(saved?.start_date)===start && dateOnly(saved?.end_date)===end;
+  if (num(result.meta?.changes)===0 || !saved || !(num(saved.version)===expected+1 || created))
+    return fail(c,409,"SHARED_RANGE_CONFLICT","Başka bilgisayarda tarih aralığı değişti. Son kayıt okunmalı.");
+  return ok(c,{
+    configured:true, startDate:dateOnly(saved.start_date), endDate:dateOnly(saved.end_date),
+    version:num(saved.version), updatedAt:text(saved.updated_at),
+  });
 }
 
 async function listRoster(c: Context<AppEnv>) {
@@ -2218,6 +2275,8 @@ export function registerGunlukOperasyonRoutes(app: Hono<AppEnv>) {
 
   app.get("/api/gunluk-operasyon/records", protect(listFocused));
   app.post("/api/gunluk-operasyon/records", protect(saveFocused));
+  app.get("/api/gunluk-operasyon/active-range", protect(getActiveDailyRange));
+  app.post("/api/gunluk-operasyon/active-range", protect(saveActiveDailyRange));
   app.get("/api/gunluk-operasyon/roster", protect(listRoster));
   app.post("/api/gunluk-operasyon/roster", protect(saveRoster));
   app.post("/api/gunluk-operasyon/excel-upload", protect(excelUploadPreview));
