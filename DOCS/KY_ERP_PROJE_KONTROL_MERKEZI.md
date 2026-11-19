@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — Hotmail/Outlook + Model 360 · PR #597 / canlı OAuth kabulü açık
+- **Kod:** mevcut Microsoft Graph/mail altyapısında sayfa kaybetmeyen `nextLink` / `deltaLink` cursor, idempotent gerçek Outlook taslağı, sınırlı cron takibi, tek HKN mailinin iki PDF ile doğrulanan çoklu modellere bağlanması, eski Outlook sent HKN/DDM kanıtı ve hesap sağlık göstergeleri.
+- **Test:** PR #597 head `9e81639b25e2726c24f3ae85333d03646679488c`; Frontend lint/test/build ve Worker typecheck/test/build PASS (Actions #44469401143). İlk Worker build eksik export nedeniyle FAIL idi, düzeltildi.
+- **Canlı kabul:** Hotmail OAuth, gerçek posta kutusu senkronizasyonu, gönderim veya teslim **PASS değildir**. PR/Cloudflare merge+deploy kanıtı ayrıca izlenir. İşNet/Google Drive bağlantılarına ve canlı mali kayıtlara dokunulmadı.
+- **Yeni sohbet devir kaynağı:** [KY_ERP_HOTMAIL_OUTLOOK_EBELGE_DEVIR_20261119.md](KY_ERP_HOTMAIL_OUTLOOK_EBELGE_DEVIR_20261119.md). Açık P2: gerçek kullanıcı OAuth, toplu gerçek XML-model satır kabulü, bir HKN/çok DDM, eski manuel Outlook arşivi, fiyat/teklif inceleme.
+
+
+
 ## 18.11.2026 — Ortak Model 360 kartı · Tüm departmanlar · Adet ve belge kontrolü (açık geliştirme)
 - **Kullanıcı kararı:** Tek canonical model kimliği, DESEN / İmalat / Boyahane / Muhasebe / e-Belge / Mail için **tek ortak modal**. Her departman yalnız kendi yetkili verisini görür/girer. Modüller arasında gidip gelmek gerekmez. Model görseli gerçek DESEN/File Hub kaynağıdır; görsel bulunamıyorsa uydurulmaz, açık eksik uyarısı verilir.
 - **Belge kardinalitesi:** Bir HKN birden fazla modeli, bir DDM birden fazla modeli, bir model birden fazla HKN/DDM'yi içerebilir. Fiziksel HKN/DDM belge kaydı ve XML/PDF tektir. Modelin miktarı sadece canonical model kimliğine bağlı **belge kalemi** üzerinden sayılır; belge başlık toplamı her modele tekrar dağıtılmaz, model adı benzerliği otomatik kesin eşleşme değildir.

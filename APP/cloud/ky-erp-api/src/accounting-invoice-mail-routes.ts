@@ -3,6 +3,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerInvoiceWeeklyReconciliationRoutes } from "./accounting-invoice-weekly-reconciliation";
+import {invoiceMailCommonModelIds,invoiceMailDocumentFromFile,invoiceMailOutlookFileEvidence} from "./invoice-mail-model-evidence";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -196,7 +197,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     const filters=["scope=?","main_company_slug=?"];
     const args:any[]=["MUHASEBE_INVOICE_MAIL_LINK",a.tenant];
     if (invoiceNo) {filters.push("json_extract(data,'$.invoiceNo')=?");args.push(invoiceNo);}
-    if (modelId) {filters.push("json_extract(data,'$.modelId')=?");args.push(modelId);}
+    if (modelId) {filters.push("(json_extract(data,'$.modelId')=? OR EXISTS(SELECT 1 FROM json_each(data,'$.modelIds') model WHERE model.value=?))");args.push(modelId,modelId);}
     const result=await c.env.DB.prepare("SELECT file_name,data,created_at FROM json_store WHERE "+filters.join(" AND ")+" ORDER BY created_at DESC LIMIT 80")
       .bind(...args).all<Row>();
     const links=(result.results||[]).map((row) => {
@@ -204,6 +205,49 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
       catch{return null;}
     }).filter(Boolean);
     return c.json({ok:true,data:links});
+  });
+
+  // Read-only evidence of mails sent manually from Outlook before ERP mail linking.
+  // A mail is shown only if its sent folder has exactly one HKN + DDM PDF
+  // pair that is independently related to the queried canonical model.
+  app.get("/api/muhasebe/invoice-mail-outlook-history",async(c)=>{
+    const a=await access(c);if(a.failure)return a.failure;
+    const modelId=txt(c.req.query("modelId"));
+    if(!modelId)return error(c,"MODEL_ID_REQUIRED","Model kartı seçilmelidir.",422);
+    const model=await c.env.DB.prepare("SELECT id FROM model_records WHERE main_company_slug=? AND id=? AND deleted_at IS NULL LIMIT 1").bind(a.tenant,modelId).first<Row>();
+    if(!model)return error(c,"MODEL_NOT_FOUND","Model kartı bulunamadı.",404);
+    const files=await c.env.DB.prepare(
+      "SELECT DISTINCT f.file_name FROM file_hub_relations r JOIN file_hub_assets f ON f.id=r.file_asset_id AND f.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.entity_id=? AND UPPER(f.status)='AVAILABLE'"
+    ).bind(a.tenant,modelId).all<Row>();
+    const hkn=[...new Set((files.results||[]).map(r=>invoiceMailDocumentFromFile(r.file_name,"HKN")).filter(Boolean))];
+    const ddm=[...new Set((files.results||[]).map(r=>invoiceMailDocumentFromFile(r.file_name,"DDM")).filter(Boolean))];
+    if(!hkn.length||!ddm.length)return c.json({ok:true,data:{items:[],scanned:0,limited:false,source:"OUTLOOK_ATTACHMENT_EVIDENCE"}});
+    const admin=elevated(a.user!),userId=txt(a.user?.id);
+    const permissionJoin=admin?"":"JOIN mail_account_members mm ON mm.main_company_slug=m.main_company_slug AND mm.account_id=m.account_id AND mm.user_id=? AND mm.can_view=1";
+    const params:any[]=admin?[]:[userId];
+    params.push(a.tenant);
+    const messages=await c.env.DB.prepare(
+      "SELECT DISTINCT m.id,m.subject,m.sent_at,m.provider_message_id FROM mail_messages m JOIN mail_accounts account ON account.main_company_slug=m.main_company_slug AND account.id=m.account_id JOIN mail_folders folder ON folder.main_company_slug=m.main_company_slug AND folder.id=m.folder_id "+permissionJoin+
+      " JOIN mail_attachments att ON att.main_company_slug=m.main_company_slug AND att.message_id=m.id WHERE m.main_company_slug=? AND m.direction='OUTGOING' AND m.sent_at IS NOT NULL AND UPPER(folder.folder_type)='SENT' AND account.provider_type='MICROSOFT_365' AND UPPER(att.file_name) LIKE 'HKN%.PDF' ORDER BY m.sent_at DESC LIMIT 201"
+    ).bind(...params).all<Row>();
+    const msgs=(messages.results||[]).slice(0,200),ids=msgs.map(r=>txt(r.id));
+    if(!ids.length)return c.json({ok:true,data:{items:[],scanned:0,limited:false,source:"OUTLOOK_ATTACHMENT_EVIDENCE"}});
+    const attachments=await c.env.DB.prepare(
+      "SELECT message_id,file_name FROM mail_attachments WHERE main_company_slug=? AND message_id IN ("+ids.map(()=>"?").join(",")+")"
+    ).bind(a.tenant,...ids).all<Row>();
+    const byMessage=new Map<string,string[]>();
+    for(const row of attachments.results||[]){
+      const id=txt(row.message_id),names=byMessage.get(id)||[];
+      names.push(txt(row.file_name));byMessage.set(id,names);
+    }
+    const items=msgs.map(row=>{
+      const evidence=invoiceMailOutlookFileEvidence(byMessage.get(txt(row.id))||[],hkn,ddm);
+      return evidence?{id:txt(row.id),invoiceNo:evidence.invoiceNo,deliveryNo:evidence.deliveryNo,
+        subject:txt(row.subject),sentAt:txt(row.sent_at),providerMessageId:txt(row.provider_message_id),
+        status:"OUTLOOK_SYNCED_SENT",source:"OUTLOOK_ATTACHMENT_EVIDENCE",delivered:false}:null;
+    }).filter(Boolean);
+    c.header("Cache-Control","private, no-store");
+    return c.json({ok:true,data:{items,scanned:msgs.length,limited:(messages.results||[]).length>200,source:"OUTLOOK_ATTACHMENT_EVIDENCE"}});
   });
 
   app.post("/api/muhasebe/invoice-mail-links", async (c) => {
@@ -236,6 +280,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     catch{return error(c,"MAIL_LINK_ATTACHMENTS_INVALID","Mail eki bilgisi okunamadı.",409);}
     if(refs.length!==2)return error(c,"MAIL_LINK_ATTACHMENTS_INVALID","Gönderimde iki belge eki olmalıdır.",409);
     const names:string[]=[];
+    const sentAssets:Array<{id:string,name:string}>=[];
     for(const ref of refs){
       const assetId=txt(ref.fileAssetId||ref.file_asset_id||ref.id);
       const asset=await c.env.DB.prepare("SELECT file_name FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1")
@@ -246,11 +291,25 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
           .bind(a.tenant,assetId,modelId).first<Row>();
         if (!relation)return error(c,"MAIL_LINK_MODEL_MISMATCH","Gönderilen belge seçili model kartına bağlı değil.",409);
       }
-      names.push(txt(asset.file_name).toUpperCase());
+      const normalizedName=txt(asset.file_name).toUpperCase();
+      names.push(normalizedName);
+      sentAssets.push({id:assetId,name:normalizedName});
     }
     const pdfFor=(number:string) => names.some((n) => new RegExp("^"+number+"(?![0-9]).*\\.PDF$").test(n));
     if(!pdfFor(invoiceNo) || !pdfFor(deliveryNo))
       return error(c,"MAIL_LINK_ATTACHMENT_MISMATCH","Mail ekleri bu HKN/DDM belgeleriyle eşleşmiyor.",409);
+    // Link the ONE accepted HKN mail to ALL canonical models actually related
+    // to both original PDFs. Never multiply the send job or guess by model name.
+    const hknAssetId=sentAssets.find(a=>invoiceMailDocumentFromFile(a.name,"HKN")===invoiceNo)?.id||"";
+    const ddmAssetId=sentAssets.find(a=>invoiceMailDocumentFromFile(a.name,"DDM")===deliveryNo)?.id||"";
+    if(!hknAssetId||!ddmAssetId)
+      return error(c,"MAIL_DOCUMENT_PAIR_AMBIGUOUS","Eklerin belge kimlikleri kesin doğrulanamadı.",409);
+    const modelRelations=await c.env.DB.prepare(
+      "SELECT DISTINCT r.entity_id AS modelId,r.file_asset_id AS assetId FROM file_hub_relations r JOIN model_records m ON m.main_company_slug=r.main_company_slug AND m.id=r.entity_id AND m.deleted_at IS NULL WHERE r.main_company_slug=? AND r.entity_type='MODEL' AND r.file_asset_id IN (?,?)"
+    ).bind(a.tenant,hknAssetId,ddmAssetId).all<Row>();
+    const modelIds=invoiceMailCommonModelIds((modelRelations.results||[]).map(r=>({modelId:txt(r.modelId),assetId:txt(r.assetId)})),hknAssetId,ddmAssetId);
+    if(modelId&&!modelIds.includes(modelId))
+      return error(c,"MAIL_LINK_MODEL_MISMATCH","Seçilen modelin her iki PDF ile kesin ilişkisi bulunamadı.",409);
     let recipients:Row={};
     try{recipients=JSON.parse(txt(job.recipients_json)||"{}");}catch{recipients={};}
     const existing=await c.env.DB.prepare(
@@ -259,7 +318,7 @@ export function registerAccountingInvoiceMailRoutes(app: Hono<AppEnv>) {
     if(existing){return c.json({ok:true,data:JSON.parse(txt(existing.data)),idempotent:true});}
     const data={
       draftId,sendJobId:job.job_id,providerMessageId:job.provider_message_id||"",
-      accountId:job.account_id,invoiceNo,deliveryNo,modelId,
+      accountId:job.account_id,invoiceNo,deliveryNo,modelId,modelIds,
       modelName:txt(body.modelName).slice(0,160),routeId:txt(body.routeId),
       subject:txt(job.subject),to:Array.isArray(recipients.to)?recipients.to:[],
       cc:Array.isArray(recipients.cc)?recipients.cc:[],status:"PROVIDER_ACCEPTED",

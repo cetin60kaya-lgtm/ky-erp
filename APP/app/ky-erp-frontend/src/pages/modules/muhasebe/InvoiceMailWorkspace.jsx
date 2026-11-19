@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../../../utils/api";
-import { createMailDraft, listCommunicationFiles, listMailAccounts, sendMailDraft } from "../../../services/mailApi";
+import { createMailDraft, listCommunicationFiles, listMailAccounts, sendMailDraft, saveMicrosoftOutlookDraft } from "../../../services/mailApi";
 import { documentKey, matchingPdfFiles, matchingRecipientRoutes, makeInvoiceMailContent, parseRecipientEmails, invoiceMailEventId, INVOICE_MAIL_TEMPLATES, contactsForInvoiceRoute, routeContactRecipients } from "./invoiceMailRouting";
 import "./invoiceMailWorkspace.css";
 
@@ -358,9 +358,14 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     setWorking(true); setError(""); setNotice(""); setPhase("PREPARING");
     try {
       const prepared = draft || await createVerifiedDraft();
+      // Saving to Outlook is independently retryable on the SAME canonical
+      // KY ERP draft. If Graph fails, the prepared draft stays in state.
+      const mirrored = unwrap(await saveMicrosoftOutlookDraft(prepared.id));
+      if (!mirrored?.providerDraftId || mirrored?.sent)
+        throw new Error("Outlook Taslaklar klasörüne kaydetme doğrulanamadı. Mail gönderilmedi.");
       if (!sendNow) {
         setPhase("DRAFT_SAVED");
-        setNotice("Taslak KY ERP'de kaydedildi. Mail gönderilmedi.");
+        setNotice("Taslak KY ERP ve Outlook Taslaklar klasörüne kaydedildi. Mail gönderilmedi.");
         return;
       }
       const logicalEventId = invoiceMailEventId(companySlug, invoiceNo, deliveryNo);
@@ -514,10 +519,10 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
         onChange={(event) => setSendAcknowledged(event.target.checked)} />
         Alıcıları, HKN/DDM PDF eklerini, konu ve mesajı bu ekranda kontrol ettim. Gönderim onayım sadece bu hazırlık içindir.
       </label>
-      <small>Önizleme ve taslak aynı ekranda kalır. "Taslak Kaydet" mail göndermez; "Gönder" Microsoft Graph'a açık gönderim isteğidir.</small>
+      <small>Önizleme ve taslak aynı ekranda kalır. "Outlook Taslaklarına Kaydet" mail göndermez; "Gönder" Microsoft Graph'a açık gönderim isteğidir.</small>
     </div>
     <div className="imw-actions">
-      <button type="button" disabled={!accountId || !routeId || working || dispatchLocked || sent} onClick={() => void processMail(false)}>Taslak Kaydet</button>
+      <button type="button" disabled={!accountId || !routeId || working || dispatchLocked || sent} onClick={() => void processMail(false)}>Outlook Taslaklarına Kaydet</button>
       <button type="button" disabled={!accountId || !routeId || !sendAcknowledged || working || dispatchLocked || sent} className="imw-send" onClick={() => void processMail(true)}>
         {phase === "PREPARING" ? "Hazırlanıyor..." : phase === "SENDING" ? "Gönderiliyor..." : phase === "ACCEPTED" ? "İstek kabul edildi" : "Gönder"}
       </button>

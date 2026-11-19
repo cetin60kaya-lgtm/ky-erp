@@ -11,6 +11,7 @@ import { registerAiPlatformAccessRoutes } from "./ai-platform-access";
 import { registerUiDialogLayoutRoutes } from "./ui-dialog-layout-cloud";
 import { runSecurityWorkspaceReminderSweep } from "./auth-security-mobile-control";
 import { runFileHubCloudScheduledSync } from "./file-hub-cloud-oauth";
+import { runMicrosoftMailScheduledSync } from "./mail-microsoft-graph";
 import { runFileHubAccountingDocumentIntake } from "./file-hub-accounting-intake.ts";
 import { retryPhysicalOperations } from "./accounting-physical-journal";
 
@@ -121,6 +122,10 @@ export default {
     }));
     ctx.waitUntil(runFileHubAccountingDocumentIntake(env).catch(() => {
       console.error("ACCOUNTING_FILE_HUB_INTAKE_FAILED");
+    }));
+    // Bounded 1-account/2-folder/1-page continuation: no new OAuth, no sending.
+    ctx.waitUntil(runMicrosoftMailScheduledSync(env).catch(() => {
+      console.error("MICROSOFT_MAIL_SCHEDULED_SYNC_FAILED");
     }));
     ctx.waitUntil(retryPhysicalOperations(env).then((result)=>{
       if(result.processed || result.status!=="OK")console.log(JSON.stringify({
