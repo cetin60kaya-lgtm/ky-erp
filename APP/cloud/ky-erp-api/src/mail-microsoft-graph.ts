@@ -519,6 +519,45 @@ export function registerMicrosoftMailRoutes(app:any){
     return new Response(bytes,{status:200,headers});
   });
 
+  // On-demand, hash-based verification of historical Outlook SENT PDF attachments.
+  // Only evidence links are written; no mail, invoice or financial records are created.
+  app.post("/api/mail/messages/:id/verify-evidence/microsoft",async(c:any)=>{
+    const a:any=await currentAccess(c);if(a.error)return a.error;
+    const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!perm(current,"canView"))return c.json(err("MAIL_FORBIDDEN","Mail görüntüleme yetkisi gerekli."),403);
+    const mail=await c.env.DB.prepare("SELECT m.id,m.account_id,m.provider_message_id FROM mail_messages m JOIN mail_folders f ON f.id=m.folder_id AND f.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? AND m.direction='OUTGOING' AND m.sent_at IS NOT NULL AND UPPER(f.folder_type)='SENT' LIMIT 1")
+      .bind(messageId,tenant).first<AnyRow>();
+    if(!mail)return c.json(err("MAIL_SENT_EVIDENCE_NOT_FOUND","Gerçek Outlook Gönderilenler mesajı bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(mail.account_id));
+    if(!account||upper(account.provider_type)!=="MICROSOFT_365"||!account.provider_connected)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Posta kutusu erişimi bulunamadı."),403);
+    const items=await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,messageId).all<AnyRow>();
+    const pdfs=(items.results||[]).filter(row=>invoiceMailDocumentFromFile(row.file_name,"HKN")||invoiceMailDocumentFromFile(row.file_name,"DDM"));
+    if(!pdfs.length||pdfs.length>10)return c.json(err("MAIL_PDF_EVIDENCE_INVALID","HKN/DDM PDF listesi geçersiz."),409);
+    const token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),results:any[]=[];
+    for(const row of pdfs){
+      const name=text(row.file_name),attachmentId=text(row.provider_attachment_id);
+      if(!attachmentId||Number(row.size_bytes||0)>15*1024*1024){results.push({fileName:name,status:"REVIEW_REQUIRED"});continue;}
+      try{
+        const payload=(await graphJson(base+"/messages/"+encodeURIComponent(text(mail.provider_message_id))+"/attachments/"+encodeURIComponent(attachmentId)+"?$select=id,name,size,contentBytes",token)).payload;
+        if(text(payload.name)!==name||Number(payload.size||0)!==Number(row.size_bytes||0)||!text(payload.contentBytes))throw new Error("MAIL_ATTACHMENT_CHANGED");
+        const raw=atob(text(payload.contentBytes).replace(/\s+/g,""));
+        if(raw.length>15*1024*1024)throw new Error("MAIL_ATTACHMENT_TOO_LARGE");
+        const bytes=Uint8Array.from(raw,ch=>ch.charCodeAt(0));
+        const digest=await crypto.subtle.digest("SHA-256",bytes);
+        const hash=Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("");
+        const matched=await c.env.DB.prepare("SELECT id,file_name,sha256,size_bytes FROM file_hub_assets WHERE main_company_slug=? AND LOWER(sha256)=? AND size_bytes=? AND UPPER(status)='AVAILABLE' LIMIT 30")
+          .bind(tenant,hash,bytes.length).all<AnyRow>();
+        const kind=invoiceMailDocumentFromFile(name,"HKN")?"HKN":"DDM",number=invoiceMailDocumentFromFile(name,kind);
+        const exact=(matched.results||[]).filter(asset=>invoiceMailDocumentFromFile(asset.file_name,kind)===number);
+        if(exact.length!==1){results.push({fileName:name,status:"REVIEW_REQUIRED"});continue;}
+        await c.env.DB.prepare("UPDATE mail_attachments SET file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=? AND message_id=?")
+          .bind(exact[0].id,JSON.stringify({provider:"MICROSOFT_365",sha256:hash,verifiedAt:nowIso()}),row.id,tenant,messageId).run();
+        results.push({fileName:name,status:"HASH_VERIFIED"});
+      }catch{results.push({fileName:name,status:"REVIEW_REQUIRED"});}
+    }
+    return c.json({ok:true,data:{messageId,results,complete:results.every(row=>row.status==="HASH_VERIFIED")}});
+  });
+
   // Explicit user "Taslak Kaydet": save the same draft in Outlook's Drafts.
   // This does NOT send a message and does not create a second ERP mail record.
   app.post("/api/mail/drafts/:id/provider-draft/microsoft",async(c:any)=>{
@@ -532,7 +571,7 @@ export function registerMicrosoftMailRoutes(app:any){
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunda taslak hazırlama yetkiniz yok."),403);
     if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)
       return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Outlook hesabı bağlı ve onaylı değil."),409);
-    if(["SENT","SEND_REVIEW_REQUIRED"].includes(upper(draft.status)))
+    if(["SENT","SEND_REVIEW_REQUIRED","PROVIDER_DRAFT_CREATING","PROVIDER_DRAFT_REVIEW_REQUIRED"].includes(upper(draft.status)))
       return c.json(err("MAIL_DRAFT_ALREADY_PROCESSED","Gönderilmiş veya incelenecek taslak Outlook'ta yeniden oluşturulamaz."),409);
     let assets:any[]=[];
     try{assets=await resolveDraftAttachments(c,tenant,parseAttachments(draft.attachment_refs_json));}
@@ -548,19 +587,26 @@ export function registerMicrosoftMailRoutes(app:any){
       const existingProviderDraftId=text(draft.provider_draft_id);
       let providerDraftId=existingProviderDraftId;
       if(!providerDraftId){
-        const message={subject:text(draft.subject),body:{contentType:text(draft.body_html)?"HTML":"Text",content:text(draft.body_html||draft.body_text)},
-          toRecipients:localRecipients(recipients.to),ccRecipients:localRecipients(recipients.cc),bccRecipients:localRecipients(recipients.bcc),transactionId:draftId};
-        const original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id));
-        const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
-        const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;
-        providerDraftId=text(created.id);
-        if(!providerDraftId)throw Object.assign(new Error("Outlook taslak kimliği alınamadı."),{code:"MICROSOFT_PROVIDER_DRAFT_MISSING"});
-        // Persist before attaching; retry resumes rather than duplicates.
-        const updated=await c.env.DB.prepare(
-          "UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=? AND provider_draft_id IS NULL AND status='DRAFT'"
-        ).bind(providerDraftId,nowIso(),draftId,tenant).run();
-        if(!Number(updated.meta?.changes||0))
-          return c.json(err("MAIL_DRAFT_RACE_REVIEW","Taslak başka bir işlemde değişti. Gönderim başlatılmadı."),409);
+        if(upper(draft.status)!=="DRAFT")return c.json(err("MAIL_DRAFT_REVIEW_REQUIRED","Önceki Outlook taslak isteği belirsiz; otomatik yeniden oluşturma kapalı."),409);
+        const claimed=await c.env.DB.prepare("UPDATE mail_drafts SET status='PROVIDER_DRAFT_CREATING',updated_at=? WHERE id=? AND main_company_slug=? AND status='DRAFT' AND provider_draft_id IS NULL")
+          .bind(nowIso(),draftId,tenant).run();
+        if(!Number(claimed.meta?.changes||0))return c.json(err("MAIL_DRAFT_IN_PROGRESS","Taslak başka bir işlemde oluşturuluyor."),409);
+        try{
+          const message={subject:text(draft.subject),body:{contentType:text(draft.body_html)?"HTML":"Text",content:text(draft.body_html||draft.body_text)},
+            toRecipients:localRecipients(recipients.to),ccRecipients:localRecipients(recipients.cc),bccRecipients:localRecipients(recipients.bcc),transactionId:draftId};
+          const original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id));
+          const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
+          const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;
+          providerDraftId=text(created.id);
+          if(!providerDraftId)throw Object.assign(new Error("Outlook taslak kimliği alınamadı."),{code:"MICROSOFT_PROVIDER_DRAFT_MISSING"});
+          await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=? AND status='PROVIDER_DRAFT_CREATING'")
+            .bind(providerDraftId,nowIso(),draftId,tenant).run();
+        }catch(error){
+          // A timeout may mean a remote draft exists: don't create another automatically.
+          await c.env.DB.prepare("UPDATE mail_drafts SET status='PROVIDER_DRAFT_REVIEW_REQUIRED',updated_at=? WHERE id=? AND main_company_slug=? AND status='PROVIDER_DRAFT_CREATING'")
+            .bind(nowIso(),draftId,tenant).run();
+          throw error;
+        }
       }
       await syncMicrosoftDraftAttachments(base,providerDraftId,token,assets);
       return c.json({ok:true,data:{draftId,providerDraftId,status:"PROVIDER_DRAFT",idempotent:Boolean(existingProviderDraftId),sent:false}});
@@ -574,6 +620,7 @@ export function registerMicrosoftMailRoutes(app:any){
     const draft=await c.env.DB.prepare("SELECT d.*,a.provider_type,a.status account_status,a.provider_connected,a.email_address,a.account_type FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.id=? AND d.main_company_slug=? LIMIT 1").bind(draftId,tenant).first<AnyRow>();
     if(!draft)return c.json(err("DRAFT_NOT_FOUND","Mail taslağı bulunamadı."),404);
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_SEND_FORBIDDEN","Bu posta kutusundan gönderim yetkiniz yok."),403);
+    if(["PROVIDER_DRAFT_CREATING","PROVIDER_DRAFT_REVIEW_REQUIRED"].includes(upper(draft.status)))return c.json(err("MAIL_DRAFT_REVIEW_REQUIRED","Taslak sonucu belirsiz; gönderim kilitli."),409);
     if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Microsoft posta kutusu aktif ve onaylı değil."),409);
     let original=null;
     try { original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id)); }
