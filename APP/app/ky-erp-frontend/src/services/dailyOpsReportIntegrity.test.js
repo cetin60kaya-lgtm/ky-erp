@@ -82,3 +82,13 @@ test("sunucu gündüz/gece alt toplamı baz hakedişiyle uyuşmazsa hiçbir fiş
       baseAmount:3200,additions:0,deductions:0,totalAmount:3200},
   ]),/D1 gündüz\/gece alt toplamı/);
 });
+
+test("189 personellik haftalık çıktı her kişiyi A4 sayfasına eksiksiz alır", async () => {
+  const { paginateDailyPrintRows } = await import("./dailyOpsReportIntegrity.js");
+  const rows = Array.from({ length: 189 }, (_, index) => ({ employeeId: `e${index + 1}` }));
+  const pages = paginateDailyPrintRows(rows, 26);
+  assert.equal(pages.length, 8);
+  assert.equal(pages[0].length, 26);
+  assert.equal(pages.at(-1).length, 7);
+  assert.deepEqual(pages.flat().map((row) => row.employeeId), rows.map((row) => row.employeeId));
+});
