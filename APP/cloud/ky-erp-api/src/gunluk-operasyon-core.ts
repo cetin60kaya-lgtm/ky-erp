@@ -23,6 +23,18 @@ export function dailyMoneyCents(value: unknown) {
   return Math.round(finite * 100);
 }
 
+/**
+ * Yeni personel/ücret kartındaki tutar geçerli ve en fazla iki ondalıklı olmalı.
+ * Hatalı metin sessizce 0 TL'ye dönüşmez; bütün hesaplar kuruş tamsayısıdır.
+ */
+export function validDailyWageAmount(value: unknown): number | null {
+  const amount = Number(value);
+  if (!Number.isFinite(amount) || amount < 0) return null;
+  const cents = Math.round(amount * 100);
+  if (!Number.isSafeInteger(cents) || Math.abs(amount * 100 - cents) > 0.00001) return null;
+  return cents / 100;
+}
+
 export function mergeDailyRosterIds(savedIds: string[], workedIds: string[], knownIds: string[]) {
   const known = new Set(knownIds.filter(Boolean));
   return [...new Set([...savedIds, ...workedIds])].filter((employeeId) => employeeId && known.has(employeeId));
