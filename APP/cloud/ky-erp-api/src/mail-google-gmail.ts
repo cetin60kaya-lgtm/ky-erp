@@ -5,7 +5,7 @@ import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
 import { gmailCanonicalLabel, gmailReadPageToken, gmailSyncPageState, GMAIL_PAGE_SIZE, GMAIL_FOLDERS_PER_PASS } from "./mail-gmail-sync-cursor.ts";
 import { gmailOAuthClientReadiness } from "./mail-google-client-boundary.ts";
-import { gmailHistoryCursor, gmailHistoryChangedMessageIds, gmailHistoryQueuePage, gmailHistoryAdvance } from "./mail-gmail-history-cursor.ts";
+import { gmailHistoryCursor, gmailHistoryQueuePage, gmailHistoryAdvance } from "./mail-gmail-history-cursor.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -523,7 +523,8 @@ async function syncGmailAccountStep(c:any,tenant:string,account:AnyRow,actorId="
 
 export async function runGmailMailScheduledSync(env:Cloudflare.Env){
   // Existing */5 cron; no additional scheduled service. Each tick scans
-  // at most one approved Gmail account and three bounded 3-message pages.
+  // at most one approved Gmail account and ONE bounded 3-message page.
+  // The free-tier D1 limit is 50 queries per Worker invocation.
   const ready=gmailOAuthClientReadiness(env);
   if(!ready.configured)return {processed:0,accountCount:0,reason:"GMAIL_CONFIG_UNAVAILABLE"};
   const cutoff=new Date(Date.now()-15*60*1000).toISOString();
@@ -544,7 +545,7 @@ export async function runGmailMailScheduledSync(env:Cloudflare.Env){
   const firstFolder=await env.DB.prepare(
     "SELECT id FROM mail_folders WHERE main_company_slug=? AND account_id=? AND sync_enabled=1 ORDER BY id LIMIT 1"
   ).bind(tenant,account.id).first<AnyRow>();
-  const record=async(code:string)=>{
+  const record=async(code:string,progress:AnyRow={})=>{
     // First OAuth sync may discover its folders only inside syncGmailAccountStep.
     const folderId=text(firstFolder?.id)||text((await env.DB.prepare(
       "SELECT id FROM mail_folders WHERE main_company_slug=? AND account_id=? AND sync_enabled=1 ORDER BY id LIMIT 1"
@@ -555,22 +556,23 @@ export async function runGmailMailScheduledSync(env:Cloudflare.Env){
       "INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) "+
       "VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) "+
       "DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_error=excluded.last_error,updated_at=excluded.updated_at"
-    ).bind(crypto.randomUUID(),tenant,account.id,folderId,"GMAIL_CRON",code?"ERROR":"OK",ts,code?null:ts,code,ts).run();
+    ).bind(crypto.randomUUID(),tenant,account.id,folderId,"GMAIL_CRON",JSON.stringify({state:code?"ERROR":"OK",...progress}),ts,code?null:ts,code,ts).run();
   };
   try{
-    let processed=0,completed=0,total=0,steps=0,partial=true;
-    for(let i=0;i<3;i++){
+    let processed=0,completed=0,total=0,steps=0,partial=true,lastFolder="";
+    for(let i=0;i<1;i++){
       const result=await syncGmailAccountStep(c,tenant,account);
       steps++;processed+=Number(result.total||0);
       completed=result.completedFolders;total=result.totalFolders;partial=result.partial;
+      lastFolder=text(result.folders?.[0]?.name)||lastFolder;
       if(result.fatal){
-        await record("GMAIL_PAGE_FAILED");
+        await record("GMAIL_PAGE_FAILED",{processed,completed,total,lastFolder});
         return {accountCount:1,processed,steps,completed,total,partial:true,failed:true,reason:"GMAIL_PAGE_FAILED"};
       }
       if(!partial||!result.folders.length||result.folders.some((folder:any)=>!folder.ok))break;
       if(Number(result.total||0)===0&&!result.folders.some((folder:any)=>folder.completed))break;
     }
-    await record("");
+    await record("",{processed,completed,total,lastFolder});
     return {accountCount:1,processed,steps,completed,total,partial};
   }catch(error:any){
     // A failed account is retried after 15 minutes; other tenants remain eligible.
