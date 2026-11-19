@@ -16,8 +16,13 @@ export function microsoftDeltaSafeUrl(url:string,mailboxBase:string,folderId:str
     throw new Error("MICROSOFT_DELTA_URL_INVALID");
   // Keep continuation inside this exact mailbox+folder; provider-origin URLs are
   // not permitted to redirect an OAuth bearer token into another mailbox.
-  const prefix=base.pathname.replace(/\/$/,"")+"/mailFolders/"+encodeURIComponent(folderId)+"/messages/delta";
-  if(value.pathname!==prefix||!value.searchParams.size)
+  const mailbox=base.pathname.replace(/\/$/,""),folder=encodeURIComponent(folderId);
+  const paths=[
+    mailbox+"/mailFolders/"+folder+"/messages/delta",
+    mailbox+"/mailFolders('"+folder+"')/messages/delta",
+    mailbox+"/mailFolders(%27"+folder+"%27)/messages/delta",
+  ];
+  if(!paths.includes(value.pathname)||!value.searchParams.size)
     throw new Error("MICROSOFT_DELTA_FOLDER_MISMATCH");
   return value.toString();
 }

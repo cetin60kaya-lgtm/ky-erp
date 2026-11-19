@@ -22,6 +22,8 @@ test("stale or missing graph continuation cannot accidentally succeed",()=>{
 });
 test("continuation cursor stays in the same Microsoft mailbox and folder",()=>{
  assert.equal(microsoftDeltaSafeUrl(url,base,"A/B"),url);
+ const quoted=base+"/mailFolders('A%2FB')/messages/delta?$skiptoken=second";
+ assert.equal(microsoftDeltaSafeUrl(quoted,base,"A/B"),quoted);
  assert.throws(()=>microsoftDeltaSafeUrl("https://evil.example/delta?token=1",base,"A/B"),/URL_INVALID/);
  assert.throws(()=>microsoftDeltaSafeUrl(base+"/mailFolders/OTHER/messages/delta?$skiptoken=3",base,"A/B"),/FOLDER_MISMATCH/);
  assert.throws(()=>microsoftDeltaSafeUrl(base+"/messages?$skiptoken=3",base,"A/B"),/FOLDER_MISMATCH/);
