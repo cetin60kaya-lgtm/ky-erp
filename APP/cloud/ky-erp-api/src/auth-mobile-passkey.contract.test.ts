@@ -34,3 +34,12 @@ test("fast login never overrides role, company or manager approval policy", () =
   assert.match(source, /deps\.afterFactors\(c, user/);
   assert.doesNotMatch(source, /localStorage|sessionStorage|password_hash/);
 });
+test("platform credentials can be revoked only by owner after fresh authentication", () => {
+  assert.match(source, /app\.delete\("\/api\/auth\/passkey\/credentials\/:credentialId"/);
+  assert.match(source, /text\(row\.userId\) !== text\(current\.id\)/);
+  assert.match(source, /if \(!freshAuth\(current\)\)/);
+  assert.match(source, /PASSKEY_DEVICE_REVOKED_SELF/);
+  assert.match(source, /PRIMARY_LOGIN_REQUIRED/);
+  assert.match(policy, /source: "PASSKEY_LOGIN"/);
+  assert.match(source, /Windows Hello/);
+});
