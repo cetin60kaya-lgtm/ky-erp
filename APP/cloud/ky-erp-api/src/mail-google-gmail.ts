@@ -295,47 +295,96 @@ export function registerGoogleMailRoutes(app:any){
     }catch(error:any){return fail(text(error?.message)||"Gmail hesabı bağlanamadı.",text(error?.code)||"GOOGLE_OAUTH_FAILED");}
   });
 
+  // Gmail labels overlap: keep every provider message in one deterministic primary folder,
+  // regardless of the label that yielded its ID on this scan.
+  const syncPrimaryLabel=(item:any,scanned:string,folders:Map<string,AnyRow>)=>{
+    const ids=(Array.isArray(item?.labelIds)?item.labelIds:[]).map(text);
+    for(const id of ["TRASH","SPAM","DRAFT","SENT","INBOX"])if(ids.includes(id)&&folders.has(id))return id;
+    const skip=new Set(["UNREAD","STARRED","IMPORTANT","CATEGORY_PERSONAL","CATEGORY_SOCIAL","CATEGORY_PROMOTIONS","CATEGORY_UPDATES","CATEGORY_FORUMS","CHAT"]);
+    const custom=ids.filter((id)=>!skip.has(id)&&!id.startsWith("CATEGORY_")&&folders.has(id)).sort((a,b)=>a.localeCompare(b,"tr"));
+    return custom[0]||scanned;
+  };
+
   app.post("/api/mail/accounts/:id/sync/google",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
     if(!perm(current,"canView"))return c.json(err("MAIL_SYNC_FORBIDDEN","Mail senkronizasyon yetkiniz yok."),403);
     const account=await accountForUser(c,current,tenant,text(c.req.param("id")));
     if(!account)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Mail hesabı bulunamadı veya erişim yok."),404);
     if(upper(account.provider_type)!=="GMAIL"||!account.provider_connected)return c.json(err("MAIL_REAUTH_REQUIRED","Gmail hesabı bağlı değil."),409);
-    const token=(await usableToken(c,tenant,account)).text,labelPayload=(await googleJson(GMAIL+"/labels",token)).payload,labels=Array.isArray(labelPayload.labels)?labelPayload.labels:[],folderMap=new Map<string,AnyRow>();
+
+    const token=(await usableToken(c,tenant,account)).text;
+    const labelPayload=(await googleJson(GMAIL+"/labels",token)).payload;
+    const labels=Array.isArray(labelPayload.labels)?labelPayload.labels:[];
+    const folderMap=new Map<string,AnyRow>();
     const typeOf=(id:string)=>({INBOX:"INBOX",SENT:"SENT",DRAFT:"DRAFTS",SPAM:"JUNK",TRASH:"TRASH",STARRED:"STARRED",IMPORTANT:"IMPORTANT"}[id]||"CUSTOM");
     for(const label of labels){
       const id=text(label.id);if(!id)continue;
       const folder=await ensureFolder(c,tenant,text(account.id),id,text(label.name)||id,typeOf(id));
       folderMap.set(id,{...folder,folder_type:typeOf(id)});
     }
-    const defs=[["INBOX","INCOMING"],["SENT","OUTGOING"]],summary:any[]=[];
+    // Only rows belonging to an enabled, currently discoverable Gmail label are scanned.
+    // Previously linked folders are never deleted or relabeled without explicit consent.
+    const folderRows=await c.env.DB.prepare(
+      "SELECT f.*,s.cursor_value page_cursor,s.last_success_at page_success,s.last_error page_error,s.last_sync_at page_last_sync "+
+      "FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id "+
+      "AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1"
+    ).bind(tenant,account.id).all<AnyRow>();
+    const enabled=(folderRows.results||[]).filter((row:any)=>folderMap.has(text(row.provider_folder_id)));
+    const rank=(row:any)=>({INBOX:0,SENT:1,DRAFTS:2,CUSTOM:3,STARRED:4,IMPORTANT:5,JUNK:6,TRASH:7}[upper(row.folder_type)]??8);
+    const todo=enabled.filter((row:any)=>text(row.page_cursor)!=="DONE")
+      .sort((a:any,b:any)=>{
+        // Finish new folders early without starving partially paginated folders.
+        const aFirst=text(a.page_last_sync)?1:0,bFirst=text(b.page_last_sync)?1:0;
+        return aFirst-bFirst||rank(a)-rank(b)||text(a.page_last_sync).localeCompare(text(b.page_last_sync));
+      }).slice(0,3);
     const profile=(await googleJson(GMAIL+"/profile",token)).payload;
-    for(const [labelId,direction] of defs){
-      const folder=folderMap.get(labelId)||await ensureFolder(c,tenant,text(account.id),labelId,labelId==="INBOX"?"Gelen Kutusu":"Gönderilenler",typeOf(labelId));
-      let count=0,failed=0;const failures:any[]=[];
+    const summary:any[]=[];let total=0,successfulFolders=0;
+    for(const folder of todo){
+      const labelId=text(folder.provider_folder_id),previous=text(folder.page_cursor);
+      const pageToken=previous.startsWith("PAGE:")?previous.slice(5):"";
+      const url=new URL(GMAIL+"/messages");
+      url.searchParams.set("maxResults","40");
+      url.searchParams.set("labelIds",labelId);
+      if(pageToken)url.searchParams.set("pageToken",pageToken);
+      let count=0,failed=0,nextPageToken="",errorText="";const failures:any[]=[];
       try{
-        const list=(await googleJson(GMAIL+"/messages?maxResults=100&labelIds="+encodeURIComponent(labelId),token)).payload;
+        const list=(await googleJson(url.toString(),token)).payload;
+        nextPageToken=text(list.nextPageToken);
         for(const item of Array.isArray(list.messages)?list.messages:[]){
           try{
             const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-            await persistMessage(c,tenant,account,folder,full,direction);count++;
+            const primary=syncPrimaryLabel(full,labelId,folderMap);
+            await persistMessage(c,tenant,account,folderMap.get(primary)||folder,full,"AUTO");
+            count++;
           }catch(error:any){
             failed++;
-            if(failures.length<5)failures.push({providerMessageId:text(item?.id),error:text(error?.message)||"Mesaj işlenemedi."});
+            if(failures.length<5)failures.push({providerMessageId:text(item.id),error:text(error?.message)||"Mesaj işlenemedi."});
           }
         }
-        const ts=nowIso(),lastError=failed?String(failed)+" mesaj işlenemedi.":null;
-        await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
-          .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_HISTORY",text(profile.historyId)||null,ts,failed?null:ts,lastError,ts).run();
-        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,failures});
       }catch(error:any){
-        summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:false,error:text(error?.message)||"Klasör senkronize edilemedi.",failures});
+        failed++;errorText=text(error?.message)||"Gmail sayfası okunamadı.";
       }
+      const done=failed===0&&!nextPageToken&&!errorText;
+      const checkpoint=done?"DONE":failed?previous:("PAGE:"+nextPageToken);
+      const ts=nowIso(),lastError=errorText|| (failed?failed+" mesaj işlenemedi.":"SYNC_PENDING_PAGINATION");
+      await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
+        .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_PAGE",checkpoint,ts,done?ts:null,done?"":lastError,ts).run();
+      if(done)successfulFolders++;
+      total+=count;
+      summary.push({folder:folder.folder_type||typeOf(labelId),name:folder.name,count,failed,ok:failed===0,completed:done,pending:Boolean(nextPageToken)||!done,failures,...(errorText?{error:errorText}:{})});
     }
-    const partial=summary.some(r=>!r.ok),successfulFolders=summary.filter(r=>r.count>0||r.ok).length,total=summary.reduce((sum,row)=>sum+Number(row.count||0),0);
-    await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length});
-    if(partial&&successfulFolders===0&&total===0)return c.json(err("MAIL_SYNC_FAILED","Gmail posta kutusu senkronize edilemedi.",{folders:summary}),502);
-    return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,discoveredFolders:labels.length,warning:partial?"Bazı Gmail mesajları veya klasörleri atlandı; başarılı kayıtlar güncellendi.":""}},partial?207:200);
+    // A 200/207 result is based on *all enabled provider labels*, not only the first INBOX/SENT page.
+    const finished=(await c.env.DB.prepare(
+      "SELECT COUNT(*) n FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id "+
+      "AND s.folder_id=f.id AND s.cursor_type='GMAIL_PAGE' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1 "+
+      "AND s.cursor_value='DONE' AND s.last_success_at IS NOT NULL AND TRIM(COALESCE(s.last_error,''))=''"
+    ).bind(tenant,account.id).first<AnyRow>())?.n;
+    const completedFolders=Number(finished||0),totalFolders=Number((folderRows.results||[]).filter((f:any)=>Number(f.sync_enabled)===1).length);
+    const partial=completedFolders!==totalFolders||summary.some(r=>!r.ok);
+    await audit(c,tenant,text(current.id),text(account.id),"MAIL_GOOGLE_SYNC",{summary,partial,total,successfulFolders,discoveredLabels:labels.length,completedFolders,totalFolders});
+    if(partial&&successfulFolders===0&&total===0&&summary.some(r=>!r.ok))
+      return c.json(err("MAIL_SYNC_FAILED","Gmail posta kutusu senkronize edilemedi.",{folders:summary}),502);
+    return c.json({ok:true,data:{accountId:account.id,partial,total,folders:summary,completedFolders,totalFolders,discoveredFolders:labels.length,warning:partial?"Gmail klasör sayfalaması henüz bitmedi; 'Senkronize Et' ile kaldığı yerden devam edin.":""}},partial?207:200);
   });
 
   app.post("/api/mail/accounts/:id/folders/:folderId/sync/google",async(c:any)=>{
