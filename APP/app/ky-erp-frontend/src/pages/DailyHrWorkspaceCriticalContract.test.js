@@ -234,7 +234,7 @@ test("date range scope stays isolated and no previous-roster warning or navigati
 });
 
 test("dönem değişikliği anlık kaydetme, haftalık çıktı, Excel ve ödeme öncesinde D1 ile tekrar doğrulanır", () => {
-  assert.match(workspace, /const verifyPrintAndPaymentRange = async/);
+  assert.match(workspace, /const verifyPrintAndPaymentRange = useCallback\(async/);
   assert.match(workspace, /getDailyActiveRange\(\{ mainCompanyId: companyId \}, \{ forceFresh: true \}\)/);
   assert.match(workspace, /current\.version !== sharedVersionRef\.current/);
   assert.match(workspace, /await verifyPrintAndPaymentRange\(paymentPoolRange\)/);
