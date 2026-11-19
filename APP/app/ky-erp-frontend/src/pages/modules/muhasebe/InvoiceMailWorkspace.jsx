@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiDelete, apiGet, apiPost } from "../../../utils/api";
 import { createMailDraft, listCommunicationFiles, listMailAccounts, sendMailDraft, saveMicrosoftOutlookDraft } from "../../../services/mailApi";
-import { documentKey, matchingPdfFiles, matchingRecipientRoutes, makeInvoiceMailContent, parseRecipientEmails, invoiceMailEventId, INVOICE_MAIL_TEMPLATES, contactsForInvoiceRoute, routeContactRecipients } from "./invoiceMailRouting";
+import { documentKey, matchingPdfFiles, matchingRecipientRoutes, makeInvoiceMailContent, parseRecipientEmails, invoiceMailEventId, parseDeliveryNumbers, INVOICE_MAIL_TEMPLATES, contactsForInvoiceRoute, routeContactRecipients } from "./invoiceMailRouting";
 import "./invoiceMailWorkspace.css";
 
 const unwrap = (value) => value?.data?.data ?? value?.data ?? value ?? [];
@@ -38,7 +38,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const [invoiceFiles, setInvoiceFiles] = useState([]);
   const [deliveryFiles, setDeliveryFiles] = useState([]);
   const [invoiceAssetId, setInvoiceAssetId] = useState("");
-  const [deliveryAssetId, setDeliveryAssetId] = useState("");
+  const [deliveryAssetIds, setDeliveryAssetIds] = useState({});
   const [draft, setDraft] = useState(null);
   const [sent, setSent] = useState(false);
   const [mailHistory, setMailHistory] = useState([]);
@@ -53,6 +53,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
   const [sendAcknowledged, setSendAcknowledged] = useState(false);
+  const deliveryNos=useMemo(()=>{try{return parseDeliveryNumbers(deliveryNo);}catch{return [];}},[deliveryNo]);
 
   const refresh = useCallback(async () => {
     if (!companySlug) return;
@@ -89,10 +90,10 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   }, [modelId,companySlug]);
   useEffect(() => {
     setInvoiceNo(String(selectedInvoice?.document_no || selectedInvoice?.invoiceNo || ""));
-    setDeliveryNo(String(selectedInvoice?.delivery_no || selectedInvoice?.deliveryNo || ""));
+    setDeliveryNo((Array.isArray(selectedInvoice?.delivery_nos)?selectedInvoice.delivery_nos:[selectedInvoice?.delivery_no||selectedInvoice?.deliveryNo||""]).filter(Boolean).join("; "));
     setModelName(String(selectedInvoice?.model_name || selectedInvoice?.modelName || ""));
     setRouteForm((current) => ({ ...current, customerName: String(selectedInvoice?.party_name || current.customerName || "") }));
-    setDraft(null); setSent(false); setInvoiceAssetId(""); setDeliveryAssetId("");
+    setDraft(null); setSent(false); setInvoiceAssetId(""); setDeliveryAssetIds({});
     setSubjectOverride(null); setBodyOverride(null); setBccText("");
     setDispatchLocked(false); setPhase("IDLE"); setSendAcknowledged(false);
     setAcceptedDraft(null); setLinkNeedsRepair(false); setRemoteAttempt(null);
@@ -124,15 +125,15 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   // The persisted job, not the browser state, owns post-reload send status.
   useEffect(() => {
     let cancelled = false;
-    const hkn = documentKey(invoiceNo), ddm = documentKey(deliveryNo);
-    if (!companySlug || !/^HKN[0-9]{8,18}$/.test(hkn) || !/^DDM[0-9]{8,18}$/.test(ddm)) {
+    const hkn = documentKey(invoiceNo);
+    if (!companySlug || !/^HKN[0-9]{8,18}$/.test(hkn)) {
       setRemoteAttempt(null);
       return undefined;
     }
     const timer = window.setTimeout(async () => {
       try {
         const result = unwrap(await apiGet("/muhasebe/invoice-mail-dispatch-status", {
-          mainCompanySlug: companySlug, invoiceNo: hkn, deliveryNo: ddm,
+          mainCompanySlug: companySlug, invoiceNo: hkn,
         }));
         if (cancelled) return;
         setRemoteAttempt(result);
@@ -142,7 +143,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
             setSent(true); setPhase("ACCEPTED");
             if (!result.linked && result.draftId) {
               setAcceptedDraft({
-                id: result.draftId, invoiceNo: hkn, deliveryNo: ddm,
+                id: result.draftId, invoiceNo: hkn, deliveryNos: result.deliveryNos || deliveryNos,
                 modelId, modelName, routeId,
               });
               setLinkNeedsRepair(true);
@@ -158,7 +159,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       }
     }, 350);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [companySlug, invoiceNo, deliveryNo, modelId, modelName, routeId, sent, linkRevision]);
+  }, [companySlug, invoiceNo, deliveryNos, modelId, modelName, routeId, sent, linkRevision]);
 
   const chosenRoute = routes.find((row) => row.id === routeId);
   const account = accounts.find((row) => row.id === accountId);
@@ -234,22 +235,23 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     return () => { cancelled = true; window.clearTimeout(timer); };
   }, [invoiceNo, companySlug, modelId, modelFiles]);
 
-  useEffect(() => {
-    let cancelled = false;
-    const wanted = documentKey(deliveryNo);
-    setDeliveryFiles([]); setDeliveryAssetId("");
-    if (!/^DDM[0-9]{8,18}$/.test(wanted) || !companySlug) return undefined;
-    const timer = window.setTimeout(async () => {
-      try {
-        const result = unwrap(await listCommunicationFiles({ q: wanted, take: 100 }));
-        if (cancelled) return;
-        const matches = matchingPdfFiles(result, wanted, "DDM").filter((file) => !modelId || modelFiles.some((related) => related.id === file.id));
-        setDeliveryFiles(matches);
-        if (matches.length === 1) setDeliveryAssetId(matches[0].id);
-      } catch (e) { if (!cancelled) setError(e?.message || "DDM dosyaları aranamadı."); }
-    }, 300);
-    return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [deliveryNo, companySlug, modelId, modelFiles]);
+  useEffect(()=>{
+    let cancelled=false;setDeliveryFiles([]);setDeliveryAssetIds({});
+    if(!deliveryNos.length||!companySlug)return undefined;
+    const timer=window.setTimeout(async()=>{
+      try{
+        const groups=await Promise.all(deliveryNos.map(no=>listCommunicationFiles({q:no,take:100})));
+        if(cancelled)return;
+        const files=groups.flatMap(result=>Array.isArray(unwrap(result))?unwrap(result):[]);
+        const matches=[...new Map(files.filter(file=>deliveryNos.some(no=>matchingPdfFiles([file],no,"DDM").length===1)&&
+          (!modelId||modelFiles.some(rel=>rel.id===file.id))).map(file=>[file.id,file])).values()];
+        const selected={};
+        deliveryNos.forEach(no=>{const found=matchingPdfFiles(matches,no,"DDM");if(found.length===1)selected[no]=found[0].id;});
+        setDeliveryFiles(matches);setDeliveryAssetIds(selected);
+      }catch(e){if(!cancelled)setError(e?.message||"DDM PDF dosyaları bulunamadı.");}
+    },300);
+    return()=>{cancelled=true;window.clearTimeout(timer);};
+  },[deliveryNos,companySlug,modelId,modelFiles]);
 
   const editRoute = (row) => {
     setRouteForm({ id: row.id, customerName: row.customerName, groupCode: row.groupCode,
@@ -291,10 +293,11 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
   const createVerifiedDraft = async () => {
     if (!chosenRoute) throw new Error("Önce doğrulanmış grup ve fatura alıcısı profilini seçin.");
     if (!account || !isOutlookActive(account)) throw new Error("Aktif Microsoft Outlook gönderim hesabı seçin.");
-    const content = makeInvoiceMailContent(modelName, invoiceNo, deliveryNo, templateId);
-    if (!invoiceFiles.some((file) => file.id === invoiceAssetId) || !deliveryFiles.some((file) => file.id === deliveryAssetId)) {
-      throw new Error("HKN ve DDM PDF dosyalarının ikisi de mevcut File Hub'dan seçilmelidir.");
-    }
+    const content = makeInvoiceMailContent(modelName, invoiceNo, deliveryNos, templateId);
+    const deliveryAssets=deliveryNos.map(no=>({deliveryNo:no,deliveryAssetId:deliveryAssetIds[no]||""}));
+    if(!deliveryNos.length||!invoiceFiles.some(file=>file.id===invoiceAssetId)||deliveryAssets.some(item=>
+       !matchingPdfFiles(deliveryFiles,item.deliveryNo,"DDM").some(file=>file.id===item.deliveryAssetId)))
+      throw new Error("HKN ve bütün DDM PDF dosyalarını File Hub üzerinden doğrulayın.");
     const to = parseRecipientEmails(toText);
     const cc = String(ccText || "").trim() ? parseRecipientEmails(ccText) : [];
     const bcc = String(bccText || "").trim() ? parseRecipientEmails(bccText) : [];
@@ -302,11 +305,11 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     const finalBody = String(bodyOverride === null ? content.bodyText : bodyOverride).trim();
     if (!finalSubject || finalSubject.length > 250 || !finalBody || finalBody.length > 20000)
       throw new Error("Mail konusu ve mesajı zorunludur.");
-    const logicalEventId = invoiceMailEventId(companySlug, invoiceNo, deliveryNo);
+    const logicalEventId = invoiceMailEventId(companySlug, invoiceNo, deliveryNos);
     const verified = unwrap(await apiPost("/muhasebe/invoice-mail-preflight", {
       mainCompanySlug: companySlug, accountId, routeId, modelId,
-      invoiceNo: documentKey(invoiceNo), deliveryNo: documentKey(deliveryNo),
-      invoiceAssetId, deliveryAssetId, subject: finalSubject, bodyText: finalBody,
+      invoiceNo: documentKey(invoiceNo), deliveryAssets,
+      invoiceAssetId, subject: finalSubject, bodyText: finalBody,
       to, cc, bcc,
     }));
     if (verified?.verified !== true || verified?.logicalEventId !== logicalEventId)
@@ -314,19 +317,19 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
     const created = unwrap(await createMailDraft({
       accountId, subject: finalSubject, bodyText: finalBody,
       recipients: { to, cc, bcc },
-      attachmentRefs: [{ fileAssetId: invoiceAssetId }, { fileAssetId: deliveryAssetId }],
+      attachmentRefs: [{ fileAssetId: invoiceAssetId }, ...deliveryAssets.map(item=>({fileAssetId:item.deliveryAssetId}))],
       mainCompanySlug: companySlug,
     }));
     if (!created?.id) throw new Error("Posta taslağı KY ERP'de doğrulanamadı.");
-    const prepared = { ...created, to, cc, bcc, subject: finalSubject, bodyText: finalBody, invoiceAssetId, deliveryAssetId,
-      invoiceNo: documentKey(invoiceNo), deliveryNo: documentKey(deliveryNo), modelId, modelName, routeId };
+    const prepared = { ...created, to, cc, bcc, subject: finalSubject, bodyText: finalBody, invoiceAssetId, deliveryAssets,
+      invoiceNo: documentKey(invoiceNo), deliveryNo: deliveryNos[0], deliveryNos, modelId, modelName, routeId };
     setDraft(prepared);
     return prepared;
   };
 
   const persistInvoiceMailLink = (prepared) => apiPost("/muhasebe/invoice-mail-links", {
     mainCompanySlug: companySlug, draftId: prepared.id,
-    invoiceNo: prepared.invoiceNo, deliveryNo: prepared.deliveryNo,
+    invoiceNo: prepared.invoiceNo, deliveryNos: prepared.deliveryNos,
     modelId: prepared.modelId, modelName: prepared.modelName, routeId: prepared.routeId,
   });
 
@@ -368,14 +371,14 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
         setNotice("Taslak KY ERP ve Outlook Taslaklar klasörüne kaydedildi. Mail gönderilmedi.");
         return;
       }
-      const logicalEventId = invoiceMailEventId(companySlug, invoiceNo, deliveryNo);
+      const logicalEventId = invoiceMailEventId(companySlug, invoiceNo, deliveryNos);
       // A saved draft is NOT lasting permission to send. Re-check current
       // account/route/model/PDF ownership and duplicate lock immediately
       // before Graph, without creating a second draft or changing screens.
       const verified = unwrap(await apiPost("/muhasebe/invoice-mail-preflight", {
         mainCompanySlug: companySlug, accountId, routeId, modelId,
-        invoiceNo: prepared.invoiceNo, deliveryNo: prepared.deliveryNo,
-        invoiceAssetId: prepared.invoiceAssetId, deliveryAssetId: prepared.deliveryAssetId,
+        invoiceNo: prepared.invoiceNo, deliveryAssets: prepared.deliveryAssets,
+        invoiceAssetId: prepared.invoiceAssetId,
         subject: prepared.subject, bodyText: prepared.bodyText,
         to: prepared.to, cc: prepared.cc, bcc: prepared.bcc,
       }));
@@ -391,7 +394,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
         await persistInvoiceMailLink(prepared);
         setLinkNeedsRepair(false);
         setLinkRevision((current) => current + 1);
-        setNotice("Microsoft gönderim isteğini kabul etti. İki PDF, alıcılar ve model ilişkisi kaydedildi; teslim/okundu kanıtı değildir.");
+        setNotice("Microsoft gönderim isteğini kabul etti. HKN ve ilgili DDM PDFleri ile model ilişkisi kaydedildi; teslim/okundu kanıtı değildir.");
       } catch (linkError) {
         setLinkNeedsRepair(true);
         setNotice("Microsoft isteği kabul etti; ERP yazışma bağı henüz doğrulanamadı: " +
@@ -475,15 +478,18 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       </select></label>
       <label>Model adı<input disabled={working || dispatchLocked} value={modelName} onChange={(e) => {setModelName(e.target.value);invalidateDocument();}} placeholder="Model kartındaki ad" /></label>
       <label>HKN fatura no<input disabled={working || dispatchLocked} value={invoiceNo} onChange={(e) => {setInvoiceNo(e.target.value);invalidateDocument();}} placeholder="HKN2026..." /></label>
-      <label>DDM irsaliye no<input disabled={working || dispatchLocked} value={deliveryNo} onChange={(e) => {setDeliveryNo(e.target.value);invalidateDocument();}} placeholder="DDM2026..." /></label>
+      <label>DDM irsaliye noları (; ile ayır)<input disabled={working || dispatchLocked} value={deliveryNo} onChange={(e) => {setDeliveryNo(e.target.value);invalidateDocument();}} placeholder="DDM2026...; DDM2026..." /></label>
       <label>HKN fatura PDF<select disabled={working || dispatchLocked} value={invoiceAssetId} onChange={(e) => {setInvoiceAssetId(e.target.value);invalidate();}}>
         <option value="">{invoiceFiles.length ? "PDF seçin" : "Tam HKN numarasıyla File Hub'da dosya aranıyor / bulunamadı"}</option>
         {invoiceFiles.map((file) => <option key={file.id} value={file.id}>{file.file_name} · {file.provider_type || "Dosya"}</option>)}
       </select></label>
-      <label>DDM irsaliye PDF<select disabled={working || dispatchLocked} value={deliveryAssetId} onChange={(e) => {setDeliveryAssetId(e.target.value);invalidate();}}>
-        <option value="">{deliveryFiles.length ? "PDF seçin" : "Tam DDM numarasıyla File Hub'da dosya aranıyor / bulunamadı"}</option>
-        {deliveryFiles.map((file) => <option key={file.id} value={file.id}>{file.file_name} · {file.provider_type || "Dosya"}</option>)}
-      </select></label>
+      {deliveryNos.map(no=><label key={no}>DDM {no} PDF
+        <select disabled={working||dispatchLocked} value={deliveryAssetIds[no]||""}
+          onChange={e=>{setDeliveryAssetIds(current=>({...current,[no]:e.target.value}));invalidate();}}>
+          <option value="">Doğrulanmış PDF seçin</option>
+          {matchingPdfFiles(deliveryFiles,no,"DDM").map(file=><option key={file.id} value={file.id}>{file.file_name} · {file.provider_type||"Dosya"}</option>)}
+        </select>
+      </label>)}
       <label>Faturayı alanlar (TO)<textarea disabled={working || dispatchLocked} value={toText} onChange={(e) => {setToText(e.target.value);invalidate();}} rows={2} placeholder="Alıcı profili seçildiğinde doldurulur, değiştirilebilir" /></label>
       <label>Bilgi alıcıları (CC)<textarea disabled={working || dispatchLocked} value={ccText} onChange={(e) => {setCcText(e.target.value);invalidate();}} rows={2} placeholder="Gerekli diğer alıcılar" /></label>
       <label>Gizli bilgi (BCC)<textarea disabled={working || dispatchLocked} value={bccText} onChange={(e) => {setBccText(e.target.value);invalidate();}} rows={2} placeholder="İsteğe bağlı" /></label>
@@ -512,7 +518,7 @@ export default function InvoiceMailWorkspace({ activeMainCompany, selectedInvoic
       <strong>{phase === "ACCEPTED" ? "Microsoft gönderim isteğini kabul etti" : phase === "DRAFT_SAVED" ? "Taslak kaydedildi — gönderilmedi" : "Gönderim önizlemesi"}</strong>
       <p>Hesap: {account?.email_address || "Henüz seçilmedi"} · Konu: {subject || "Eksik"}</p>
       <p>TO: {toText || "Eksik"}{ccText ? " · CC: " + ccText : ""}{bccText ? " · BCC: " + bccText : ""}</p>
-      <p>Ek: {invoiceFiles.find((file) => file.id === invoiceAssetId)?.file_name || "HKN PDF seçilmedi"} / {deliveryFiles.find((file) => file.id === deliveryAssetId)?.file_name || "DDM PDF seçilmedi"}</p>
+      <p>Ekler: {invoiceFiles.find(file=>file.id===invoiceAssetId)?.file_name||"HKN PDF seçilmedi"} / {deliveryNos.map(no=>deliveryFiles.find(file=>file.id===deliveryAssetIds[no])?.file_name||no+" PDF seçilmedi").join(" / ")}</p>
     </div>
     <div className="imw-send-review">
       <label><input type="checkbox" checked={sendAcknowledged} disabled={working || dispatchLocked || sent}
