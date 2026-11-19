@@ -31,5 +31,5 @@ test("weekly matrix, totals, PDF and Excel all use D1 verified net money", () =>
   assert.match(frontend, /disabled=\{!weeklyFinancialReady\}/);
   assert.match(worker, /hr_daily_payment_adjustments a/);
   assert.match(worker, /a\.period_start=\? AND a\.period_end=\?/);
-  assert.match(worker, /baseAmount,additions:additionsAmount,deductions:deductionsAmount/);
+  assert.match(worker, /baseAmount:baseCents\/100,additions:additionsAmount,deductions:deductionsAmount/);
 });
