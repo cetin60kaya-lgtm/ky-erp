@@ -444,8 +444,11 @@ export async function runGmailMailScheduledSync(env:Cloudflare.Env){
   const firstFolder=await env.DB.prepare(
     "SELECT id FROM mail_folders WHERE main_company_slug=? AND account_id=? AND sync_enabled=1 ORDER BY id LIMIT 1"
   ).bind(tenant,account.id).first<AnyRow>();
-  const folderId=text(firstFolder?.id);
   const record=async(code:string)=>{
+    // First OAuth sync may discover its folders only inside syncGmailAccountStep.
+    const folderId=text(firstFolder?.id)||text((await env.DB.prepare(
+      "SELECT id FROM mail_folders WHERE main_company_slug=? AND account_id=? AND sync_enabled=1 ORDER BY id LIMIT 1"
+    ).bind(tenant,account.id).first<AnyRow>())?.id);
     if(!folderId)return;
     const ts=nowIso();
     await env.DB.prepare(
