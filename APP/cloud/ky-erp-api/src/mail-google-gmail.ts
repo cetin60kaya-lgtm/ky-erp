@@ -3,6 +3,7 @@ import { getAuthenticatedUser } from "./auth-cloud.ts";
 import { openMailCredential, sealMailCredential } from "./mail-communication-core.ts";
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
+import { gmailCanonicalLabel, gmailReadPageToken, gmailSyncPageState, GMAIL_PAGE_SIZE, GMAIL_FOLDERS_PER_PASS } from "./mail-gmail-sync-cursor.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -295,16 +296,6 @@ export function registerGoogleMailRoutes(app:any){
     }catch(error:any){return fail(text(error?.message)||"Gmail hesabı bağlanamadı.",text(error?.code)||"GOOGLE_OAUTH_FAILED");}
   });
 
-  // Gmail labels overlap: keep every provider message in one deterministic primary folder,
-  // regardless of the label that yielded its ID on this scan.
-  const syncPrimaryLabel=(item:any,scanned:string,folders:Map<string,AnyRow>)=>{
-    const ids=(Array.isArray(item?.labelIds)?item.labelIds:[]).map(text);
-    for(const id of ["TRASH","SPAM","DRAFT","SENT","INBOX"])if(ids.includes(id)&&folders.has(id))return id;
-    const skip=new Set(["UNREAD","STARRED","IMPORTANT","CATEGORY_PERSONAL","CATEGORY_SOCIAL","CATEGORY_PROMOTIONS","CATEGORY_UPDATES","CATEGORY_FORUMS","CHAT"]);
-    const custom=ids.filter((id)=>!skip.has(id)&&!id.startsWith("CATEGORY_")&&folders.has(id)).sort((a,b)=>a.localeCompare(b,"tr"));
-    return custom[0]||scanned;
-  };
-
   app.post("/api/mail/accounts/:id/sync/google",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
     if(!perm(current,"canView"))return c.json(err("MAIL_SYNC_FORBIDDEN","Mail senkronizasyon yetkiniz yok."),403);
@@ -336,14 +327,14 @@ export function registerGoogleMailRoutes(app:any){
         // Finish new folders early without starving partially paginated folders.
         const aFirst=text(a.page_last_sync)?1:0,bFirst=text(b.page_last_sync)?1:0;
         return aFirst-bFirst||rank(a)-rank(b)||text(a.page_last_sync).localeCompare(text(b.page_last_sync));
-      }).slice(0,3);
+      }).slice(0,GMAIL_FOLDERS_PER_PASS);
     const profile=(await googleJson(GMAIL+"/profile",token)).payload;
     const summary:any[]=[];let total=0,successfulFolders=0;
     for(const folder of todo){
       const labelId=text(folder.provider_folder_id),previous=text(folder.page_cursor);
-      const pageToken=previous.startsWith("PAGE:")?previous.slice(5):"";
+      const pageToken=gmailReadPageToken(previous);
       const url=new URL(GMAIL+"/messages");
-      url.searchParams.set("maxResults","40");
+      url.searchParams.set("maxResults",String(GMAIL_PAGE_SIZE));
       url.searchParams.set("labelIds",labelId);
       if(pageToken)url.searchParams.set("pageToken",pageToken);
       let count=0,failed=0,nextPageToken="",errorText="";const failures:any[]=[];
@@ -353,7 +344,7 @@ export function registerGoogleMailRoutes(app:any){
         for(const item of Array.isArray(list.messages)?list.messages:[]){
           try{
             const full=(await googleJson(GMAIL+"/messages/"+encodeURIComponent(text(item.id))+"?format=full",token)).payload;
-            const primary=syncPrimaryLabel(full,labelId,folderMap);
+            const primary=gmailCanonicalLabel(full.labelIds,labelId,folderMap.keys());
             await persistMessage(c,tenant,account,folderMap.get(primary)||folder,full,"AUTO");
             count++;
           }catch(error:any){
@@ -364,8 +355,8 @@ export function registerGoogleMailRoutes(app:any){
       }catch(error:any){
         failed++;errorText=text(error?.message)||"Gmail sayfası okunamadı.";
       }
-      const done=failed===0&&!nextPageToken&&!errorText;
-      const checkpoint=done?"DONE":failed?previous:("PAGE:"+nextPageToken);
+      const pageState=gmailSyncPageState(previous,nextPageToken,failed);
+      const done=pageState.complete,checkpoint=pageState.cursor;
       const ts=nowIso(),lastError=errorText|| (failed?failed+" mesaj işlenemedi.":"SYNC_PENDING_PAGINATION");
       await c.env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET cursor_value=excluded.cursor_value,last_sync_at=excluded.last_sync_at,last_success_at=excluded.last_success_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
         .bind(crypto.randomUUID(),tenant,account.id,folder.id,"GMAIL_PAGE",checkpoint,ts,done?ts:null,done?"":lastError,ts).run();
