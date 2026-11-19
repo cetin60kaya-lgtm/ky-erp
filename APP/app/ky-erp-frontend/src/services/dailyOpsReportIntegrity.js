@@ -36,6 +36,20 @@ export function reconcileDailyWeeklyReport(matrixRows, financialRows) {
     if (Math.abs(Math.round((baseAmount + additions - deductions) * 100) - Math.round(netAmount * 100)) > 1)
       throw new Error("Haftalık ek ödeme/kesinti tutarı net hakedişle uyuşmuyor.");
     const old = byId.get(id) || {};
+    if (byId.has(id)) {
+      // Haftalık yazdırmada vardiya sayısı ve baz hakediş iki ayrı kaynaktan
+      // farklı geliyorsa yanlış çıktıyı engelle; kişi kartındaki güncel
+      // ücretten geçmiş çalışma tutarı tahmin edilmez.
+      const dayCount = Number(row.dayCount ?? old.dayCount ?? 0);
+      const nightCount = Number(row.nightCount ?? old.nightCount ?? 0);
+      if (![dayCount, nightCount].every(Number.isSafeInteger) || dayCount < 0 || nightCount < 0
+        || dayCount !== Number(old.dayCount ?? 0) || nightCount !== Number(old.nightCount ?? 0))
+        throw new Error("Haftalık vardiya sayıları D1 hakediş özetiyle uyuşmuyor.");
+      const matrixCents = Math.round(Number(old.totalAmount ?? 0) * 100);
+      if (!Number.isFinite(matrixCents)
+        || Math.abs(matrixCents - Math.round(baseAmount * 100)) > 1)
+        throw new Error("Gündüz/gece ücret toplamı D1 baz hakedişiyle uyuşmuyor.");
+    }
     byId.set(id, {
       ...old,
       employeeId: id,
