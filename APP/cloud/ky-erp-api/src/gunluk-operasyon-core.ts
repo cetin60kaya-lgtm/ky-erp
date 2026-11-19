@@ -57,3 +57,34 @@ export function dailyWageAtDate(
     ? { dayWage: dailyMoneyCents(active.dayWage) / 100, nightWage: dailyMoneyCents(active.nightWage) / 100 }
     : { dayWage: dailyMoneyCents(first.beforeDayWage) / 100, nightWage: dailyMoneyCents(first.beforeNightWage) / 100 };
 }
+
+/**
+ * Tek vardiya ücreti çözümleme kuralı. D1 ekranı, gün kaydı, haftalık rapor
+ * ve ödeme defteri aynı ödeme kilidi/tarih etkisi önceliğini kullanır.
+ * Tarihli efektif ücret dailyWageAtDate ile zaten hesaplanmıştır.
+ */
+export function resolveRecordedShiftWages(
+  effective: { dayWage: number; nightWage: number },
+  record: {
+    paymentStatus?: unknown;
+    ledgerItemCount?: unknown;
+    savedDayWage?: unknown;
+    savedNightWage?: unknown;
+    settledDayCents?: unknown;
+    settledNightCents?: unknown;
+  },
+) {
+  const legacyPaid = text(record.paymentStatus).toUpperCase() === "PAID"
+    && Number(record.ledgerItemCount ?? 0) === 0;
+  const shiftWage = (shift: "day" | "night"): number => {
+    const settled = shift === "day" ? record.settledDayCents : record.settledNightCents;
+    if (settled !== null && settled !== undefined) {
+      const cents = Number(settled);
+      if (!Number.isSafeInteger(cents) || cents < 0) throw new Error("INVALID_SETTLED_WAGE");
+      return cents / 100;
+    }
+    if (legacyPaid) return dailyMoneyCents(shift === "day" ? record.savedDayWage : record.savedNightWage) / 100;
+    return dailyMoneyCents(shift === "day" ? effective.dayWage : effective.nightWage) / 100;
+  };
+  return { dayWage: shiftWage("day"), nightWage: shiftWage("night") };
+}
