@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 19.11.2026 — Günlük Personel Girişi acil tasarım geri alma
+- Kullanıcı tek ekran akıllı paneli reddetti. PR #610'un ana ekran değişiklikleri geri alınacak; **önceki ana ekran ve Hızlı Giriş penceresi aynen kalacak**. Yeni seçici yalnız Hızlı Giriş > Personel Ekle alanında yer alacak.
+- Çoklu personel işaretle/tek tuşla havuza ekle; tek silmesiz `mode:merge` D1 çağrısı ve eksiksiz kişi doğrulaması. Sık kullanılanlar mevcut gerçek dönem çalışma kayıtlarından; seçim tek başına vardiya/ücret/ödeme değiştirmez.
+- Canonical üretim D1'de hiçbir personel/ödeme kaydı değiştirilmez; son PR ve canlı asset kanıtından önce yayın tamamlandı denmez.
+
+
 ## 19.11.2026 — Gmail 0/15 sayaç ilk sayfalarda sabit: kontrollü tek tık tarama
 - Gerçek DESEN Gmail OAuth onaylı; ilk iki "Senkronize Et" adımında aynı `0/15 klasör, 3 mesaj işlendi` sonucu göründü. Bu tek başına senkronun takıldığı kanıtı değil: kod `GMAIL_PAGE_SIZE=3` ve `GMAIL_FOLDERS_PER_PASS=1`, bitmemiş etiketler `DONE` sayılmaz, yenilerine öncelik verir.
 - Tek buton artık **en fazla 8 ardışık, ayrı, küçük Worker isteği** çalıştırır; adım, işlenen mesaj **işlem sayısı** (yeni/eşsiz mail sayısı değil), son etiket ve tamamlanan klasör sayısını gösterir. Her adım backend'in gerçek cursor'ına dayanır. Klasör hata, sıfır ilerleme, kullanıcı durdurması ve ekran terk etmede yeni istek durur.

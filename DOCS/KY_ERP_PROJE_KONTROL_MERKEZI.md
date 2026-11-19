@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 19.11.2026 — KULLANICI DÜZELTMESİ: Günlük ekran eski hâline; yalnız Hızlı Giriş Personel Ekle
+- Kullanıcı ekran görüntüsüyle PR #610'daki ana sayfa akıllı tek ekran tasarımını açıkça reddetti; eski **Günlük Personel Girişi** (dönem havuzu + orta detay tablo + sağ Günlük Kontrol + eski Hızlı Giriş popup) birebir korunacak. Bu yeni karar aynı tarihteki eski tek ekran planından üstündür.
+- Geri alma dalı `fix/gunluk-eski-ekran-yalniz-hizli-personel-ekle-20261119` güncel production kaynağından açıldı: PR #610 ana ekran, test ve istenmeyen bağımsız SmartSelector/CSS/sıralama dosyaları tersine alındı. Mevcut muhasebe, Gmail, Worker, ücret motoru, ödeme/D1 koduna dokunulmadı.
+- **Yalnız** eski popup içindeki `Listeye Ekle` datalist bileşeni kompakt, çok seçimli `QuickRosterPicker` ile değiştirildi. Sık kullanılanlar mevcut dönem çalışma kaydından; isim/kod/vasıf araması + checkbox + tek `N Personeli Ekle` tuşu. D1 mevcut `mode:merge` ile tek istekte onaylanır; vardiya otomatik seçilmez, ödeme ve ücretler değişmez.
+- Yayına alma için son CI PASS, merge SHA ve canlı eski ana ekran + değişmiş popup varlığı ayrı kanıtlanacak. Canlı üretim personel kaydı, vardiya, ücret veya ödeme değiştirilmeyecek.
+
+
 
 ## 19.11.2026 — Günlük Personel Girişi akıllı tek ekran
 - Dal: `feature/gunluk-akilli-tek-ekran-20261119`; PR #610. Yalnız mevcut `DailyHrWorkspace` sayfasına bağımsız `DailyEntrySmartSelector.jsx` ve kapsamlı yeni CSS eklenir; eski D1 ücret/hakediş motoru, ödeme defteri, personel kartı ve Cloudflare Worker veri sözleşmesi değiştirilmez.

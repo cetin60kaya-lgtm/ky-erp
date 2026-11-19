@@ -20,9 +20,12 @@ test("quick next-day action moves main date and keeps the same shift", () => {
   assert.match(save, /setSelectedDate\(nextDate\)/);
   assert.match(save, /setShift\(snapshot\.shift\)/);
 });
-test("quick pool additions are persisted instead of only setting local roster state", () => {
-  const code = source.split("const addRosterPerson = async")[1]?.split("const addPersonToRoster = async")[0];
+test("quick pool multi-person additions use one verified D1 merge, never just local state", () => {
+  const code = source.split("const addManyFromQuickPool = async")[1]?.split("const saveFocused = async")[0];
   assert.ok(code);
-  assert.match(code, /await addPersonToRoster\(person\)/);
+  assert.match(code, /await saveDailyRoster\(/);
+  assert.match(code, /mode: "merge"/);
+  assert.match(code, /ids\.some\(\(id\) => !confirmed\.includes\(id\)\)/);
+  assert.match(code, /setRosterSaved\(true\)/);
   assert.doesNotMatch(code, /setRosterSaved\(false\)/);
 });
