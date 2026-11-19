@@ -135,10 +135,9 @@ test("manual daily range keeps arbitrary ranges instead of forcing Monday-Sunday
   assert.doesNotMatch(workspace, /kyop-range-summary/);
 });
 
-test("weekly summary fits on one A4 landscape sheet and includes grand totals", () => {
-  assert.match(workspace, /const pages = \[source\]/);
-  assert.doesNotMatch(workspace, /index \+= 26/);
-  assert.match(workspace, /\.week-page\{width:100%;height:auto;max-height:198mm;display:block;page-break-after:auto/);
+test("weekly summary paginates A4 landscape without losing staff and includes grand totals", () => {
+  assert.match(workspace, /const pages = paginateDailyPrintRows\(source, 26\)/);
+  assert.match(workspace, /\.week-page\{width:100%;height:auto;max-height:198mm;display:block;page-break-after:always/);
   assert.match(workspace, /@page\{size:A4 landscape;margin:3mm/);
   assert.match(workspace, /GENEL TOPLAM/);
 });
