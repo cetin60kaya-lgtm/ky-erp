@@ -214,6 +214,8 @@ export function registerMailCommunicationRoutes(app:any){
     const readiness=`,(SELECT MAX(s.last_success_at) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id) last_sync_success_at
       ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.last_success_at IS NOT NULL) sync_success_count
       ,(SELECT COUNT(*) FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND TRIM(COALESCE(s.last_error,''))<>'') sync_error_count
+      ,(SELECT COUNT(*) FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) sync_enabled_folder_count
+      ,(SELECT COUNT(*) FROM mail_folders f JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1 AND s.last_success_at IS NOT NULL AND s.cursor_value IS NOT NULL AND TRIM(COALESCE(s.last_error,''))='') sync_completed_folder_count
       ,CASE WHEN EXISTS(SELECT 1 FROM mail_account_credentials mc WHERE mc.main_company_slug=a.main_company_slug AND mc.account_id=a.id) THEN 1 ELSE 0 END credential_present`;
     const result=elevated
       ?await c.env.DB.prepare("SELECT a.*"+readiness+" FROM mail_accounts a WHERE a.main_company_slug=? ORDER BY CASE a.status WHEN 'ACTIVE' THEN 0 WHEN 'PENDING' THEN 1 ELSE 2 END,a.email_address").bind(tenant).all<AnyRow>()
@@ -221,8 +223,11 @@ export function registerMailCommunicationRoutes(app:any){
     const rows=(result.results||[]).map((row:AnyRow)=>{
       const companyApproved=upper(row.approval_status)==="APPROVED";
       const oauthConnected=Number(row.provider_connected||0)===1&&Number(row.credential_present||0)===1;
-      const syncHealthy=Number(row.sync_success_count||0)>0&&Number(row.sync_error_count||0)===0;
-      return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
+      const enabled=Number(row.sync_enabled_folder_count||0),completed=Number(row.sync_completed_folder_count||0);
+      const syncHealthy=upper(row.provider_type)==="MICROSOFT_365"
+        ? enabled>0&&completed===enabled&&Number(row.sync_error_count||0)===0
+        : Number(row.sync_success_count||0)>0&&Number(row.sync_error_count||0)===0;
+      return{...row,readiness:{companyApproved,oauthConnected,syncHealthy,enabledFolders:enabled,completedFolders:completed,lastSyncSuccessAt:text(row.last_sync_success_at)||null,complete:companyApproved&&oauthConnected&&syncHealthy}};
     });
     return c.json({ok:true,data:rows});
   });
@@ -487,8 +492,8 @@ export function registerMailCommunicationRoutes(app:any){
     const a:any=await currentAndTenant(c);if(a.error)return a.error;const{current,tenant}=a;
     if(!hasMailPermission(current))return c.json(jsonError("MAIL_FORBIDDEN","Mail taslaklarını görüntüleme yetkiniz yok."),403);
     const r=ownerRole(current?.role)||companyAdminRole(current?.role)
-      ?await c.env.DB.prepare("SELECT d.* FROM mail_drafts d WHERE d.main_company_slug=? AND d.status IN ('DRAFT','PROVIDER_DRAFT') ORDER BY d.updated_at DESC LIMIT 200").bind(tenant).all<AnyRow>()
-      :await c.env.DB.prepare("SELECT d.* FROM mail_drafts d JOIN mail_account_members m ON m.account_id=d.account_id AND m.main_company_slug=d.main_company_slug WHERE d.main_company_slug=? AND d.status IN ('DRAFT','PROVIDER_DRAFT') AND m.user_id=? AND m.can_view=1 ORDER BY d.updated_at DESC LIMIT 200").bind(tenant,text(current?.id)).all<AnyRow>();
+      ?await c.env.DB.prepare("SELECT d.* FROM mail_drafts d WHERE d.main_company_slug=? AND d.status IN ('DRAFT','PROVIDER_DRAFT','PROVIDER_DRAFT_REVIEW_REQUIRED') ORDER BY d.updated_at DESC LIMIT 200").bind(tenant).all<AnyRow>()
+      :await c.env.DB.prepare("SELECT d.* FROM mail_drafts d JOIN mail_account_members m ON m.account_id=d.account_id AND m.main_company_slug=d.main_company_slug WHERE d.main_company_slug=? AND d.status IN ('DRAFT','PROVIDER_DRAFT','PROVIDER_DRAFT_REVIEW_REQUIRED') AND m.user_id=? AND m.can_view=1 ORDER BY d.updated_at DESC LIMIT 200").bind(tenant,text(current?.id)).all<AnyRow>();
     return c.json({ok:true,data:r.results||[]});
   });
 

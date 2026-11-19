@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import {model360Access, model360DeliveryForInvoice, model360LinkedInvoices, model360Warnings, model360QuantityReview} from "./model360Rules.js";
+import {model360Access, model360DeliveryForInvoice, model360DeliveriesForInvoice, model360LinkedInvoices, model360Warnings, model360QuantityReview} from "./model360Rules.js";
 
 test("çok modelli fatura bir kez listelenir; sadece gerçek giden HKN kabul edilir", () => {
   const docs = [
@@ -71,4 +71,12 @@ test("sanal model fiş veya mali mutabakat için kalıcı model sayılmaz",()=>{
 test("Sınırlı canonical kimlik API görseli varken yanlış eksik görsel uyarısı çıkmaz",()=>{
  const list=model360Warnings(null,null,[],{imageUrl:"/real-model-image.jpg"});
  assert.equal(list.some(x=>x.includes("görseli eksik")),false);
+});
+
+test("bir HKN iki veya daha fazla ilişkili DDM'yi kayıpsız toplar",()=>{
+ const invoice={relatedDocuments:[{id:"1"},{id:"2"},{id:"3"}]};
+ const docs=[{id:"1",kind:"IRSALIYE",direction:"OUTGOING",number:"DDM2026000000974"},
+ {id:"2",kind:"IRSALIYE",direction:"OUTGOING",number:"DDM2026000000975"},
+ {id:"3",kind:"IRSALIYE",direction:"INCOMING",number:"DDM2026000000976"}];
+ assert.deepEqual(model360DeliveriesForInvoice(invoice,docs),["DDM2026000000974","DDM2026000000975"]);
 });

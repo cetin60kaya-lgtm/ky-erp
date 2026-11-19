@@ -31,6 +31,12 @@ export function model360LinkedInvoices(items) {
       && /^HKN[0-9]{8,18}$/.test(normalized(row.number)))
     .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
 }
+export function model360DeliveriesForInvoice(invoice,items){
+  const related=new Set((invoice?.relatedDocuments||[]).map(row=>String(row.id||"")));
+  return [...new Set((Array.isArray(items)?items:[]).filter(row=>related.has(String(row.id))&&
+    normalized(row.kind)==="IRSALIYE"&&normalized(row.direction)==="OUTGOING"&&
+    /^DDM[0-9]{8,18}$/.test(normalized(row.number))).map(row=>normalized(row.number)))].sort();
+}
 export function model360DeliveryForInvoice(invoice, items) {
   const related = new Set((invoice?.relatedDocuments || []).map((row) => String(row.id || "")));
   const matches = (Array.isArray(items) ? items : []).filter((row) =>

@@ -4,6 +4,7 @@ import { openMailCredential, sealMailCredential } from "./mail-communication-cor
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext } from "./mail-reply-context.ts";
 import {microsoftDeltaPageState,microsoftDeltaSafeUrl,microsoftDeltaComplete} from "./mail-microsoft-delta-core.ts";
+import {invoiceMailDocumentFromFile,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix} from "./invoice-mail-model-evidence.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -136,7 +137,7 @@ async function ensureFolder(c:any,tenant:string,accountId:string,providerId:stri
   }
   return row;
 }
-async function ensureThread(c:any,tenant:string,accountId:string,providerThreadId:string,subject:string,stamp:string){
+async function ensureThread(c:any,tenant:string,accountId:string,providerThreadId:string,subject:string,stamp:string,isNew:boolean){
   if(!providerThreadId)return"";
   const ts=nowIso();
   let row=await c.env.DB.prepare("SELECT id FROM mail_threads WHERE main_company_slug=? AND account_id=? AND provider_thread_id=? LIMIT 1").bind(tenant,accountId,providerThreadId).first<AnyRow>();
@@ -146,14 +147,19 @@ async function ensureThread(c:any,tenant:string,accountId:string,providerThreadI
       .bind(id,tenant,accountId,providerThreadId,subject||null,stamp||null,1,0,ts,ts).run();
     return id;
   }
-  await c.env.DB.prepare("UPDATE mail_threads SET subject=COALESCE(NULLIF(?,''),subject),last_message_at=CASE WHEN COALESCE(last_message_at,'')<? THEN ? ELSE last_message_at END,message_count=message_count+1,updated_at=? WHERE id=?").bind(subject||"",stamp||"",stamp||null,ts,row.id).run();
+  await c.env.DB.prepare("UPDATE mail_threads SET subject=COALESCE(NULLIF(?,''),subject),last_message_at=CASE WHEN COALESCE(last_message_at,'')<? THEN ? ELSE last_message_at END,message_count=message_count+?,updated_at=? WHERE id=?").bind(subject||"",stamp||"",stamp||null,isNew?1:0,ts,row.id).run();
   return text(row.id);
 }
 async function persistMessage(c:any,tenant:string,account:AnyRow,folder:AnyRow,item:AnyRow,direction:string){
   const providerMessageId=text(item.id);if(!providerMessageId)return;
-  const stamp=text(item.receivedDateTime||item.sentDateTime||nowIso()),threadId=await ensureThread(c,tenant,text(account.id),text(item.conversationId),text(item.subject),stamp),ts=nowIso();
+  const stamp=text(item.receivedDateTime||item.sentDateTime||nowIso()),ts=nowIso();
   const removed=Boolean(item["@removed"]);
   const existing=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
+  if(removed){
+    if(existing?.id)await c.env.DB.prepare("UPDATE mail_messages SET provider_metadata=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(JSON.stringify({provider:"MICROSOFT_365",removed:item["@removed"]}),ts,existing.id,tenant).run();
+    return;
+  }
+  const threadId=await ensureThread(c,tenant,text(account.id),text(item.conversationId),text(item.subject),stamp,!existing?.id);
   const id=text(existing?.id)||crypto.randomUUID(),from=item?.from?.emailAddress||{},body=item?.body||{};
   const bodyHtml=upper(body.contentType)==="HTML"&&!removed?text(body.content):null;
   const bodyText=upper(body.contentType)!=="HTML"&&!removed?text(body.content):null;
@@ -232,8 +238,8 @@ async function attachMicrosoftAsset(base:string,providerDraftId:string,token:str
 }
 async function syncMicrosoftDraftAttachments(base:string,providerDraftId:string,token:string,assets:any[]){
   if(!assets.length)return;
-  const listed=(await graphJson(base+"/messages/"+encodeURIComponent(providerDraftId)+"/attachments?$select=id,name,size",token)).payload;
-  const existing=new Set((Array.isArray(listed.value)?listed.value:[]).map((row:any)=>text(row.name).toLowerCase()+"\u0000"+Number(row.size||0)));
+  const listed=await graphCollection(base+"/messages/"+encodeURIComponent(providerDraftId)+"/attachments?$top=50&$select=id,name,size",token,10);
+  const existing=new Set(listed.map((row:any)=>text(row.name).toLowerCase()+"\u0000"+Number(row.size||0)));
   for(const asset of assets)await attachMicrosoftAsset(base,providerDraftId,token,asset,existing);
 }
 
@@ -283,38 +289,36 @@ async function discoverMicrosoftFolders(c:any,tenant:string,account:AnyRow,token
   return local;
 }
 async function syncMicrosoftAttachments(c:any,tenant:string,account:AnyRow,token:string,item:AnyRow){
-  const providerMessageId=text(item.id);if(!providerMessageId)return;
+  const providerMessageId=text(item.id);if(!providerMessageId||item["@removed"]||!item.hasAttachments)return;
   const local=await c.env.DB.prepare("SELECT id FROM mail_messages WHERE main_company_slug=? AND account_id=? AND provider_message_id=? LIMIT 1").bind(tenant,account.id,providerMessageId).first<AnyRow>();
   if(!local?.id)return;
-  if(item["@removed"]){
-    await c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id).run();
-    return;
-  }
-  if(!item.hasAttachments)return;
-  // Read the complete provider metadata BEFORE replacing the locally known
-  // attachments. A failed Graph request cannot erase evidence from the archive.
   const base=mailboxBase(account),initial=base+"/messages/"+encodeURIComponent(providerMessageId)+"/attachments?$top=50&$select=id,name,contentType,size,isInline,contentId";
   const rows:any[]=[];let next=initial,pages=0;
   while(next&&pages<10){
     const payload=(await graphJson(next,token)).payload;
     rows.push(...(Array.isArray(payload.value)?payload.value:[]));
     next=text(payload["@odata.nextLink"]);pages++;
-    if(next){
-      const u=new URL(next);
-      if(u.protocol!=="https:"||u.host!=="graph.microsoft.com")
-        throw new Error("MICROSOFT_ATTACHMENT_CURSOR_INVALID");
-    }
+    if(next){const u=new URL(next);if(u.protocol!=="https:"||u.host!=="graph.microsoft.com")throw new Error("MICROSOFT_ATTACHMENT_CURSOR_INVALID");}
   }
   if(next)throw new Error("MICROSOFT_ATTACHMENT_PAGE_LIMIT");
-  const ts=nowIso(),statements:any[]=[
-    c.env.DB.prepare("DELETE FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id)
-  ];
-  for(const attachment of rows){
-    if(!text(attachment.id)||!text(attachment.name))continue;
-    statements.push(c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
-      .bind(crypto.randomUUID(),tenant,local.id,text(attachment.id),null,text(attachment.name),text(attachment.contentType)||null,Number(attachment.size||0)||null,attachment.isInline?1:0,text(attachment.contentId)||null,JSON.stringify({provider:"MICROSOFT_365"}),ts));
+  // Atomic metadata refresh; don't destroy previously hash-verified attachments on a failed Graph page.
+  const stored=await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,local.id).all<AnyRow>();
+  const previous=new Map((stored.results||[]).filter(row=>text(row.provider_attachment_id)).map(row=>[text(row.provider_attachment_id),row]));
+  const seen=new Set<string>(),statements:any[]=[],ts=nowIso();
+  for(const row of rows){
+    const id=text(row.id),name=text(row.name),size=Number(row.size||0);if(!id||!name)continue;
+    seen.add(id);const old=previous.get(id);
+    const same=old&&text(old.file_name)===name&&Number(old.size_bytes||0)===size;
+    if(old)statements.push(c.env.DB.prepare("UPDATE mail_attachments SET file_name=?,mime_type=?,size_bytes=?,is_inline=?,content_id=?,file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=?")
+      .bind(name,text(row.contentType)||null,size||null,row.isInline?1:0,text(row.contentId)||null,same?old.file_asset_id:null,same?old.provider_metadata:JSON.stringify({provider:"MICROSOFT_365"}),old.id,tenant));
+    else statements.push(c.env.DB.prepare("INSERT INTO mail_attachments(id,main_company_slug,message_id,provider_attachment_id,file_asset_id,file_name,mime_type,size_bytes,is_inline,content_id,provider_metadata,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+      .bind(crypto.randomUUID(),tenant,local.id,id,null,name,text(row.contentType)||null,size||null,row.isInline?1:0,text(row.contentId)||null,JSON.stringify({provider:"MICROSOFT_365"}),ts));
   }
-  await c.env.DB.batch(statements);
+  for(const old of stored.results||[]){
+    if(!text(old.provider_attachment_id)||seen.has(text(old.provider_attachment_id)))continue;
+    statements.push(c.env.DB.prepare("UPDATE mail_attachments SET file_asset_id=NULL,provider_metadata=? WHERE id=? AND main_company_slug=?").bind(JSON.stringify({provider:"MICROSOFT_365",removed:true}),old.id,tenant));
+  }
+  if(statements.length)await c.env.DB.batch(statements);
 }
 
 async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:string,folder:AnyRow,maxPages=4){
@@ -354,21 +358,28 @@ async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:stri
 }
 
 export async function runMicrosoftMailScheduledSync(env:Cloudflare.Env){
-  // Run only on already approved/connected accounts with discovered folders.
+  // Fair, bounded scheduling. An invalid token pauses only this account for 15 minutes.
+  const cutoff=new Date(Date.now()-15*60*1000).toISOString();
   const account=await env.DB.prepare(
-    "SELECT a.* FROM mail_accounts a WHERE a.provider_type='MICROSOFT_365' AND a.status='ACTIVE' AND a.approval_status='APPROVED' AND a.provider_connected=1 AND EXISTS(SELECT 1 FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) ORDER BY COALESCE((SELECT MIN(COALESCE(s.last_sync_at,'')) FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1),'') ASC LIMIT 1"
-  ).first<AnyRow>();
+    "SELECT a.* FROM mail_accounts a WHERE a.provider_type='MICROSOFT_365' AND a.status='ACTIVE' AND a.approval_status='APPROVED' AND a.provider_connected=1 "+
+    "AND EXISTS(SELECT 1 FROM mail_folders f WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1) "+
+    "AND NOT EXISTS(SELECT 1 FROM mail_sync_cursors s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.cursor_type='MICROSOFT_DELTA' AND s.last_sync_at>? AND COALESCE(s.last_error,'') NOT IN ('','SYNC_PENDING_PAGINATION')) "+
+    "ORDER BY COALESCE((SELECT MIN(COALESCE(s.last_sync_at,'')) FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=a.main_company_slug AND f.account_id=a.id AND f.sync_enabled=1),'') ASC LIMIT 1"
+  ).bind(cutoff).first<AnyRow>();
   if(!account)return {processed:0,accountCount:0};
   const folders=await env.DB.prepare(
     "SELECT f.* FROM mail_folders f LEFT JOIN mail_sync_cursors s ON s.main_company_slug=f.main_company_slug AND s.account_id=f.account_id AND s.folder_id=f.id AND s.cursor_type='MICROSOFT_DELTA' WHERE f.main_company_slug=? AND f.account_id=? AND f.sync_enabled=1 ORDER BY COALESCE(s.last_sync_at,'') ASC, CASE f.folder_type WHEN 'INBOX' THEN 0 WHEN 'SENT' THEN 1 ELSE 2 END LIMIT 2"
   ).bind(account.main_company_slug,account.id).all<AnyRow>();
   try{
-    const c={env},token=(await usableToken(c,text(account.main_company_slug),account)).text;
-    const results=[];
-    for(const folder of folders.results||[]) results.push(await syncMicrosoftFolder(c,text(account.main_company_slug),account,token,folder,1));
+    const c={env},token=(await usableToken(c,text(account.main_company_slug),account)).text,results=[];
+    for(const folder of folders.results||[])results.push(await syncMicrosoftFolder(c,text(account.main_company_slug),account,token,folder,1));
     return {processed:results.reduce((n,r)=>n+r.count,0),accountCount:1,folders:results.length,partial:results.some(r=>!r.completed)};
-  }catch{
-    return {processed:0,accountCount:1,failed:true};
+  }catch(error:any){
+    const ts=nowIso(),code=["MAIL_REAUTH_REQUIRED","MICROSOFT_TOKEN_FAILED"].includes(text(error?.code))?text(error.code):"MAIL_SYNC_ACCOUNT_FAILED";
+    const operations=(folders.results||[]).map(folder=>env.DB.prepare("INSERT INTO mail_sync_cursors(id,main_company_slug,account_id,folder_id,cursor_type,cursor_value,last_sync_at,last_success_at,last_error,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(main_company_slug,account_id,folder_id,cursor_type) DO UPDATE SET last_sync_at=excluded.last_sync_at,last_error=excluded.last_error,updated_at=excluded.updated_at")
+      .bind(crypto.randomUUID(),account.main_company_slug,account.id,folder.id,"MICROSOFT_DELTA",null,ts,null,code,ts));
+    if(operations.length)await env.DB.batch(operations);
+    return {processed:0,accountCount:1,failed:true,code};
   }
 }
 
@@ -508,6 +519,45 @@ export function registerMicrosoftMailRoutes(app:any){
     return new Response(bytes,{status:200,headers});
   });
 
+  // On-demand, hash-based verification of historical Outlook SENT PDF attachments.
+  // Only evidence links are written; no mail, invoice or financial records are created.
+  app.post("/api/mail/messages/:id/verify-evidence/microsoft",async(c:any)=>{
+    const a:any=await currentAccess(c);if(a.error)return a.error;
+    const{current,tenant}=a,messageId=text(c.req.param("id"));
+    if(!perm(current,"canView"))return c.json(err("MAIL_FORBIDDEN","Mail görüntüleme yetkisi gerekli."),403);
+    const mail=await c.env.DB.prepare("SELECT m.id,m.account_id,m.provider_message_id FROM mail_messages m JOIN mail_folders f ON f.id=m.folder_id AND f.main_company_slug=m.main_company_slug WHERE m.id=? AND m.main_company_slug=? AND m.direction='OUTGOING' AND m.sent_at IS NOT NULL AND UPPER(f.folder_type)='SENT' LIMIT 1")
+      .bind(messageId,tenant).first<AnyRow>();
+    if(!mail)return c.json(err("MAIL_SENT_EVIDENCE_NOT_FOUND","Gerçek Outlook Gönderilenler mesajı bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(mail.account_id));
+    if(!account||upper(account.provider_type)!=="MICROSOFT_365"||!account.provider_connected)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Posta kutusu erişimi bulunamadı."),403);
+    const items=await c.env.DB.prepare("SELECT * FROM mail_attachments WHERE main_company_slug=? AND message_id=?").bind(tenant,messageId).all<AnyRow>();
+    const pdfs=(items.results||[]).filter(row=>invoiceMailDocumentFromFile(row.file_name,"HKN")||invoiceMailDocumentFromFile(row.file_name,"DDM"));
+    if(!pdfs.length||pdfs.length>10)return c.json(err("MAIL_PDF_EVIDENCE_INVALID","HKN/DDM PDF listesi geçersiz."),409);
+    const token=(await usableToken(c,tenant,account)).text,base=mailboxBase(account),results:any[]=[];
+    for(const row of pdfs){
+      const name=text(row.file_name),attachmentId=text(row.provider_attachment_id);
+      if(!attachmentId||Number(row.size_bytes||0)>15*1024*1024){results.push({fileName:name,status:"REVIEW_REQUIRED"});continue;}
+      try{
+        const payload=(await graphJson(base+"/messages/"+encodeURIComponent(text(mail.provider_message_id))+"/attachments/"+encodeURIComponent(attachmentId)+"?$select=id,name,size,contentBytes",token)).payload;
+        if(text(payload.name)!==name||Number(payload.size||0)!==Number(row.size_bytes||0)||!text(payload.contentBytes))throw new Error("MAIL_ATTACHMENT_CHANGED");
+        const raw=atob(text(payload.contentBytes).replace(/\s+/g,""));
+        if(raw.length>15*1024*1024)throw new Error("MAIL_ATTACHMENT_TOO_LARGE");
+        const bytes=Uint8Array.from(raw,ch=>ch.charCodeAt(0));
+        const digest=await crypto.subtle.digest("SHA-256",bytes);
+        const hash=Array.from(new Uint8Array(digest)).map(v=>v.toString(16).padStart(2,"0")).join("");
+        const matched=await c.env.DB.prepare("SELECT id,file_name,sha256,size_bytes FROM file_hub_assets WHERE main_company_slug=? AND LOWER(sha256)=? AND size_bytes=? AND UPPER(status)='AVAILABLE' LIMIT 30")
+          .bind(tenant,hash,bytes.length).all<AnyRow>();
+        const kind=invoiceMailDocumentFromFile(name,"HKN")?"HKN":"DDM",number=invoiceMailDocumentFromFile(name,kind);
+        const exact=(matched.results||[]).filter(asset=>invoiceMailDocumentFromFile(asset.file_name,kind)===number);
+        if(exact.length!==1){results.push({fileName:name,status:"REVIEW_REQUIRED"});continue;}
+        await c.env.DB.prepare("UPDATE mail_attachments SET file_asset_id=?,provider_metadata=? WHERE id=? AND main_company_slug=? AND message_id=?")
+          .bind(exact[0].id,JSON.stringify({provider:"MICROSOFT_365",sha256:hash,verifiedAt:nowIso()}),row.id,tenant,messageId).run();
+        results.push({fileName:name,status:"HASH_VERIFIED"});
+      }catch{results.push({fileName:name,status:"REVIEW_REQUIRED"});}
+    }
+    return c.json({ok:true,data:{messageId,results,complete:results.every(row=>row.status==="HASH_VERIFIED")}});
+  });
+
   // Explicit user "Taslak Kaydet": save the same draft in Outlook's Drafts.
   // This does NOT send a message and does not create a second ERP mail record.
   app.post("/api/mail/drafts/:id/provider-draft/microsoft",async(c:any)=>{
@@ -521,7 +571,7 @@ export function registerMicrosoftMailRoutes(app:any){
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Bu posta kutusunda taslak hazırlama yetkiniz yok."),403);
     if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)
       return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Outlook hesabı bağlı ve onaylı değil."),409);
-    if(["SENT","SEND_REVIEW_REQUIRED"].includes(upper(draft.status)))
+    if(["SENT","SEND_REVIEW_REQUIRED","PROVIDER_DRAFT_CREATING","PROVIDER_DRAFT_REVIEW_REQUIRED"].includes(upper(draft.status)))
       return c.json(err("MAIL_DRAFT_ALREADY_PROCESSED","Gönderilmiş veya incelenecek taslak Outlook'ta yeniden oluşturulamaz."),409);
     let assets:any[]=[];
     try{assets=await resolveDraftAttachments(c,tenant,parseAttachments(draft.attachment_refs_json));}
@@ -537,19 +587,26 @@ export function registerMicrosoftMailRoutes(app:any){
       const existingProviderDraftId=text(draft.provider_draft_id);
       let providerDraftId=existingProviderDraftId;
       if(!providerDraftId){
-        const message={subject:text(draft.subject),body:{contentType:text(draft.body_html)?"HTML":"Text",content:text(draft.body_html||draft.body_text)},
-          toRecipients:localRecipients(recipients.to),ccRecipients:localRecipients(recipients.cc),bccRecipients:localRecipients(recipients.bcc),transactionId:draftId};
-        const original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id));
-        const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
-        const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;
-        providerDraftId=text(created.id);
-        if(!providerDraftId)throw Object.assign(new Error("Outlook taslak kimliği alınamadı."),{code:"MICROSOFT_PROVIDER_DRAFT_MISSING"});
-        // Persist before attaching; retry resumes rather than duplicates.
-        const updated=await c.env.DB.prepare(
-          "UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=? AND provider_draft_id IS NULL AND status='DRAFT'"
-        ).bind(providerDraftId,nowIso(),draftId,tenant).run();
-        if(!Number(updated.meta?.changes||0))
-          return c.json(err("MAIL_DRAFT_RACE_REVIEW","Taslak başka bir işlemde değişti. Gönderim başlatılmadı."),409);
+        if(upper(draft.status)!=="DRAFT")return c.json(err("MAIL_DRAFT_REVIEW_REQUIRED","Önceki Outlook taslak isteği belirsiz; otomatik yeniden oluşturma kapalı."),409);
+        const claimed=await c.env.DB.prepare("UPDATE mail_drafts SET status='PROVIDER_DRAFT_CREATING',updated_at=? WHERE id=? AND main_company_slug=? AND status='DRAFT' AND provider_draft_id IS NULL")
+          .bind(nowIso(),draftId,tenant).run();
+        if(!Number(claimed.meta?.changes||0))return c.json(err("MAIL_DRAFT_IN_PROGRESS","Taslak başka bir işlemde oluşturuluyor."),409);
+        try{
+          const message={subject:text(draft.subject),body:{contentType:text(draft.body_html)?"HTML":"Text",content:text(draft.body_html||draft.body_text)},
+            toRecipients:localRecipients(recipients.to),ccRecipients:localRecipients(recipients.cc),bccRecipients:localRecipients(recipients.bcc),transactionId:draftId};
+          const original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id));
+          const endpoint=original?base+"/messages/"+encodeURIComponent(original.provider_message_id)+"/createReply":base+"/messages";
+          const created=(await graphJson(endpoint,token,{method:"POST",headers:{Prefer:'IdType="ImmutableId"'},body:JSON.stringify(original?{message}:message)})).payload;
+          providerDraftId=text(created.id);
+          if(!providerDraftId)throw Object.assign(new Error("Outlook taslak kimliği alınamadı."),{code:"MICROSOFT_PROVIDER_DRAFT_MISSING"});
+          await c.env.DB.prepare("UPDATE mail_drafts SET provider_draft_id=?,status='PROVIDER_DRAFT',updated_at=? WHERE id=? AND main_company_slug=? AND status='PROVIDER_DRAFT_CREATING'")
+            .bind(providerDraftId,nowIso(),draftId,tenant).run();
+        }catch(error){
+          // A timeout may mean a remote draft exists: don't create another automatically.
+          await c.env.DB.prepare("UPDATE mail_drafts SET status='PROVIDER_DRAFT_REVIEW_REQUIRED',updated_at=? WHERE id=? AND main_company_slug=? AND status='PROVIDER_DRAFT_CREATING'")
+            .bind(nowIso(),draftId,tenant).run();
+          throw error;
+        }
       }
       await syncMicrosoftDraftAttachments(base,providerDraftId,token,assets);
       return c.json({ok:true,data:{draftId,providerDraftId,status:"PROVIDER_DRAFT",idempotent:Boolean(existingProviderDraftId),sent:false}});
@@ -563,6 +620,7 @@ export function registerMicrosoftMailRoutes(app:any){
     const draft=await c.env.DB.prepare("SELECT d.*,a.provider_type,a.status account_status,a.provider_connected,a.email_address,a.account_type FROM mail_drafts d JOIN mail_accounts a ON a.id=d.account_id AND a.main_company_slug=d.main_company_slug WHERE d.id=? AND d.main_company_slug=? LIMIT 1").bind(draftId,tenant).first<AnyRow>();
     if(!draft)return c.json(err("DRAFT_NOT_FOUND","Mail taslağı bulunamadı."),404);
     if(!(await memberCanSend(c,current,tenant,text(draft.account_id))))return c.json(err("MAIL_SEND_FORBIDDEN","Bu posta kutusundan gönderim yetkiniz yok."),403);
+    if(["PROVIDER_DRAFT_CREATING","PROVIDER_DRAFT_REVIEW_REQUIRED"].includes(upper(draft.status)))return c.json(err("MAIL_DRAFT_REVIEW_REQUIRED","Taslak sonucu belirsiz; gönderim kilitli."),409);
     if(upper(draft.provider_type)!=="MICROSOFT_365"||upper(draft.account_status)!=="ACTIVE"||!draft.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_ACTIVE","Microsoft posta kutusu aktif ve onaylı değil."),409);
     let original=null;
     try { original=await mailReplyContext(c.env.DB,tenant,text(draft.account_id),text(draft.reply_to_message_id)); }
@@ -573,6 +631,18 @@ export function registerMicrosoftMailRoutes(app:any){
     try{resolvedAttachments=await resolveDraftAttachments(c,tenant,attachments);}
     catch(error:any){return c.json(err(text(error?.code)||"MAIL_ATTACHMENT_LOAD_FAILED",text(error?.message)||"Mail eki File Hub'dan alınamadı."),Number(error?.status)||502);}
     const logicalEventId=text(body.logicalEventId)||"MAIL_DRAFT_SEND:"+draftId;
+    // The invariant is enforced by the Worker too, not only the browser preflight.
+    const hknDocs=resolvedAttachments.map(a=>invoiceMailDocumentFromFile(a.fileName,"HKN")).filter(Boolean);
+    const ddmDocs=resolvedAttachments.map(a=>invoiceMailDocumentFromFile(a.fileName,"DDM")).filter(Boolean);
+    if(hknDocs.length||ddmDocs.length){
+      if(hknDocs.length!==1||!ddmDocs.length||new Set(ddmDocs).size!==ddmDocs.length||
+        logicalEventId!==invoiceMailDispatchKey(tenant,hknDocs[0]))
+        return c.json(err("MAIL_INVOICE_PACKAGE_INVALID","HKN başına tek gönderim anahtarı ve doğrulanmış DDM PDF paketi zorunludur."),422);
+      const legacy=invoiceMailLegacyKeyPrefix(tenant,hknDocs[0]);
+      const past=await c.env.DB.prepare("SELECT id FROM mail_send_jobs WHERE main_company_slug=? AND substr(logical_event_id,1,?)=? LIMIT 1")
+        .bind(tenant,legacy.length,legacy).first<AnyRow>();
+      if(past)return c.json(err("MAIL_INVOICE_LEGACY_ATTEMPT","Bu HKN'nin eski DDM gönderim kaydı var; yeniden gönderim engellendi."),409);
+    }
     const existingJob=await c.env.DB.prepare("SELECT * FROM mail_send_jobs WHERE main_company_slug=? AND logical_event_id=? LIMIT 1").bind(tenant,logicalEventId).first<AnyRow>();
     // An idempotency key belongs to exactly one immutable draft.
     // Never attribute another draft's accepted send to a new recipient/attachment set.
