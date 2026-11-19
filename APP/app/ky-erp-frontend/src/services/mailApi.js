@@ -15,6 +15,9 @@ export const getMailOverview = () =>
 export const listMailAccounts = (mainCompanySlug = "") =>
   apiGet("/mail/accounts", { _ts: Date.now(), ...(mainCompanySlug ? { mainCompanySlug } : {}) }).then(unwrap);
 
+export const diagnoseMailAccounts = (mainCompanySlug = "") =>
+  apiGet("/mail/accounts/diagnostics", { _ts: Date.now(), ...(mainCompanySlug ? { mainCompanySlug } : {}) }).then(unwrap);
+
 export const requestMailAccount = (payload = {}) =>
   apiPost("/mail/accounts/request", payload).then(unwrap);
 

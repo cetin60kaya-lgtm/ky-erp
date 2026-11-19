@@ -4,10 +4,12 @@ import { readFileSync } from "node:fs";
 
 const read=(url:string)=>readFileSync(new URL(url,import.meta.url),"utf8");
 
-test("Gmail adapter reuses Google Drive OAuth app and keeps explicit-send safety",()=>{
+test("Gmail adapter only uses dedicated OAuth app and keeps explicit-send safety",()=>{
   const source=read("./mail-google-gmail.ts");
-  assert.match(source,/GOOGLE_DRIVE_CLIENT_ID/);
-  assert.match(source,/GOOGLE_DRIVE_CLIENT_SECRET/);
+  assert.match(source,/gmailOAuthClientReadiness\(c.env\)/);
+  assert.match(source,/GOOGLE_MAIL_CLIENT_ID/);
+  assert.match(source,/GOOGLE_MAIL_CLIENT_SECRET/);
+  assert.doesNotMatch(source,/GOOGLE_MAIL_CLIENT_ID\s*\|\|\s*c.env.GOOGLE_DRIVE_CLIENT_ID/);
   assert.match(source,/gmail\.modify/);
   assert.match(source,/gmail\.send/);
   assert.match(source,/code_challenge_method:"S256"/);

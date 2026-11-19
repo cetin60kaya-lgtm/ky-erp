@@ -4,6 +4,7 @@ import { openMailCredential, sealMailCredential } from "./mail-communication-cor
 import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext, gmailReplyHeaders } from "./mail-reply-context.ts";
 import { gmailCanonicalLabel, gmailReadPageToken, gmailSyncPageState, GMAIL_PAGE_SIZE, GMAIL_FOLDERS_PER_PASS } from "./mail-gmail-sync-cursor.ts";
+import { gmailOAuthClientReadiness } from "./mail-google-client-boundary.ts";
 
 type AnyRow = Record<string, any>;
 
@@ -59,10 +60,9 @@ async function sha256Hex(value:string){const bytes=await sha256Bytes(value);retu
 function headerSafe(value:unknown){return text(value).replace(/[\r\n]+/g," ").trim();}
 
 function clientConfig(c:any){
-  const clientId=text(c.env.GOOGLE_MAIL_CLIENT_ID||c.env.GOOGLE_DRIVE_CLIENT_ID);
-  const clientSecret=text(c.env.GOOGLE_MAIL_CLIENT_SECRET||c.env.GOOGLE_DRIVE_CLIENT_SECRET);
-  if(!clientId||!clientSecret)throw Object.assign(new Error("Google OAuth uygulama bilgileri production secret olarak tanımlı değil."),{code:"GOOGLE_MAIL_CONFIG_MISSING"});
-  return{clientId,clientSecret};
+  const status=gmailOAuthClientReadiness(c.env);
+  if(!status.configured)throw Object.assign(new Error(status.reason),{code:"GOOGLE_MAIL_CONFIG_MISSING",configurationMode:status.configurationMode});
+  return{clientId:text(c.env.GOOGLE_MAIL_CLIENT_ID),clientSecret:text(c.env.GOOGLE_MAIL_CLIENT_SECRET)};
 }
 async function tokenPost(c:any,values:Record<string,string>){
   const cfg=clientConfig(c);
