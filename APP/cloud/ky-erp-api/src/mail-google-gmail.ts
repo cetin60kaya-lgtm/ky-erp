@@ -357,6 +357,7 @@ export function registerGoogleMailRoutes(app:any){
       const url=new URL(GMAIL+"/messages");
       url.searchParams.set("maxResults",String(GMAIL_PAGE_SIZE));
       url.searchParams.set("labelIds",labelId);
+      if(["SPAM","TRASH"].includes(labelId))url.searchParams.set("includeSpamTrash","true");
       if(pageToken)url.searchParams.set("pageToken",pageToken);
       let count=0,failed=0,nextPageToken="",errorText="";const failures:any[]=[];
       try{
