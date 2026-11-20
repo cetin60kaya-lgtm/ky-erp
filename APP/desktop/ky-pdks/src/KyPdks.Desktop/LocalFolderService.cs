@@ -142,7 +142,7 @@ public static class LocalFolderService
             throw new UnauthorizedAccessException("Kaynak veya hedef klasör yetkisi kaldırılmış.");
         if (destination.Purpose != "BACKUP_DESTINATION" || destination.Permission != "BACKUP_WRITE")
             throw new UnauthorizedAccessException("Hedef açıkça yedek yazma için onaylanmalı.");
-        if (source.Id == destination.Id || source.Company != destination.Company)
+        if (source.Id == destination.Id || !source.Company.Equals(destination.Company, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Kaynak ile hedef farklı olmalı ve aynı firmaya ait olmalı.");
         var sourcePath = ValidateRoot(source.FullPath);
         var destPath = ValidateRoot(destination.FullPath);
@@ -177,8 +177,10 @@ public static class LocalFolderService
                         await input.CopyToAsync(output, ct);
                         await output.FlushAsync(ct);
                     }
-                    await using var verify = File.OpenRead(temp);
-                    var hash = Convert.ToHexString(await SHA256.HashDataAsync(verify, ct)).ToLowerInvariant();
+                    string hash;
+                    await using (var verify = File.OpenRead(temp)) {
+                        hash = Convert.ToHexString(await SHA256.HashDataAsync(verify, ct)).ToLowerInvariant();
+                    }
                     File.Move(temp, target, false);
                     count++; total += file.Length;
                     fileRows.Add(new {relativePath=relative.Replace('\\','/'),sha256=hash,size=file.Length});
