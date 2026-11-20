@@ -710,6 +710,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <p>{viewMeta[1]}</p>
       </div>
       <div className="eb-hero-actions">
+        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("entegrasyonlar")}><RefreshCw size={17}/> İşNet XML + PDF Al</button>}
         {view === "overview" && <>
           <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
           <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Sorunları Aç</button>
@@ -768,7 +769,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <StatCard label="Muhasebeleşti" value={pool.stats?.posted} hint="Son onayı tamamlanan" />
       </div>
       <section className="eb-pool">
-        <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint}</span></div><span>{Number(pool.total || 0)} kayıt · Sayfa {page}/{pageCount}</span></div>
+        <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint} · XML, PDF ve manuel belgeler aynı havuzda korunur.</span></div><span>{Number(pool.total || 0)} kayıt · Sayfa {page}/{pageCount}</span></div>
         <div className="eb-pool-toolbar">
           <div className="eb-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Belge no, firma veya VKN ara" /></div>
           {view==="incoming-invoices"&&<label className="eb-print-pending-filter">
