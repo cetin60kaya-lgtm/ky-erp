@@ -18,7 +18,7 @@ const saveBlob=(blob,name)=>{
  a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();
  window.setTimeout(()=>URL.revokeObjectURL(url),10000);
 };
-export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,profile,onOpenVisualStudio}){
+export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,profile,onOpenVisualStudio,onOpenSync}){
  const key=adapter?.key||"";
  const tenant=activeMainCompany?.slug||activeMainCompany?.id||"";
  const [type,setType]=useState("incoming-invoice");
@@ -106,7 +106,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
     setPdfUrl(URL.createObjectURL(file.blob));
    }else if(rawXml){
     const records=await getEBelgeVisualProfiles();
-    const approved=(records?.items||[]).find(p=>p.approved===true&&p.issuerTaxNo===parsed?.supplier.tax&&p.kind===parsed?.kind);
+    const approved=(records?.items||[]).find(p=>p.approved===true&&p.issuerTaxNo===parsed?.supplier?.tax&&p.kind===parsed?.kind);
     const output=await renderUblOutput(rawXml,approved?.layout||{},"PDF");
     setPdfUrl(URL.createObjectURL(output.blob));
     setMessage(approved?
@@ -124,10 +124,11 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
    onClick={()=>{setType(x.key);reset()}}>{x.name}</button>)}</div>
   {key==="ISNET"&&chromeMode&&<div className="itc-chrome" role="status">
     <div><strong>Chrome oturumu üzerinden belge testi</strong>
-      <p>NetteFatura'ya giriş yalnız İşNet'in Chrome sekmesinde yapılır. KY ERP şifre/çerez istemez ve API oturumu açmaya çalışmaz.</p>
-      <p>Seçilen kategorideki XML veya PDF'yi portaldan indirin; aşağıdaki <b>Yerel XML / PDF Dosyası</b> alanından dosyayı seçin. XML tarayıcıda okunur; ilgili firma için PDF önizlemesi oluşturulabilir.</p>
+      <p>Bu alan yerel XML/PDF dosyasını güvenli şekilde önizlemek içindir. İşNet'ten doğrudan belge almak için ana <b>Belgeleri Al · XML + PDF</b> ekranını kullanın.</p>
+      <p>İsterseniz NetteFatura'dan indirdiğiniz dosyayı aşağıdan seçerek belge türünü, XML alanlarını ve PDF önizlemesini de kontrol edebilirsiniz.</p>
     </div>
     <a href="https://nettefatura.isnet.net.tr/" target="_blank" rel="noopener noreferrer">NetteFatura'yı Chrome'da Aç</a>
+    {onOpenSync&&<button type="button" onClick={onOpenSync}>KY ERP İşNet Belgeleri Al Ekranı</button>}
     <small>Portal oturumu KY ERP tarafından doğrulanamaz. Otomatik belge listesi/çekimi için ayrıca yetkili tarayıcı bağlantısı gerekir; bu modda “Listeyi Test Et” kullanılmaz.</small>
   </div>}
   {key==="ISNET"&&!chromeMode&&<div className="itc-remote">
@@ -165,8 +166,8 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   </label><small>Orijinal dosya üretime veya GitHub'a gönderilmez; testten sonra sayfayı kapatınca geçici önizleme silinir.</small></div>
   {message&&<p className="itc-message" role="status">{message}</p>}
   {parsed&&<div className="itc-summary"><strong>{parsed.kind==="INVOICE"?"Fatura":"İrsaliye"} · {parsed.number}</strong>
-    <span>Tarih: {parsed.date} · Kalem: {parsed.lines.length} · ETTN: {parsed.uuid||"Belirtilmedi"}</span>
-    <span>Düzenleyen: {parsed.supplier.name}</span>
+    <span>Tarih: {parsed.date} · Kalem: {parsed.lines?.length||0} · ETTN: {parsed.uuid||"Belirtilmedi"}</span>
+    <span>Düzenleyen: {parsed.supplier?.name||"Belirtilmedi"}</span>
    {onOpenVisualStudio&&<button type="button" className="itc-visual-link" onClick={onOpenVisualStudio}>
      Bu Firma İçin Görsel Şablonu Aç / Düzenle
    </button>}</div>}
