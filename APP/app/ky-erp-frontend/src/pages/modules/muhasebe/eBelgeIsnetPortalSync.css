@@ -11,3 +11,15 @@
 .eis-setup .eis-fields select{border:1px solid #cbd5e1;border-radius:8px;min-height:40px;box-sizing:border-box;padding:9px 10px;font-size:13px;background:var(--surface,#fff);color:inherit;width:100%}
 .eis-setup .eis-fields button{min-width:150px;flex:0 1 auto}
 @media(max-width:600px){.eis-connection-action{align-items:stretch;flex-direction:column}.eis-setup .eis-fields>*{width:100%;flex:1 1 100%}}
+
+/* One streamlined intake workflow: connection -> original files -> review. */
+.eis-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin-top:17px}
+.eis-steps span{display:flex;align-items:center;gap:9px;padding:11px 12px;min-width:0;border:1px solid #d8e3f0;border-radius:9px;background:var(--surface-alt,#f7f9fc);font-weight:650;font-size:12px;color:var(--text-primary,#2f4966)}
+.eis-steps b{display:grid;place-items:center;flex:0 0 25px;height:25px;border-radius:50%;background:#24568e;color:white;font-size:12px}
+.eis-archive-policy{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border:1px solid #bfdecf;border-radius:10px;background:#f0faf4;color:#226443;font-size:12px;line-height:1.6}
+.eis-archive-policy svg{flex-shrink:0;margin-top:2px}
+.eis-archive-policy b{font-weight:700}
+.eis-types{margin-top:15px}
+.eis-work{margin-top:5px}
+.eis-setup .eis-fields input:focus-visible,.eis-setup .eis-fields select:focus-visible,.eis-work .eis-fields input:focus-visible{outline:2px solid #548dcc;outline-offset:2px}
+@media(max-width:720px){.eis-steps{grid-template-columns:1fr;gap:6px}.eis-steps span{padding:9px 10px}.eis-archive-policy{padding:10px 12px}}
