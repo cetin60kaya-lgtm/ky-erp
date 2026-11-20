@@ -42,3 +42,11 @@
 .itc-chrome strong{font-size:14px}.itc-chrome p{margin:6px 0;line-height:1.5}
 .itc-chrome small{color:#627e9a;font-size:11px}
 .itc-chrome a{justify-self:start;display:inline-flex;align-items:center;background:#225fc7;color:#fff;text-decoration:none;border-radius:8px;padding:9px 12px;font-size:12px;font-weight:700}
+
+/* Keep original documents prominent; template authoring remains an opt-in advanced tool. */
+.itc-original-policy{display:flex;align-items:flex-start;gap:10px;padding:12px 13px;background:#edf9f3;color:#1c6742;border:1px solid #bce0cd;border-radius:10px;font-size:12px;line-height:1.6}
+.itc-original-policy svg{flex-shrink:0;margin-top:1px}
+.itc-advanced{border:1px solid #d8e2ee;border-radius:10px;padding:12px 14px;background:var(--surface-alt,#f9fbfd);font-size:12px}
+.itc-advanced summary{cursor:pointer;color:var(--text-primary,#304b6d);font-weight:650}
+.itc-advanced p{color:var(--text-secondary,#61758b);line-height:1.6}
+.itc-advanced button{min-height:40px}
