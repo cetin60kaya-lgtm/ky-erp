@@ -55,13 +55,9 @@ Name: "{autoprograms}\KY ERP\Entegrasyon Merkezini Başlat"; Filename: "{sys}\ws
 
 [Tasks]
 Name: "desktopicon"; Description: "Masaüstünde KY ERP Masaüstü kısayolu oluştur"; GroupDescription: "Kısayollar:"; Flags: checkedonce
-Name: "integrationstart"; Description: "Onaylı yerel entegrasyonları Windows oturumunda otomatik başlat"; GroupDescription: "İsteğe bağlı entegrasyon:"; Flags: unchecked
 
-[Registry]
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "KY ERP Integrations"; ValueData: """{sys}\wscript.exe"" ""{app}\Integrations\start-kyerp-integrations-hidden.vbs"""; Flags: uninsdeletevalue; Tasks: integrationstart
 
 [Run]
-Filename: "{sys}\wscript.exe"; Parameters: """{app}\Integrations\start-kyerp-integrations-hidden.vbs"""; Flags: runhidden nowait postinstall skipifsilent; Tasks: integrationstart
 Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent durduruluyor..."
 Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent kaydı temizleniyor..."
 Filename: "{sys}\sc.exe"; Parameters: "create KYERP.PDKS.Agent binPath= &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; start= delayed-auto DisplayName= &quot;KY ERP PDKS Agent&quot;"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent kuruluyor..."
