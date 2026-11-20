@@ -12,6 +12,11 @@ namespace KyPdks.Desktop;
 public partial class LocalFolderWindow : Window
 {
     private readonly string _company;
+    private bool _startupLoaded;
+    private const string RunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string RunName = "KY ERP Integrations";
+    private static string IntegrationStarter => Path.Combine(AppContext.BaseDirectory,
+        "Integrations", "start-kyerp-integrations-hidden.vbs");
 
     public LocalFolderWindow(string company)
     {
@@ -19,6 +24,92 @@ public partial class LocalFolderWindow : Window
         _company = string.IsNullOrWhiteSpace(company) ? "" : company.Trim();
         CompanyInput.Text = _company;
         RefreshGrants();
+        RefreshStartup();
+    }
+
+    private void RefreshStartup()
+    {
+        try
+        {
+            _startupLoaded = false;
+            var available = File.Exists(IntegrationStarter);
+            StartWithWindows.IsEnabled = available;
+            StartIntegrationsButton.IsEnabled = available;
+            using var key=Microsoft.Win32.Registry.CurrentUser.OpenSubKey(RunPath);
+            var current = key?.GetValue(RunName)?.ToString() ?? "";
+            StartWithWindows.IsChecked = available &&
+                current.Contains(IntegrationStarter, StringComparison.OrdinalIgnoreCase);
+        }
+        catch(Exception error) { ShowStatus("Başlangıç ayarı okunamadı: "+error.Message,true); }
+        finally { _startupLoaded = true; }
+    }
+
+    private void StartWithWindows_Changed(object sender, RoutedEventArgs e)
+    {
+        if (!_startupLoaded) return;
+        try
+        {
+            if (!File.Exists(IntegrationStarter)) throw new FileNotFoundException("Kurulum içindeki entegrasyon başlatıcısı bulunamadı.");
+            using var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(RunPath, true)
+                ?? throw new UnauthorizedAccessException("Windows başlangıç kaydı açılamadı.");
+            if (StartWithWindows.IsChecked == true)
+            {
+                var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wscript.exe");
+                key.SetValue(RunName, $"\\"{wscript}\\" \\"{IntegrationStarter}\\"");
+                ShowStatus("KY ERP entegrasyonları bu Windows kullanıcısı oturum açınca otomatik başlayacak. Klasör izinleri değişmedi.");
+            }
+            else
+            {
+                key.DeleteValue(RunName, false);
+                ShowStatus("KY ERP entegrasyonları için Windows otomatik başlatma kapatıldı. Dosyalar ve izinler korunuyor.");
+            }
+        }
+        catch(Exception error) { ShowStatus("Başlangıç tercihi kaydedilemedi: "+error.Message,true); }
+    }
+
+    private async void StartIntegrations_Click(object sender, RoutedEventArgs e)
+    {
+        if (!File.Exists(IntegrationStarter)) {
+            ShowStatus("Entegrasyon başlatıcısı bulunamadı. Setup paketi kurulmuş olmalı.",true);
+            return;
+        }
+        StartIntegrationsButton.IsEnabled=false;
+        try
+        {
+            var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"wscript.exe");
+            using var process=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
+                FileName=wscript,Arguments=$"\\"{IntegrationStarter}\\"",UseShellExecute=false,CreateNoWindow=true,
+            });
+            if(process is null)throw new InvalidOperationException("Entegrasyon başlatma isteği gönderilemedi.");
+            await Task.Delay(1300);
+            await VerifyPortalAsync();
+        }
+        catch(Exception error){ShowStatus("Entegrasyon başlatılamadı: "+error.Message,true);}
+        finally{StartIntegrationsButton.IsEnabled=true;}
+    }
+
+    private async void CheckPortal_Click(object sender, RoutedEventArgs e) => await VerifyPortalAsync();
+
+    private async Task VerifyPortalAsync()
+    {
+        try
+        {
+            using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(4)};
+            using var request=new HttpRequestMessage(HttpMethod.Get,"http://127.0.0.1:8788/health");
+            request.Headers.TryAddWithoutValidation("Origin","https://kyerp.net");
+            using var response=await http.SendAsync(request);
+            if(!response.IsSuccessStatusCode)throw new InvalidOperationException("Adaptör yanıtı HTTP "+(int)response.StatusCode);
+            using var result=System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            if(!result.RootElement.TryGetProperty("adapter",out var adapter) ||
+                adapter.GetString()!="KY_ISNET_LOCAL_V1")
+                throw new InvalidOperationException("8788 portunda beklenmeyen program var.");
+            var isConnected=result.RootElement.TryGetProperty("connected",out var connected) &&
+                connected.ValueKind==System.Text.Json.JsonValueKind.True;
+            ShowStatus(isConnected
+                ? "Windows İşNet adaptörü çalışıyor ve yetkili firma oturumu açık. KY ERP XML/PDF aktarımı ayrıca doğrulanmalı."
+                : "Windows İşNet adaptörü erişilebilir. İşNet oturumu henüz açılmadı; KY ERP üzerinden giriş yapılabilir.");
+        }
+        catch(Exception error){ShowStatus("Yerel İşNet adaptörü doğrulanamadı: "+error.Message,true);}
     }
 
     private void RefreshGrants()
