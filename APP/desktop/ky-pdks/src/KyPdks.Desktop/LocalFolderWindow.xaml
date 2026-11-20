@@ -92,7 +92,7 @@
                             <TextBlock x:Name="GrantCountText" Text="Klasörler yükleniyor" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal">
-                            <Button Content="İçeriği İncele" Click="InspectFolder_Click" Padding="11,7"/>
+                            <Button Content="Dosyaları Ara / Önizle" Click="InspectFolder_Click" Padding="11,7"/>
                             <Button Content="Yetkiyi Kaldır" Click="RemoveFolder_Click" Padding="11,7" Foreground="#B43232"/>
                         </StackPanel>
                     </Grid>
