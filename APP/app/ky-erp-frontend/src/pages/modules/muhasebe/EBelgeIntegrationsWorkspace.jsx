@@ -107,8 +107,9 @@ export default function EBelgeIntegrationsWorkspace({
   activeMainCompany,
   openModule,
   onOpenDocumentTest,
+  hideConnection = false,
 }) {
-  const [section, setSection] = useState("connection");
+  const [section, setSection] = useState(hideConnection ? "carrier" : "connection");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState(null);
@@ -523,7 +524,7 @@ export default function EBelgeIntegrationsWorkspace({
 
       {notice && (!notice.connectionMode || notice.connectionMode === connection.connectionMode) ? <div className={`ism-notice ${notice.tone}`} role={notice.tone === "error" ? "alert" : "status"}>{notice.text}</div> : null}
 
-      <nav className="ism-tabs">{SECTIONS.map(([key, label, Icon]) => <button key={key} type="button" className={section === key ? "active" : ""} onClick={() => setSection(key)}><Icon size={16} /> {label}</button>)}</nav>
+      <nav className="ism-tabs">{SECTIONS.filter(([key])=>!hideConnection||key!=="connection").map(([key, label, Icon]) => <button key={key} type="button" className={section === key ? "active" : ""} onClick={() => setSection(key)}><Icon size={16} /> {label}</button>)}</nav>
 
       {section === "connection" ? <section className="ism-grid two">
         <article className="ism-card ism-connection-card">
