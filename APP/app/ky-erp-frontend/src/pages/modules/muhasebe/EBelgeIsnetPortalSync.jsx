@@ -70,10 +70,17 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
     if(connectionBusy||running||!verified||!companyId)return;
     setConnectionBusy("save");setMessage("");
     try{
-      const response=await saveIsnetSettings({mainCompanySlug:tenant,username:account.trim(),companyId,connectionMode:"portal"});
-      const selectedName=companies.find(c=>String(c.id)===String(companyId))?.name||response?.companyName||"";
-      setSettings(x=>({...x,...response,username:account.trim(),companyId,companyName:selectedName}));
-      setVerified(false);setSetupOpen(false);setPhase("success");setMessage("Firma bağlantısı kaydedildi. XML + PDF belgeleri alabilirsiniz.");
+      await saveIsnetSettings({mainCompanySlug:tenant,username:account.trim(),companyId,connectionMode:"portal"});
+      // Treat a D1 write as saved only after a fresh read confirms the tenant
+      // and authorized company. A saved profile is NOT an active portal session.
+      const persisted=await getIsnetSettings(tenant);
+      if(String(persisted?.companyId||"")!==String(companyId) ||
+         String(persisted?.username||"").trim()!==account.trim()) {
+        throw Error("Firma kaydı sunucudan doğrulanamadı. Yenilemeden bağlantı başarılı sayılmaz.");
+      }
+      setSettings(persisted);setPassword("");
+      setVerified(false);setSetupOpen(false);setPhase("success");
+      setMessage("Firma kaydı doğrulandı. Portal oturumu henüz açık değil; belge indirmek için şifreyi yeniden girip 'Belgeleri Al'ı kullanın.");
     }catch(error){setPhase("error");setMessage(error?.message||"Firma seçimi kaydedilemedi.");}
     finally{setConnectionBusy("");}
   };
