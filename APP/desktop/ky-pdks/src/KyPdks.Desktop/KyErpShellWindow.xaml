@@ -122,6 +122,7 @@
                         <Expander x:Name="SystemGroup" Style="{StaticResource NavGroup}" Header="SİSTEM">
                             <StackPanel>
                                 <Button x:Name="FileHubButton" Style="{StaticResource NavButton}" Tag="/admin/dosya-klasor-yonetimi" Click="ModuleButton_Click" Content="▤   Dosya Merkezi"/>
+                                <Button x:Name="LocalCenterButton" Style="{StaticResource NavButton}" Click="LocalCenterButton_Click" Content="▣   Yerel Dosya ve Yedek Merkezi"/>
                                 <Button x:Name="AssistantButton" Style="{StaticResource NavButton}" Tag="/asistan/sohbet" Click="ModuleButton_Click" Content="✦   KY ERP Asistan"/>
                                 <Button x:Name="AdminButton" Style="{StaticResource NavButton}" Tag="/admin/admin-yonetim-ozeti" Click="ModuleButton_Click" Content="⚙   Yönetim"/>
                             </StackPanel>
