@@ -595,9 +595,9 @@ function publicSettings(row: Row) {
     companies: Array.isArray(row.companies) ? row.companies : [],
     connectionMode: text(row.connectionMode || "auto"),
     hasPassword: false,
-    sessionReady: Boolean(text(row.accessToken) || text(row.portalCookie)),
+    sessionReady: Boolean(text(row.accessToken)),
     apiSessionReady: Boolean(text(row.accessToken)),
-    portalSessionReady: Boolean(text(row.portalCookie) && row.portalCompanySelected === true),
+    portalSessionReady: false,
     tokenExpiresOn: row.tokenExpiresOn || null,
     testedAt: row.testedAt || null,
     savedAt: row.savedAt || null,
@@ -608,7 +608,7 @@ function publicSettings(row: Row) {
       portalBase: text(diagnostics.portalBase || row.portalBase),
     },
     securityNote:
-      "Şifre kaydedilmez. İşNet API tokenı ve/veya firma seçilmiş portal oturumu saklanır; parola, token ve çerez AI bağlamına verilmez.",
+      "Portal şifresi ve oturum çerezi saklanmaz. Portal senkronizasyonunda kullanıcı şifresini işlem sırasında girer.",
   };
 }
 
@@ -856,7 +856,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         companies,
         accessToken: api?.token || "",
         tokenExpiresOn: api?.expiresOn || null,
-        portalCookie: portal?.cookie || "",
+        portalCookie: "",
         portalBase: portal?.base || text(current.portalBase) || PORTAL_BASES[0],
         portalCompanySelected: false,
         connectionMode: primary,
@@ -909,7 +909,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
 
     let apiToken = text(current.accessToken);
     let apiExpires = current.tokenExpiresOn || null;
-    let portalCookie = text(current.portalCookie);
+    let portalCookie = "";
     let portalBase = text(current.portalBase) || PORTAL_BASES[0];
     let portalSelected = current.portalCompanySelected === true;
     let apiError = "";
@@ -967,9 +967,9 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         companies: Array.isArray(current.companies) ? current.companies : companies,
         accessToken: apiToken,
         tokenExpiresOn: apiExpires,
-        portalCookie,
+        portalCookie: "",
         portalBase,
-        portalCompanySelected: portalSelected,
+        portalCompanySelected: false,
         connectionMode: primary,
         savedAt: nowIso(),
         passwordStored: false,
@@ -1013,23 +1013,38 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         return c.json(err("ISNET_ADAPTER_INACTIVE","İşNet adaptörü bu firma için pasif veya listeden kaldırılmış. Önce etkinleştirin."),409);
     }
     const settings = (await storeGet(c, SETTINGS_SCOPE, slug, slug)) || {};
-    const cookie = text(settings.portalCookie);
-    const base = text(settings.portalBase) || PORTAL_BASES[0];
+    const username = text(settings.username);
     const companyId = text(settings.companyId);
-    if (!cookie || !companyId || settings.portalCompanySelected !== true) {
-      return c.json(
-        err(
-          "ISNET_PORTAL_SESSION_REQUIRED",
-          "İşNet portal oturumu hazır değil. Ayarlarda TCKN ve şifreyle Bağlantıyı Test Et, firmayı seçip Kaydet yapın.",
-        ),
-        409,
-      );
+    const companyName = text(settings.companyName);
+    const password = text(body.password);
+    if (!username || !password || !companyId || !companyName) {
+      return c.json(err("ISNET_PORTAL_CREDENTIALS_REQUIRED",
+        "İşNet firması tanımlı olmalı ve senkronizasyon için şifre işlem sırasında girilmelidir."), 409);
+    }
+    let session: PortalSession;
+    try {
+      session = await portalLogin(username, password, companyId, companyName);
+      if (!session.companySelected) throw new Error("Firma oturumu doğrulanamadı.");
+    } catch {
+      return c.json(err("ISNET_PORTAL_LOGIN_FAILED",
+        "İşNet portal giriş/firma seçimi başarısız. İşNet hesabını kontrol edin."), 502);
+    }
+    const cookie = session.cookie;
+    const base = session.base;
+    const endDay = text(body.endDate) || new Date().toISOString().slice(0, 10);
+    const startDay = text(body.startDate) || new Date(Date.parse(endDay+"T00:00:00Z")-7*86400000).toISOString().slice(0,10);
+    const days = (Date.parse(endDay+"T00:00:00Z")-Date.parse(startDay+"T00:00:00Z"))/86400000;
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(startDay) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(endDay) ||
+        !Number.isFinite(days) || days < 0 || days > 31) {
+      return c.json(err("ISNET_PERIOD_INVALID","Senkronizasyon için en fazla 31 günlük geçerli aralık seçin."),400);
+    }
+    const offset = Number(body.offset ?? 0);
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > 20000) {
+      return c.json(err("ISNET_OFFSET_INVALID", "Senkronizasyon sayfa konumu geçersiz."),400);
     }
 
-    const endDate = text(body.endDate) || new Date().toISOString().slice(0, 10);
-    const defaultStart = new Date(`${endDate}T00:00:00Z`);
-    defaultStart.setUTCDate(defaultStart.getUTCDate() - 31);
-    const startDate = text(body.startDate) || defaultStart.toISOString().slice(0, 10);
+    const endDate = endDay;
+    const startDate = startDay;
     const runId = crypto.randomUUID();
     await storePut(
       c,
@@ -1043,7 +1058,11 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       const groups = await Promise.all(
         SOURCES.map((source) => fetchSource(base, cookie, source, companyId, startDate, endDate)),
       );
-      const docs = groups.flat();
+      const allDocs = groups.flat();
+      // Bounded Worker subrequests; the client continues with nextOffset.
+      const batchSize = 8;
+      const docs = allDocs.slice(offset, offset + batchSize);
+      const hasMore = offset + docs.length < allDocs.length;
       let downloaded = 0;
       let failed = 0;
       let canonicalCreated = 0;
@@ -1058,20 +1077,20 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
           baseDoc.dateText && /^\d{2}\.\d{2}\.\d{4}$/.test(baseDoc.dateText)
             ? baseDoc.dateText.split(".").reverse().slice(0, 2).join("-")
             : (baseDoc.dateText || new Date().toISOString()).slice(0, 7);
-        const folder = `${slug}/isnet/${baseDoc.direction}/${baseDoc.kind}/${month}/${safeFile(baseDoc.documentNo)}`;
+        const folder = `${slug}/isnet/${baseDoc.direction}/${baseDoc.kind}/${month}/${safeFile(baseDoc.documentNo)}-${safeFile(baseDoc.sourceId)}`;
         let pdfKey = text(state.pdfKey);
         let xmlKey = text(state.xmlKey);
         let xmlText = "";
 
         try {
-          if (!pdfKey) {
+          if (!pdfKey || !(await c.env.FILES.head(pdfKey))) {
             const pdf = await downloadFile(base, cookie, baseDoc, "pdf");
             pdfKey = `${folder}/${safeFile(baseDoc.documentNo)}.pdf`;
             await c.env.FILES.put(pdfKey, pdf.buffer, {
               httpMetadata: { contentType: pdf.contentType },
             });
           }
-          if (!xmlKey) {
+          if (!xmlKey || !(await c.env.FILES.head(xmlKey))) {
             const xml = await downloadFile(base, cookie, baseDoc, "xml");
             xmlKey = `${folder}/${safeFile(baseDoc.documentNo)}.xml`;
             await c.env.FILES.put(xmlKey, xml.buffer, {
@@ -1082,7 +1101,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
             const existing = await c.env.FILES.get(xmlKey);
             if (existing) xmlText = await existing.text();
           }
-          downloaded += 1;
+          if (pdfKey && xmlKey) downloaded += 1;
         } catch (error: any) {
           failed += 1;
           state = { ...state, error: text(error?.message) };
@@ -1146,7 +1165,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       const requiresReview = failed > 0 || canonicalFailed > 0;
       const result = {
         id: runId,
-        status: requiresReview ? "PARTIAL_REVIEW_REQUIRED" : "COMPLETED",
+        status: requiresReview ? "PARTIAL_REVIEW_REQUIRED" : hasMore ? "PARTIAL_CONTINUE" : "COMPLETED",
         requiresReview,
         warning: requiresReview
           ? "İşNet taşıma tamamlandı ancak bazı belge dosyaları veya canonical e-Belge kayıtları kontrol gerektiriyor."
@@ -1156,7 +1175,11 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         completedAt: nowIso(),
         startDate,
         endDate,
-        portalCount: docs.length,
+        portalCount: allDocs.length,
+        batchCount: docs.length,
+        offset,
+        nextOffset: hasMore ? offset + docs.length : null,
+        hasMore,
         downloaded,
         failed,
         canonical: {
@@ -1166,10 +1189,10 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
           errors: canonicalErrors,
         },
         counts: {
-          incomingInvoices: docs.filter((d) => d.direction === "incoming" && d.kind === "invoice").length,
-          incomingDispatches: docs.filter((d) => d.direction === "incoming" && d.kind === "dispatch").length,
-          outgoingDispatches: docs.filter((d) => d.direction === "outgoing" && d.kind === "dispatch").length,
-          outgoingInvoices: docs.filter((d) => d.direction === "outgoing" && d.kind === "invoice").length,
+          incomingInvoices: allDocs.filter((d) => d.direction === "incoming" && d.kind === "invoice").length,
+          incomingDispatches: allDocs.filter((d) => d.direction === "incoming" && d.kind === "dispatch").length,
+          outgoingDispatches: allDocs.filter((d) => d.direction === "outgoing" && d.kind === "dispatch").length,
+          outgoingInvoices: allDocs.filter((d) => d.direction === "outgoing" && d.kind === "invoice").length,
           canonicalCreated,
           canonicalDuplicates,
           canonicalFailed,
