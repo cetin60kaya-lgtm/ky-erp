@@ -380,7 +380,7 @@ async function loginPortalOnBase(username: string, password: string, portalBase:
   // Their presence is NOT evidence of an incorrect password.
   // A company-list failure can also be caused by portal session cookies, CSRF
   // or a provider-side redirect; never mislabel it as invalid credentials.
-  if (/(?:hatalı|yanlış|geçersiz)\\s+(?:giriş|şifre|parola|kullanıcı)|(?:şifre|parola|kullanıcı adı)\\s+(?:hatalı|yanlış|geçersiz)/i.test(cleanText)) {
+  if (/(?:hatalı|yanlış|geçersiz)\s+(?:giriş|şifre|parola|kullanıcı)|(?:şifre|parola|kullanıcı adı)\s+(?:hatalı|yanlış|geçersiz)/i.test(cleanText)) {
     throw new Error("İşNet portalı giriş yanıtında hata bildirdi, ancak şifre doğrulaması bağımsız olarak teyit edilemedi.");
   }
   throw new Error("İşNet portalına erişildi fakat yetkili firma listesi alınamadı. Portal oturumu veya çerez doğrulaması incelenmeli; şifrenin yanlış olduğu kanıtlanmadı.");
