@@ -23,9 +23,11 @@ const STATE_SCOPE = "ISNET_DOCUMENT_STATE";
 const SYNC_SCOPE = "ISNET_SYNC_RUN";
 const API_BASE = "https://einvoiceapi.isnet.net.tr";
 const PORTAL_BASES = [
-  // This is the same host accepted by the user's isolated Windows portal test.
-  "https://nettefatura.isnet.net.tr",
+  // 20.11.2026 Cloudflare egress: efatura READY, nettefatura TIMEOUT.
+  // The same verified portal login/company-list flow is used for both hosts.
+  // Credentials are NEVER replayed to a second host once a POST is attempted.
   "https://efatura.isnet.net.tr",
+  "https://nettefatura.isnet.net.tr",
 ];
 
 const text = (value: unknown) => value == null ? "" : String(value).trim();
