@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { getAuthenticatedUser } from "./auth-cloud";
 import { registerFileHubRoutes } from "./file-hub";
+import { registerFileHubFolderRouteRoutes } from "./file-hub-folder-routes";
 import { registerFileHubCloudOauthRoutes } from "./file-hub-cloud-oauth";
 import { registerFileHubPreviewRoutes } from "./file-hub-preview";
 import { registerPublicFileHubAgentRoutes } from "./file-hub-agent-public";
@@ -69,6 +70,7 @@ export function registerAdminStorageRoutes(app:any){
 
   registerFileHubCloudOauthRoutes(app);
   registerFileHubRoutes(app);
+  registerFileHubFolderRouteRoutes(app);
   registerFileHubPreviewRoutes(app);
   registerPublicFileHubAgentRoutes(app);
   registerPublicFileHubScanRoutes(app);
