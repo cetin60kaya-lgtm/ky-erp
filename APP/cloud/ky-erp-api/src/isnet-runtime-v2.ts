@@ -373,10 +373,17 @@ async function loginPortalOnBase(username: string, password: string, portalBase:
   if (/google authenticator|doğrulama kodu|iki aşamalı|tek kullanımlık|otp|2fa/i.test(cleanText)) {
     throw new Error("İşNet ek doğrulama kodu istedi. Bu portal adımı KY ERP tarafından doğrulanamadı; bağlı gösterilmez.");
   }
-  if (/captcha|güvenlik kodu|kullanıcı adı|şifre|hatalı giriş/i.test(cleanText)) {
-    throw new Error("İşNet portalı kullanıcı/TCKN veya şifre bilgisini kabul etmedi.");
+  if (/captcha|güvenlik kodu/i.test(cleanText)) {
+    throw new Error("İşNet portalı ek güvenlik doğrulaması istiyor. Firma listesi alınamadı; parola hatası olduğu doğrulanmadı.");
   }
-  throw new Error("Portal girişi açıldı ancak yetkili firma listesi alınamadı.");
+  // Login forms normally contain the words "kullanıcı adı" and "şifre".
+  // Their presence is NOT evidence of an incorrect password.
+  // A company-list failure can also be caused by portal session cookies, CSRF
+  // or a provider-side redirect; never mislabel it as invalid credentials.
+  if (/(?:hatalı|yanlış|geçersiz)\\s+(?:giriş|şifre|parola|kullanıcı)|(?:şifre|parola|kullanıcı adı)\\s+(?:hatalı|yanlış|geçersiz)/i.test(cleanText)) {
+    throw new Error("İşNet portalı giriş yanıtında hata bildirdi, ancak şifre doğrulaması bağımsız olarak teyit edilemedi.");
+  }
+  throw new Error("İşNet portalına erişildi fakat yetkili firma listesi alınamadı. Portal oturumu veya çerez doğrulaması incelenmeli; şifrenin yanlış olduğu kanıtlanmadı.");
 }
 
 // Official portal host fallbacks are attempted only before password submission.
