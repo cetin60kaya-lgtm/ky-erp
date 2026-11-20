@@ -597,6 +597,20 @@ async function portalLogin(username: string, password: string, companyId = "", c
   throw new Error(lastError || "İşNet portalına bağlanılamadı.");
 }
 
+// One portal authentication implementation for both the settings test and
+// real XML/PDF intake. The probe returns ONLY authorized company metadata;
+// session cookies and password are never returned to the browser or D1.
+export async function probeIsnetPortalAccount(username: string, password: string) {
+  const session = await portalLogin(username, password);
+  return {
+    token: "",
+    expiresOn: null,
+    companies: session.companies,
+    mode: "portal",
+    diagnostics: { api: "Denenmedi", portal: "Firma listesi doğrulandı" },
+  };
+}
+
 function publicSettings(row: Row) {
   const diagnostics = obj(row.diagnostics);
   return {
