@@ -46,7 +46,7 @@ public static class LocalFolderService
         if (name.Length > 120) throw new InvalidOperationException("Klasör adı çok uzun.");
         var allowed = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
             "ACCOUNTING", "DOCUMENTS", "DESIGN", "CODE_READONLY", "FILE_HUB",
-            "BACKUP_SOURCE", "BACKUP_DESTINATION", "GENERAL_READ",
+            "BACKUP_SOURCE", "BACKUP_DESTINATION", "FILE_HUB_WRITE", "GENERAL_READ",
         };
         if (!allowed.Contains(purpose)) throw new InvalidOperationException("Geçersiz izin amacı.");
         if (company.Length > 80 || company.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
@@ -56,7 +56,7 @@ public static class LocalFolderService
             throw new InvalidOperationException("Bu klasör aynı firma ve amaç için zaten yetkilendirilmiş.");
         var grant = new LocalFolderGrant {
             Name = name.Trim(), FullPath = root, Purpose = purpose,
-            Company = company.Trim(), Permission = purpose == "BACKUP_DESTINATION" ? "BACKUP_WRITE" : "READ_ONLY"
+            Company = company.Trim(), Permission = purpose == "BACKUP_DESTINATION" ? "BACKUP_WRITE" : purpose == "FILE_HUB_WRITE" ? "FILE_HUB_WRITE" : "READ_ONLY"
         };
         list.Add(grant);
         Save(list);
@@ -88,20 +88,13 @@ public static class LocalFolderService
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException("Seçili klasör mevcut değil.");
         if (root.Equals(Path.TrimEndingDirectorySeparator(Path.GetPathRoot(root) ?? ""), PathComparison))
             throw new InvalidOperationException("Disk veya paylaşım köküne sınırsız erişim verilemez. Alt klasör seçin.");
-        EnsureNoReparsePoints(root);
+        // Approved Google Drive/OneDrive mounts can be junction ancestors.
+        // The selected root itself must be a real directory; internal links are skipped.
+        if ((new DirectoryInfo(root).Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new InvalidOperationException("Doğrudan bağlantı/junction klasörü yerine içindeki alt klasörü seçin.");
         return root;
     }
 
-    // Never follow symlinks/junctions outside the approved tree.
-    private static void EnsureNoReparsePoints(string fullPath)
-    {
-        var cursor = new DirectoryInfo(fullPath);
-        while (cursor is not null) {
-            if ((cursor.Attributes & FileAttributes.ReparsePoint) != 0)
-                throw new InvalidOperationException("Sembolik bağlantı/junction yolu için ayrı izin gerekli.");
-            cursor = cursor.Parent;
-        }
-    }
 
     private static bool Inside(string root, string target) =>
         target.Equals(root, PathComparison) ||
@@ -184,7 +177,8 @@ public static class LocalFolderService
                         await input.CopyToAsync(output, ct);
                         await output.FlushAsync(ct);
                     }
-                    var hash = Convert.ToHexString(await SHA256.HashDataAsync(File.OpenRead(temp), ct)).ToLowerInvariant();
+                    await using var verify = File.OpenRead(temp);
+                    var hash = Convert.ToHexString(await SHA256.HashDataAsync(verify, ct)).ToLowerInvariant();
                     File.Move(temp, target, false);
                     count++; total += file.Length;
                     fileRows.Add(new {relativePath=relative.Replace('\\','/'),sha256=hash,size=file.Length});
