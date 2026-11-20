@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { probeIsnetSessionHealth, verifiedCachedIsnetSession } from "./isnet-session-health";
 import { normalizeIsnetConnectionMode, checkedIsnetCompanySave } from "./isnet-connection-flow";
 import { probeIsnetPublicLogin } from "./isnet-portal-public-health";
+import { probeIsnetPortalAccount } from "./isnet-live-sync";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
 type Bindings = Cloudflare.Env;
@@ -242,171 +243,15 @@ async function loginApi(username: string, password: string) {
   }
 }
 
-function verificationToken(html: string) {
-  return text(
-    html.match(/name=["']__RequestVerificationToken["'][^>]*value=["']([^"']+)["']/i)?.[1] ||
-    html.match(/value=["']([^"']+)["'][^>]*name=["']__RequestVerificationToken["']/i)?.[1],
-  );
-}
-
-function mergeCookies(response: Response, jar: Map<string, string>) {
-  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  const values = headers.getSetCookie?.() || (headers.get("set-cookie") ? [headers.get("set-cookie") as string] : []);
-  for (const value of values) {
-    const pair = text(value.split(";", 1)[0]);
-    const separator = pair.indexOf("=");
-    if (separator > 0) jar.set(pair.slice(0, separator), pair.slice(separator + 1));
-  }
-}
-
-function cookieHeader(jar: Map<string, string>) {
-  return [...jar.entries()].map(([key, value]) => `${key}=${value}`).join("; ");
-}
-
-async function loginPortalOnBase(username: string, password: string, portalBase: string) {
-  const jar = new Map<string, string>();
-  const deadline = Date.now() + 25_000;
-  const request = async (path: string, init: RequestInit = {}) => {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) throw new Error("İşNet portalı zaman aşımına uğradı.");
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), Math.min(8_000, remaining));
-    try {
-      const response = await fetch(path.startsWith("http") ? path : `${portalBase}${path}`, {
-        ...init,
-        headers: {
-          Accept: "text/html,application/xhtml+xml,application/json",
-          "User-Agent": "Mozilla/5.0 KY-ERP-IsNet-Cloud/4.0",
-          ...(jar.size ? { Cookie: cookieHeader(jar) } : {}),
-          ...(init.headers || {}),
-        },
-        redirect: "manual",
-        signal: controller.signal,
-      });
-      mergeCookies(response, jar);
-      return response;
-    } finally {
-      clearTimeout(timeout);
-    }
-  };
-
-  // Public form availability is checked before credentials reach the provider.
-  // Canonical path was independently observed as HTTP 200 with an anti-forgery
-  // field from a Windows browser on 2026-11-14. Cloudflare egress is separate.
-  const loginPaths = ["/Account/Login", "/account/login/Login"];
-  let loginPath = "";
-  let loginHtml = "";
-  let token = "";
-  let diagnostic = "FORM_MISSING";
-  for (const candidate of loginPaths) {
-    try {
-      const response = await request(candidate);
-      if (!response.ok) {
-        diagnostic = `HTTP_${response.status}`;
-        if (response.status === 403 || response.status === 429) break;
-        continue;
-      }
-      const html = await response.text();
-      const nextToken = verificationToken(html);
-      if (nextToken) {
-        loginPath = candidate;
-        loginHtml = html;
-        token = nextToken;
-        break;
-      }
-      diagnostic = "TOKEN_MISSING";
-    } catch (error: any) {
-      diagnostic = ["AbortError","TimeoutError"].includes(text(error?.name)) ? "TIMEOUT" : "NETWORK_ERROR";
-    }
-  }
-  if (!loginPath || !token) {
-    throw new Error(`İşNet giriş formu KY ERP sunucusundan alınamadı (${diagnostic}). Şifre doğrulaması başlamadı.`);
-  }
-  const inputNames = [...loginHtml.matchAll(/<input[^>]*name=["']([^"']+)["']/gi)].map((m) => text(m[1])).filter(Boolean);
-  const usernameField = inputNames.find((name) => /(identificationnumber|vkntckn|tckn|username|user_name)/i.test(name)) || "VknTckn";
-  const passwordField = inputNames.find((name) => /(password|sifre|şifre)/i.test(name)) || "Password";
-  const form = new URLSearchParams();
-  form.set(usernameField, username);
-  form.set(passwordField, password);
-  form.set("RememberMe", "false");
-  form.set("__RequestVerificationToken", token);
-  const loginResponse = await request(loginPath, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Origin: portalBase,
-      Referer: `${portalBase}${loginPath}`,
-    },
-    body: form.toString(),
-  });
-  const loginText = await loginResponse.text();
-  const companyPaths = ["/Account/GetCompanyList", "/account/GetCompanyList", "/account/login/GetCompanyList"];
-  for (const candidate of companyPaths) {
-    try {
-      const response = await request(candidate, {
-        method: "POST",
-        headers: {
-          Accept: "application/json, text/javascript, */*; q=0.01",
-          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          Origin: portalBase,
-          Referer: `${portalBase}${loginPath}`,
-          "X-Requested-With": "XMLHttpRequest",
-        },
-        body: new URLSearchParams({ q: "" }).toString(),
-      });
-      const raw = await response.text();
-      let payload: any = {};
-      try { payload = raw ? JSON.parse(raw) : {}; } catch { payload = {}; }
-      const companies = normalizeCompanies(payload);
-      if (companies.length) {
-        return {
-          token: "",
-          expiresOn: null,
-          companies,
-          mode: "portal",
-          diagnostics: { api: "Başarısız", portal: "Bağlandı" },
-        };
-      }
-    } catch { /* next */ }
-  }
-  const cleanText = loginText.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  if (/google authenticator|doğrulama kodu|iki aşamalı|tek kullanımlık|otp|2fa/i.test(cleanText)) {
-    throw new Error("İşNet ek doğrulama kodu istedi. Bu portal adımı KY ERP tarafından doğrulanamadı; bağlı gösterilmez.");
-  }
-  if (/captcha|güvenlik kodu/i.test(cleanText)) {
-    throw new Error("İşNet portalı ek güvenlik doğrulaması istiyor. Firma listesi alınamadı; parola hatası olduğu doğrulanmadı.");
-  }
-  // Login forms normally contain the words "kullanıcı adı" and "şifre".
-  // Their presence is NOT evidence of an incorrect password.
-  // A company-list failure can also be caused by portal session cookies, CSRF
-  // or a provider-side redirect; never mislabel it as invalid credentials.
-  if (/(?:hatalı|yanlış|geçersiz)\s+(?:giriş|şifre|parola|kullanıcı)|(?:şifre|parola|kullanıcı adı)\s+(?:hatalı|yanlış|geçersiz)/i.test(cleanText)) {
-    throw new Error("İşNet portalı giriş yanıtında hata bildirdi, ancak şifre doğrulaması bağımsız olarak teyit edilemedi.");
-  }
-  throw new Error("İşNet portalına erişildi fakat yetkili firma listesi alınamadı. Portal oturumu veya çerez doğrulaması incelenmeli; şifrenin yanlış olduğu kanıtlanmadı.");
-}
-
-// Official portal host fallbacks are attempted only before password submission.
-// Never retry an authentication or MFA failure against a second service.
-async function loginPortal(username: string, password: string) {
-  let lastError: Error | null = null;
-  for (const base of ["https://efatura.isnet.net.tr", PORTAL_BASE]) {
-    try { return await loginPortalOnBase(username, password, base); }
-    catch (error: any) {
-      lastError = error instanceof Error ? error : new Error("İşNet portal kontrolü başarısız.");
-      if (!lastError.message.includes("Şifre doğrulaması başlamadı")) throw lastError;
-    }
-  }
-  throw lastError || new Error("İşNet giriş sayfasına ulaşılamıyor.");
-}
-
+// Portal authentication is centralized in isnet-live-sync.ts so a green
+// connection test uses the same login and company-list sequence as XML/PDF.
 async function loginIsnet(username: string, password: string, mode: string = "portal") {
   if (!username || !password) throw new Error("İşNet kullanıcı adı/TCKN ve şifre zorunludur.");
   // The requested provider route is explicit. Never retry credentials silently
   // against a different authentication endpoint (account lockout / MFA risk).
   return normalizeIsnetConnectionMode(mode) === "api"
     ? loginApi(username, password)
-    : loginPortal(username, password);
+    : probeIsnetPortalAccount(username, password);
 }
 
 async function settingsRaw(c: Context<AppEnv>, slug: string) {
