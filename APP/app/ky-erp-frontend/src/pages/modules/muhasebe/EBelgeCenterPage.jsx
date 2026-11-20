@@ -36,6 +36,7 @@ import EBelgeLineReview from "./EBelgeLineReview";
 import EBelgeAccountingPrint from "./EBelgeAccountingPrint";
 import EBelgeManualFallback from "./EBelgeManualFallback";
 import {eBelgeFileKey,splitEBelgeUploadQueue} from "./eBelgeUploadQueue";
+import {selectOriginalEBelgeFiles} from "./eBelgeOriginalFiles";
 import {parseUblForVisualOutput,renderUblOutput} from "./visualUblOutput";
 import VisualProfileStudio from "./VisualProfileStudio";
 import EBelgeAdapterManager from "./EBelgeAdapterManager";
@@ -375,10 +376,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   if (!id) return null;
   const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
   const relationCount = detail?.relations?.length || 0;
-  const storedFiles=Array.isArray(detail?.files)?detail.files:[];
-  const originalPdf=storedFiles.find(file=>/\.pdf$/i.test(String(file.file_name||"")));
-  const originalXml=storedFiles.find(file=>/\.xml$/i.test(String(file.file_name||"")));
-  const otherFiles=storedFiles.filter(file=>file.id!==originalPdf?.id&&file.id!==originalXml?.id);
+  const { pdf:originalPdf, xml:originalXml, other:otherFiles }=selectOriginalEBelgeFiles(detail?.files);
   const isProviderSource=/^ISNET/i.test(String(detail?.source_type||detail?.provider_type||""));
 
   const supplierPhysicalInvoice = detail?.direction === "INCOMING" && /FATURA|INVOICE|ARSIV/i.test(String(detail?.document_type || "")) &&
