@@ -55,7 +55,7 @@ public partial class LocalFolderWindow : Window
             if (StartWithWindows.IsChecked == true)
             {
                 var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wscript.exe");
-                key.SetValue(RunName, $"\\"{wscript}\\" \\"{IntegrationStarter}\\"");
+                key.SetValue(RunName, $"\"{wscript}\" \"{IntegrationStarter}\"");
                 ShowStatus("KY ERP entegrasyonları bu Windows kullanıcısı oturum açınca otomatik başlayacak. Klasör izinleri değişmedi.");
             }
             else
@@ -78,7 +78,7 @@ public partial class LocalFolderWindow : Window
         {
             var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System),"wscript.exe");
             using var process=System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo {
-                FileName=wscript,Arguments=$"\\"{IntegrationStarter}\\"",UseShellExecute=false,CreateNoWindow=true,
+                FileName=wscript,Arguments=$"\"{IntegrationStarter}\"",UseShellExecute=false,CreateNoWindow=true,
             });
             if(process is null)throw new InvalidOperationException("Entegrasyon başlatma isteği gönderilemedi.");
             await Task.Delay(1300);
