@@ -645,8 +645,14 @@ async function fetchAdapterXml(c: Context<AppEnv>, slug: string, document: Row) 
   if (!sourceId || sourceId.length > 200) throw new Error("ISNET_DOCUMENT_ID_INVALID");
   const base = new URL(settings.apiBase);
   if (base.protocol !== "https:") throw new Error("ISNET_ADAPTER_URL_INVALID");
-  const url = new URL(`${base.pathname.replace(/\\/$/, "")}/documents/${encodeURIComponent(sourceId)}/xml`, base.origin);
-  if (url.origin !== base.origin) throw new Error("ISNET_ADAPTER_URL_INVALID");
+  // Never guess a vendor endpoint: the approved adapter must give an exact per-document XML URL.
+  const downloadPath = text(document.xmlDownloadUrl || document.xmlUrl);
+  if (!downloadPath) throw new Error("ISNET_XML_ENDPOINT_NOT_PROVIDED");
+  const url = new URL(downloadPath, base);
+  if (url.origin !== base.origin || url.protocol !== "https:" ||
+      url.username || url.password || !url.pathname.startsWith(base.pathname.replace(/\\/$/, "") + "/")) {
+    throw new Error("ISNET_ADAPTER_URL_INVALID");
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20000);
   let bytes: ArrayBuffer;
@@ -705,6 +711,8 @@ async function savePortalDocuments(c: Context<AppEnv>, slug: string, rows: Row[]
       {
         ...((await storeGet(c, SCOPES.portalDocument, automationKey, slug)) || {}),
         ...raw,
+        xmlKey: text(raw.xmlKey) || text((await storeGet(c, SCOPES.portalDocument, automationKey, slug))?.xmlKey),
+        pdfKey: text(raw.pdfKey) || text((await storeGet(c, SCOPES.portalDocument, automationKey, slug))?.pdfKey),
         id: sourceId,
         sourceId,
         automationKey,
