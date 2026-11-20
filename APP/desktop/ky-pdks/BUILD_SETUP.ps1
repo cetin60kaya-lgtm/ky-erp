@@ -85,11 +85,19 @@ $NodeExe = [string]$NodeTool.Source
 $NodeVersion = [version]((& $NodeExe --version).Trim().TrimStart('v'))
 if ($NodeVersion.Major -lt 22) { throw "Entegrasyon paketi Node 22+ gerektirir: $NodeVersion" }
 $NodeLicense = Join-Path (Split-Path -Parent $NodeExe) 'LICENSE'
-if (-not (Test-Path -LiteralPath $NodeLicense)) {
-    throw 'Node yeniden dağıtım LICENSE dosyası derleme bilgisayarında eksik.'
-}
+$EmbeddedLicense = Join-Path $IntegrationOut 'bin\NODE-LICENSE.txt'
 Copy-Item -LiteralPath $NodeExe -Destination (Join-Path $IntegrationOut 'bin\node.exe') -Force
-Copy-Item -LiteralPath $NodeLicense -Destination (Join-Path $IntegrationOut 'bin\NODE-LICENSE.txt') -Force
+if (Test-Path -LiteralPath $NodeLicense) {
+    Copy-Item -LiteralPath $NodeLicense -Destination $EmbeddedLicense -Force
+} else {
+    # The Windows MSI can install node.exe without its LICENSE file. Fetch
+    # the matching version's official open-source notices from Node's repo.
+    $NodeTag = 'v' + $NodeVersion.ToString()
+    $LicenseUri = "https://raw.githubusercontent.com/nodejs/node/$NodeTag/LICENSE"
+    try { Invoke-WebRequest -UseBasicParsing -Uri $LicenseUri -OutFile $EmbeddedLicense -TimeoutSec 25 }
+    catch { throw "Node $NodeTag resmî lisans metni indirilemedi; Setup paketlenmedi." }
+    if ((Get-Item $EmbeddedLicense).Length -lt 1500) { throw 'Node lisans dosyası eksik veya geçersiz.' }
+}
 $HubSources = @('file-hub-agent.mjs','local-folder-authorization.mjs',
     'accounting-archive-worker.mjs','psd-preview-worker.mjs','psd-composite-preview.mjs')
 foreach ($file in $HubSources) {
