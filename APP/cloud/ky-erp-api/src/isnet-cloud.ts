@@ -633,6 +633,59 @@ async function externalJson(
   }
 }
 
+
+// The adapter's document download contract is separate from the list endpoint.
+// Only the configured HTTPS adapter origin is contacted; no URL from a document is trusted.
+async function fetchAdapterXml(c: Context<AppEnv>, slug: string, document: Row) {
+  const settings = await settingsOf(c, slug);
+  if (!settings.apiBase) {
+    throw new Error("ISNET_ADAPTER_NOT_CONFIGURED");
+  }
+  const sourceId = text(document.sourceId || document.id);
+  if (!sourceId || sourceId.length > 200) throw new Error("ISNET_DOCUMENT_ID_INVALID");
+  const base = new URL(settings.apiBase);
+  if (base.protocol !== "https:") throw new Error("ISNET_ADAPTER_URL_INVALID");
+  const url = new URL(`${base.pathname.replace(/\\/$/, "")}/documents/${encodeURIComponent(sourceId)}/xml`, base.origin);
+  if (url.origin !== base.origin) throw new Error("ISNET_ADAPTER_URL_INVALID");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20000);
+  let bytes: ArrayBuffer;
+  try {
+    const response = await fetch(url.toString(), {
+      method: "GET",
+      headers: { ...(await authHeaders(c, slug)), Accept: "application/xml, text/xml, application/json" },
+      redirect: "error",
+      signal: controller.signal,
+    });
+    if (!response.ok) throw new Error(`ISNET_XML_HTTP_${response.status}`);
+    const length = Number(response.headers.get("content-length") || 0);
+    if (length > 8 * 1024 * 1024) throw new Error("ISNET_XML_TOO_LARGE");
+    const contentType = (response.headers.get("content-type") || "").toLowerCase();
+    if (contentType.includes("json")) {
+      const payload = await response.json() as Row;
+      const encoded = text(payload.xmlBase64 || payload.contentBase64);
+      if (encoded.length > 12 * 1024 * 1024 || !/^[A-Za-z0-9+/=\\s]+$/.test(encoded)) throw new Error("ISNET_XML_FORMAT_INVALID");
+      const binary = atob(encoded.replace(/\\s/g, ""));
+      if (binary.length > 8 * 1024 * 1024) throw new Error("ISNET_XML_TOO_LARGE");
+      bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0)).buffer;
+    } else {
+      bytes = await response.arrayBuffer();
+    }
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!bytes.byteLength || bytes.byteLength > 8 * 1024 * 1024) throw new Error("ISNET_XML_SIZE_INVALID");
+  const xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes).replace(/^\\uFEFF/, "").trimStart();
+  if (!/^<\\?xml\\b|^<(?:[\\w.-]+:)?(?:Invoice|DespatchAdvice)\\b/.test(xml) ||
+      !/<(?:[\\w.-]+:)?(?:Invoice|DespatchAdvice)\\b/.test(xml) ||
+      /<!DOCTYPE|<!ENTITY/i.test(xml) || /<html\\b/i.test(xml)) {
+    throw new Error("ISNET_XML_FORMAT_INVALID");
+  }
+  const key = `isnet/${encodeURIComponent(slug)}/${encodeURIComponent(text(document.kind || "invoice"))}/${encodeURIComponent(text(document.direction || "incoming"))}/${encodeURIComponent(sourceId)}/original.xml`;
+  await c.env.FILES.put(key, bytes, { httpMetadata: { contentType: "application/xml; charset=utf-8" } });
+  return key;
+}
+
 async function savePortalDocuments(c: Context<AppEnv>, slug: string, rows: Row[]) {
   let saved = 0;
   for (const raw of rows) {
@@ -650,6 +703,7 @@ async function savePortalDocuments(c: Context<AppEnv>, slug: string, rows: Row[]
       SCOPES.portalDocument,
       automationKey,
       {
+        ...((await storeGet(c, SCOPES.portalDocument, automationKey, slug)) || {}),
         ...raw,
         id: sourceId,
         sourceId,
@@ -981,16 +1035,26 @@ export function registerIsnetCloudRoutes(app: Hono<AppEnv>) {
         data: { document, backfilled: false, message: "Belge zaten yerel arşivde." },
       });
     }
-    return c.json({
-      ok: true,
-      success: true,
-      data: {
-        document,
-        backfilled: false,
-        message:
-          "Portal belgesi listede. PDF/XML dosyası adaptör tarafından sağlandığında R2 arşivine alınabilir.",
-      },
-    });
+    if (document.xmlKey && await r2File(c, document.xmlKey)) {
+      return c.json({ ok: true, success: true, data: { document, backfilled: false, alreadyPresent: true } });
+    }
+    try {
+      const xmlKey = await fetchAdapterXml(c, slug, document);
+      const key = text(document.automationKey);
+      const original = await storeGet(c, SCOPES.portalDocument, key, slug);
+      if (!original) return c.json(errorBody("NOT_FOUND", "İşNet adaptör belge kaydı bulunamadı."), 404);
+      await storePut(c, SCOPES.portalDocument, key, {
+        ...original, xmlKey, hasXml: true, downloadedAt: nowIso(),
+      }, slug);
+      return c.json({
+        ok: true, success: true,
+        data: { document: { ...document, xmlKey, hasXml: true }, backfilled: true },
+      });
+    } catch (error) {
+      const code = error instanceof Error && /^ISNET_[A-Z0-9_]+$/.test(error.message)
+        ? error.message : "ISNET_XML_DOWNLOAD_FAILED";
+      return c.json(errorBody(code, "Orijinal XML İşNet adaptöründen indirilemedi; belge kaydı korundu."), 502);
+    }
   });
 
   app.post("/api/isnet/portal/documents/:automationKey/read", async (c) => {
