@@ -2,6 +2,8 @@
 import type { Context, Hono } from "hono";
 import { ingestProviderEBelgeXml } from "./e-belge-center-cloud";
 import { MAX_ISNET_DOCUMENT_BYTES, verifyIsnetDownloadedFile } from "./isnet-file-validation";
+import { getAuthenticatedUser } from "./auth-cloud";
+import { accountingAccess, accountingTenantReadAllowed } from "./accounting-access-policy";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -1000,6 +1002,10 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
   app.post("/api/isnet/full-sync", async (c) => {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
+    const user = await getAuthenticatedUser(c);
+    if (!user || !accountingTenantReadAllowed(user, slug) || !accountingAccess(user, "POST", c.req.path)) {
+      return c.json(err("ISNET_SYNC_FORBIDDEN", "Bu firma için İşNet belge alma ve muhasebe havuzuna kayıt yetkiniz yok."), 403);
+    }
     // A paused/removed company adapter may not launch a provider synchronization.
     // A tenant without a selection row keeps its legacy connection until onboarded.
     const adapterRow = await c.env.DB.prepare(
