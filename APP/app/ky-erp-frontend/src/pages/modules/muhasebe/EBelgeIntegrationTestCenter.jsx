@@ -1,5 +1,5 @@
 import {useEffect,useState} from "react";
-import {Download,Eye,FileSearch,FileText,LoaderCircle,ShieldCheck} from "lucide-react";
+import {CheckCircle2,Download,Eye,FileSearch,FileText,LoaderCircle,ShieldCheck} from "lucide-react";
 import {getIsnetSettings,queryIsnetDocumentTest,downloadIsnetReadOnlyXmlSample} from "../../../services/isnetApi";
 import {parseUblForVisualOutput,renderUblOutput} from "./visualUblOutput";
 import {getEBelgeVisualProfiles} from "../../../services/eBelgeApi";
