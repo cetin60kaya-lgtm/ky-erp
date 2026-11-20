@@ -134,6 +134,15 @@
         </Grid>
         <Border Grid.Row="3" Background="#EAF3FB" BorderBrush="#CDE0F1" BorderThickness="1" CornerRadius="9" Padding="12,10">
             <StackPanel>
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,9">
+                    <CheckBox x:Name="StartWithWindows" Content="İşNet ve File Hub bu Windows kullanıcısı oturum açınca başlasın"
+                              VerticalAlignment="Center" FontWeight="SemiBold" Foreground="#24476B"
+                              Checked="StartWithWindows_Changed" Unchecked="StartWithWindows_Changed"/>
+                    <Button x:Name="StartIntegrationsButton" Content="Entegrasyonları Şimdi Başlat"
+                            Margin="14,0,0,0" Padding="12,6" Click="StartIntegrations_Click"/>
+                    <Button Content="Yerel İşNet Bağlantısını Kontrol Et"
+                            Margin="8,0,0,0" Padding="12,6" Click="CheckPortal_Click"/>
+                </StackPanel>
                 <TextBlock x:Name="LocalStatus" Text="Hazır · Tüm yetkiler yalnız bu Windows kullanıcısına ait." TextWrapping="Wrap"
                            FontSize="12" Foreground="#23527B"/>
                 <TextBlock Text="Yerel klasör yedeği Cloudflare D1 veritabanı yedeği değildir. İşNet, dosya senkronu ve D1 aktarımı ayrı yetki/bağlantı kontrollerinden geçer."
