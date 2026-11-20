@@ -380,7 +380,10 @@ export default function AppShellV3({
 
   useEffect(() => {
     const onKeyDown = (event) => {
-      if ((event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("tr-TR") === "k") {
+      // Global quick actions must not intercept password/forms or a repeated keydown.
+      const editable = event.target?.closest?.("input, textarea, select, [contenteditable=true]");
+      if (!editable && !event.repeat && !event.isComposing && !event.altKey &&
+          (event.ctrlKey || event.metaKey) && event.key.toLocaleLowerCase("tr-TR") === "k") {
         event.preventDefault();
         setQuickOpen((current) => !current);
       }
@@ -394,6 +397,9 @@ export default function AppShellV3({
   }, []);
 
   useEffect(() => { if (!quickOpen) setQuickSearch(""); }, [quickOpen]);
+
+  // A navigation action must never leave the global command palette over a new screen.
+  useEffect(() => { setQuickOpen(false); }, [activeModule?.key, activeTab]);
 
   useEffect(() => {
     const moduleKey = activeModule?.key || "";
@@ -650,7 +656,7 @@ export default function AppShellV3({
       <main className="shell-v3-main">
         <header className="shell-v3-topbar">
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç" aria-controls="ky-shell-main-menu" aria-expanded={mobileMenuOpen}><Menu size={19} /></button>
-          <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onFocus={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
+          <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onPointerDown={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><ErpIcon name="hizli" size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
           {ownerUser ? (
             <div className="shell-v3-owner-scope" aria-label="Uygulama Sahibi kapsamı"><small>Kapsam</small><strong>Uygulama Sahibi</strong><span>Tüm Sistem</span></div>
