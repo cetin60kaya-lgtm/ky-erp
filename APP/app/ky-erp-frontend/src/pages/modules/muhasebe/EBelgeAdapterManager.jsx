@@ -170,7 +170,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     </div>
     {profileError&&<div className="eam-alert" role="alert">{profileError}</div>}
     {panel==="sync"&&active.key==="ISNET"?<EBelgeIsnetPortalSync key={tenant+":sync"} activeMainCompany={activeMainCompany} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onSynced={refresh}/>:
-     panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
+     panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenSync={()=>setPanel("sync")} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
      panel==="profile"?<EBelgeIntegrationProfileEditor key={tenant+":"+active.key} adapter={active} company={owner} profile={profile} onSaved={setProfile}/>:
      active.key==="ISNET"?<div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule} onOpenDocumentTest={()=>setPanel("test")}/></div>:
      active.key==="MANUAL"?<div className="eam-detail-body"><div className="eam-instruction"><FileCode2 size={23}/><div><strong>Manuel XML / PDF Belge Havuzu</strong><p>UBL-TR XML asıl kaynaktır. PDF/JPEG/PNG görüntü ve kontrol içindir.</p></div></div>
