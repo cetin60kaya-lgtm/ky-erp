@@ -1066,7 +1066,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       );
       const allDocs = groups.flat();
       // Bounded Worker subrequests; the client continues with nextOffset.
-      const batchSize = 8;
+      const batchSize = 2; // Limit D1 Free write-heavy canonical ingest per Worker request
       const docs = allDocs.slice(offset, offset + batchSize);
       const hasMore = offset + docs.length < allDocs.length;
       let downloaded = 0;

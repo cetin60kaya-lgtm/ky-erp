@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CheckCircle2, FileCode2, FileText, FolderOpen, LockKeyhole, RefreshCw, ShieldCheck, Truck } from "lucide-react";
-import { getIsnetSettings, syncIsnetPortalBatch } from "../../../services/isnetApi";
+import { getIsnetSettings, saveIsnetSettings, testIsnetSettings, syncIsnetPortalBatch } from "../../../services/isnetApi";
 import "./eBelgeIsnetPortalSync.css";
 
 const directions = [
@@ -20,6 +20,14 @@ function validPeriod(from, to) {
 export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, enabled = true, onSynced }) {
   const tenant = activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || activeMainCompany?.id || "";
   const [settings, setSettings] = useState(null);
+  const [account,setAccount] = useState("");
+  const [companies,setCompanies] = useState([]);
+  const [companyId,setCompanyId] = useState("");
+  const [verified,setVerified] = useState(false);
+  const [setupOpen,setSetupOpen] = useState(false);
+  const [connectionBusy,setConnectionBusy] = useState("");
+  const [cursor,setCursor] = useState(0);
+  const [hasMore,setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [password, setPassword] = useState("");
   const [from, setFrom] = useState(() => daysAgo(7));
@@ -36,16 +44,39 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
     stopRef.current = true;
     setLoading(true); setSettings(null); setPassword(""); setMessage(""); setSummary(null); setPhase("idle");
     if (!tenant) { setLoading(false); return () => { alive = false; }; }
-    getIsnetSettings()
-      .then((data) => { if (alive) setSettings(data); })
+    getIsnetSettings(tenant)
+      .then((data) => { if (alive) { setSettings(data);setAccount(data?.username||"");setCompanies(Array.isArray(data?.companies)?data.companies:[]);setCompanyId(data?.companyId||"");setSetupOpen(!data?.companyId); } })
       .catch(() => { if (alive) { setPhase("error"); setMessage("Firma İşNet ayarları alınamadı. Bağlantı sekmesinden kontrol edin."); } })
       .finally(() => { if (alive) setLoading(false); });
     return () => { alive = false; stopRef.current = true; };
   }, [tenant]);
 
   const ready = Boolean(settings?.username && settings?.companyId && settings?.companyName);
-  const canRun = enabled && tenant && ready && !loading && !running;
-  const preset = (days) => { setFrom(daysAgo(days)); setTo(daysAgo(0)); setPhase("idle"); setMessage(""); };
+  const canRun = enabled && tenant && ready && !loading && !running && !connectionBusy;
+  const preset = (days) => { setFrom(daysAgo(days)); setTo(daysAgo(0)); setPhase("idle"); setMessage("");setCursor(0);setHasMore(false);setSummary(null); };
+  const verifyAccount=async()=>{
+    if(connectionBusy||running||!account.trim()||!password.trim())return;
+    setConnectionBusy("verify");setMessage("");setPhase("idle");
+    try{
+      const response=await testIsnetSettings({mainCompanySlug:tenant,username:account.trim(),password,connectionMode:"portal"});
+      const available=Array.isArray(response?.companies)?response.companies:Array.isArray(response?.authorizedCompanies)?response.authorizedCompanies:[];
+      if(!available.length)throw Error("İşNet firma yetki listesi alınamadı.");
+      setCompanies(available);setCompanyId(id=>available.some(c=>String(c.id)===String(id))?id:available.length===1?String(available[0].id):"");
+      setVerified(true);setPhase("success");setMessage("Bağlantı doğrulandı. Firma seçimini kaydedin.");
+    }catch(error){setVerified(false);setPhase("error");setMessage(error?.message||"İşNet bağlantısı doğrulanamadı.");}
+    finally{setConnectionBusy("");}
+  };
+  const saveCompany=async()=>{
+    if(connectionBusy||running||!verified||!companyId)return;
+    setConnectionBusy("save");setMessage("");
+    try{
+      const response=await saveIsnetSettings({mainCompanySlug:tenant,username:account.trim(),companyId,connectionMode:"portal"});
+      const selectedName=companies.find(c=>String(c.id)===String(companyId))?.name||response?.companyName||"";
+      setSettings(x=>({...x,...response,username:account.trim(),companyId,companyName:selectedName}));
+      setVerified(false);setSetupOpen(false);setPhase("success");setMessage("Firma bağlantısı kaydedildi. XML + PDF belgeleri alabilirsiniz.");
+    }catch(error){setPhase("error");setMessage(error?.message||"Firma seçimi kaydedilemedi.");}
+    finally{setConnectionBusy("");}
+  };
   const run = useCallback(async () => {
     if (busyRef.current || !enabled || !tenant) return;
     if (!validPeriod(from, to)) { setPhase("error"); setMessage("Tarih aralığı 0–31 gün olmalı."); return; }
@@ -55,10 +86,11 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
     stopRef.current = false; busyRef.current = true; setRunning(true);
     setPhase("running"); setMessage("İşNet belgeleri sorgulanıyor...");
     setSummary(null); setProgress({ current: 0, total: 0 });
-    let offset = 0, finished = false, totalDownloaded = 0, totalAdded = 0, totalDuplicates = 0, count = 0;
+    let offset = hasMore ? cursor : 0, finished = false, totalDownloaded = 0, totalAdded = 0, totalDuplicates = 0, count = 0;
+    let totalFailed=0;
     let last = null;
     try {
-      for (let part = 0; part < 100; part += 1) {
+      for (let part = 0; part < 150; part += 1) {
         if (stopRef.current) break;
         setMessage("Belgeler alınıyor ve havuza kaydediliyor. İşlem " + (part + 1) + "...");
         const response = await syncIsnetPortalBatch({
@@ -69,21 +101,18 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
         totalDownloaded += Number(response.downloaded || 0);
         totalAdded += Number(response.canonical?.created || 0);
         totalDuplicates += Number(response.canonical?.duplicates || 0);
+        totalFailed += Number(response.failed || 0) + Number(response.canonical?.failed || 0);
         setProgress({ current: offset + Number(response.batchCount || 0), total: count });
-        setSummary({ ...response, downloaded: totalDownloaded, totalAdded, totalDuplicates });
-        if (response.status === "FAILED" || response.requiresReview) {
-          setPhase("review");
-          setMessage("Bazı belgeler kontrol gerektiriyor. Başarıyla alınan belgeler korunuyor. Eksik belgeler için İşlem Sonuçlarını kontrol edin.");
-          break;
-        }
+        setSummary({ ...response, downloaded: totalDownloaded, totalAdded, totalDuplicates, totalFailed });
+        if (response.status === "FAILED") throw Error("İşNet belge kaynağı sorgulaması tamamlanamadı.");
         if (response.hasMore !== true) {
-          finished = true; setPhase("success");
-          setMessage("Belge aktarımı tamamlandı. Yeni belgeler havuzda kontrol bekliyor.");
+          finished = true;setHasMore(false);setCursor(0);setPhase(totalFailed?"review":"success");
+          setMessage(totalFailed?"Belgeler tarandı. "+totalFailed+" dosya/havuz hatası kontrol gerektiriyor; başarılı kayıtlar korundu.":"Belge aktarımı tamamlandı. Yeni belgeler havuzda kontrol bekliyor.");
           break;
         }
         const nextOffset = Number(response.nextOffset);
         if (!Number.isSafeInteger(nextOffset) || nextOffset <= offset) throw new Error("Belge sayfalama bilgisi doğrulanamadı.");
-        offset = nextOffset;
+        offset = nextOffset;setCursor(nextOffset);setHasMore(true);
       }
       if (!finished && !stopRef.current && last && !last.requiresReview) {
         setPhase("review");
@@ -100,7 +129,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
     } finally {
       setPassword(""); setRunning(false); busyRef.current = false;
     }
-  }, [enabled, tenant, password, from, to, ready, onSynced]);
+  }, [enabled, tenant, password, from, to, ready, onSynced, hasMore, cursor]);
 
   return <section className="eis" aria-label="İşNet belge alma">
     <header className="eis-head">
@@ -115,6 +144,25 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
         {!enabled ? "Entegrasyon pasif" : loading ? "Kontrol ediliyor" : ready ? "Firma tanımlı" : "Bağlantı kurulmalı"}
       </span>
     </div>
+    <div className="eis-connection-action">
+      <button type="button" disabled={Boolean(connectionBusy)||running} onClick={()=>setSetupOpen(x=>!x)}>
+        <LockKeyhole size={15}/>{ready?"Bağlantı ve Firma Ayarları":"İşNet Bağlantısını Kur"}
+      </button>
+      {!ready&&<small>Bir kez kullanıcı hesabını doğrulayın ve firmayı seçin; sonrasında aynı ekrandan belgeleri alın.</small>}
+    </div>
+    {setupOpen&&<section className="eis-setup" aria-label="İşNet bağlantısı ve firma seçimi">
+      <strong>İşNet bağlantısı</strong>
+      <p>İşNet portal hesabınızı doğrulayın. Şifre sadece test ve indirme süresince kullanılır; sunucuda kalıcı tutulmaz.</p>
+      <div className="eis-fields">
+        <label>Kullanıcı adı / TCKN<input value={account} autoComplete="section-isnet username" disabled={Boolean(connectionBusy)} onChange={event=>{setAccount(event.target.value);setVerified(false);}}/></label>
+        <label>Portal şifresi<input type="password" autoComplete="off" value={password} disabled={Boolean(connectionBusy)} onChange={event=>setPassword(event.target.value)}/></label>
+        <button type="button" disabled={Boolean(connectionBusy)||!account.trim()||!password} onClick={()=>void verifyAccount()}>{connectionBusy==="verify"?"Doğrulanıyor...":"Bağlantıyı Doğrula"}</button>
+        <label>Yetkili firma<select value={companyId} disabled={Boolean(connectionBusy)||!companies.length} onChange={event=>setCompanyId(event.target.value)}>
+          <option value="">Firma seçin</option>{companies.map(c=><option value={c.id} key={c.id}>{c.name}</option>)}
+        </select></label>
+        <button type="button" disabled={Boolean(connectionBusy)||!verified||!companyId} onClick={()=>void saveCompany()}>Firmayı Kaydet</button>
+      </div>
+    </section>}
     <div className="eis-types" aria-label="Alınacak belge türleri">
       {directions.map(({key,title,icon:Icon}) => <div className="eis-type" key={key}>
         <Icon size={17}/><span>{title}</span><strong>{summary ? number(summary.counts?.[key]) : "XML + PDF"}</strong>
@@ -133,7 +181,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
         <label>İşNet portal şifresi<input type="password" value={password} disabled={running || !enabled} autoComplete="off" placeholder="Yalnız bu işlem için" onChange={(event) => setPassword(event.target.value)}/></label>
       </div>
       <div className="eis-actions">
-        <button className="eis-primary" type="button" disabled={!canRun} onClick={() => void run()}><RefreshCw size={17} className={running ? "eis-spinning" : ""}/> {running ? "Belgeler aktarılıyor..." : "Belgeleri Al · XML + PDF"}</button>
+        <button className="eis-primary" type="button" disabled={!canRun} onClick={() => void run()}><RefreshCw size={17} className={running ? "eis-spinning" : ""}/> {running ? "Belgeler aktarılıyor..." : hasMore ? "Kaldığı Yerden Devam Et" : "Belgeleri Al · XML + PDF"}</button>
         {running && <button className="eis-secondary" type="button" onClick={() => { stopRef.current = true; setMessage("Mevcut aktarım bitince durdurulacak."); }}>Durdur</button>}
       </div>
     </div>
@@ -146,10 +194,11 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
         <span>İndirilen <b>{number(summary.downloaded)}</b></span>
         <span>Yeni havuz kaydı <b>{number(summary.totalAdded)}</b></span>
         <span>Mükerrer <b>{number(summary.totalDuplicates)}</b></span>
-        <span>Dosya hatası <b>{number(summary.failed)}</b></span>
+        <span>Dosya/havuz hatası <b>{number(summary.totalFailed)}</b></span>
       </div>}
       {running && progress.total > 0 && <progress max={progress.total} value={Math.min(progress.current,progress.total)} aria-label="Belge aktarım ilerlemesi"/>}
     </div>}
+    <div className="eis-actions"><button type="button" onClick={()=>openModule?.("e-belge",{tabKey:"eslestirmeler"})}><FileText size={16}/> Fatura–İrsaliye Eşleşmeleri</button></div>
     <footer className="eis-foot"><LockKeyhole size={15}/> İşNet şifresi kalıcı kaydedilmez. Belgeler kullanıcı onayı olmadan muhasebeleştirilmez; resmî fatura gönderimi yapılmaz.</footer>
   </section>;
 }

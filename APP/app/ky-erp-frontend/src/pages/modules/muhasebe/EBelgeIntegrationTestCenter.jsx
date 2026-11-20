@@ -42,10 +42,10 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   });
   setQuery(null);setMessage("");setRawXml("");setParsed(null);setFile(null);setSession(null);setShowXml(false);
   if(key==="ISNET"){
-   getIsnetSettings().then(r=>{if(live)setSession(r)}).catch(()=>{if(live)setSession({connectionMode:"unverified",sessionReady:false})});
+   getIsnetSettings(tenant).then(r=>{if(live)setSession(r)}).catch(()=>{if(live)setSession({connectionMode:"unverified",sessionReady:false})});
   }
   return()=>{live=false};
- },[key,activeMainCompany?.slug,activeMainCompany?.id,profile?.defaultDays]);
+ },[key,tenant,profile?.defaultDays]);
  const t=TYPES.find(x=>x.key===type)||TYPES[0];
  const tenant=activeMainCompany?.slug||activeMainCompany?.id||"";
  const chromeMode=key==="ISNET"&&getIsnetConnectionModePreference(tenant)!=="api";

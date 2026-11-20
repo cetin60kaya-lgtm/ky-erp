@@ -263,7 +263,7 @@ function cookieHeader(jar: Map<string, string>) {
   return [...jar.entries()].map(([key, value]) => `${key}=${value}`).join("; ");
 }
 
-async function loginPortal(username: string, password: string) {
+async function loginPortalOnBase(username: string, password: string, portalBase: string) {
   const jar = new Map<string, string>();
   const deadline = Date.now() + 25_000;
   const request = async (path: string, init: RequestInit = {}) => {
@@ -272,7 +272,7 @@ async function loginPortal(username: string, password: string) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), Math.min(8_000, remaining));
     try {
-      const response = await fetch(path.startsWith("http") ? path : `${PORTAL_BASE}${path}`, {
+      const response = await fetch(path.startsWith("http") ? path : `${portalBase}${path}`, {
         ...init,
         headers: {
           Accept: "text/html,application/xhtml+xml,application/json",
@@ -334,8 +334,8 @@ async function loginPortal(username: string, password: string) {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
-      Origin: PORTAL_BASE,
-      Referer: `${PORTAL_BASE}${loginPath}`,
+      Origin: portalBase,
+      Referer: `${portalBase}${loginPath}`,
     },
     body: form.toString(),
   });
@@ -348,8 +348,8 @@ async function loginPortal(username: string, password: string) {
         headers: {
           Accept: "application/json, text/javascript, */*; q=0.01",
           "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-          Origin: PORTAL_BASE,
-          Referer: `${PORTAL_BASE}${loginPath}`,
+          Origin: portalBase,
+          Referer: `${portalBase}${loginPath}`,
           "X-Requested-With": "XMLHttpRequest",
         },
         body: new URLSearchParams({ q: "" }).toString(),
@@ -377,6 +377,20 @@ async function loginPortal(username: string, password: string) {
     throw new Error("İşNet portalı kullanıcı/TCKN veya şifre bilgisini kabul etmedi.");
   }
   throw new Error("Portal girişi açıldı ancak yetkili firma listesi alınamadı.");
+}
+
+// Official portal host fallbacks are attempted only before password submission.
+// Never retry an authentication or MFA failure against a second service.
+async function loginPortal(username: string, password: string) {
+  let lastError: Error | null = null;
+  for (const base of ["https://efatura.isnet.net.tr", PORTAL_BASE]) {
+    try { return await loginPortalOnBase(username, password, base); }
+    catch (error: any) {
+      lastError = error instanceof Error ? error : new Error("İşNet portal kontrolü başarısız.");
+      if (!lastError.message.includes("Şifre doğrulaması başlamadı")) throw lastError;
+    }
+  }
+  throw lastError || new Error("İşNet giriş sayfasına ulaşılamıyor.");
 }
 
 async function loginIsnet(username: string, password: string, mode: string = "portal") {

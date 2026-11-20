@@ -156,7 +156,7 @@ export default function EBelgeIntegrationsWorkspace({
       const result = await loadModuleData({
         scope: `e-belge:${tenant}:entegrasyonlar`,
         sources: {
-          connection: { critical: true, load: () => getIsnetSettings() },
+          connection: { critical: true, load: () => getIsnetSettings(tenant) },
           business: { critical: true, load: () => getIsnetBusinessSettings(activeMainCompany) },
           companies: { fallback: [], load: () => fetchCompanies(activeMainCompany) },
           models: { fallback: [], load: () => fetchSharedModels(activeMainCompany, { limit: 3000 }) },
