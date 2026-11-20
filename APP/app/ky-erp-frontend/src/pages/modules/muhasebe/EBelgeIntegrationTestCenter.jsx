@@ -52,7 +52,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
  const available=key==="ISNET"&&session?.connectionMode==="api"&&session.sessionReady===true&&Boolean(session.companyId);
  const periodValid=dates.from&&dates.to&&dates.from<=dates.to&&(Date.parse(dates.to)-Date.parse(dates.from))<=31*86400000;
  const remoteAllowed=available&&!chromeMode&&profile?.workflow!=="DISABLED";
- const reset=()=>{setQuery(null);setRawXml("");setParsed(null);setMessage("");setShowXml(false)};
+ const reset=()=>{setQuery(null);setRawXml("");setParsed(null);setFile(null);setMessage("");setShowXml(false);setPdfUrl("")};
  const runQuery=async()=>{
   if(busy||!remoteAllowed||!periodValid)return;
   setBusy("list");reset();
@@ -119,7 +119,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
  const testEnabled=profile?.workflow!=="DISABLED";
  return <section className="itc" aria-label="Belge Test Merkezi">
   <header><div><small>ORTAK TEST ORTAMI / {adapter?.label}</small><h3>Belge Test Merkezi</h3>
-    <p>Bağlantı, dört belge türü, gerçek XML okuma ve PDF önizleme aynı alanda. Testler resmî gönderim veya muhasebe kaydı yapmaz.</p></div><FileSearch size={24}/></header>
+    <p>XML ve PDF dosyalarını burada yalnız kontrol edin. İşNet&#39;ten otomatik alma ve orijinal arşiv için <b>Belgeleri Al</b> ekranını kullanın.</p></div><FileSearch size={24}/></header>
   <div className="itc-categories">{TYPES.map(x=><button key={x.key} type="button" className={type===x.key?"active":""}
    onClick={()=>{setType(x.key);reset()}}>{x.name}</button>)}</div>
   {key==="ISNET"&&chromeMode&&<div className="itc-chrome" role="status">
@@ -129,7 +129,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
     </div>
     <a href="https://nettefatura.isnet.net.tr/" target="_blank" rel="noopener noreferrer">NetteFatura'yı Chrome'da Aç</a>
     {onOpenSync&&<button type="button" onClick={onOpenSync}>KY ERP İşNet Belgeleri Al Ekranı</button>}
-    <small>Portal oturumu KY ERP tarafından doğrulanamaz. Otomatik belge listesi/çekimi için ayrıca yetkili tarayıcı bağlantısı gerekir; bu modda “Listeyi Test Et” kullanılmaz.</small>
+    <small>Bu alan, bilgisayarınızdan seçtiğiniz dosyaları inceler. Gerçek portal giriş testi ve XML/PDF arşivleme ayrı ana işlemde yapılır.</small>
   </div>}
   {key==="ISNET"&&!chromeMode&&<div className="itc-remote">
    <div className="itc-status"><ShieldCheck size={16}/><span>{!session?"API durumu okunuyor...":available
@@ -160,7 +160,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
    ?"Manuel kaynak: XML/PDF dosyasını seçin. Dosya yerel tarayıcıda test edilir."
    :"Bu entegratörün API sürücüsü henüz yok. Ortak dosya testi yapılabilir; canlı sorgu yapılamaz."}</span></div>}
   {!testEnabled&&<div className="itc-status">Çalışma profili pasif. Dosya testleri yalnız kontrol amaçlı yapılabilir.</div>}
-  <div className="itc-file"><label>Yerel XML / PDF Dosyası
+  <div className="itc-file"><label>Dosya Kontrolü · XML veya PDF Seç
     <input type="file" accept=".xml,.pdf,application/xml,application/pdf" disabled={Boolean(busy)}
       onChange={e=>{void validateFile(e.target.files?.[0]);e.target.value=""}}/>
   </label><small>Orijinal dosya üretime veya GitHub'a gönderilmez; testten sonra sayfayı kapatınca geçici önizleme silinir.</small></div>
@@ -168,15 +168,21 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   {parsed&&<div className="itc-summary"><strong>{parsed.kind==="INVOICE"?"Fatura":"İrsaliye"} · {parsed.number}</strong>
     <span>Tarih: {parsed.date} · Kalem: {parsed.lines?.length||0} · ETTN: {parsed.uuid||"Belirtilmedi"}</span>
     <span>Düzenleyen: {parsed.supplier?.name||"Belirtilmedi"}</span>
-   {onOpenVisualStudio&&<button type="button" className="itc-visual-link" onClick={onOpenVisualStudio}>
-     Bu Firma İçin Görsel Şablonu Aç / Düzenle
-   </button>}</div>}
+</div>}
   {file&&<div className="itc-actions">
    {rawXml&&<button type="button" onClick={()=>setShowXml(x=>!x)}><Eye size={15}/> {showXml?"XML'i Kapat":"XML Aç"}</button>}
    {rawXml&&<button type="button" onClick={()=>saveBlob(new Blob([rawXml],{type:"application/xml"}),file.name)}><Download size={15}/> XML İndir</button>}
    <button type="button" disabled={Boolean(busy)} onClick={()=>void previewPdf()}>
     {busy==="pdf"?<LoaderCircle size={15}/>:<FileText size={15}/>} {file.type==="application/pdf"?"PDF Aç":"PDF Önizle"}</button>
   </div>}
+  {key==="ISNET"&&<div className="itc-original-policy">
+    <CheckCircle2 size={16}/><span>İşNet'in orijinal PDF'si varsa ayrıca şablon oluşturulmaz. XML ve PDF aynı belgeyle birlikte arşivlenir. Bu test, tarayıcıdaki geçici dosyayı inceler.</span>
+  </div>}
+  {onOpenVisualStudio&&<details className="itc-advanced">
+    <summary>İleri araçlar · Görsel şablon (isteğe bağlı)</summary>
+    <p>Yalnız orijinal PDF'si bulunmayan XML dosyaları için özel kontrol görünümü gerekiyorsa kullanın. Şablon, İşNet'ten alınan orijinal belgeyi değiştirmez.</p>
+    <button type="button" className="itc-visual-link" onClick={onOpenVisualStudio}>Görsel Şablonları Düzenle</button>
+  </details>}
   {showXml&&rawXml&&<pre className="itc-xml" aria-label="XML içeriği">{rawXml.slice(0,12000)}{rawXml.length>12000?"\n... [Önizleme 12.000 karakterle sınırlı]":""}</pre>}
   {pdfUrl&&<iframe className="itc-pdf" src={pdfUrl} title="Belge kontrol PDF önizlemesi" />}
  </section>;
