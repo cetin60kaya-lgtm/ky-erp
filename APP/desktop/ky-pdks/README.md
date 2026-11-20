@@ -1,3 +1,15 @@
+# KY ERP Masaüstü 1.5.1 — Tek Kurulum / Yerel Entegrasyon Merkezi
+
+Mevcut **KY ERP Masaüstü** tek paket: WPF/WebView2 ERP, PDKS cihaz Agent, gömülü Node 24, İşNet NetteFatura portal adaptörü, File Hub Agent, muhasebe arşivi ve PSD önizleme. Kullanıcının ayrıca Node kurması gerekmez. Ayrıntı ve gerçek test/yayın sınırı: `DOCS/KY_ERP_MASAUSTU_TEK_KURULUM_YEREL_MERKEZ_20261120.md`.
+
+**Yeni yerel ekran:** Sol menü **Sistem → Yerel Dosya ve Yedek Merkezi**. Kullanıcı Windows klasör seçicisinden belirli dizini ve amacını onaylar. Muhasebe/kod/desen dosyaları için salt-okunur inceleme, metin/XML/JSON/CSV/SQL arama, yalnız seçili dosyanın önizlemesi; yedek hedefi için ayrı yazma izni. Yedek, SHA-256 manifestli tarihli bir dosya snapshotıdır; mevcut dosya silinmez ve **Cloudflare D1 tam veritabanı yedeği değildir**.
+
+**Başlatma:** `KY ERP → Yerel Dosya ve Yedek Merkezi → Entegrasyonları Şimdi Başlat`. İstenirse aynı ekrandan Windows oturum açılışında otomatik başlatma işaretlenir. Kurulum kendiliğinden gizli başlangıç görevi oluşturmaz. Arka plan File Hub için mevcut yetkili agent anahtarı + kullanıcı onaylı File Hub klasörü gerekir. İşNet şifresi dosyaya, GitHub'a veya chat'e kaydedilmez.
+
+**Windows derleme kabulü (20.11.2026):** .NET 8 xUnit 14/14, Node yerel izin testleri 5/5; WPF Release derleme 0 hata; Inno Setup 6 tek Setup.exe (1.5.1) SHA-256 doğrulandı. Setup Authenticode **imzasız** ve henüz gerçek sisteme kurulup operasyonel kabul edilmedi. Installer'ın mevcut PDKS hizmeti yeniden kaydetme davranışı nedeniyle canlı terminal bilgisayarına kurulmadan önce PDKS bakım kontrolü gerekir.
+
+---
+
 # KY PDKS 1.3.0 — Windows Masaüstü
 
 KY ERP'nin PDKS modülüyle aynı D1 iş verisini kullanan gerçek Windows masaüstü uygulamasıdır. Windows tarafındaki SQLite ikinci personel/izin/avans/bordro veritabanı değildir; yalnız ham kart, offline kuyruk, cache, log ve yedek içindir.

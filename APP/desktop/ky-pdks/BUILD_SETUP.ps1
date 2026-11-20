@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.5.0'
+$Version = '1.5.1'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
@@ -15,6 +15,8 @@ $TestProject = Join-Path $Root 'src\KyPdks.Tests\KyPdks.Tests.csproj'
 $DesktopOut = Join-Path $Dist 'desktop'
 $AgentOut = Join-Path $Dist 'agent'
 $InstallerOut = Join-Path $Dist 'setup'
+$IntegrationOut = Join-Path $Dist 'integrations'
+$RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 
 function Invoke-Native {
     param(
@@ -41,6 +43,9 @@ Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 New-Item $DesktopOut -ItemType Directory -Force | Out-Null
 New-Item $AgentOut -ItemType Directory -Force | Out-Null
 New-Item $InstallerOut -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'bin') -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'file-hub-agent') -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'isnet') -ItemType Directory -Force | Out-Null
 
 Write-Host '1/5 Restore ve derleme...' -ForegroundColor Cyan
 Invoke-Native 'Shared restore' { dotnet restore $SharedProject }
@@ -63,15 +68,55 @@ Write-Host '3/5 Self-contained Windows publish...' -ForegroundColor Cyan
 Invoke-Native 'Desktop publish' { dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $DesktopOut }
 Invoke-Native 'Agent publish' { dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut }
 
-$DesktopExe = Join-Path $DesktopOut 'KY ERP Masaüstü.exe'
+$DesktopCandidate = @(Get-ChildItem -LiteralPath $DesktopOut -Filter '*.exe' -File | Where-Object { $_.Name.StartsWith('KY ERP ', [StringComparison]::OrdinalIgnoreCase) })
+if ($DesktopCandidate.Count -ne 1) { throw "KY ERP Desktop EXE sayisi beklenenden farkli: $($DesktopCandidate.Count)" }
+$DesktopExe = $DesktopCandidate[0].FullName
 $AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
-if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $DesktopExe" }
 if (-not (Test-Path $AgentExe)) { throw "PDKS cihaz agentı oluşmadı: $AgentExe" }
 
 $DesktopVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($DesktopExe).ProductVersion
 $AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($AgentExe).ProductVersion
 if (-not ([string]$DesktopVersion).StartsWith($Version)) { throw "Desktop sürümü yanlış: $DesktopVersion" }
 if (-not ([string]$AgentVersion).StartsWith($Version)) { throw "Agent sürümü yanlış: $AgentVersion" }
+
+Write-Host '3a/5 KY ERP entegrasyon paketini ekle...' -ForegroundColor Cyan
+$NodeTool = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $NodeTool) { throw 'Kurulum derlemesinde Node >= 22 bulunmalı; kullanıcı bilgisayarında ayrıca Node kurulmayacak.' }
+$NodeExe = [string]$NodeTool.Source
+$NodeVersion = [version]((& $NodeExe --version).Trim().TrimStart('v'))
+if ($NodeVersion.Major -lt 22) { throw "Entegrasyon paketi Node 22+ gerektirir: $NodeVersion" }
+$NodeLicense = Join-Path (Split-Path -Parent $NodeExe) 'LICENSE'
+$EmbeddedLicense = Join-Path $IntegrationOut 'bin\NODE-LICENSE.txt'
+Copy-Item -LiteralPath $NodeExe -Destination (Join-Path $IntegrationOut 'bin\node.exe') -Force
+if (Test-Path -LiteralPath $NodeLicense) {
+    Copy-Item -LiteralPath $NodeLicense -Destination $EmbeddedLicense -Force
+} else {
+    # The Windows MSI can install node.exe without its LICENSE file. Fetch
+    # the matching version's official open-source notices from Node's repo.
+    $NodeTag = 'v' + $NodeVersion.ToString()
+    $LicenseUri = "https://raw.githubusercontent.com/nodejs/node/$NodeTag/LICENSE"
+    try { Invoke-WebRequest -UseBasicParsing -Uri $LicenseUri -OutFile $EmbeddedLicense -TimeoutSec 25 }
+    catch { throw "Node $NodeTag resmî lisans metni indirilemedi; Setup paketlenmedi." }
+    if ((Get-Item $EmbeddedLicense).Length -lt 1500) { throw 'Node lisans dosyası eksik veya geçersiz.' }
+}
+$HubSources = @('file-hub-agent.mjs','local-folder-authorization.mjs',
+    'accounting-archive-worker.mjs','psd-preview-worker.mjs','psd-composite-preview.mjs')
+foreach ($file in $HubSources) {
+    $source = Join-Path $RepoRoot "tools\file-hub-agent\$file"
+    if (-not (Test-Path -LiteralPath $source)) { throw "File Hub dosyası eksik: $file" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $IntegrationOut "file-hub-agent\$file") -Force
+    Invoke-Native "Node kontrol: $file" { & $NodeExe --check $source }
+}
+$PortalSource = Join-Path $RepoRoot 'TOOLS\isnet-portal-adapter\server.mjs'
+if (-not (Test-Path -LiteralPath $PortalSource)) { throw 'İşNet yerel portal adaptörü bulunamadı.' }
+Copy-Item -LiteralPath $PortalSource -Destination (Join-Path $IntegrationOut 'isnet\server.mjs') -Force
+Invoke-Native 'İşNet adaptör Node kontrolü' { & $NodeExe --check $PortalSource }
+foreach ($file in @('start-kyerp-integrations.ps1','start-kyerp-integrations-hidden.vbs')) {
+    $source = Join-Path $Root "integrations\$file"
+    if (-not (Test-Path -LiteralPath $source)) { throw "Başlatıcı eksik: $file" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $IntegrationOut $file) -Force
+}
+# No .env, tenant secret, Windows credential or browser session is packaged.
 
 Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
@@ -111,6 +156,9 @@ $BuildInfo = [ordered]@{
     sha256 = $Hash
     desktopVersion = [string]$DesktopVersion
     agentVersion = [string]$AgentVersion
+    embeddedNodeVersion = $NodeVersion.ToString()
+    integrationModules = @('ISNET_PORTAL', 'FILE_HUB', 'ACCOUNTING_ARCHIVE', 'PSD_PREVIEW')
+    folderGrantsRequired = $true
     desktop = (Get-Item $DesktopExe).Length
     agent = (Get-Item $AgentExe).Length
 }

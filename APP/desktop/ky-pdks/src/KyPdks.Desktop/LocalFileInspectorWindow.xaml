@@ -1,0 +1,45 @@
+<Window x:Class="KyPdks.Desktop.LocalFileInspectorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KY ERP · İzinli Yerel Dosya İnceleme"
+        Width="1030" Height="790" MinWidth="780" MinHeight="600"
+        WindowStartupLocation="CenterOwner" Background="#F5F8FC">
+    <Grid Margin="19">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+            <RowDefinition Height="1.1*"/><RowDefinition Height="0.9*"/><RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" Margin="0,0,0,13">
+            <TextBlock Text="Yerel Dosya İnceleme" FontSize="23" FontWeight="Bold" Foreground="#193B59"/>
+            <TextBlock x:Name="RootLabel" TextWrapping="Wrap" FontSize="12" Foreground="#5C758B" Margin="0,5,0,0"/>
+        </StackPanel>
+        <DockPanel Grid.Row="1" Margin="0,0,0,10">
+            <Button DockPanel.Dock="Right" Content="Dosyaları Ara" Click="Search_Click" Padding="12,8"/>
+            <Button DockPanel.Dock="Right" Content="Seçili Metni Aç" Click="Read_Click" Padding="12,8" Margin="6,0"/>
+            <TextBox x:Name="QueryInput" Padding="10,8" VerticalContentAlignment="Center"
+                ToolTip="Dosya adı veya göreli yol içinde ara; en fazla 200 sonuç"/>
+        </DockPanel>
+        <DataGrid Grid.Row="2" x:Name="ResultsGrid" IsReadOnly="True" AutoGenerateColumns="False"
+                  SelectionMode="Single" CanUserAddRows="False" BorderBrush="#DCE7F2"
+                  GridLinesVisibility="Horizontal">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Göreli klasör / Dosya" Binding="{Binding RelativePath}" Width="*"/>
+                <DataGridTextColumn Header="Boyut (bayt)" Binding="{Binding SizeBytes}" Width="120"/>
+                <DataGridTextColumn Header="Son değişiklik" Binding="{Binding LastModifiedAt}" Width="170"/>
+            </DataGrid.Columns>
+        </DataGrid>
+        <Border Grid.Row="3" BorderBrush="#DCE7F2" BorderThickness="1" Background="White"
+                CornerRadius="8" Padding="8" Margin="0,12,0,0">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="Salt okunur içerik · Kod, XML, JSON, CSV, SQL, metin · En fazla 256 KB"
+                           FontSize="12" FontWeight="SemiBold" Foreground="#305673" Margin="5,4,5,8"/>
+                <TextBox x:Name="PreviewText" IsReadOnly="True" AcceptsReturn="True"
+                         VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                         FontFamily="Consolas" FontSize="12" TextWrapping="NoWrap" BorderThickness="0"/>
+            </DockPanel>
+        </Border>
+        <TextBlock Grid.Row="4" x:Name="StatusText" Margin="0,12,0,0" FontSize="12"
+                   Foreground="#335E7C" TextWrapping="Wrap"
+                   Text="İşlem başlatılmadı. Dosya içeriği yalnız bu Windows ekranında görüntülenir; buluta otomatik gönderilmez."/>
+    </Grid>
+</Window>

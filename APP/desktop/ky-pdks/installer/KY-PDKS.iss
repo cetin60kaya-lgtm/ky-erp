@@ -1,5 +1,5 @@
 #define MyAppName "KY ERP Masaüstü"
-#define MyAppVersion "1.5.0"
+#define MyAppVersion "1.5.1"
 #define MyPublisher "KY ERP"
 #define Dist GetEnv("KY_PDKS_DIST")
 #define SetupOut GetEnv("KY_PDKS_SETUP_OUT")
@@ -9,9 +9,9 @@ AppId={{7B558935-8DD5-4D1F-9A62-A1D79EE27C10}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppVerName={#MyAppName} {#MyAppVersion}
-VersionInfoVersion=1.5.0.0
+VersionInfoVersion=1.5.1.0
 VersionInfoCompany={#MyPublisher}
-VersionInfoDescription=KY ERP Masaüstü • ERP + PDKS + offline senkron merkezi
+VersionInfoDescription=KY ERP Masaüstü • ERP + İşNet + Dosya Merkezi + PDKS + yerel yedek
 AppPublisher={#MyPublisher}
 AppPublisherURL=https://kyerp.net
 AppSupportURL=https://kyerp.net
@@ -46,13 +46,16 @@ Name: "{commonappdata}\KY ERP\PDKS\Reports"; Permissions: users-modify
 [Files]
 Source: "{#Dist}\desktop\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "{#Dist}\agent\*"; DestDir: "{app}\Agent"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#Dist}\integrations\*"; DestDir: "{app}\Integrations"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\KY ERP\KY ERP Masaüstü"; Filename: "{app}\KY ERP Masaüstü.exe"
 Name: "{autodesktop}\KY ERP Masaüstü"; Filename: "{app}\KY ERP Masaüstü.exe"; Tasks: desktopicon
+Name: "{autoprograms}\KY ERP\Entegrasyon Merkezini Başlat"; Filename: "{sys}\wscript.exe"; Parameters: """{app}\Integrations\start-kyerp-integrations-hidden.vbs"""
 
 [Tasks]
 Name: "desktopicon"; Description: "Masaüstünde KY ERP Masaüstü kısayolu oluştur"; GroupDescription: "Kısayollar:"; Flags: checkedonce
+
 
 [Run]
 Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent durduruluyor..."

@@ -434,6 +434,23 @@ public partial class KyErpShellWindow : Window
         await TryRefreshIdentityAsync();
     }
 
+    private async void LocalCenterButton_Click(object sender, RoutedEventArgs e)
+    {
+        // A local folder permission is separate from cloud/ERP authorization.
+        // The current Windows user must approve each individual folder in the dialog.
+        var company=await GetWebStorageValueAsync("kyerp.activeCompany");
+        if (company.StartsWith("{", StringComparison.Ordinal))
+        {
+            try
+            {
+                using var json = JsonDocument.Parse(company);
+                company = FirstText(json.RootElement, "slug", "mainCompanySlug", "id");
+            }
+            catch { company = ""; }
+        }
+        new LocalFolderWindow(company) { Owner = this }.ShowDialog();
+    }
+
     private async void NativePdksButton_Click(object sender, RoutedEventArgs e)
     {
         await TryRefreshIdentityAsync();

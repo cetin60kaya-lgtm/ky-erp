@@ -4,6 +4,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { approvedLocalFileHubRoots } from "./local-folder-authorization.mjs";
 
 const VERSION = "1.3.0";
 const API = String(process.env.KYERP_API_URL || "https://api.kyerp.net").replace(/\/+$/, "");
@@ -205,7 +206,7 @@ async function heartbeat(connections, lastError="") {
   });
 }
 
-const connections = await loadConfig();
+const connections = approvedLocalFileHubRoots(await loadConfig(), {mode:"read"});
 console.log(`KY File Agent ${VERSION} | Firma=${COMPANY} | Cihaz=${DEVICE} | Kaynak=${connections.length}`);
 let lastError = "";
 await heartbeat(connections);

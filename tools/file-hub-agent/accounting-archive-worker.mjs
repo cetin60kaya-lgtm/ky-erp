@@ -4,6 +4,7 @@ import fsp from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
 import crypto from "node:crypto";
+import { approvedLocalFileHubRoots } from "./local-folder-authorization.mjs";
 
 const API=String(process.env.KYERP_API_URL||"https://api.kyerp.net").replace(/\/+$/,"");
 const KEY=String(process.env.KYERP_AGENT_KEY||"").trim();
@@ -25,11 +26,11 @@ async function config(){
     const rows=Array.isArray(raw)?raw:Array.isArray(raw.connections)?raw.connections:[];
     const map=new Map();
     for(const row of rows){const id=String(row.storageConnectionId||row.id||"").trim(),root=String(row.rootPath||row.localRootPath||"").trim();if(id&&root)map.set(id,path.resolve(root));}
-    if(map.size)return map;
+    if(map.size)return new Map(approvedLocalFileHubRoots([...map].map(([storageConnectionId,rootPath])=>({storageConnectionId,rootPath})),{mode:"write"}).map(c=>[c.storageConnectionId,c.rootPath]));
   }
   const response=await fetch(`${API}/api/auth/file-hub-agent/config`,{method:"POST",headers:{"Content-Type":"application/json","X-KYERP-Agent-Key":KEY,"X-KYERP-Tenant-Slug":COMPANY},body:JSON.stringify({mainCompanySlug:COMPANY,deviceName:DEVICE})});
   const payload=await response.json(); if(!response.ok||payload?.ok===false)throw new Error(payload?.error?.message||`HTTP ${response.status}`);
-  return new Map((payload?.data?.connections||[]).map(row=>[String(row.storageConnectionId),path.resolve(String(row.rootPath))]));
+  return new Map(approvedLocalFileHubRoots((payload?.data?.connections||[]).map(row=>({storageConnectionId:String(row.storageConnectionId),rootPath:path.resolve(String(row.rootPath))})),{mode:"write"}).map(c=>[c.storageConnectionId,c.rootPath]));
 }
 async function post(endpoint,payload={}){
   const response=await fetch(`${API}${endpoint}`,{method:"POST",headers:{"Content-Type":"application/json","X-KYERP-Agent-Key":KEY,"X-KYERP-Tenant-Slug":COMPANY},body:JSON.stringify({mainCompanySlug:COMPANY,deviceName:DEVICE,...payload})});
