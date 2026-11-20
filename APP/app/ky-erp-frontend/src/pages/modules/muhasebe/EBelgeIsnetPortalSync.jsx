@@ -52,8 +52,9 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
   }, [tenant]);
 
   const ready = Boolean(settings?.username && settings?.companyId && settings?.companyName);
-  const canRun = enabled && tenant && ready && !loading && !running && !connectionBusy;
-  const preset = (days) => { setFrom(daysAgo(days)); setTo(daysAgo(0)); setPhase("idle"); setMessage("");setCursor(0);setHasMore(false);setSummary(null); };
+  const canRun = enabled && tenant && ready && !loading && !running && !connectionBusy && !setupOpen;
+  const resetPeriod=()=>{setPhase("idle");setMessage("");setCursor(0);setHasMore(false);setSummary(null);setProgress({current:0,total:0});};
+  const preset = (days) => { setFrom(daysAgo(days)); setTo(daysAgo(0));resetPeriod(); };
   const verifyAccount=async()=>{
     if(connectionBusy||running||!account.trim()||!password.trim())return;
     setConnectionBusy("verify");setMessage("");setPhase("idle");
@@ -145,6 +146,9 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
         <p>Gelen ve giden faturalar ile irsaliyeler. Orijinal XML + PDF, tek işlem.</p></div>
       <button className="eis-secondary" type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}><FolderOpen size={16}/> Belge Havuzu</button>
     </header>
+    <div className="eis-steps" aria-label="İşNet belge aktarım adımları">
+      <span><b>1</b> Firma bağlantısı</span><span><b>2</b> XML + PDF'yi al</span><span><b>3</b> Havuzda kontrol et</span>
+    </div>
     <div className="eis-status">
       <div className="eis-company"><span>Seçili İşNet firması</span><strong>{loading ? "Kontrol ediliyor..." : settings?.companyName || "Firma bağlantısı eksik"}</strong></div>
       <span className={"eis-chip " + (!enabled ? "eis-chip-warn" : ready ? "eis-chip-ok" : "eis-chip-warn")}>
@@ -170,22 +174,23 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
         <button type="button" disabled={Boolean(connectionBusy)||!verified||!companyId} onClick={()=>void saveCompany()}>Firmayı Kaydet</button>
       </div>
     </section>}
+    <div className="eis-archive-policy"><CheckCircle2 size={16}/><span>İşNet'in verdiği <b>orijinal XML ve PDF</b> aynı belge kartında korunur. PDF için yeni şablon oluşturmak gerekmez. Eksik dosya varsa ayrıca gösterilir.</span></div>
     <div className="eis-types" aria-label="Alınacak belge türleri">
       {directions.map(({key,title,icon:Icon}) => <div className="eis-type" key={key}>
         <Icon size={17}/><span>{title}</span><strong>{summary ? number(summary.counts?.[key]) : "XML + PDF"}</strong>
       </div>)}
     </div>
     <div className="eis-work">
-      <div className="eis-work-title"><strong>1. Tarih ve bağlantı</strong><small>Bir sorguda en fazla 31 gün</small></div>
+      <div className="eis-work-title"><strong>2. Belgelerin tarih aralığı</strong><small>Bir sorguda en fazla 31 gün</small></div>
       <div className="eis-presets">
         <button type="button" disabled={running} onClick={() => preset(0)}>Bugün</button>
         <button type="button" disabled={running} onClick={() => preset(7)}>Son 7 gün</button>
         <button type="button" disabled={running} onClick={() => preset(30)}>Son 30 gün</button>
       </div>
       <div className="eis-fields">
-        <label>Başlangıç<input type="date" value={from} disabled={running} onChange={(event) => setFrom(event.target.value)}/></label>
-        <label>Bitiş<input type="date" value={to} disabled={running} onChange={(event) => setTo(event.target.value)}/></label>
-        <label>İşNet portal şifresi<input type="password" value={password} disabled={running || !enabled} autoComplete="off" placeholder="Yalnız bu işlem için" onChange={(event) => setPassword(event.target.value)}/></label>
+        <label>Başlangıç<input type="date" value={from} disabled={running} onChange={(event) => {setFrom(event.target.value);resetPeriod();}}/></label>
+        <label>Bitiş<input type="date" value={to} disabled={running} onChange={(event) => {setTo(event.target.value);resetPeriod();}}/></label>
+        {!setupOpen&&<label>İşNet portal şifresi<input type="password" value={password} disabled={running || !enabled} autoComplete="off" placeholder="Yalnız bu işlem için" onChange={(event) => setPassword(event.target.value)}/></label>}
       </div>
       <div className="eis-actions">
         <button className="eis-primary" type="button" disabled={!canRun} onClick={() => void run()}><RefreshCw size={17} className={running ? "eis-spinning" : ""}/> {running ? "Belgeler aktarılıyor..." : hasMore ? "Kaldığı Yerden Devam Et" : "Belgeleri Al · XML + PDF"}</button>
@@ -198,7 +203,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
       {message && <p>{message}</p>}
       {summary && <div className="eis-result-stats">
         <span>Listelenen <b>{number(summary.portalCount)}</b></span>
-        <span>İndirilen <b>{number(summary.downloaded)}</b></span>
+        <span>XML + PDF tam <b>{number(summary.downloaded)}</b></span>
         <span>Yeni havuz kaydı <b>{number(summary.totalAdded)}</b></span>
         <span>Mükerrer <b>{number(summary.totalDuplicates)}</b></span>
         <span>Dosya/havuz hatası <b>{number(summary.totalFailed)}</b></span>
