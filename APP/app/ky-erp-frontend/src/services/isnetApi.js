@@ -36,3 +36,8 @@ export const downloadIsnetReadOnlyXmlSample = (kind,from="",to="",direction="inc
 
 export const queryIsnetDocumentTest = (type,from,to) =>
  apiGet("/isnet/document-test",{type,from,to},{forceFresh:true,timeoutMs:25000}).then(unwrap);
+
+// Manual, bounded and tenant-scoped portal sync. Credentials are sent only to KY ERP HTTPS Worker,
+// used for one request, and must not be persisted in D1, localStorage or logs.
+export const syncIsnetPortalBatch = ({mainCompanySlug, password, startDate, endDate, offset = 0}) =>
+  apiPost("/isnet/full-sync", {mainCompanySlug, password, startDate, endDate, offset}, {timeoutMs: 110_000}).then(unwrap);
