@@ -20,6 +20,7 @@ const saveBlob=(blob,name)=>{
 };
 export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,profile,onOpenVisualStudio}){
  const key=adapter?.key||"";
+ const tenant=activeMainCompany?.slug||activeMainCompany?.id||"";
  const [type,setType]=useState("incoming-invoice");
  const [dates,setDates]=useState(()=>{
   const now=new Date();return {from:day(new Date(now.getTime()-7*86400000)),to:day(now)};
@@ -47,7 +48,6 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   return()=>{live=false};
  },[key,tenant,profile?.defaultDays]);
  const t=TYPES.find(x=>x.key===type)||TYPES[0];
- const tenant=activeMainCompany?.slug||activeMainCompany?.id||"";
  const chromeMode=key==="ISNET"&&getIsnetConnectionModePreference(tenant)!=="api";
  const available=key==="ISNET"&&session?.connectionMode==="api"&&session.sessionReady===true&&Boolean(session.companyId);
  const periodValid=dates.from&&dates.to&&dates.from<=dates.to&&(Date.parse(dates.to)-Date.parse(dates.from))<=31*86400000;
