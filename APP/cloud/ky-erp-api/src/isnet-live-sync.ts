@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { ingestProviderEBelgeXml } from "./e-belge-center-cloud";
 import { MAX_ISNET_DOCUMENT_BYTES, verifyIsnetDownloadedFile } from "./isnet-file-validation";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { classifyIsnetPortalFailure } from "./isnet-portal-safe-diagnostics";
 import { accountingAccess, accountingTenantReadAllowed } from "./accounting-access-policy";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -1055,24 +1056,9 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
       session = await portalLogin(username, password, companyId, companyName);
       if (!session.companySelected) throw new Error("Firma oturumu doğrulanamadı.");
     } catch (failure: any) {
-      // A valid password in the local probe does not prove Worker egress/cookie
-      // support. Report the failed stage, not an invented "wrong password".
-      const reason = text(failure?.message).toLocaleLowerCase("tr-TR");
-      const formUnavailable = /giriş sayfası|doğrulama anahtarı|zaman aşımı|timeout|fetch failed|network/i.test(reason);
-      const companyUnverified = /firma listesi|yetkili firma|yetki listesi/i.test(reason);
-      const selectionUnverified = /firma seçimi|firma oturumu|oturumu doğrulanamadı/i.test(reason);
-      const securityChallenge = /ek güvenlik|captcha|doğrulama kodu/i.test(reason);
-      const code = formUnavailable ? "ISNET_PORTAL_FORM_UNAVAILABLE"
-        : companyUnverified ? "ISNET_PORTAL_COMPANIES_UNVERIFIED"
-        : selectionUnverified ? "ISNET_PORTAL_COMPANY_SESSION_UNVERIFIED"
-        : securityChallenge ? "ISNET_PORTAL_SECURITY_CHALLENGE"
-        : "ISNET_PORTAL_SESSION_UNVERIFIED";
-      const message = formUnavailable ? "İşNet giriş formuna KY ERP bulut sunucusundan erişilemedi. Şifre yanlış olarak değerlendirilmedi."
-        : companyUnverified ? "İşNet portalında yetkili firma listesi alınamadı. Oturum ve çerez doğrulaması gerekli."
-        : selectionUnverified ? "Firma seçimi veya portal oturumu doğrulanamadı. Kaydedilmiş firma kaydı korunuyor."
-        : securityChallenge ? "İşNet ek güvenlik doğrulaması istiyor; otomatik oturum doğrulanamadı."
-        : "İşNet bulut portal oturumu doğrulanamadı. Şifrenin yanlış olduğu kanıtlanmadı.";
-      return c.json(err(code, message), 502);
+      // Exact, secret-free stage names instead of claiming the password is wrong.
+      const {code,message}=classifyIsnetPortalFailure(failure);
+      return c.json(err(code,message),502);
     }
     const cookie = session.cookie;
     const base = session.base;
