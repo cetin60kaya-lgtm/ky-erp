@@ -15,6 +15,8 @@ $TestProject = Join-Path $Root 'src\KyPdks.Tests\KyPdks.Tests.csproj'
 $DesktopOut = Join-Path $Dist 'desktop'
 $AgentOut = Join-Path $Dist 'agent'
 $InstallerOut = Join-Path $Dist 'setup'
+$IntegrationOut = Join-Path $Dist 'integrations'
+$RepoRoot = (Resolve-Path (Join-Path $Root '..\..\..')).Path
 
 function Invoke-Native {
     param(
@@ -41,6 +43,9 @@ Remove-Item $Dist -Recurse -Force -ErrorAction SilentlyContinue
 New-Item $DesktopOut -ItemType Directory -Force | Out-Null
 New-Item $AgentOut -ItemType Directory -Force | Out-Null
 New-Item $InstallerOut -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'bin') -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'file-hub-agent') -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'isnet') -ItemType Directory -Force | Out-Null
 
 Write-Host '1/5 Restore ve derleme...' -ForegroundColor Cyan
 Invoke-Native 'Shared restore' { dotnet restore $SharedProject }
@@ -72,6 +77,37 @@ $DesktopVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($DesktopExe).Pro
 $AgentVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($AgentExe).ProductVersion
 if (-not ([string]$DesktopVersion).StartsWith($Version)) { throw "Desktop sürümü yanlış: $DesktopVersion" }
 if (-not ([string]$AgentVersion).StartsWith($Version)) { throw "Agent sürümü yanlış: $AgentVersion" }
+
+Write-Host '3a/5 KY ERP entegrasyon paketini ekle...' -ForegroundColor Cyan
+$NodeTool = Get-Command node.exe -ErrorAction SilentlyContinue
+if (-not $NodeTool) { throw 'Kurulum derlemesinde Node >= 22 bulunmalı; kullanıcı bilgisayarında ayrıca Node kurulmayacak.' }
+$NodeExe = [string]$NodeTool.Source
+$NodeVersion = [version]((& $NodeExe --version).Trim().TrimStart('v'))
+if ($NodeVersion.Major -lt 22) { throw "Entegrasyon paketi Node 22+ gerektirir: $NodeVersion" }
+$NodeLicense = Join-Path (Split-Path -Parent $NodeExe) 'LICENSE'
+if (-not (Test-Path -LiteralPath $NodeLicense)) {
+    throw 'Node yeniden dağıtım LICENSE dosyası derleme bilgisayarında eksik.'
+}
+Copy-Item -LiteralPath $NodeExe -Destination (Join-Path $IntegrationOut 'bin\node.exe') -Force
+Copy-Item -LiteralPath $NodeLicense -Destination (Join-Path $IntegrationOut 'bin\NODE-LICENSE.txt') -Force
+$HubSources = @('file-hub-agent.mjs','local-folder-authorization.mjs',
+    'accounting-archive-worker.mjs','psd-preview-worker.mjs','psd-composite-preview.mjs')
+foreach ($file in $HubSources) {
+    $source = Join-Path $RepoRoot "tools\file-hub-agent\$file"
+    if (-not (Test-Path -LiteralPath $source)) { throw "File Hub dosyası eksik: $file" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $IntegrationOut "file-hub-agent\$file") -Force
+    Invoke-Native "Node kontrol: $file" { & $NodeExe --check $source }
+}
+$PortalSource = Join-Path $RepoRoot 'TOOLS\isnet-portal-adapter\server.mjs'
+if (-not (Test-Path -LiteralPath $PortalSource)) { throw 'İşNet yerel portal adaptörü bulunamadı.' }
+Copy-Item -LiteralPath $PortalSource -Destination (Join-Path $IntegrationOut 'isnet\server.mjs') -Force
+Invoke-Native 'İşNet adaptör Node kontrolü' { & $NodeExe --check $PortalSource }
+foreach ($file in @('start-kyerp-integrations.ps1','start-kyerp-integrations-hidden.vbs')) {
+    $source = Join-Path $Root "integrations\$file"
+    if (-not (Test-Path -LiteralPath $source)) { throw "Başlatıcı eksik: $file" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $IntegrationOut $file) -Force
+}
+# No .env, tenant secret, Windows credential or browser session is packaged.
 
 Write-Host '4/5 Inno Setup...' -ForegroundColor Cyan
 $ProgramFilesX86 = ${env:ProgramFiles(x86)}
@@ -111,6 +147,9 @@ $BuildInfo = [ordered]@{
     sha256 = $Hash
     desktopVersion = [string]$DesktopVersion
     agentVersion = [string]$AgentVersion
+    embeddedNodeVersion = $NodeVersion.ToString()
+    integrationModules = @('ISNET_PORTAL', 'FILE_HUB', 'ACCOUNTING_ARCHIVE', 'PSD_PREVIEW')
+    folderGrantsRequired = $true
     desktop = (Get-Item $DesktopExe).Length
     agent = (Get-Item $AgentExe).Length
 }
