@@ -465,7 +465,7 @@ export default function AppShellV3({
                       {section.tabs.map(([key, label, icon]) => (
                         <button type="button" key={key} className={active && activeTab === key ? "active" : ""}
                           aria-current={active && activeTab === key ? "page" : undefined}
-                          onClick={() => onOpenTab(module.key, key)}>
+                          onClick={() => { setQuickOpen(false); onOpenTab(module.key, key); }}>
                           <ErpIcon name={tabVisualIcon(key, icon)} size={14} /><span>{label}</span>
                         </button>
                       ))}
@@ -476,7 +476,7 @@ export default function AppShellV3({
             }) : (sections[0]?.tabs || tabs).map(([key, label, icon]) => (
               <button type="button" key={key} className={`ky-pro-sidebar-tab ${active && activeTab === key ? "active" : ""}`}
                 aria-current={active && activeTab === key ? "page" : undefined}
-                onClick={() => onOpenTab(module.key, key)}>
+                onClick={() => { setQuickOpen(false); onOpenTab(module.key, key); }}>
                 <ErpIcon name={tabVisualIcon(key, icon)} size={14} /><span>{label}</span>
               </button>
             ))}
@@ -656,7 +656,7 @@ export default function AppShellV3({
       <main className="shell-v3-main">
         <header className="shell-v3-topbar">
           <button type="button" className="shell-v3-icon mobile" onClick={onOpenMobileMenu} aria-label="Menüyü aç" aria-controls="ky-shell-main-menu" aria-expanded={mobileMenuOpen}><Menu size={19} /></button>
-          <label className="shell-v3-search"><Search size={17} /><input value={quickSearch} onPointerDown={() => setQuickOpen(true)} onChange={(event) => { setQuickSearch(event.target.value); setQuickOpen(true); }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP genel işlem araması" /></label>
+          <label className="shell-v3-search"><Search size={17} /><input type="text" readOnly autoComplete="off" name="kyerp_command_palette_trigger" value="" onClick={() => setQuickOpen(true)} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); setQuickOpen(true); } }} placeholder="Ekran, işlem, firma, belge veya model ara" aria-label="KY ERP işlem aramasını aç" /></label>
           <button type="button" className="shell-v3-quick-button" onClick={() => setQuickOpen(true)}><ErpIcon name="hizli" size={16} /><span>Hızlı İşlem</span><kbd>Ctrl K</kbd></button>
           {ownerUser ? (
             <div className="shell-v3-owner-scope" aria-label="Uygulama Sahibi kapsamı"><small>Kapsam</small><strong>Uygulama Sahibi</strong><span>Tüm Sistem</span></div>
@@ -905,7 +905,7 @@ export default function AppShellV3({
       {quickOpen ? (
         <div className="shell-v3-quick-backdrop" role="presentation" onMouseDown={() => setQuickOpen(false)}>
           <section className="shell-v3-quick-palette" role="dialog" aria-modal="true" aria-label="Hızlı işlemler" onMouseDown={(event) => event.stopPropagation()}>
-            <header><Command size={19} /><input autoFocus value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="İşlem ara: üretim fişi, model, reçete, cari..." /><button type="button" onClick={() => setQuickOpen(false)} aria-label="Kapat"><X size={18} /></button></header>
+            <header><Command size={19} /><input autoFocus autoComplete="off" name="kyerp_command_palette_search" value={quickSearch} onChange={(event) => setQuickSearch(event.target.value)} placeholder="İşlem ara: üretim fişi, model, reçete, cari..." /><button type="button" onClick={() => setQuickOpen(false)} aria-label="Kapat"><X size={18} /></button></header>
             <div className="shell-v3-quick-list">
               {quickActions.map((action) => (
                 <button type="button" key={action.id} className="shell-v3-quick-action" onClick={() => runQuickAction(action)} onKeyDown={(event) => { if (event.key === "Enter") runQuickAction(action); }}>

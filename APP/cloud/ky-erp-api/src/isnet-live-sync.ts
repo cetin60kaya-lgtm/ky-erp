@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { ingestProviderEBelgeXml } from "./e-belge-center-cloud";
 import { MAX_ISNET_DOCUMENT_BYTES, verifyIsnetDownloadedFile } from "./isnet-file-validation";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { classifyIsnetPortalFailure } from "./isnet-portal-safe-diagnostics";
 import { accountingAccess, accountingTenantReadAllowed } from "./accounting-access-policy";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -22,8 +23,9 @@ const STATE_SCOPE = "ISNET_DOCUMENT_STATE";
 const SYNC_SCOPE = "ISNET_SYNC_RUN";
 const API_BASE = "https://einvoiceapi.isnet.net.tr";
 const PORTAL_BASES = [
-  "https://efatura.isnet.net.tr",
+  // This is the same host accepted by the user's isolated Windows portal test.
   "https://nettefatura.isnet.net.tr",
+  "https://efatura.isnet.net.tr",
 ];
 
 const text = (value: unknown) => value == null ? "" : String(value).trim();
@@ -326,20 +328,16 @@ function portalErrorText(html: string) {
     .replace(/\s+/g, " ")
     .trim();
   const lower = plain.toLocaleLowerCase("tr-TR");
-  const marker = [
-    "kullanıcı adı veya şifre",
-    "hatalı giriş",
-    "şifreniz hatalı",
-    "giriş başarısız",
-    "captcha",
-    "güvenlik kodu",
-    "doğrulama",
-    "bilgilendirme metnini",
-    "zorunludur",
-  ].find((item) => lower.includes(item));
-  if (!marker) return "";
-  const index = lower.indexOf(marker);
-  return text(plain.slice(Math.max(0, index - 70), index + 260));
+  // Generic login page labels ("kullanıcı adı", "şifre", "zorunludur",
+  // "doğrulama") are NOT evidence that a user's password was rejected.
+  // Return a fixed, non-sensitive diagnostic, never provider page content.
+  if (["hatalı giriş", "şifreniz hatalı", "giriş başarısız"].some((x)=>lower.includes(x))) {
+    return "İşNet giriş yanıtında kimlik doğrulama hatası bildiriyor.";
+  }
+  if (["captcha", "güvenlik kodu", "tek kullanımlık kod"].some((x)=>lower.includes(x))) {
+    return "İşNet girişinde ek güvenlik doğrulaması gerekiyor.";
+  }
+  return "";
 }
 
 function looksLikeLoginPage(html: string) {
@@ -366,10 +364,18 @@ async function portalLogin(username: string, password: string, companyId = "", c
   let lastError = "";
 
   for (const base of PORTAL_BASES) {
+    // A request containing a password may have reached the provider even if the
+    // network fails. Never replay credentials to a second host automatically.
+    let credentialsSubmitted = false;
     const jar = new Map<string, string>();
     const request = async (path: string, init: RequestInit = {}) => {
-      const target = path.startsWith("http") ? path : `${base}${path.startsWith("/") ? path : `/${path}`}`;
-      const response = await fetch(target, {
+      const target = new URL(path, base);
+      // Portal form/action and redirects are untrusted provider input. Never
+      // send credentials or cookies to an arbitrary origin.
+      if (target.origin !== new URL(base).origin || target.username || target.password) {
+        throw new Error("İşNet form adresi güvenlik doğrulamasını geçemedi.");
+      }
+      const response = await fetch(target.toString(), {
         ...init,
         headers: {
           Accept: "text/html,application/xhtml+xml,application/json",
@@ -378,14 +384,14 @@ async function portalLogin(username: string, password: string, companyId = "", c
           ...(init.headers || {}),
         },
         redirect: "manual",
-        signal: AbortSignal.timeout(35_000),
+        signal: AbortSignal.timeout(init.method === "POST" ? 25_000 : 9_000),
       });
       mergeCookies(response, jar);
       return response;
     };
 
     try {
-      const loginPaths = ["/account/Login", "/Account/Login", "/account/login/Login", "/account/login"];
+      const loginPaths = ["/Account/Login", "/account/Login", "/account/login/Login"];
       let loginPath = "";
       let loginHtml = "";
       let token = "";
@@ -423,6 +429,7 @@ async function portalLogin(username: string, password: string, companyId = "", c
       loginBody.set("RememberMe", "false");
       loginBody.set("__RequestVerificationToken", token);
 
+      credentialsSubmitted = true;
       const loginResponse = await request(action, {
         method: "POST",
         headers: {
@@ -444,7 +451,7 @@ async function portalLogin(username: string, password: string, companyId = "", c
         throw new Error(explicitPortalError);
       }
       if (redirectedToLogin) {
-        throw new Error("İşNet portalı kullanıcı/TCKN veya şifre bilgisini kabul etmedi.");
+        throw new Error("İşNet giriş sayfasına yönlendirme yaptı; portal oturumu veya ek güvenlik kontrolü doğrulanmadı.");
       }
 
       const companyPaths = [
@@ -505,7 +512,7 @@ async function portalLogin(username: string, password: string, companyId = "", c
         const message = portalErrorText(`${loginResult} ${companyRaw}`);
         if (message) throw new Error(message);
         if (looksLikeLoginPage(loginResult)) {
-          throw new Error("İşNet portalı giriş bilgilerini kabul etmedi.");
+          throw new Error("İşNet yetkili firma listesi yerine giriş sayfası döndü. Oturum çerezleri doğrulanmalı.");
         }
         throw new Error("Portal girişi açıldı ancak yetkili firma listesi alınamadı.");
       }
@@ -581,11 +588,28 @@ async function portalLogin(username: string, password: string, companyId = "", c
         loginPath,
       };
     } catch (error: any) {
-      lastError = `${base.replace(/^https?:\/\//, "")}: ${text(error?.message) || "başarısız"}`;
+      const safe = text(error?.message) || "Portal isteği tamamlanamadı.";
+      lastError = `${base.replace(/^https?:\/\//, "")}: ${safe}`;
+      // Never silently retry a password against another İşNet host.
+      if (credentialsSubmitted) break;
     }
   }
 
   throw new Error(lastError || "İşNet portalına bağlanılamadı.");
+}
+
+// One portal authentication implementation for both the settings test and
+// real XML/PDF intake. The probe returns ONLY authorized company metadata;
+// session cookies and password are never returned to the browser or D1.
+export async function probeIsnetPortalAccount(username: string, password: string) {
+  const session = await portalLogin(username, password);
+  return {
+    token: "",
+    expiresOn: null,
+    companies: session.companies,
+    mode: "portal",
+    diagnostics: { api: "Denenmedi", portal: "Firma listesi doğrulandı" },
+  };
 }
 
 function publicSettings(row: Row) {
@@ -1031,9 +1055,10 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
     try {
       session = await portalLogin(username, password, companyId, companyName);
       if (!session.companySelected) throw new Error("Firma oturumu doğrulanamadı.");
-    } catch {
-      return c.json(err("ISNET_PORTAL_LOGIN_FAILED",
-        "İşNet portal giriş/firma seçimi başarısız. İşNet hesabını kontrol edin."), 502);
+    } catch (failure: any) {
+      // Exact, secret-free stage names instead of claiming the password is wrong.
+      const {code,message}=classifyIsnetPortalFailure(failure);
+      return c.json(err(code,message),502);
     }
     const cookie = session.cookie;
     const base = session.base;
