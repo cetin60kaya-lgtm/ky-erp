@@ -167,9 +167,8 @@ public partial class LocalFolderWindow : Window
         }
         try
         {
-            var summary = LocalFolderService.Inspect(selected);
-            ShowStatus($"{selected.Name} · {summary.FileCount:N0} dosya · {summary.TotalBytes / 1024d / 1024d:N2} MB. " +
-                "Dosya içeriği buluta aktarılmadı, kaynak değiştirilmedi.");
+            new LocalFileInspectorWindow(selected) { Owner = this }.ShowDialog();
+            ShowStatus($"İzinli {selected.Name} klasörü için yerel inceleme kapatıldı; kaynak dosyalar korunuyor.");
         }
         catch(Exception error)
         {
