@@ -339,9 +339,11 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
       if(document.kind!=="INVOICE"||String(detail.document_no)!==document.number)
         throw Error("Belge numarası veya türü orijinal XML ile uyuşmuyor.");
       const all=await getEBelgeVisualProfiles();
-      const profile=(all?.items||[]).find(p=>p.issuerTaxNo===document.supplier.tax&&p.kind==="INVOICE"&&p.approved===true);
-      if(!profile)throw Error("Bu düzenleyen firmanın onaylı fatura şablonu yok. Önce e-Belge → Görsel Şablonlar'da onaylayın.");
-      const output=await renderUblOutput(xml,profile.layout,"PDF");
+      const profile=(all?.items||[]).find(p=>p.issuerTaxNo===document.supplier?.tax&&p.kind==="INVOICE"&&p.approved===true);
+      // Original İşNet PDF is always preferred. If only UBL exists, build
+      // a clearly secondary CONTROL preview without demanding any template.
+      // Never store this browser-rendered PDF as the provider's original.
+      const output=await renderUblOutput(xml,profile?.layout||{},"PDF");
       openEBelgeBlob(output.blob,reservedWindow);
     }catch(e){
       if(reservedWindow&&!reservedWindow.closed)reservedWindow.close();
@@ -373,7 +375,12 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   if (!id) return null;
   const openIssues = detail?.issues?.filter((item) => !item.is_resolved) || [];
   const relationCount = detail?.relations?.length || 0;
-  const fileCount = detail?.files?.length || 0;
+  const storedFiles=Array.isArray(detail?.files)?detail.files:[];
+  const originalPdf=storedFiles.find(file=>/\.pdf$/i.test(String(file.file_name||"")));
+  const originalXml=storedFiles.find(file=>/\.xml$/i.test(String(file.file_name||"")));
+  const otherFiles=storedFiles.filter(file=>file.id!==originalPdf?.id&&file.id!==originalXml?.id);
+  const isProviderSource=/^ISNET/i.test(String(detail?.source_type||detail?.provider_type||""));
+
   const supplierPhysicalInvoice = detail?.direction === "INCOMING" && /FATURA|INVOICE|ARSIV/i.test(String(detail?.document_type || "")) &&
     (detail?.lines || []).some((line) => ["BOYAHANE", "STOCK", "CONSUMABLE"].includes(String(line?.raw_metadata?.routingType || "").toUpperCase()));
 
@@ -390,6 +397,26 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
           <div><span>Tarih</span><strong>{dateText(detail.issue_date)}</strong><small>{sourceLabel(detail.source_type)}</small></div>
           <div><span>Toplam</span><strong>{money(detail.payable_total, detail.currency)}</strong><small>KDV {money(detail.tax_total, detail.currency)}</small></div>
           <div><span>Durum</span><strong>{statusLabel(detail.status)}</strong><small>{detail.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></div>
+        </section>
+        <section className="eb-original-archive" aria-label="Orijinal belge arşivi">
+          <div className="eb-original-archive-head">
+            <div><strong>Orijinal Belge Arşivi</strong>
+              <span>{isProviderSource?"İşNet":sourceLabel(detail.source_type)} · Aynı belgeye bağlı XML ve PDF, değişmeden saklanır.</span>
+            </div>
+            <span className="eb-original-archive-count">{Number(Boolean(originalXml))+Number(Boolean(originalPdf))}/2 ana dosya</span>
+          </div>
+          <div className="eb-original-file-actions">
+            {originalPdf?<button type="button" className="eb-original-file-primary" disabled={busy===`file-${originalPdf.id}`} onClick={()=>void preview(originalPdf)}>
+              <FileText size={19}/><span><strong>Orijinal PDF</strong><small>Görüntüle / Yazdır</small></span><CheckCircle2 size={16}/>
+            </button>:<div className="eb-original-file-missing"><FileText size={19}/><span><strong>Orijinal PDF eksik</strong><small>XML korunur, tekrar indirmede tamamlanabilir.</small></span></div>}
+            {originalXml?<button type="button" className="eb-original-file-xml" disabled={busy===`file-${originalXml.id}`} onClick={()=>void preview(originalXml)}>
+              <FileCheck2 size={19}/><span><strong>Orijinal XML</strong><small>UBL-TR · Aç / İndir</small></span><CheckCircle2 size={16}/>
+            </button>:<div className="eb-original-file-missing"><FileCheck2 size={19}/><span><strong>Orijinal XML eksik</strong><small>Belge kaynağı kontrol edilmeli.</small></span></div>}
+          </div>
+          {otherFiles.length>0&&<details className="eb-original-extra"><summary>Diğer ek dosyalar · {otherFiles.length}</summary>
+            <div className="eb-original-extra-list">{otherFiles.map(file=><button key={file.id} type="button" onClick={()=>void preview(file)}>{file.file_name||"Ek dosya"}</button>)}</div>
+          </details>}
+          {!originalPdf&&originalXml&&<small className="eb-original-archive-note">Gerekirse XML’den yalnız kontrol amaçlı PDF önizlemesi üretilebilir. Bu çıktı orijinal İşNet PDF’si değildir; şablon zorunlu değildir.</small>}
         </section>
         <EBelgeAccountingPrint detail={detail} mainCompanySlug={mainCompanySlug}
           onPdf={()=>void openSupplierAccountingPdf()} onChanged={onChanged}/>
@@ -454,10 +481,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
               <summary><strong>Fatura – İrsaliye Bağı</strong><span>{relationCount}</span></summary>
               <div className="eb-fold-body">{relationCount ? <div className="eb-relations">{detail.relations.map((row) => <div key={row.id}><Link2 size={16} /><span>{row.related_document_no || row.related_document_id}</span><small>{row.relation_type}</small></div>)}</div> : <span className="eb-muted">Henüz bağlı irsaliye/fatura yok.</span>}</div>
             </details>
-            <details className="eb-fold">
-              <summary><strong>Dosyalar</strong><span>{fileCount}</span></summary>
-              <div className="eb-fold-body"><div className="eb-files">{detail.files?.map((file) => <button type="button" key={file.id} disabled={busy === `file-${file.id}`} onClick={() => preview(file)}><FileText size={17} /><span>{file.file_name}</span><small>{file.source_type}</small></button>)}</div></div>
-            </details>
+
           </div>
         </div>
       </>}
