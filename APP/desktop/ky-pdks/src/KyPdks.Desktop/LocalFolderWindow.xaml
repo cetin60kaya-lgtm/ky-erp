@@ -67,6 +67,7 @@
                             <ComboBoxItem Content="Model ve desen kaynakları" Tag="DESIGN"/>
                             <ComboBoxItem Content="Kod ve proje · salt okunur" Tag="CODE_READONLY"/>
                             <ComboBoxItem Content="Dosya Servisleri · File Hub" Tag="FILE_HUB"/>
+                            <ComboBoxItem Content="File Hub / Arşiv hedefi · yazma izni" Tag="FILE_HUB_WRITE"/>
                             <ComboBoxItem Content="Yedeklenecek kaynak" Tag="BACKUP_SOURCE"/>
                             <ComboBoxItem Content="Yedek hedefi · yazma izni" Tag="BACKUP_DESTINATION"/>
                             <ComboBoxItem Content="Diğer klasör · salt okunur" Tag="GENERAL_READ"/>
