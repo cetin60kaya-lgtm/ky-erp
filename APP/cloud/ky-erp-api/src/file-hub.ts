@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { buildFileHubSmartDiagnostics } from "./file-hub-smart-diagnostics";
+import { normalizeFileHubBindingPath, normalizeFileHubPriority, normalizeFileHubRouteCode } from "./file-hub-folder-policy";
 
 type Bindings = Cloudflare.Env & { FILE_HUB_AGENT_KEY?: string };
 type Variables = { requestId: string };
@@ -93,7 +94,15 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     await event(c,slug,"CONNECTION_UPDATED",{actorType:"USER",actorId:owner.id,storageConnectionId:id}); return c.json({ok:true});
   });
 
-  app.get("/api/file-hub/bindings", async c => { if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c); const r=await c.env.DB.prepare(`SELECT b.*,c.name connection_name,c.provider_type FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? ORDER BY b.module_code,b.purpose_code`).bind(slug).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(rowView)}); });
+  app.get("/api/file-hub/bindings", async c => {
+    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    const slug=slugOf(c);
+    const [primary,additional]=await Promise.all([
+      c.env.DB.prepare(`SELECT b.*,c.name connection_name,c.provider_type FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id AND c.main_company_slug=b.main_company_slug WHERE b.main_company_slug=? ORDER BY b.module_code,b.purpose_code`).bind(slug).all<Row>(),
+      c.env.DB.prepare(`SELECT b.*,c.name connection_name,c.provider_type FROM file_hub_binding_targets b JOIN file_hub_connections c ON c.id=b.storage_connection_id AND c.main_company_slug=b.main_company_slug WHERE b.main_company_slug=? AND b.is_active=1 ORDER BY b.module_code,b.purpose_code,b.priority,b.created_at`).bind(slug).all<Row>(),
+    ]);
+    return c.json({ok:true,data:[...(primary.results||[]).map(r=>({...rowView(r),isAdditional:false})),...(additional.results||[]).map(r=>({...rowView(r),isAdditional:true}))]});
+  });
 
   app.put("/api/file-hub/bindings", async c => {
     const b=await bodyOf(c),owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Bölüm / dosya depolama yönlendirmesini yalnız firma sahibi veya kendi firmasında uygulama sahibi değiştirebilir."),403);
@@ -106,9 +115,78 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     await event(c,slug,"BINDING_SAVED",{actorType:"USER",actorId:owner.id,storageConnectionId:connectionId,details:{moduleCode,purposeCode,rootPath:text(b.rootPath)}}); return c.json({ok:true,data:{id}});
   });
 
+
+  // Çoklu klasör: eski tekil atama ana hedef olarak korunur. Buradaki her hedef
+  // aynı firmaya aittir; bağlama/silme hiçbir fiziksel dosyayı taşımaz veya silmez.
+  app.post("/api/file-hub/bindings/additional", async c => {
+    const b=await bodyOf(c),owner=await requireCompanyOwner(c,b);
+    if(!owner)return c.json(err("COMPANY_OWNER_ONLY","Klasör bağlama yetkisi firma yöneticisindedir."),403);
+    const slug=slugOf(c,b),connectionId=text(b.storageConnectionId);
+    let moduleCode:string,purposeCode:string,rootPath:string,priority:number;
+    try{
+      moduleCode=normalizeFileHubRouteCode(b.moduleCode);
+      purposeCode=normalizeFileHubRouteCode(b.purposeCode);
+      rootPath=normalizeFileHubBindingPath(b.rootPath);
+      priority=normalizeFileHubPriority(b.priority);
+    }catch(e:any){return c.json(err("INVALID_BINDING",text(e.message)),422);}
+    if(!rootPath)return c.json(err("FOLDER_REQUIRED","Ek klasörde firma köküne göre açık alt klasör seçilmelidir."),422);
+    const conn=await c.env.DB.prepare("SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1").bind(connectionId,slug).first<Row>();
+    if(!conn)return c.json(err("INVALID_CONNECTION","Bu firmaya bağlı aktif servis bulunamadı."),422);
+    const primary=await c.env.DB.prepare("SELECT id FROM file_hub_bindings WHERE main_company_slug=? AND module_code=? AND purpose_code=? AND storage_connection_id=? AND root_path=?").bind(slug,moduleCode,purposeCode,connectionId,rootPath).first<Row>();
+    if(primary)return c.json(err("ALREADY_BOUND","Bu klasör zaten ana hedefe bağlı."),409);
+    const old=await c.env.DB.prepare("SELECT id,is_active FROM file_hub_binding_targets WHERE main_company_slug=? AND module_code=? AND purpose_code=? AND storage_connection_id=? AND root_path=?").bind(slug,moduleCode,purposeCode,connectionId,rootPath).first<Row>();
+    if(old && Number(old.is_active)===1)return c.json(err("ALREADY_BOUND","Bu klasör zaten bağlı."),409);
+    const id=text(old?.id)||crypto.randomUUID(),ts=now();
+    const flags=[bool(b.readEnabled,true)?1:0,bool(b.writeEnabled,false)?1:0,bool(b.syncEnabled,true)?1:0];
+    if(old)await c.env.DB.prepare("UPDATE file_hub_binding_targets SET priority=?,read_enabled=?,write_enabled=?,sync_enabled=?,is_active=1,updated_at=? WHERE id=? AND main_company_slug=?")
+      .bind(priority,...flags,ts,id,slug).run();
+    else await c.env.DB.prepare("INSERT INTO file_hub_binding_targets(id,main_company_slug,module_code,purpose_code,storage_connection_id,root_path,priority,read_enabled,write_enabled,sync_enabled,is_active,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?)")
+      .bind(id,slug,moduleCode,purposeCode,connectionId,rootPath,priority,...flags,ts,ts).run();
+    await event(c,slug,"BINDING_ADDED",{actorType:"USER",actorId:owner.id,storageConnectionId:connectionId,details:{id,moduleCode,purposeCode,rootPath}});
+    return c.json({ok:true,data:{id}},old?200:201);
+  });
+  app.patch("/api/file-hub/bindings/additional/:id", async c => {
+    const b=await bodyOf(c),owner=await requireCompanyOwner(c,b);
+    if(!owner)return c.json(err("COMPANY_OWNER_ONLY","Klasör değiştirme yetkisi firma yöneticisindedir."),403);
+    const slug=slugOf(c,b),id=c.req.param("id");
+    const old=await c.env.DB.prepare("SELECT * FROM file_hub_binding_targets WHERE id=? AND main_company_slug=? AND is_active=1").bind(id,slug).first<Row>();
+    if(!old)return c.json(err("NOT_FOUND","Klasör ataması bulunamadı."),404);
+    const connectionId=text(b.storageConnectionId||old.storage_connection_id);
+    const conn=await c.env.DB.prepare("SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1").bind(connectionId,slug).first<Row>();
+    if(!conn)return c.json(err("INVALID_CONNECTION","Bu firmaya bağlı aktif servis bulunamadı."),422);
+    let rootPath:string,priority:number;
+    try{rootPath=normalizeFileHubBindingPath(b.rootPath===undefined?old.root_path:b.rootPath);priority=normalizeFileHubPriority(b.priority===undefined?old.priority:b.priority);}
+    catch(e:any){return c.json(err("INVALID_BINDING",text(e.message)),422);}
+    if(!rootPath)return c.json(err("FOLDER_REQUIRED","Ek klasör yolu boş olamaz."),422);
+    const duplicate=await c.env.DB.prepare("SELECT id FROM file_hub_binding_targets WHERE main_company_slug=? AND module_code=? AND purpose_code=? AND storage_connection_id=? AND root_path=? AND id<>? AND is_active=1")
+      .bind(slug,old.module_code,old.purpose_code,connectionId,rootPath,id).first<Row>();
+    if(duplicate)return c.json(err("ALREADY_BOUND","Bu klasör zaten bağlı."),409);
+    const primary=await c.env.DB.prepare("SELECT id FROM file_hub_bindings WHERE main_company_slug=? AND module_code=? AND purpose_code=? AND storage_connection_id=? AND root_path=?")
+      .bind(slug,old.module_code,old.purpose_code,connectionId,rootPath).first<Row>();
+    if(primary)return c.json(err("ALREADY_BOUND","Bu klasör ana hedefe zaten bağlı."),409);
+    await c.env.DB.prepare("UPDATE file_hub_binding_targets SET storage_connection_id=?,root_path=?,priority=?,read_enabled=?,write_enabled=?,sync_enabled=?,updated_at=? WHERE id=? AND main_company_slug=?")
+      .bind(connectionId,rootPath,priority,b.readEnabled===undefined?old.read_enabled:bool(b.readEnabled)?1:0,b.writeEnabled===undefined?old.write_enabled:bool(b.writeEnabled)?1:0,b.syncEnabled===undefined?old.sync_enabled:bool(b.syncEnabled)?1:0,now(),id,slug).run();
+    await event(c,slug,"BINDING_UPDATED",{actorType:"USER",actorId:owner.id,storageConnectionId:connectionId,details:{id,moduleCode:old.module_code,purposeCode:old.purpose_code,rootPath}});
+    return c.json({ok:true,data:{id}});
+  });
+  app.delete("/api/file-hub/bindings/:id", async c => {
+    const b=await bodyOf(c),owner=await requireCompanyOwner(c,b);
+    if(!owner)return c.json(err("COMPANY_OWNER_ONLY","Klasör bağlantısını yalnız firma yöneticisi kaldırabilir."),403);
+    const slug=slugOf(c,b),id=c.req.param("id");
+    const additional=await c.env.DB.prepare("SELECT id,storage_connection_id FROM file_hub_binding_targets WHERE id=? AND main_company_slug=? AND is_active=1").bind(id,slug).first<Row>();
+    const primary=additional?null:await c.env.DB.prepare("SELECT id,storage_connection_id FROM file_hub_bindings WHERE id=? AND main_company_slug=?").bind(id,slug).first<Row>();
+    const record=additional||primary;
+    if(!record)return c.json(err("NOT_FOUND","Klasör ataması bulunamadı."),404);
+    if(additional)await c.env.DB.prepare("UPDATE file_hub_binding_targets SET is_active=0,updated_at=? WHERE id=? AND main_company_slug=?").bind(now(),id,slug).run();
+    else await c.env.DB.prepare("DELETE FROM file_hub_bindings WHERE id=? AND main_company_slug=?").bind(id,slug).run();
+    await event(c,slug,"BINDING_REMOVED",{actorType:"USER",actorId:owner.id,storageConnectionId:record.storage_connection_id,details:{bindingId:id,physicalFilesChanged:false}});
+    return c.json({ok:true,data:{removed:true,filesPreserved:true}});
+  });
+
   app.get("/api/file-hub/resolve-storage", async c => {
     if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),moduleCode=upper(c.req.query("moduleCode")),purposeCode=upper(c.req.query("purposeCode"));
     let row=await c.env.DB.prepare(`SELECT b.*,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? AND b.module_code=? AND b.purpose_code=? AND c.is_active=1 LIMIT 1`).bind(slug,moduleCode,purposeCode).first<Row>();
+    if(!row)row=await c.env.DB.prepare(`SELECT b.*,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_binding_targets b JOIN file_hub_connections c ON c.id=b.storage_connection_id AND c.main_company_slug=b.main_company_slug WHERE b.main_company_slug=? AND b.module_code=? AND b.purpose_code=? AND b.is_active=1 AND c.is_active=1 ORDER BY b.priority ASC,b.created_at ASC LIMIT 1`).bind(slug,moduleCode,purposeCode).first<Row>();
     if(!row && restrictedPurposes.has(purposeCode)) return c.json(err("SENSITIVE_BINDING_REQUIRED","Hassas belge için ana firma kökü yerine özel yetkilendirilmiş klasör ataması zorunludur."),404);
     if(!row) row=await c.env.DB.prepare(`SELECT NULL id,'' module_code,'' purpose_code,c.id storage_connection_id,'' root_path,1 read_enabled,1 write_enabled,1 sync_enabled,1 is_default,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_connections c WHERE c.main_company_slug=? AND c.is_active=1 AND c.is_primary=1 LIMIT 1`).bind(slug).first<Row>();
     if(!row) return c.json(err("NO_STORAGE","Bu firma/modül için depolama hedefi tanımlı değil."),404); return c.json({ok:true,data:rowView(row)});
