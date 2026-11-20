@@ -1,0 +1,143 @@
+<Window x:Class="KyPdks.Desktop.LocalFolderWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="KY ERP · Yerel Dosya ve Yedek Merkezi"
+        Width="1120" Height="830" MinWidth="900" MinHeight="670"
+        WindowStartupLocation="CenterOwner" Background="#F2F6FB">
+    <Window.Resources>
+        <SolidColorBrush x:Key="Text" Color="#17314D"/>
+        <SolidColorBrush x:Key="Muted" Color="#667C94"/>
+        <Style x:Key="AccentButton" TargetType="Button">
+            <Setter Property="Padding" Value="16,11"/>
+            <Setter Property="MinHeight" Value="42"/>
+            <Setter Property="Background" Value="#165B9B"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style x:Key="SoftCard" TargetType="Border">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="CornerRadius" Value="12"/>
+            <Setter Property="BorderBrush" Value="#D8E4F1"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="16"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid Margin="23,19">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Grid.Row="0" Margin="0,0,0,18">
+            <TextBlock Text="KY ERP · Yerel Entegrasyon Merkezi" FontSize="25" FontWeight="Bold"
+                       Foreground="{StaticResource Text}"/>
+            <TextBlock Margin="0,5,0,0" FontSize="13" Foreground="{StaticResource Muted}" TextWrapping="Wrap"
+                Text="Muhasebe belgeleri, model/desen, kod incelemesi ve firma yedeklerini seçtiğiniz klasörlerden yönetin. Sadece açık izin verdiğiniz klasörler erişilebilir."/>
+        </StackPanel>
+        <Border Grid.Row="1" Style="{StaticResource SoftCard}">
+            <StackPanel>
+                <TextBlock Text="1 · Klasöre izin ver" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+                <TextBlock Text="İşlem amacı seçin, firmanızı ve klasör adını yazın. Windows klasör seçicisi yalnız siz onaylayınca açılır."
+                           Foreground="{StaticResource Muted}" Margin="0,3,0,10"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="170"/>
+                        <ColumnDefinition Width="1.1*"/>
+                        <ColumnDefinition Width="1.3*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,9,0">
+                        <TextBlock Text="Firma" Foreground="{StaticResource Muted}"/>
+                        <TextBox x:Name="CompanyInput" Height="32"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Margin="0,0,9,0">
+                        <TextBlock Text="Klasör adı" Foreground="{StaticResource Muted}"/>
+                        <TextBox x:Name="NameInput" Height="32"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Margin="0,0,9,0">
+                        <TextBlock Text="Erişim amacı" Foreground="{StaticResource Muted}"/>
+                        <ComboBox x:Name="PurposeInput" Height="32">
+                            <ComboBoxItem Content="Muhasebe · Belge inceleme" Tag="ACCOUNTING" IsSelected="True"/>
+                            <ComboBoxItem Content="Faturalar ve irsaliyeler" Tag="DOCUMENTS"/>
+                            <ComboBoxItem Content="Model ve desen kaynakları" Tag="DESIGN"/>
+                            <ComboBoxItem Content="Kod ve proje · salt okunur" Tag="CODE_READONLY"/>
+                            <ComboBoxItem Content="Dosya Servisleri · File Hub" Tag="FILE_HUB"/>
+                            <ComboBoxItem Content="Yedeklenecek kaynak" Tag="BACKUP_SOURCE"/>
+                            <ComboBoxItem Content="Yedek hedefi · yazma izni" Tag="BACKUP_DESTINATION"/>
+                            <ComboBoxItem Content="Diğer klasör · salt okunur" Tag="GENERAL_READ"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <Button Grid.Column="3" VerticalAlignment="Bottom" Style="{StaticResource AccentButton}"
+                            Content="+  Klasör Seç ve Onayla" Click="AddFolder_Click"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <Grid Grid.Row="2">
+            <Grid.RowDefinitions><RowDefinition Height="1.2*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <Border Grid.Row="0" Style="{StaticResource SoftCard}">
+                <DockPanel LastChildFill="True">
+                    <Grid DockPanel.Dock="Top" Margin="0,0,0,10">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock Text="2 · İzin verilen klasörler" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+                            <TextBlock x:Name="GrantCountText" Text="Klasörler yükleniyor" FontSize="12" Foreground="{StaticResource Muted}" Margin="0,3,0,0"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal">
+                            <Button Content="İçeriği İncele" Click="InspectFolder_Click" Padding="11,7"/>
+                            <Button Content="Yetkiyi Kaldır" Click="RemoveFolder_Click" Padding="11,7" Foreground="#B43232"/>
+                        </StackPanel>
+                    </Grid>
+                    <DataGrid x:Name="GrantsGrid" AutoGenerateColumns="False" IsReadOnly="True"
+                        HeadersVisibility="Column" CanUserAddRows="False" SelectionMode="Single"
+                        GridLinesVisibility="Horizontal" BorderBrush="#D8E4F1">
+                        <DataGrid.Columns>
+                            <DataGridTextColumn Header="Firma" Binding="{Binding Company}" Width="115"/>
+                            <DataGridTextColumn Header="Klasör" Binding="{Binding Name}" Width="140"/>
+                            <DataGridTextColumn Header="Erişim amacı" Binding="{Binding Purpose}" Width="145"/>
+                            <DataGridTextColumn Header="İzin" Binding="{Binding Permission}" Width="112"/>
+                            <DataGridTextColumn Header="Onaylanan gerçek Windows yolu" Binding="{Binding FullPath}" Width="*"/>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </DockPanel>
+            </Border>
+            <Border Grid.Row="1" Style="{StaticResource SoftCard}">
+                <StackPanel>
+                    <TextBlock Text="3 · Firma klasör yedeği oluştur" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+                    <TextBlock Text="Kaynağı değiştirmeden ayrı tarihli yedek oluşturur. SHA-256 kontrol manifesti üretir, eski yedekleri silmez."
+                               Foreground="{StaticResource Muted}" Margin="0,5,0,11"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="1*"/><ColumnDefinition Width="1*"/><ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,12,0">
+                            <TextBlock Text="Kaynak klasör" Foreground="{StaticResource Muted}"/>
+                            <ComboBox x:Name="BackupSource" Height="34" DisplayMemberPath="Name"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Margin="0,0,12,0">
+                            <TextBlock Text="Onaylı yedek hedefi" Foreground="{StaticResource Muted}"/>
+                            <ComboBox x:Name="BackupDestination" Height="34" DisplayMemberPath="Name"/>
+                        </StackPanel>
+                        <Button x:Name="BackupButton" Grid.Column="2" VerticalAlignment="Bottom"
+                                Style="{StaticResource AccentButton}" Content="Yedeği Oluştur" Click="RunBackup_Click"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+        <Border Grid.Row="3" Background="#EAF3FB" BorderBrush="#CDE0F1" BorderThickness="1" CornerRadius="9" Padding="12,10">
+            <StackPanel>
+                <TextBlock x:Name="LocalStatus" Text="Hazır · Tüm yetkiler yalnız bu Windows kullanıcısına ait." TextWrapping="Wrap"
+                           FontSize="12" Foreground="#23527B"/>
+                <TextBlock Text="Yerel klasör yedeği Cloudflare D1 veritabanı yedeği değildir. İşNet, dosya senkronu ve D1 aktarımı ayrı yetki/bağlantı kontrollerinden geçer."
+                           Foreground="#536D87" FontSize="11" TextWrapping="Wrap" Margin="0,5,0,0"/>
+            </StackPanel>
+        </Border>
+    </Grid>
+</Window>
