@@ -76,6 +76,7 @@ import { registerIsnetBusinessSettingsCloudRoutes } from "./isnet-business-setti
 import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
 import { registerIsnetInvoiceRuntimeRoutes } from "./isnet-invoice-runtime";
 import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
+import { registerIsnetLocalPortalRoutes } from "./isnet-local-portal-routes";
 import { registerIsnetOutgoingRecoveryRoutes } from "./isnet-outgoing-recovery";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
@@ -245,6 +246,7 @@ registerIsnetBusinessSettingsCloudRoutes(app);
 // Keep the audited, password-free two-stage settings handler FIRST.
 registerIsnetRuntimeV2Routes(app);
 registerIsnetLiveSyncRoutes(app);
+registerIsnetLocalPortalRoutes(app);
 registerIsnetOutgoingRecoveryRoutes(app);
 registerIsnetFileRuntimeRoutes(app);
 registerIsnetInvoiceRuntimeRoutes(app);
