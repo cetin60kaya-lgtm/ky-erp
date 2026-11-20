@@ -807,7 +807,7 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
           verificationKind: result.mode === "api" ? "API_LOGIN" : "PORTAL_LOGIN_ONLY",
           message: result.mode === "api"
             ? "İşNet API bağlantısı doğrulandı. Yetkili firmayı seçip kaydedin."
-            : "NetteFatura portal girişi doğrulandı. Güvenlik nedeniyle şifre saklanmadı; otomatik senkronizasyon için API oturumu tercih edilir.",
+            : "NetteFatura portal firmaları doğrulandı. Yetkili firmayı kaydettikten sonra aynı portal yöntemiyle XML ve PDF alınabilir; şifre saklanmaz.",
         },
       });
     } catch (error: any) {
