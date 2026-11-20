@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 20.11.2026 — İşNet tek yerel Google Drive arşivi (canlı dosya kabulü bekliyor)
+- Kullanıcı kararı: Cloudflare'ın doğrudan İşNet portal şifresi/oturum denemesi yerine, **DESEN'de çalışan yerel portal aktarımı** kullanılır; Hakan Emp altında Google Drive for Desktop ile eşitlenen tek `Firma Yedekleri/ISNET_EBELGE` klasörü orijinal XML/PDF'nin **tek fiziksel evidir**. Tarayıcı İndirilenler'e ikinci kopya veya R2'ye zorunlu orijinal kopya üretilmez.
+- Gerçek Windows klasör oluşturma PASS; Google Drive bağlı hesabın dosya ağacında dört alt klasör görüldü (GELEN/GIDEN FATURA/IRSALIYE). DESEN Node 24 local `127.0.0.1:8790/health` PASS; canlı İşNet girişli belge indirme bu revizyonda **henüz test edilmedi**.
+- Yerel program `TOOLS/isnet-drive-archive` Node 22+ ile çalışır, portal şifre/cookie yalnız bellekte; SHA-256 ve özel oluşturma ile tekrar gelen aynı belgeyi fiziksel olarak çoğaltmaz, eski orijinali değiştirmez. Eksik PDF sonra tamamlanır. Başlangıç görevi/parola saklama kurulmadı. Dört belge türü salt-okunur listeleme/arşiv için tek arayüz.
+- ERP entegrasyon ekranının önceliği yerel arşive yönlendirildi; cloud portalın sahte yanlış şifre mesajı gündelik ana ekranda kullanılmaz. **Drive arşiv varlığı = D1 e-Belge Havuzu kaydı değildir**. File Hub `E_DOCUMENT` provider/binding, manifest→D1 idempotent metaveri ve orijinal Google Drive dosyasına referans için ayrı oturumlu kabul kalır; ikinci R2 orijinal kopyası yapılmaz. Cari/KDV/kalem ve eşleştirme mevcut canonical e-Belge motoruna ait; fatura gönderme ve kesin muhasebe yok.
+- Önceden mevcut farklı fatura/irsaliye klasörleri korunur, bu işlemde taşınmaz/silinmez. Gerçek aktarım, çoklu bilgisayar Drive indirme ve ERP metadata ilişkisi PASS olmadan uçtan uca tamam demeyin.
+
+
 ## 19.11.2026 — Günlük Operasyon son kabul / kişi ödeme kartı
 - Güncel canonical production HEAD üzerinde yalnız Günlük Operasyon kaynakları taşındı; paralel Gmail/mail değişiklikleri korunuyor.
 - 14–22 gibi firma-geneli ortak haftayı D1 CAS sürümü korur. “Bu Hafta” kendiliğinden seçilmez; ilk kez `Bu Dönemi Sabitle` ile kullanıcı onayı gerekir.
