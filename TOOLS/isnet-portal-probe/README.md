@@ -49,3 +49,29 @@ Ardından **aynı bilgisayardaki** tarayıcıdan `http://127.0.0.1:8787` açıl�
 - `PORTAL_BAGLANTISI_HATASI`: network, timeout ya da beklenmeyen hata; ham sunucu yanıtı/log veya şifre gösterilmez.
 
 **Durum:** İlk kod prototipi; gerçek NetteFatura hesabı ve Windows üzerinde henüz kabul edilmedi. Güvenlik ve canlı kullanım için ek geliştirme gerektirir.
+
+## Android telefonla deneme (PC gerekmez)
+
+Bu araç bir APK değildir. Android'de **Termux** içinde Node.js çalıştırılır, test sayfası telefonun **kendi Chrome tarayıcısında** açılır. Ağdaki başka bilgisayara ya da internette barındırılan bir şifre formuna ihtiyaç yoktur.
+
+1. Termux'u yalnız güvenilir resmî kaynağından yükle: https://f-droid.org/packages/com.termux/ . APK indirme sitelerini kullanma.
+2. Termux'u aç. Aşağıdaki komutları **bir defa** çalıştır:
+
+```sh
+pkg update
+pkg install nodejs curl
+mkdir -p "$HOME/kyerp-isnet-test"
+cd "$HOME/kyerp-isnet-test"
+curl --fail --location --silent --show-error \
+  "https://raw.githubusercontent.com/cetin60kaya-lgtm/ky-erp/test/isnet-portal-xml-lokal-20261120/TOOLS/isnet-portal-probe/server.mjs" \
+  --output server.mjs
+node --check server.mjs
+node server.mjs
+```
+
+3. Termux açıkken aynı telefonun **Chrome** tarayıcısında http://127.0.0.1:8787 adresini aç. İşNet kullanıcı adı ve şifresini **yalnızca o yerel sayfada** gir; firma seç, gelen faturaları listele, XML indir.
+4. Çıkarken **Oturumu temizle** seç. Termux'ta Ctrl+C ile işlemi durdur. Sonraki gün test için `cd "$HOME/kyerp-isnet-test" && node server.mjs` yeterlidir.
+
+**Android notları:** Chrome indirme izni verebilir; dosya indirilenlere kaydolur. Termux ve Chrome aynı telefonda olmalıdır; `127.0.0.1` her cihazın kendisini gösterir. Telefon Android'in pil tasarrufu sebebiyle Termux'u durdurursa test kesilir. Bu araç yalnız **yerel HTTP/loopback** üzerinde çalışır; şifre internetteki KY ERP sunucusuna veya GitHub'a gönderilmez, ama kullanıcı tarafından NetteFatura portalına HTTPS üzerinden iletilir.
+
+**Önemli:** İlk test kodunun Node söz dizimi kontrolü yapıldı, ancak Android/Termux ve gerçek İşNet hesabıyla uçtan uca test **henüz yapılmadı**. Portal oturumunun MFA veya CAPTCHA istemesi durumunda bunu aşmaya çalışmayın. Gerçek fatura XML'sini GitHub'a veya sohbet yorumlarına paylaşmayın; test ekranındaki güvenli hata kodu yeterlidir.
