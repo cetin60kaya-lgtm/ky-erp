@@ -1082,29 +1082,39 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
         let xmlKey = text(state.xmlKey);
         let xmlText = "";
 
+        // PDF may be missing or temporarily unavailable even when the signed UBL XML is valid.
+        // Independent downloads ensure that a PDF error never prevents XML ingestion.
+        const fileErrors: string[] = [];
         try {
           if (!pdfKey || !(await c.env.FILES.head(pdfKey))) {
             const pdf = await downloadFile(base, cookie, baseDoc, "pdf");
-            pdfKey = `${folder}/${safeFile(baseDoc.documentNo)}.pdf`;
-            await c.env.FILES.put(pdfKey, pdf.buffer, {
-              httpMetadata: { contentType: pdf.contentType },
-            });
+            const newPdfKey = `${folder}/${safeFile(baseDoc.documentNo)}.pdf`;
+            await c.env.FILES.put(newPdfKey, pdf.buffer, { httpMetadata: { contentType: pdf.contentType } });
+            pdfKey = newPdfKey;
           }
+        } catch {
+          fileErrors.push("PDF_INDIRILEMEDI");
+        }
+        try {
           if (!xmlKey || !(await c.env.FILES.head(xmlKey))) {
             const xml = await downloadFile(base, cookie, baseDoc, "xml");
-            xmlKey = `${folder}/${safeFile(baseDoc.documentNo)}.xml`;
-            await c.env.FILES.put(xmlKey, xml.buffer, {
-              httpMetadata: { contentType: xml.contentType },
-            });
+            const newXmlKey = `${folder}/${safeFile(baseDoc.documentNo)}.xml`;
+            await c.env.FILES.put(newXmlKey, xml.buffer, { httpMetadata: { contentType: xml.contentType } });
+            xmlKey = newXmlKey;
             xmlText = new TextDecoder().decode(xml.buffer);
           } else {
             const existing = await c.env.FILES.get(xmlKey);
             if (existing) xmlText = await existing.text();
           }
-          if (pdfKey && xmlKey) downloaded += 1;
-        } catch (error: any) {
+        } catch {
+          fileErrors.push("XML_INDIRILEMEDI");
+        }
+        if (fileErrors.length) {
           failed += 1;
-          state = { ...state, error: text(error?.message) };
+          state = { ...state, error: fileErrors.join(",") };
+        } else {
+          downloaded += 1;
+          state = { ...state, error: null };
         }
 
         const portal = { ...baseDoc, automationKey, pdfKey, xmlKey };
