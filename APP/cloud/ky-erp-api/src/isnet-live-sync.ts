@@ -1034,7 +1034,7 @@ export function registerIsnetLiveSyncRoutes(app: Hono<AppEnv>) {
     const endDay = text(body.endDate) || new Date().toISOString().slice(0, 10);
     const startDay = text(body.startDate) || new Date(Date.parse(endDay+"T00:00:00Z")-7*86400000).toISOString().slice(0,10);
     const days = (Date.parse(endDay+"T00:00:00Z")-Date.parse(startDay+"T00:00:00Z"))/86400000;
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(startDay) || !/^\\d{4}-\\d{2}-\\d{2}$/.test(endDay) ||
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(startDay) || !/^\d{4}-\d{2}-\d{2}$/.test(endDay) ||
         !Number.isFinite(days) || days < 0 || days > 31) {
       return c.json(err("ISNET_PERIOD_INVALID","Senkronizasyon için en fazla 31 günlük geçerli aralık seçin."),400);
     }
