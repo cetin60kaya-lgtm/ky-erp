@@ -23,6 +23,9 @@ public sealed class LocalFolderGrant
 public sealed record LocalBackupResult(string SnapshotPath, int FileCount, long TotalBytes, string ManifestSha256);
 public sealed record LocalFolderSummary(int FileCount, long TotalBytes);
 
+public sealed record LocalFileEntry(string RelativePath, long SizeBytes, DateTimeOffset LastModifiedAt);
+
+
 public static class LocalFolderService
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -127,6 +130,48 @@ public static class LocalFolderService
         int count = 0; long bytes = 0;
         foreach (var file in EnumerateSafeFiles(root)) { count++; bytes += file.Length; }
         return new LocalFolderSummary(count, bytes);
+    }
+
+
+    public static IReadOnlyList<LocalFileEntry> Search(LocalFolderGrant grant, string query, int limit = 200)
+    {
+        if (!Load().Any(g => g.Id == grant.Id)) throw new UnauthorizedAccessException("Klasör yetkisi kaldırılmış.");
+        var root = ValidateRoot(grant.FullPath);
+        var term = (query ?? "").Trim();
+        var result = new List<LocalFileEntry>();
+        var inspected = 0;
+        foreach (var file in EnumerateSafeFiles(root)) {
+            if (++inspected > 100_000) break; // Bounded work on large model/code archives.
+            var relative = Path.GetRelativePath(root, file.FullName).Replace('\\','/');
+            if (term.Length != 0 && !relative.Contains(term, StringComparison.OrdinalIgnoreCase)) continue;
+            result.Add(new LocalFileEntry(relative, file.Length, file.LastWriteTimeUtc));
+            if (result.Count >= Math.Clamp(limit,1,500)) break;
+        }
+        return result;
+    }
+
+    public static string ReadTextPreview(LocalFolderGrant grant, string relativePath)
+    {
+        if (!Load().Any(g => g.Id == grant.Id)) throw new UnauthorizedAccessException("Klasör yetkisi kaldırılmış.");
+        var root = ValidateRoot(grant.FullPath);
+        if (string.IsNullOrWhiteSpace(relativePath) || Path.IsPathRooted(relativePath))
+            throw new UnauthorizedAccessException("Dosya yolu onaylı klasöre göre olmalıdır.");
+        var target = Path.GetFullPath(Path.Combine(root,relativePath));
+        if (!Inside(root,target)) throw new UnauthorizedAccessException("Dosya izinli klasör dışında.");
+        var file = new FileInfo(target);
+        if (!file.Exists || (file.Attributes & FileAttributes.ReparsePoint) != 0)
+            throw new UnauthorizedAccessException("Bağlantı dosyası veya bulunamayan yol okunamaz.");
+        var extensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+            ".md",".txt",".cs",".js",".jsx",".mjs",".ts",".tsx",".json",".xml",
+            ".csv",".sql",".css",".html",".yml",".yaml",".ps1",".py",
+        };
+        if(!extensions.Contains(file.Extension))throw new InvalidOperationException("Bu dosya türünün metin önizlemesi desteklenmiyor.");
+        if(file.Length > 256*1024)throw new InvalidOperationException("Önizleme için en fazla 256 KB metin okunur.");
+        using var stream = new FileStream(target,FileMode.Open,FileAccess.Read,FileShare.ReadWrite);
+        using var reader = new StreamReader(stream,System.Text.Encoding.UTF8,true);
+        var contents = reader.ReadToEnd();
+        if(contents.IndexOf('\0') >= 0)throw new InvalidOperationException("İkili dosya metin önizlemesine alınamaz.");
+        return contents;
     }
 
     /// <summary>
