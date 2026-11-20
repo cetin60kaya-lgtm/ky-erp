@@ -68,9 +68,10 @@ Write-Host '3/5 Self-contained Windows publish...' -ForegroundColor Cyan
 Invoke-Native 'Desktop publish' { dotnet publish $DesktopProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $DesktopOut }
 Invoke-Native 'Agent publish' { dotnet publish $AgentProject -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o $AgentOut }
 
-$DesktopExe = Join-Path $DesktopOut 'KY ERP Masaüstü.exe'
+$DesktopCandidate = @(Get-ChildItem -LiteralPath $DesktopOut -Filter '*.exe' -File | Where-Object { $_.Name.StartsWith('KY ERP ', [StringComparison]::OrdinalIgnoreCase) })
+if ($DesktopCandidate.Count -ne 1) { throw "KY ERP Desktop EXE sayisi beklenenden farkli: $($DesktopCandidate.Count)" }
+$DesktopExe = $DesktopCandidate[0].FullName
 $AgentExe = Join-Path $AgentOut 'KYERP.PDKS.Agent.exe'
-if (-not (Test-Path $DesktopExe)) { throw "Masaüstü uygulama oluşmadı: $DesktopExe" }
 if (-not (Test-Path $AgentExe)) { throw "PDKS cihaz agentı oluşmadı: $AgentExe" }
 
 $DesktopVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($DesktopExe).ProductVersion
