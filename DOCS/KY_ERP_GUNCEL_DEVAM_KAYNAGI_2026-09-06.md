@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 20.11.2026 — İşNet tek yerel Drive arşivinin son kullanıcı yönlendirmesi
+- DESEN'de aynı amaç için oluşmuş iki yerel İşNet arşiv klasörü tespit edildi. **Tek kalıcı kaynak:** Google Drive'ın zaten eşitlediği `Hakan Emp/KY-ISNET-BELGELER`. Diğer geçici `Firma Yedekleri/ISNET_EBELGE` klasörü tamamen boş olduğu doğrulanıp kaldırıldı; yalnız bizim 8790 yerel süreç/görev/deneme çalışma kopyası kapatıldı. Mevcut 8791 uygulamasına ve eski dosyalara müdahale edilmedi.
+- Gerçek Windows `http://127.0.0.1:8791/` HTTP 200; Drive bağlı hesapta `KY-ISNET-BELGELER` klasörü doğrulandı. Mevcut yerel program dört yönde XML/PDF arşivi ve SHA-256 mükerrer koruması içerir; **gerçek fatura/irsaliye indirme bu sohbetin son kontrolünde henüz yapılmadı**, boş arşive sahte PASS yazılmaz.
+- KY ERP e-Belge → Entegrasyonlar → İşNet günlük ana ekranı **yalnız mevcut 8791 yerel Drive arşivine** açılır. Eski bulut üzerinden portal şifresi tekrar deneme + R2'ye fiziksel ikinci orijinal yükleme akışı varsayılan kullanımdan çıkarıldı.
+- **File Hub `E_DOCUMENT` bağlantısı ve D1 canonical belge kaydı henüz canlı doğrulanmadı:** Drive'daki dosya fiziksel orijinaldir, D1'deki muhasebe kaydı değildir. Metadata/UUID/hash ile provider referansı kurulduktan sonra belge/kalem/KDV/irsaliye eşleştirme mevcut canonical motorla yapılacaktır. Bu aşamaya kadar ERP havuzuna otomatik aktarıldı denmez; fatura gönderimi veya kesin mali kayıt yok.
+
+
 ## 19.11.2026 — Günlük Operasyon son kabul / kişi ödeme kartı
 - Güncel canonical production HEAD üzerinde yalnız Günlük Operasyon kaynakları taşındı; paralel Gmail/mail değişiklikleri korunuyor.
 - 14–22 gibi firma-geneli ortak haftayı D1 CAS sürümü korur. “Bu Hafta” kendiliğinden seçilmez; ilk kez `Bu Dönemi Sabitle` ile kullanıcı onayı gerekir.
