@@ -174,7 +174,14 @@ async function downloadDocument(sourceId,sourceKey,format) {
 }
 
 
-const FOLDERS=Object.freeze({
+// Existing 101-document archive keeps its historical on-disk folder names.
+// New corporate e-Belgeler roots use the same four human-facing folder names
+// as KY ERP; this never silently migrates or duplicates old documents.
+const corporateLayout=/(?:^|[\\/])e-Belgeler[\\/]?$/i.test(ARCHIVE_ROOT);
+const FOLDERS=Object.freeze(corporateLayout ? {
+  incoming_invoice:"Gelen e-Fatura", outgoing_invoice:"Giden e-Fatura",
+  incoming_dispatch:"Gelen e-İrsaliye", outgoing_dispatch:"Giden e-İrsaliye"
+} : {
   incoming_invoice:"GELEN-FATURA", outgoing_invoice:"GIDEN-FATURA",
   incoming_dispatch:"GELEN-IRSALIYE", outgoing_dispatch:"GIDEN-IRSALIYE"
 });
