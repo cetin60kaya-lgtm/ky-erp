@@ -121,7 +121,7 @@
 
                         <Expander x:Name="SystemGroup" Style="{StaticResource NavGroup}" Header="SİSTEM">
                             <StackPanel>
-                                <Button x:Name="FileHubButton" Style="{StaticResource NavButton}" Tag="/admin/dosya-klasor-yonetimi" Click="ModuleButton_Click" Content="▤   Dosya Merkezi"/>
+                                <Button x:Name="FileHubButton" Style="{StaticResource NavButton}" Tag="/depolama/depolama-kaynaklar" Click="ModuleButton_Click" Content="▤   Dosya Merkezi"/>
                                 <Button x:Name="LocalCenterButton" Style="{StaticResource NavButton}" Click="LocalCenterButton_Click" Content="▣   Yerel Dosya ve Yedek Merkezi"/>
                                 <Button x:Name="AssistantButton" Style="{StaticResource NavButton}" Tag="/asistan/sohbet" Click="ModuleButton_Click" Content="✦   KY ERP Asistan"/>
                                 <Button x:Name="AdminButton" Style="{StaticResource NavButton}" Tag="/admin/admin-yonetim-ozeti" Click="ModuleButton_Click" Content="⚙   Yönetim"/>
@@ -178,6 +178,8 @@
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource ShellBorder}" BorderThickness="0,0,0,1">
                         <DockPanel Margin="14,6">
+                            <Button x:Name="IsnetStorageButton" DockPanel.Dock="Right" Style="{StaticResource TopButton}"
+                                    Click="IsnetStorageButton_Click" Content="Dosya Merkezi / Klasör Bağla" Margin="0,0,6,0"/>
                             <Button x:Name="IsnetCloudButton" DockPanel.Dock="Right" Style="{StaticResource TopButton}"
                                     Click="IsnetCloudButton_Click" Content="KY ERP e-Belge / Entegrasyonlar"/>
                             <TextBlock Text="İşNet • Dört Yönlü XML + PDF Otomatik Arşiv" VerticalAlignment="Center"
