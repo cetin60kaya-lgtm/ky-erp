@@ -2,7 +2,7 @@
 // No ERP writes, no automatic downloads, no credential persistence.
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
-import { mkdir, readFile, writeFile, rename, unlink } from "node:fs/promises";
+import { mkdir, readFile, writeFile, rename, unlink, readdir } from "node:fs/promises";
 import { join, isAbsolute } from "node:path";
 import {runIsnetArchiveSync,splitDateWindows} from "./sync-core.mjs";
 
@@ -220,26 +220,77 @@ async function writeManifest(document,result){
     kind:document.kind,direction:document.direction,company:document.company||"",
     lastCheckedAt:archivedAt(),xml:result.xml||previous.xml||null,pdf:result.pdf||previous.pdf||null,
     errors:result.errors,
+    review:result.review||previous.review||null,
   };
   const temporary=manifest+".partial-"+randomBytes(6).toString("hex");
   try {await writeFile(temporary,JSON.stringify(contents,null,2),{flag:"wx"});await rename(temporary,manifest);}
   finally{await unlink(temporary).catch(e=>{if(e.code!=="ENOENT")throw e;});}
 }
 
-async function alreadyArchived(doc){
+const PDF_REVIEW_CODE="PDF_SURUM_FARKI_INCELEME";
+const legacyPdfConflict=(v)=>String(v||"").includes("ARŞİVDE_FARKLI_ORİJİNAL_VAR_INCELEYIN") ||
+  String(v||"").includes(PDF_REVIEW_CODE);
+const pendingPdfReview=(manifest)=>manifest?.review?.status==="PENDING" ||
+  (Array.isArray(manifest?.errors)&&manifest.errors.some(legacyPdfConflict));
+async function readDocumentManifest(doc){
   const {dir,stem}=archiveLocation(doc);
-  let manifest;
+  let manifest=null;
   try{manifest=JSON.parse(await readFile(join(dir,"belge-kayit.json"),"utf8"))}
-  catch(e){if(e.code==="ENOENT"||e instanceof SyntaxError)return null;throw e;}
-  if(manifest.sourceKey!==doc.sourceKey||String(manifest.sourceId)!==String(doc.sourceId) ||
-     !manifest.xml?.sha256||!manifest.pdf?.sha256||
-     (Array.isArray(manifest.errors)&&manifest.errors.length))return null;
+  catch(e){if(e.code==="ENOENT")return {dir,stem,manifest:null};if(e instanceof SyntaxError)err("ARSIV_MANIFEST_BICIM_HATASI");throw e;}
+  if(manifest.sourceKey!==doc.sourceKey || String(manifest.sourceId)!==String(doc.sourceId) ||
+    String(manifest.documentNo)!==String(doc.no))err("ARSIV_BELGE_KIMLIGI_CAKISMASI");
+  return {dir,stem,manifest};
+}
+async function verifyOriginalFiles(dir,stem,manifest){
+  if(!manifest?.xml?.sha256||!manifest?.pdf?.sha256)return false;
   try{
     const [xml,pdf]=await Promise.all([readFile(join(dir,stem+".xml")),readFile(join(dir,stem+".pdf"))]);
-    if(sha256(xml)!==manifest.xml.sha256||sha256(pdf)!==manifest.pdf.sha256) return null;
-    return {documentNo:doc.no,sourceKey:doc.sourceKey,xmlSaved:true,pdfSaved:true,
-      xmlReused:true,pdfReused:true,errors:[]};
-  }catch(e){if(e.code==="ENOENT")return null;throw e;}
+    if(!pdf.subarray(0,5).equals(Buffer.from("%PDF-")))return false;
+    return sha256(xml)===manifest.xml.sha256 && sha256(pdf)===manifest.pdf.sha256;
+  }catch(e){if(e.code==="ENOENT")return false;throw e;}
+}
+async function alreadyArchived(doc){
+  const {dir,stem,manifest}=await readDocumentManifest(doc);
+  if(!manifest||!(await verifyOriginalFiles(dir,stem,manifest)))return null;
+  const review=pendingPdfReview(manifest);
+  // Historical PDF conflict stays visible, but does NOT trigger endless redownloads.
+  return {documentNo:doc.no,sourceKey:doc.sourceKey,xmlSaved:true,pdfSaved:true,
+    xmlReused:true,pdfReused:true,reviewPending:review,reviewCandidates:manifest.review?.candidates?.length||0,
+    errors:review?[PDF_REVIEW_CODE]:[]};
+}
+// A portal-rendered PDF may differ in metadata between requests. Never replace
+// the first verified original. Save the competing byte stream under a unique hash,
+// retain a single review record, and never silently call it legally equivalent.
+async function preservePdfAlternative(doc,bytes){
+  if(!bytes.subarray(0,5).equals(Buffer.from("%PDF-")))err("PDF_ALTERNATIF_GECERSIZ");
+  const {dir,stem,manifest}=await readDocumentManifest(doc);
+  if(!manifest?.pdf?.sha256)err("PDF_ORIJINAL_METADATA_YOK");
+  const original=await readFile(join(dir,stem+".pdf"));
+  if(sha256(original)!==manifest.pdf.sha256)err("PDF_ORIJINAL_HASH_UYUSMAZLIGI");
+  const digest=sha256(bytes);
+  if(digest===manifest.pdf.sha256)return null;
+  const reviews=Array.isArray(manifest.review?.candidates)?manifest.review.candidates:[];
+  if(reviews.some(x=>x.sha256===digest))return reviews.find(x=>x.sha256===digest);
+  if(reviews.length>=8)err("PDF_ALTERNATIF_LIMITI_INCELEME");
+  const folder=join(dir,"_INCELEME");
+  await mkdir(folder,{recursive:true});
+  const fileName="PDF-ALTERNATIF-"+digest.slice(0,16)+".pdf";
+  const destination=join(folder,fileName);
+  let exists=false;
+  try{
+    const previous=await readFile(destination);
+    if(sha256(previous)!==digest)err("PDF_ALTERNATIF_HASH_CAKISMASI");
+    exists=true;
+  }catch(e){if(e.code!=="ENOENT")throw e;}
+  if(!exists){
+    const temp=destination+".partial-"+randomBytes(6).toString("hex");
+    try{
+      await writeFile(temp,bytes,{flag:"wx"});
+      if(sha256(await readFile(temp))!==digest)err("PDF_ALTERNATIF_YAZIM_HATASI");
+      await rename(temp,destination);
+    }finally{await unlink(temp).catch(e=>{if(e.code!=="ENOENT")throw e;});}
+  }
+  return {sha256:digest,bytes:bytes.length,fileName,detectedAt:archivedAt()};
 }
 
 let archiveBusy=false;
@@ -251,12 +302,31 @@ async function archiveListed(id,sourceKey) {
   try{
     const existing=await alreadyArchived(doc);
     if(existing)return existing;
-    const out={xml:null,pdf:null,errors:[]};
+    const out={xml:null,pdf:null,errors:[],review:null};
     for(const format of ["xml","pdf"]){
-      try{out[format]=await saveOriginal(doc,format,await downloadDocument(id,sourceKey,format));}
-      catch(e){out.errors.push(format.toUpperCase()+":"+(e.safeCode||"DOSYA_ARSIV_HATASI"));}
+      let bytes=null;
+      try{
+        bytes=await downloadDocument(id,sourceKey,format);
+        out[format]=await saveOriginal(doc,format,bytes);
+      }catch(e){
+        if(format==="pdf"&&bytes&&e.safeCode==="ARŞİVDE_FARKLI_ORİJİNAL_VAR_INCELEYIN"){
+          try{
+            const candidate=await preservePdfAlternative(doc,bytes);
+            const existing=(await readDocumentManifest(doc)).manifest;
+            const prior=Array.isArray(existing?.review?.candidates)?existing.review.candidates:[];
+            const candidates=candidate&& !prior.some(x=>x.sha256===candidate.sha256)?[...prior,candidate]:prior;
+            out.review={status:"PENDING",firstSeenAt:existing?.review?.firstSeenAt||archivedAt(),
+              candidates,reason:PDF_REVIEW_CODE};
+            out.errors.push(PDF_REVIEW_CODE);
+          }catch(stageError){
+            out.errors.push("PDF:"+String(stageError.safeCode||"PDF_ALTERNATIF_ARSIV_HATASI"));
+          }
+        }else out.errors.push(format.toUpperCase()+":"+(e.safeCode||"DOSYA_ARSIV_HATASI"));
+      }
     }
-    if(out.xml||out.pdf)await writeManifest(doc,out);
+    if(out.xml||out.pdf||out.review)await writeManifest(doc,out);
+    const checked=await alreadyArchived(doc);
+    if(checked)return checked; // Both files exist and match hashes, even if review is pending.
     return {documentNo:doc.no,sourceKey:doc.sourceKey,xmlSaved:Boolean(out.xml),pdfSaved:Boolean(out.pdf),
       xmlReused:Boolean(out.xml?.reused),pdfReused:Boolean(out.pdf?.reused),errors:out.errors};
   }finally{archiveBusy=false;}
