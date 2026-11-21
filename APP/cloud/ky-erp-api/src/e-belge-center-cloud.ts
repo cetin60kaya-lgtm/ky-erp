@@ -219,7 +219,7 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
   if(p.needsManualReview===true)await addIssue(c,slug,id,"OCR_MANUAL_REVIEW_REQUIRED",`OCR sonuçları kritik alanlarda manuel kontrol gerektiriyor${Array.isArray(p.manualReviewReasons)&&p.manualReviewReasons.length?`: ${p.manualReviewReasons.join(", ")}`:"."}`,"ERROR","ocr");
   if(p.directionNeedsReview)await addIssue(c,slug,id,"DIRECTION_UNRESOLVED","Belgenin Hakan Emprime tarafına gelen mi giden mi olduğu otomatik doğrulanamadı. Ana firma VKN/ünvan eşleşmesini kontrol edin.","ERROR","direction");
   if(p.outgoingCounterpartyReview)await addIssue(c,slug,id,"OUTGOING_COUNTERPARTY_REVIEW","Giden tarama/PDF belgesinde alıcı müşteri kullanıcı tarafından doğrulanmalıdır.","ERROR","party_company_id");
-  await linkFile(c,slug,asset.id,id,asset.ext);if(!asset.canonicalSource)await queueArchive(c,slug,id,asset.id,p.documentType);await linkDocumentCanonicalModels(c,slug,id,text(asset.fileName));return{documentId:id,duplicate:false,status:"REVIEW_REQUIRED"};
+  await linkFile(c,slug,asset.id,id,asset.ext);if(!asset.canonicalSource)await queueArchive(c,slug,id,asset.id,p.documentType);await linkDocumentCanonicalModels(c,slug,id,text(asset.fileName));if(isDispatch(p.documentType))await autoReconcileInvoicesAfterDispatch(c,slug,id);return{documentId:id,duplicate:false,status:"REVIEW_REQUIRED"};
 }
 
 async function stageProviderR2Asset(c:Context<AppEnv>,slug:string,input:Row){const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo),storageKey=text(input.storageKey),ext=upper(input.ext),fileName=text(input.fileName)||`${text(input.documentNo)||providerDocumentId||crypto.randomUUID()}.${ext.toLowerCase()}`,logicalKey=`e-belge-provider:${providerType}:${providerDocumentId||normalize(fileName)}:${ext}`;const existing=await c.env.DB.prepare(`SELECT id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key FROM file_hub_assets WHERE main_company_slug=? AND logical_key=? LIMIT 1`).bind(slug,logicalKey).first<Row>();if(existing)return{...existing,ext};let sizeBytes=0;try{const head=storageKey?await c.env.FILES.head(storageKey):null;sizeBytes=Number(head?.size||0)}catch{}const id=crypto.randomUUID(),ts=now(),mimeType=text(input.mimeType)||(ext==="XML"?"application/xml":ext==="PDF"?"application/pdf":"application/octet-stream");await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','E_DOCUMENT_PROVIDER','READY',?,?,?,?,?,?)`).bind(id,slug,logicalKey,fileName,ext,mimeType,sizeBytes,storageKey||null,JSON.stringify({providerType,providerDocumentId,providerManaged:true,sourceKey:storageKey||null}),ts,ts,ts,ts).run();return{id,ext,fileName,preview_storage_key:storageKey,mime_type:mimeType,size_bytes:sizeBytes}}
@@ -244,7 +244,7 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   if(!["XML","PDF"].includes(ext))throw Object.assign(new Error("XML/PDF dışında belge otomatik alınamaz."),{code:"DOCUMENT_FORMAT_UNSUPPORTED"});
   const bindings=await env.DB.prepare(`SELECT root_path FROM file_hub_bindings
     WHERE main_company_slug=? AND storage_connection_id=? AND read_enabled=1 AND sync_enabled=1
-      AND ((module_code='E_BELGE' AND purpose_code='E_DOCUMENT')
+      AND ((module_code IN ('E_BELGE','EBELGE') AND purpose_code='E_DOCUMENT')
        OR (module_code='MUHASEBE' AND purpose_code IN ('INVOICE','DELIVERY_NOTE')))`)
     .bind(slug,text(asset.storage_connection_id)).all<Row>();
   const authorized=(bindings.results||[]).some((b:Row)=>{
@@ -255,6 +255,36 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
     .bind(slug,assetId).first<Row>();
   if(previous?.entity_id)return {documentId:text(previous.entity_id),duplicate:true,alreadyIndexed:true};
+  // The unique XML in the same provider folder owns its sibling PDF.
+  // No OCR, duplicate financial document or invoice-number-only matching.
+  if(ext==="PDF"){
+    const xmlRelativePath=path.replace(/\.pdf$/i,".xml");
+    if(xmlRelativePath!==path){
+      const siblings=await env.DB.prepare(`SELECT d.*
+        FROM accounting_documents d
+        JOIN file_hub_relations r
+          ON r.main_company_slug=d.main_company_slug
+         AND r.entity_type='DOCUMENT' AND r.entity_id=d.id
+         AND r.relation_type='XML'
+        JOIN file_hub_locations x
+          ON x.main_company_slug=r.main_company_slug
+         AND x.file_asset_id=r.file_asset_id AND x.is_available=1
+        WHERE d.main_company_slug=? AND d.deleted_at IS NULL
+          AND x.storage_connection_id=? AND LOWER(x.relative_path)=LOWER(?)
+        LIMIT 2`).bind(slug,text(asset.storage_connection_id),xmlRelativePath).all<Row>();
+      const matches=siblings.results||[];
+      if(matches.length>1)throw Object.assign(new Error("Aynı klasör için birden fazla XML belge kaydı bulundu."),{code:"DOCUMENT_XML_MATCH_AMBIGUOUS"});
+      if(matches.length===1){
+        const doc=matches[0];
+        if(text(doc.pdf_file_asset_id)&&text(doc.pdf_file_asset_id)!==assetId)
+          throw Object.assign(new Error("Belgede başka bir orijinal PDF zaten bağlı."),{code:"DOCUMENT_PDF_CONFLICT"});
+        const attached=await attachDuplicateFile(c,slug,doc,{
+          id:assetId,ext:"PDF",fileName:text(asset.file_name),canonicalSource:true,
+        });
+        return {...attached,source:"FILE_HUB_XML_PDF"};
+      }
+    }
+  }
   const downloaded=await readFileHubAssetForMail(c,slug,assetId,20*1024*1024);
   const bytes=downloaded.bytes;
   let parsed:Row;
@@ -280,6 +310,32 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   }
   const record=await createDocument(c,slug,parsed,{
     id:assetId,fileName:text(asset.file_name),ext,canonicalSource:true});
+  // XML is the document authority. Attach the unique sibling PDF even if
+  // PDF was indexed earlier, without requiring OCR or a second document.
+  if(ext==="XML"){
+    const siblingPath=path.replace(/\.xml$/i,".pdf");
+    if(siblingPath!==path){
+      const found=await env.DB.prepare(`SELECT a.id,a.file_name
+        FROM file_hub_locations l JOIN file_hub_assets a
+          ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug
+        WHERE l.main_company_slug=? AND l.storage_connection_id=?
+          AND LOWER(l.relative_path)=LOWER(?) AND l.is_available=1
+          AND a.status='AVAILABLE' AND UPPER(a.extension)='PDF' LIMIT 2`)
+        .bind(slug,text(asset.storage_connection_id),siblingPath).all<Row>();
+      if((found.results||[]).length===1){
+        const pdf=found.results![0];
+        const linkedDoc=await env.DB.prepare("SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1")
+          .bind(record.documentId,slug).first<Row>();
+        if(linkedDoc&&(!text(linkedDoc.pdf_file_asset_id)||text(linkedDoc.pdf_file_asset_id)===text(pdf.id))){
+          await attachDuplicateFile(c,slug,linkedDoc,{id:text(pdf.id),ext:"PDF",fileName:text(pdf.file_name),canonicalSource:true});
+          await env.DB.prepare(`UPDATE file_hub_assets SET metadata=json_set(
+            CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,
+            '$.accountingImportState','ATTACHED','$.accountingImportUpdatedAt',?)
+            WHERE id=? AND main_company_slug=?`).bind(now(),text(pdf.id),slug).run();
+        }
+      }
+    }
+  }
   const doc=await env.DB.prepare("SELECT id,document_type,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=?")
     .bind(record.documentId,slug).first<Row>();
   let reconciliation:Row|null=null;
@@ -351,6 +407,45 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
     const hasCounterparty=Boolean(text(parsed.partyName)||cleanTax(parsed.partyTaxNo));
     return await createDocument(c,slug,{...parsed,outgoingCounterpartyReview:outgoing&&!hasCounterparty,sourceType:"AI_SCAN",rawMetadata:{...safeJson(canonical.rawMetadata),aiProvider:canonical.extractor||"DOCUMENT_INTELLIGENCE",requestedDocumentKind:requestedKind,inferredDocumentKind:resolvedKind,autoDetected:canonical.autoDetected===true,directionResolution:parsed.directionResolution,analysisSource:analysisTarget===file?"ORIGINAL_FILE":"CLIENT_PDF_PREVIEW",originalFileName:file.name}},asset);
   }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
+}
+
+// Newly received dispatches also refresh existing unposted invoice drafts.
+// The established UBL/quantity engine remains the final relationship authority.
+async function autoReconcileInvoicesAfterDispatch(c:Context<AppEnv>,slug:string,dispatchId:string){
+  const dispatch=await c.env.DB.prepare(
+    "SELECT id,direction,document_no,party_company_id,party_tax_no,issue_date FROM accounting_documents "+
+    "WHERE id=? AND main_company_slug=? AND document_type LIKE '%IRSALIYE%' AND deleted_at IS NULL LIMIT 1"
+  ).bind(dispatchId,slug).first<Row>();
+  if(!dispatch)return{checked:0,matched:0};
+  const partyId=text(dispatch.party_company_id),tax=cleanTax(dispatch.party_tax_no),no=normalize(dispatch.document_no);
+  if(!partyId&&!tax)return{checked:0,matched:0};
+  const date=text(dispatch.issue_date),epoch=date?Date.parse(date+"T00:00:00Z"):NaN;
+  if(!Number.isFinite(epoch))return{checked:0,matched:0};
+  const start=new Date(epoch-90*86400000).toISOString().slice(0,10);
+  const end=new Date(epoch+90*86400000).toISOString().slice(0,10);
+  const sql="SELECT id,raw_metadata FROM accounting_documents WHERE main_company_slug=? AND direction=? "+
+    "AND document_type LIKE '%FATURA%' AND deleted_at IS NULL AND posted_at IS NULL "+
+    "AND status NOT IN ('APPROVED','FINALIZING','FINALIZE_RETRY','POSTED') "+
+    "AND issue_date BETWEEN ? AND ? "+
+    "AND ((?<>'' AND party_company_id=?) OR (?<>'' AND party_tax_no=?)) "+
+    "ORDER BY issue_date DESC LIMIT 60";
+  const rows=(await c.env.DB.prepare(sql).bind(slug,text(dispatch.direction),
+    start,end,partyId,partyId,tax,tax).all<Row>()).results||[];
+  let checked=0,matched=0;
+  for(const invoice of rows){
+    const refs=safeArray(safeJson(invoice.raw_metadata).dispatchReferences)
+      .map((x:unknown)=>normalize(x)).filter(Boolean);
+    if(refs.length&&no&&!refs.includes(no))continue;
+    checked++;
+    try{
+      const result=await reconcileOne(c,slug,text(invoice.id));
+      if(result.status==="MATCHED")matched++;
+    }catch{
+      await addIssue(c,slug,text(invoice.id),"DISPATCH_RECONCILE_REVIEW",
+        "İrsaliye geldi ancak otomatik fatura/irsaliye eşleştirmesi yeniden incelenmeli.","WARNING","relations");
+    }
+  }
+  return{checked,matched};
 }
 
 function lineLotNo(line:Row){const raw=safeJson(line.raw_metadata);return text(raw.dispatchLotNo||raw.invoiceLotNo||raw.lotNo)}
