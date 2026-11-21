@@ -41,6 +41,15 @@ test("app exposes per-company purpose map but disables unsupported purposes", ()
   assert.match(ui,/Gerçek bağlantılar firma D1 kaydından alınır/);
 });
 
+test("admin can unlink one folder binding with confirmation without deleting files", () => {
+  assert.match(ui,/async function removeCurrentBinding\(\)/);
+  assert.match(ui,/window\.confirm\(question\)/);
+  assert.match(ui,/method:"DELETE"/);
+  assert.match(ui,/mainCompanySlug="\+encodeURIComponent\(slug\)/);
+  assert.match(ui,/Fiziksel dosyalar ve diğer bölüm bağlantıları korundu/);
+  assert.match(ui,/Bağlantıyı Kaldır \(Dosyayı Silmez\)/);
+});
+
 test("desktop setup download cannot activate without real release URL and SHA", () => {
   assert.equal(release.releaseStatus,"TEST_LOCAL_ONLY");
   assert.equal(release.downloadUrl,null);
