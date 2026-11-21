@@ -343,7 +343,7 @@ function json(res,status,data){res.writeHead(status,{"content-type":"application
 async function readBody(req){const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)err("ISTEK_COK_BUYUK");chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString("utf8"))}catch{err("GECERSIZ_JSON")}}
 const server=createServer(async(req,res)=>{
   if(req.socket.remoteAddress!=="127.0.0.1"&&req.socket.remoteAddress!=="::ffff:127.0.0.1")return json(res,403,{error:"YEREL_ERISIM"});
-  if(req.method==="GET"&&req.url==="/"){res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store","x-frame-options":"DENY","content-security-policy":"default-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'"});return res.end(html);}
+  if(req.method==="GET"&&req.url==="/"){res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store","content-security-policy":"frame-ancestors https://kyerp.net https://app.kyerp.net; default-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'"});return res.end(html);}
   if(req.method!=="POST"||!["/login","/company","/documents","/file","/clear","/archive-item","/sync-start","/sync-status","/sync-stop"].includes(req.url))return json(res,404,{error:"BULUNAMADI"});
   if(req.headers["x-ky-csrf"]!==csrf||!["http://127.0.0.1:"+PORT,undefined].includes(req.headers.origin))return json(res,403,{error:"YETKISIZ_ISTEK"});
   try{
