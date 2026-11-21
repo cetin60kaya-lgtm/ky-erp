@@ -16,11 +16,14 @@ public partial class KyErpShellWindow : Window
 {
     private static readonly Uri AppUri = new("https://kyerp.net/");
     private static readonly Uri HealthUri = new("https://api.kyerp.net/api/health");
+    private static readonly Uri LocalIsnetUri = new("http://127.0.0.1:8791/");
 
     private readonly DesktopOfflineStore _offlineStore = new();
     private readonly PdksPaths _pdksPaths = new();
     private readonly ErpApiClient _erp = new();
     private readonly HttpClient _probe = new() { Timeout = TimeSpan.FromSeconds(4) };
+    private CoreWebView2Environment? _webEnvironment;
+    private bool _isnetWebViewReady;
     private readonly DispatcherTimer _connectionTimer = new() { Interval = TimeSpan.FromSeconds(12) };
     private readonly CancellationTokenSource _lifetime = new();
     private readonly HashSet<string> _allowedModules = new(StringComparer.OrdinalIgnoreCase);
@@ -78,6 +81,7 @@ public partial class KyErpShellWindow : Window
         var webRoot = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KY ERP", "Desktop", "WebView2");
         Directory.CreateDirectory(webRoot);
         var environment = await CoreWebView2Environment.CreateAsync(null, webRoot);
+        _webEnvironment = environment;
         await ErpWebView.EnsureCoreWebView2Async(environment);
         ErpWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
         ErpWebView.CoreWebView2.Settings.AreDefaultContextMenusEnabled = true;
@@ -428,10 +432,82 @@ public partial class KyErpShellWindow : Window
     private async void ModuleButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button button || button.Tag is not string path || ErpWebView.CoreWebView2 is null) return;
+        if (ReferenceEquals(button, IsnetButton))
+        {
+            await OpenLocalIsnetAsync();
+            return;
+        }
+        ShowIsnetCenter(false);
         ShowOfflineCenter(false);
         ErpWebView.CoreWebView2.Navigate(new Uri(AppUri, path).ToString());
         UpdatePageTitle(path);
         await TryRefreshIdentityAsync();
+    }
+
+    private async Task OpenLocalIsnetAsync()
+    {
+        try
+        {
+            using var response = await _probe.GetAsync(LocalIsnetUri, _lifetime.Token);
+            response.EnsureSuccessStatusCode();
+            var source = await response.Content.ReadAsStringAsync(_lifetime.Token);
+            if (!source.Contains("İşNet Yerel Drive Arşivi", StringComparison.Ordinal))
+                throw new InvalidOperationException("8791 arayüzü İşNet kaynağı olarak doğrulanmadı.");
+
+            if (!_isnetWebViewReady)
+            {
+                if (_webEnvironment is null) throw new InvalidOperationException("Masaüstü WebView2 hazır değil.");
+                await IsnetWebView.EnsureCoreWebView2Async(_webEnvironment);
+                IsnetWebView.CoreWebView2.Settings.AreDevToolsEnabled = false;
+                IsnetWebView.CoreWebView2.Settings.IsStatusBarEnabled = false;
+                IsnetWebView.CoreWebView2.NewWindowRequested += (_, args) =>
+                {
+                    args.Handled = true; // No external Chrome/Edge popup, including downloads/login.
+                };
+                IsnetWebView.CoreWebView2.NavigationStarting += (_, args) =>
+                {
+                    if (!Uri.TryCreate(args.Uri, UriKind.Absolute, out var target) ||
+                        !string.Equals(target.Scheme, Uri.UriSchemeHttp, StringComparison.OrdinalIgnoreCase) ||
+                        !string.Equals(target.Host, "127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
+                        target.Port != 8791 || !string.IsNullOrEmpty(target.Query))
+                    {
+                        args.Cancel = true;
+                        FooterStatusText.Text = "Güvenlik: İşNet ekranı yalnız yerel 8791 üzerinde ve URL'de giriş bilgisi olmadan açılır.";
+                    }
+                };
+                _isnetWebViewReady = true;
+                IsnetWebView.CoreWebView2.Navigate(LocalIsnetUri.ToString());
+            }
+            ShowOfflineCenter(false);
+            ShowIsnetCenter(true);
+            PageTitleText.Text = "İşNet / e-Belge · Yerel Otomasyon";
+            PageSubTitleText.Text = "Gelen/Giden XML + PDF · Firma arşivi · Bulut ve Muhasebe kabulü ayrı kontrol edilir";
+            FooterStatusText.Text = "İşNet yerel paneli KY ERP Masaüstü içinde açık. Başka tarayıcı penceresi gerekmez.";
+        }
+        catch (Exception error)
+        {
+            FooterStatusText.Text = "İşNet 8791 erişilemiyor veya güvenli şekilde açılamadı: " + error.GetType().Name;
+            // Do not open a different browser or request credentials on failure.
+        }
+    }
+
+    private void ShowIsnetCenter(bool visible)
+    {
+        IsnetWorkspace.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (visible)
+        {
+            OfflineCenter.Visibility = Visibility.Collapsed;
+            _offlineCenterVisible = false;
+        }
+        ErpWebView.Visibility = visible || _offlineCenterVisible ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    private void IsnetCloudButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowIsnetCenter(false);
+        ShowOfflineCenter(false);
+        ErpWebView.CoreWebView2?.Navigate(new Uri(AppUri, "/e-belge/entegrasyonlar").ToString());
+        UpdatePageTitle("/e-belge/entegrasyonlar");
     }
 
     private async void LocalCenterButton_Click(object sender, RoutedEventArgs e)
@@ -539,8 +615,9 @@ public partial class KyErpShellWindow : Window
     private void ShowOfflineCenter(bool visible)
     {
         _offlineCenterVisible = visible;
+        if (visible) IsnetWorkspace.Visibility = Visibility.Collapsed;
         OfflineCenter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        ErpWebView.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
+        ErpWebView.Visibility = visible || IsnetWorkspace.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
         if (visible)
         {
             PageTitleText.Text = "Offline Çalışma Merkezi";
@@ -550,7 +627,7 @@ public partial class KyErpShellWindow : Window
 
     private void UpdatePageTitle(string path)
     {
-        if (_offlineCenterVisible) return;
+        if (_offlineCenterVisible || IsnetWorkspace.Visibility == Visibility.Visible) return;
         PageTitleText.Text = path switch
         {
             var p when p.StartsWith("/muhasebe", StringComparison.OrdinalIgnoreCase) => "Muhasebe",
