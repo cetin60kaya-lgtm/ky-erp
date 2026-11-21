@@ -6,15 +6,15 @@ namespace KyPdks.Tests;
 public sealed class CompanyArchiveLayoutTests
 {
     [Fact]
-    public void ExistingHakanEmpFolderNamesRemainCanonical()
+    public void ModuleSectionFoldersAreCanonicalAndLegacyIsPreserved()
     {
-        Assert.Contains("modeller", CompanyArchiveLayout.ExistingCompanyFolders);
-        Assert.Contains("görsel", CompanyArchiveLayout.ExistingCompanyFolders);
-        Assert.Contains("yerleşim dosyaları", CompanyArchiveLayout.ExistingCompanyFolders);
-        Assert.Contains("KY-ISNET-BELGELER", CompanyArchiveLayout.ExistingCompanyFolders);
-        Assert.Contains("HKN E-FATURA", CompanyArchiveLayout.ExistingCompanyFolders);
+        Assert.Contains("DESEN", CompanyArchiveLayout.ExistingCompanyFolders);
+        Assert.Contains("MUHASEBE", CompanyArchiveLayout.ExistingCompanyFolders);
+        Assert.Contains("YÖNETİM", CompanyArchiveLayout.ExistingCompanyFolders);
+        Assert.DoesNotContain("KY-ISNET-BELGELER", CompanyArchiveLayout.ExistingCompanyFolders);
+        Assert.Equal("KY-ISNET-BELGELER", CompanyArchiveLayout.ModulePaths["LEGACY_ISNET"]);
         Assert.DoesNotContain("00_SISTEM", CompanyArchiveLayout.StandardPaths);
-        Assert.Equal("giden desenler", CompanyArchiveLayout.ModulePaths["DESEN"]);
+        Assert.Equal("DESEN/Giden Desenler", CompanyArchiveLayout.ModulePaths["DESEN"]);
     }
 
     [Fact]
@@ -29,8 +29,9 @@ public sealed class CompanyArchiveLayoutTests
             var first = CompanyArchiveLayout.EnsureMissingPaths(root);
             Assert.True(first.Created > 0);
             Assert.Equal("keep-original", File.ReadAllText(file));
-            Assert.True(Directory.Exists(Path.Combine(root, "KY-ISNET-BELGELER", "GELEN-FATURA")));
-            Assert.True(Directory.Exists(Path.Combine(root, "görsel")));
+            Assert.True(Directory.Exists(Path.Combine(root, "MUHASEBE", "e-Belgeler", "Gelen e-Fatura")));
+            Assert.False(Directory.Exists(Path.Combine(root, "KY-ISNET-BELGELER")));
+            Assert.True(Directory.Exists(Path.Combine(root, "DESEN", "Görseller")));
             Assert.Equal(0, CompanyArchiveLayout.EnsureMissingPaths(root).Created);
             Assert.Empty(CompanyArchiveLayout.MissingPaths(root));
         }
@@ -42,11 +43,11 @@ public sealed class CompanyArchiveLayoutTests
     {
         var root = Path.Combine(Path.GetTempPath(), "kyerp-archive-layout-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        File.WriteAllText(Path.Combine(root, "görsel"), "not-a-folder");
+        File.WriteAllText(Path.Combine(root, "DESEN"), "not-a-folder");
         try
         {
             Assert.Throws<IOException>(() => CompanyArchiveLayout.EnsureMissingPaths(root));
-            Assert.False(Directory.Exists(Path.Combine(root, "modeller")));
+            Assert.False(Directory.Exists(Path.Combine(root, "MUHASEBE")));
         }
         finally { Directory.Delete(root, recursive: true); }
     }
