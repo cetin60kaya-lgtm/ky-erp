@@ -6,10 +6,11 @@ import "./AdminStorageCenter.css";
 import "./StorageCloudHub.css";
 import "./StorageOperationsPolish.css";
 import AdminMailConnectionsV2 from "./AdminMailConnectionsV2";
+import { ARCHIVE_SECTIONS, archiveAssignmentStatus, archiveLayoutForSection } from "./CompanyArchiveLayout";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 
-const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-mail":"mail","depolama-atamalar":"bindings","depolama-dosyalar":"files","depolama-senkronizasyon":"sync","depolama-yedekleme":"logs"};
-const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
+const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-mail":"mail","depolama-atamalar":"bindings","depolama-klasor-duzeni":"archive","depolama-dosyalar":"files","depolama-senkronizasyon":"sync","depolama-yedekleme":"logs"};
+const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["archive","Klasör Düzeni"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
 const MODULES=STORAGE_MODULES;
 const PURPOSES=STORAGE_PURPOSES;
 const PURPOSES_BY_MODULE=STORAGE_PURPOSES_BY_MODULE;
@@ -203,6 +204,28 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
       ?"Mevcut e-Belge arşiv bağlantısı açıldı. Klasörü ve salt-okunur yetkisini kontrol edip kaydedebilirsiniz."
       :"E-Belge dört yön için salt-okunur bağlantı hazırlandı. Klasör Seç ile doğru İşNet arşivini onaylayın; dosyalar taşınmaz veya yeniden yüklenmez.");
   }
+
+ function openArchiveBinding(template) {
+   const existing=bindings.find(row=>row.module_code===template.moduleCode && row.purpose_code===template.purposeCode);
+   const selected=existing
+     ? activeConnections.find(row=>row.id===existing.storage_connection_id)
+     : cloudConnections.find(row=>row.isPrimary) || (cloudConnections.length===1?cloudConnections[0]:null);
+   if(!selected){
+     setTab("connections");
+     setMessage("Önce bu firmanın Google Drive/OneDrive ana klasörünü bir kez bağlayın. Masaüstü kurulumu zorunlu değildir.");
+     return;
+   }
+   setBinding({
+     moduleCode:template.moduleCode,purposeCode:template.purposeCode,storageConnectionId:selected.id,
+     rootPath:existing?.root_path||template.rootPath,folderSelected:Boolean(existing),
+     readEnabled:existing?.readEnabled??true,writeEnabled:existing?.writeEnabled??false,
+     syncEnabled:existing?.syncEnabled??false,
+   });
+   setTab("bindings");setError("");
+   setMessage(existing
+     ? "Bu firmanın mevcut modül/klasör eşleşmesi açıldı. Var olan yolu ve yetkileri kontrol edin."
+     : "Önerilen yol: "+template.rootPath+". Klasör Seç ile sağlayıcıdaki GERÇEK hedefi onaylayın; firma farklı isim kullanabilir.");
+ }
  async function saveBinding(){if(!binding.storageConnectionId)return setError("Önce depolama servisini seçin.");if(!binding.folderSelected)return setError("Hedef klasörü seçin; servis kökü kullanılacaksa klasör seçicide ana klasörü onaylayın.");setLoading(true);setError("");try{await apiFetch("/file-hub/bindings",{method:"PUT",body:{...binding,mainCompanySlug:slug}});setMessage(`${moduleLabel(binding.moduleCode)} / ${purposeLabel(binding.purposeCode)} klasörü bağlandı.`);await refresh()}catch(e){setError(e?.message||"Klasör ataması kaydedilemedi.")}finally{setLoading(false)}}
  async function rotateCredential(){if(credential?.configured&&!window.confirm("File Agent anahtarı yenilenecek. Mevcut yerel/NAS ajanları eski anahtarla bağlanamaz. Yedek/yeniden yapılandırma hazırlığı olmadan devam etmeyin. Onaylıyor musunuz?"))return;setLoading(true);setNewSecret(null);try{const r=await apiPost("/file-hub/agent-credential/rotate",{mainCompanySlug:slug,label:"KY File Agent"});setNewSecret(r?.data||r);setMessage("Yerel/NAS Agent anahtarı yenilendi. Bu anahtar yalnız şimdi gösterilir.");await refresh()}catch(e){setError(e?.message||"Agent anahtarı yenilenemedi.")}finally{setLoading(false)}}
  async function copy(v){try{await navigator.clipboard.writeText(String(v||""));setMessage("Agent anahtarı panoya kopyalandı.")}catch{setError("Anahtar kopyalanamadı.")}}
@@ -225,6 +248,33 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
      </div><button className="storage-primary" type="button" disabled={loading} onClick={chooseIsnetArchive}>İşNet Arşivini Bağla</button></div>
      <p className="storage-muted">1. Yetkili bulut hesabı ve arşiv ana klasörü · 2. E_BELGE / E_DOCUMENT salt-okunur klasör ataması · 3. Dosya servisini tara · 4. Muhasebe Belge Havuzu'nda otomatik taslak/inceleme. D1 kaydı ve mali kesinleştirme farklı aşamalardır.</p>
     </section><section className="storage-card-v2"><h3>Firma Bağlantı Haritası</h3><p><strong>{companyName}</strong> · Google Drive, OneDrive, SharePoint, yerel klasör ve NAS tek File Hub içinde çalışır. Kurumsal Outlook/Gmail posta kutuları ayrı E-posta Hesapları sekmesinden yönetilir. R2 yalnız web önizleme/cache katmanıdır.</p>{activeConnections.length?<div className="storage-service-grid">{activeConnections.map(row=><ServiceCard key={row.id} row={row} loading={loading} onSync={syncConnection} onDisconnect={disconnect}/>)}</div>:<div className="storage-empty-v2"><strong>Henüz servis bağlı değil</strong><p>İlk servisi ekleyin. Bulut hesabında ana klasörü seçtiğiniz anda alt klasörler KY ERP içinde görünür.</p><button className="storage-primary" type="button" onClick={()=>setWizard({})}>+ İlk Dosya Servisini Ekle</button></div>}</section><section className="storage-card-v2"><h3>Sağlık ve Uyarılar</h3><div className="storage-stats-v2"><div className="storage-stat-v2"><span>Kaynakta Yok</span><strong>{overview.missingCount||0}</strong><small>Provider tarafında bulunamayan dosya</small></div><div className="storage-stat-v2"><span>Eşleşmemiş</span><strong>{overview.unmatchedCount||0}</strong><small>ERP ilişkisi bekleyen dosya</small></div></div><div className="storage-binding-list">{setupSteps.map(step=><div className="storage-binding-row" key={step.label}><div><strong>{step.label}</strong><small>{step.done?"Hazır":"Kurulum bekliyor"}</small></div></div>)}</div></section><section className="storage-card-v2"><div className="storage-section-head"><div><h3>Akıllı Bağlantı Denetimi</h3><p>Gerçek D1 kayıtlarına göre eksik servis, senkron hatası, model klasörü ataması ve kayıp dosyaları işaretler. Öneriler onaysız veri taşımaz veya silmez.</p></div><button type="button" className="storage-secondary" disabled={loading} onClick={refresh}>Yenile</button></div><div className="storage-insight-grid">{insights.length?insights.map(row=><article key={row.code} className={`storage-insight storage-insight-${row.level}`}><div><strong>{row.title}</strong><p>{row.detail}</p></div><button type="button" className="storage-secondary" onClick={()=>setTab(row.actionTab)}>{row.actionTab==="connections"?"Servisi Bağla":row.actionTab==="bindings"?"Atamayı Aç":row.actionTab==="files"?"Dosyaları İncele":"Senkronizasyonu Aç"}</button></article>):<div className="storage-muted">Akıllı kontrol kayıtları yükleniyor veya bağlantı sağlığı henüz alınamadı.</div>}</div></section></>:null}
+ {tab==="archive"?<section className="storage-card-v2" aria-label="Firma arşiv düzeni ve modül atamaları">
+   <div className="storage-section-head"><div>
+     <h3>{companyName} · Tek Ana Arşiv / Klasör Düzeni</h3>
+     <p>Firmanın tek Google Drive/OneDrive/SharePoint ana klasörü kullanılır. Önerilen bölüm adları değiştirilebilir; esas bağlantı File Hub modül kimliğidir.</p>
+   </div><button type="button" className="storage-primary" onClick={()=>{setTab("connections");setWizard({})}}>Ana Klasör Bağla</button></div>
+   <p className="storage-muted">Boyahane, İK ve diğer web kullanıcıları için masaüstü kurulumuna gerek yok. Yerel Windows bileşeni İşNet indirmesi ve büyük PSD/AI işleri için isteğe bağlıdır. Klasör bağlama, fiziksel dosya taşımak veya mali kesinleştirme yapmak değildir.</p>
+   <div className="storage-archive-grid">
+     {ARCHIVE_SECTIONS.map(section=>{
+       const templates=archiveLayoutForSection(section);
+       const count=templates.filter(row=>archiveAssignmentStatus(row,bindings,connections).state==="CONNECTED").length;
+       return <article className="storage-archive-card" key={section.key}>
+         <header><div><strong>📁 {section.label}</strong><small>{section.path}/</small></div><span className="storage-count">{templates.length?count+"/"+templates.length:"—"}</span></header>
+         <p>{section.hint}</p>
+         {section.areas.length?<small className="storage-archive-areas">{section.areas.join(" · ")}</small>:null}
+         {section.sensitive?<small className="storage-sensitive-warning">Bu bölümün dosyaları için rol ve sağlayıcı paylaşım yetkilerini ayrıca kontrol edin.</small>:null}
+         {templates.length?<div className="storage-archive-links">{templates.map(template=>{
+           const status=archiveAssignmentStatus(template,bindings,connections);
+           return <button type="button" className="storage-secondary" key={template.moduleCode+"-"+template.purposeCode} onClick={()=>openArchiveBinding(template)}>
+             <span>{purposeLabel(template.purposeCode)}</span>
+             <small>{status.state==="CONNECTED"?"Bağlı: "+(status.rootPath||"Ana kök"):"Öneri: "+template.rootPath}</small>
+           </button>;
+         })}</div>:<p className="storage-muted">Mevcut klasör korunur; henüz File Hub ataması yoktur.</p>}
+       </article>;
+     })}
+   </div>
+   <p className="storage-muted">Tarihî KY-ISNET-BELGELER arşivi ve aktif Windows 8791 oturumu güvenli geçiş doğrulanana kadar mevcut hedefte kalır. Yeni e-Belgeler klasörünün varlığı 101 belgenin aktarıldığı anlamına gelmez.</p>
+ </section>:null}
  {tab==="connections"?<section className="storage-card-v2">
   <div className="storage-section-head"><div><h3>Dosya Servisleri</h3><p><strong>Yönetilen ana firma: {companyName}</strong> ({slug}). Google Drive, OneDrive ve e-posta hesapları firma bazında ayrılır. Cari/müşteri kayıtları bu ana firmanın altında ilişkilendirilir. NAS ve yerel klasörler ek kaynaklardır. Dropbox isteğe bağlı yedek alternatiftir; OAuth kurulmadan aktif gösterilmez.</p></div><button className="storage-primary" type="button" disabled={loading} onClick={()=>setWizard({})}>+ Başka Servis Ekle</button></div>
   <div className="storage-dual-providers">{dualProviders.map(item=><article className="storage-dual-provider" key={item.type}>
