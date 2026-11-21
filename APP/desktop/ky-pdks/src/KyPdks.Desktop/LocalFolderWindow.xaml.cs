@@ -137,10 +137,11 @@ public partial class LocalFolderWindow : Window
         }
     }
 
-    private void ChooseCompanyRoot_Click(object sender, RoutedEventArgs e)
+    private async void ChooseCompanyRoot_Click(object sender, RoutedEventArgs e)
     {
-        // The user approves precisely one company root on this Windows device.
-        // This does not authorize cloud OAuth, financial posting or File Hub writes.
+        // The authenticated tenant is taken from KY ERP, not the editable form.
+        // This one-time local permission is NOT a cloud or financial authorization.
+        ChooseCompanyRootButton.IsEnabled = false;
         try
         {
             if (string.IsNullOrWhiteSpace(_company))
@@ -154,30 +155,48 @@ public partial class LocalFolderWindow : Window
             var grants = LocalFolderService.Load();
             if (grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
                                 !g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase)))
-                throw new InvalidOperationException("Bu Windows klasörü başka bir KY ERP firmasına bağlı. Yanlış firmaya arşiv bağlanamaz.");
+                throw new InvalidOperationException("Bu Windows klasörü başka bir KY ERP firmasına bağlı.");
+            if (grants.Any(g => g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase) &&
+                                g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
+                                !g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Firma için başka bir File Hub ana klasörü zaten onaylı. " +
+                    "Eski yetkiyi kullanıcı onayıyla kaldırmadan aynı firmaya ikinci kök açılamaz.");
 
             var missing = CompanyArchiveLayout.MissingPaths(root);
             var preview = $"{_company} firması\n\nAna klasör: {root}\n" +
                 $"Mevcut klasörler korunacak. Oluşturulacak eksik standart klasör: {missing.Count}.\n\n" +
                 "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
-                "Seçili köke yalnız File Hub okuma izni verilecek; bulut OAuth ve yazma izni ayrıca doğrulanır.\n\n" +
+                "Seçili köke yalnız File Hub okuma izni verilir. Windows kullanıcı ortamında " +
+                "İşNet arşiv hedefi tanımlanır; çalışan İşNet servisi yeniden başlatılmaz.\n" +
+                "Bulut OAuth, yazma izni ve hassas klasör erişimleri ayrıca doğrulanır.\n\n" +
                 "Bu klasör düzenini kurmak istiyor musunuz?";
             if (MessageBox.Show(this, preview, "KY ERP · Firma Arşivi",
                     MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
-            var result = CompanyArchiveLayout.EnsureMissingPaths(root);
+            var result = await Task.Run(() => CompanyArchiveLayout.EnsureMissingPaths(root));
             if (!grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
                                  g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
                                  g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase)))
                 LocalFolderService.Grant(root, "Firma Ana Arşivi", "FILE_HUB", _company);
+
+            // Existing launcher reads this user-scoped archive root on its NEXT start.
+            // No existing portal process is killed, logged out or redirected silently.
+            var isnetRoot = Path.Combine(root, "KY-ISNET-BELGELER");
+            Environment.SetEnvironmentVariable("KY_ISNET_ARCHIVE_ROOT", isnetRoot,
+                EnvironmentVariableTarget.User);
+            Environment.SetEnvironmentVariable("KYERP_ARCHIVE_ACTIVE_TENANT", _company,
+                EnvironmentVariableTarget.User);
             RefreshGrants();
-            ShowStatus($"Arşiv klasörleri hazır · Firma: {_company} · Korunan: {result.Existing} · Oluşturulan: {result.Created}. " +
-                       "Drive/OneDrive ve KY ERP D1 bağlantısı ayrı kabul gerektirir.");
+            ShowStatus($"Firma klasörleri hazır: {_company} · Mevcut: {result.Existing} · " +
+                       $"Yeni: {result.Created}. İşNet arşiv yolu kullanıcı ayarına kaydedildi. " +
+                       "Çalışan 8791 oturumu değiştirilmedi; yeni yol sonraki kontrollü başlatmada kullanılır. " +
+                       "Drive/OneDrive OAuth ve D1 kabulü ayrı.");
         }
         catch (Exception error)
         {
             ShowStatus("Firma ana klasörü kurulamadı: " + error.Message, true);
         }
+        finally { ChooseCompanyRootButton.IsEnabled = true; }
     }
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
