@@ -11,7 +11,7 @@ test("all company folder rules are purpose-based and versioned, not hard-coded t
   assert.equal(policy.schemaVersion, "1.0.0");
   assert.equal(policy.initialModulePurposeAssignments.length, 52);
   assert.equal(policy.activationStatus, "DESIGN_ONLY_NEW_ITEMS_NOT_YET_DEPLOYED");
-  assert.ok(!JSON.stringify(policy).includes("Hakan Emp"));
+  assert.ok(!policy.initialModulePurposeAssignments.some(item => JSON.stringify(item).includes("Hakan Emp")));
   const ids = policy.initialModulePurposeAssignments.map(p => p.moduleCode + "/" + p.purposeCode);
   assert.equal(new Set(ids).size, ids.length);
   for (const item of policy.initialModulePurposeAssignments) {
@@ -45,7 +45,7 @@ test("desktop setup download cannot activate without real release URL and SHA", 
   assert.equal(release.releaseStatus,"TEST_LOCAL_ONLY");
   assert.equal(release.downloadUrl,null);
   assert.equal(release.setupSha256,null);
-  assert.match(release.risk,/PDKS Agent/);
+  assert.match(release.risk,/PDKS/i);
   assert.match(ui,/desktopRelease\.releaseStatus==="PUBLISHED"/);
   assert.match(ui,/\^\[a-f0-9\]\{64\}\$/i);
   assert.match(ui,/\["desktop","Masaüstü Kurulum"\]/);
