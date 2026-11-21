@@ -50,7 +50,8 @@ Bu ilave dizinlere HKN/DDM/İşNet PDF'leri tekrar kopyalanmayacak. Eski `FIRMA 
 
 - **D1:** iş kayıtlarının tek yetkili kaynağı, firma slug + yetkilendirme ile izole.
 - **Drive/OneDrive/SharePoint:** her KY ERP firması için tek provider hesabı/bağlantı/kök klasör ID'si; cihazın yerel Windows yolu **bu ID değildir**.
-- **PC-1, PC-2:** aynı bulut klasörünü yerel sync istemcisiyle görür; her PC aynı firmaya ait kendi yerel mutlak yolunu bir defa onaylar. Tek dosya için ikinci yükleme veya ayrı arşiv üretilmez.
+- **PC-1, PC-2:** aynı bulut klasörünü yerel sync istemcisiyle görür; her PC aynı firmaya ait kendi yerel mutlak yolunu bir defa onaylar. Tek dosya için ikinci yükleme veya ayrı arşiv hedefi tasarlanmaz.
+- **Çoklu yazıcı sınırı:** Yalnız aynı Drive klasörünü seçmek, iki bilgisayarda eşzamanlı XML/PDF indirme ve üzerine yazmanın güvenli olduğunu **garanti etmez**. Bir firma için aynı anda yalnız tek aktif İşNet arşiv yazıcısı kullanılmalı; birden çok PC'den yazma açılmadan önce sunucu doğrulamalı firma bazlı lease/çakışma ve idempotency testleri tamamlanmalıdır.
 - **İndeks:** File Hub, sağlayıcı dosya ID / connection ID / tenant / göreli yol / hash üzerinden idempotent olur. Yerel Drive eşitlemesi = File Hub/D1 indeksi tamamlandı demek değildir.
 - **İşNet:** 8791 yalnız aktif yetkili oturumla; farklı bilgisayarda bağımsız kimlikle sessiz yeniden giriş veya otomatik portal oturum çakışması yapılmaz. Portal oturumu kopmuşsa güvenli yeniden bağlanma kullanıcının işini kesmeyecek şekilde yönetilir.
 - **Outlook:** File Hub'da doğrulanmış HKN + ilgili DDM PDF'ler tek taslakta, firma/alıcı onayıyla gider; posta gönderimi ve muhasebe kesin kaydı klasör kurulumunun yan etkisi değildir.
