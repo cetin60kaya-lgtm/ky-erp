@@ -597,7 +597,33 @@ if(process.env.KY_ISNET_SELFTEST==="1"){
   if(!conflict)throw Error("QA_OVERWRITE_PROTECTION_FAILED");
   const pdf=await saveOriginal(doc,"pdf",Buffer.from("%PDF-1.4\nQA"));
   await writeManifest(doc,{xml:one,pdf,errors:[]});
-  console.log("KY_ISNET_LOCAL_ARCHIVE_QA_PASS: ORIGINALS_AND_DEDUP");
+  // Regression 1: historical conflict on disk must NOT download over verified
+  // XML/PDF; both should count present, but remain in a review queue.
+  await writeManifest(doc,{xml:one,pdf,errors:["PDF:ARŞİVDE_FARKLI_ORİJİNAL_VAR_INCELEYIN"]});
+  const historical=await alreadyArchived(doc);
+  if(!historical?.xmlSaved||!historical?.pdfSaved||!historical?.reviewPending||
+    historical.errors[0]!==PDF_REVIEW_CODE)throw Error("QA_HISTORICAL_PDF_CONFLICT_COUNT_FAILED");
+  state.connected=true;state.documents=[doc];
+  const stable=await archiveListed(doc.sourceId,doc.sourceKey);
+  if(!stable.pdfReused||stable.errors[0]!==PDF_REVIEW_CODE)throw Error("QA_REPEAT_DOWNLOAD_NOT_SKIPPED");
+  const variant=Buffer.from("%PDF-1.4\\nQA-ALTERNATIVE");
+  const candidate=await preservePdfAlternative(doc,variant);
+  const repeated=await preservePdfAlternative(doc,variant);
+  if(candidate?.sha256!==sha256(variant)||repeated?.sha256!==candidate.sha256)
+    throw Error("QA_ALTERNATIVE_DUPLICATE_PROTECTION_FAILED");
+  await writeManifest(doc,{xml:one,pdf,errors:[PDF_REVIEW_CODE],review:{
+    status:"PENDING",reason:PDF_REVIEW_CODE,firstSeenAt:archivedAt(),candidates:[candidate]}});
+  const reviews=await scanPdfReviews();
+  if(reviews.length!==1||reviews[0].candidateCount!==1)throw Error("QA_PENDING_REVIEW_INDEX_FAILED");
+  if(!(await previewPdfReview(doc.sourceKey,doc.sourceId,"original")).equals(Buffer.from("%PDF-1.4\\nQA")) ||
+    !(await previewPdfReview(doc.sourceKey,doc.sourceId,"alternative")).equals(variant))
+    throw Error("QA_PDF_PREVIEW_WRONG_CONTENT");
+  await keepReviewedOriginal(doc.sourceKey,doc.sourceId);
+  if((await scanPdfReviews()).length||!(await alreadyArchived(doc))|| (await alreadyArchived(doc)).errors.length)
+    throw Error("QA_REVIEW_RESOLUTION_DID_NOT_PERSIST");
+  if(!(await readFile(join(archiveLocation(doc).dir,"_INCELEME",candidate.fileName))).equals(variant))
+    throw Error("QA_ALTERNATIVE_WAS_DELETED");
+  console.log("KY_ISNET_LOCAL_ARCHIVE_QA_PASS: ORIGINALS_DEDUP_PDF_VERSIONS_REVIEW");
 }else{
   server.listen(PORT,HOST,()=>console.log("KY İşNet Drive Arşivi: http://"+HOST+":"+PORT+" · ARŞİV HAZIR"));
   process.on("SIGINT",()=>{reset();server.close(()=>process.exit(0));});
