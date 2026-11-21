@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 21.11.2026 — İşNet 31 günlük sorgu, bulut XML/PDF ve JPEG model otomasyonu (kod dalı; canlı kabul bekliyor)
+- Kod dalı: `fix/isnet-drive-jpeg-model-eslesme-20261121`; ayrıntı ve kabul planı `DOCS/KY_ISNET_31GUN_DRIVE_JPEG_MODEL_KABUL_20261121.md`.
+- 8791 İşNet yerel arşivinin 31 günü **tek sorgu dönemi** sınırıdır, belge saklama sınırı değildir; uygulama bir türde 200 kayıt sınırını da bildirir. 8791 yerel kaynak dosyası GitHub'daki 8788 adaptöründen ayrıdır; bu dal 8791'in tarih sayfalamasını değiştirdiğini iddia etmez.
+- File Hub e-Belge atamasında `E_BELGE` standardı, eski `EBELGE` kaydıyla geri uyumluluk; XML öncelikli içeri alma; yalnız aynı tenant/depolama/klasördeki XML+PDF'nin tek belgeye bağlanması.
+- Bağlanmış `DESEN/MODEL_IMAGE` Drive klasörünün yıllar dahil alt klasörlerini sayfa imleciyle tarayıp JPEG adından canonical Model Kartı oluşturma; müşteri firması tahmini yok. Dosyaları taşıma/silme yok.
+- Windows 8791 gerçek belge çekimi, D1 model/Belge Havuzu, Cloudflare Pages/Worker yayın SHA ve iki cihaz kabulü **bekliyor**. Mevcut Desktop 1.5.1 kurulumunu/Pdks hizmetini değiştirme.
+
 ## 20.11.2026 — İşNet tek yerel Drive arşivinin son kullanıcı yönlendirmesi
 - DESEN'de aynı amaç için oluşmuş iki yerel İşNet arşiv klasörü tespit edildi. **Tek kalıcı kaynak:** Google Drive'ın zaten eşitlediği `Hakan Emp/KY-ISNET-BELGELER`. Diğer geçici `Firma Yedekleri/ISNET_EBELGE` klasörü tamamen boş olduğu doğrulanıp kaldırıldı; yalnız bizim 8790 yerel süreç/görev/deneme çalışma kopyası kapatıldı. Mevcut 8791 uygulamasına ve eski dosyalara müdahale edilmedi.
 - Gerçek Windows `http://127.0.0.1:8791/` HTTP 200; Drive bağlı hesapta `KY-ISNET-BELGELER` klasörü doğrulandı. Mevcut yerel program dört yönde XML/PDF arşivi ve SHA-256 mükerrer koruması içerir; **gerçek fatura/irsaliye indirme bu sohbetin son kontrolünde henüz yapılmadı**, boş arşive sahte PASS yazılmaz.
