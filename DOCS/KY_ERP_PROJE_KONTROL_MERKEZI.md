@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — Canlı Drive bölüm arşivi V2 / KY ERP Yönetim klasör haritası
+
+- Kullanıcının kesin kararı: her firma tek Google Drive/OneDrive/SharePoint ana klasörü; **10 sade bölüm** (`DESEN`, `MUHASEBE`, `BOYAHANE`, `İK`, `İMALAT`, `DENETİM`, `FORMLAR`, `YÖNETİM`, mevcut `OTOMASYON` ve `gelen dosyalar`). Kaynak `DOCS/KY_ERP_FIRMA_ARSIV_MODUL_SADE_V2_20261122.md`. 12 düz kök V1 tasarımı tarihî oldu.
+- **Gerçek Hakan Emp Drive işlemleri**: 8 yeni bölüm ve alt ağacı oluşturuldu; tekrarlanan yeni/boş 20 dizin kontrollü silindi, bölüm altlarında 0 tekrar doğrulandı. Eski boş kök `DTF` aynı Drive ID ile `DESEN/DTF` altına taşındı. Eski `FIRMA YEDEKLERI` aynı Drive ID ile `YÖNETİM/Firma Yedekleri/Geçmiş Arşiv` altına taşındı. Aktif İşNet kökü ve dört yönü korundu; gerçek belge/döküman/PSD/XLSM silinmedi veya taşınmadı.
+- **Geliştirme PR #635** (PR #634 tabanı): `AdminStorageCenter.jsx` içine `Klasör Düzeni` yönetim sekmesi; `CompanyArchiveLayout.js` 10 bölüm, module+purpose ve özelleştirilebilir firma bağları; `StorageDocumentCatalog.js` Boyahane model formları, MSDS, TDS, periyodik bakım, yönetim logları; File Hub yeni hassas amaç denetimi; opsiyonel masaüstü klasör kurulumu, yalnız İşNet muhasebecisi seçerse 8791 arşiv yolu; 8791 yeni kurumsal e-Belgeler klasör etiketleri.
+- **Açık operasyon**: yüzlerce HKN/DDM PDF, binlerce model/desen ve 101 orijinal XML+PDF yeni köke taşınmadı; bunların aktif File Hub/Outlook/model/8791 yolu doğrulanmadan taşınması veri kaybı ve mükerrer giriş riski. İK fotoğrafı R2'de, Boyahane örnek evrak UI'si ve gerçek D1/backup otomasyonu ayrı iş; bunlar tamamlanmış gösterilmeyecek.
+- **Web öncelikli**: sıradan kullanıcı masaüstü uygulamasını kurmaz. Yalnız muhasebeci (İşNet) veya yüksek boyutlu PSD/AI kullanan desen bilgisayarı Windows yardımcı bileşeni isteyebilir. Aynı firma tek bulut arşiv kökü; Windows farklı cihaz yerel yolları aynı D1 tenant/root ile eşleşir. Fiziksel dosya taşıma için ayrı migration kabulü.
+- Kod ve QA için GitHub/Windows kanıtı aranır; canlı Cloudflare Worker/Pages merge/deploy henüz yapılmadı.
+
+
 ## 22.11.2026 — KY ERP Masaüstü tek firma arşivi / çok bilgisayar geliştirmesi
 
 - **Yeni aktif feature branch:** `feature/kyerp-masaustu-tek-arsiv-cok-firma-20261122` (İşNet/File Hub PR #634 dalını temel alır).
