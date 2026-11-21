@@ -21,7 +21,7 @@ const json = (v: unknown): Row => {
   catch { return {}; }
 };
 async function bodyOf(c: Context<AppEnv>): Promise<Row> { try { const b=await c.req.json(); return b&&typeof b==="object"&&!Array.isArray(b)?b as Row:{}; } catch { return {}; } }
-function slugOf(c: Context<AppEnv>, b: Row = {}) { return text(b.mainCompanySlug||b.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"mecit-hakan").toLocaleLowerCase("tr-TR"); }
+function slugOf(c: Context<AppEnv>, b: Row = {}) { return text(b.mainCompanySlug||b.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"").toLocaleLowerCase("tr-TR"); }
 function err(code:string,message:string,details?:unknown){return{ok:false,success:false,error:{code,message,...(details===undefined?{}:{details})}};}
 async function findAsset(c:Context<AppEnv>,slug:string,connectionId:string,relativePath:string){return c.env.DB.prepare(`SELECT a.*,l.id location_id,l.provider_file_id,l.relative_path,l.location_role,l.is_available,l.provider_modified_at FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug,connectionId,relativePath).first<Row>();}
 async function logEvent(c:Context<AppEnv>,slug:string,type:string,data:Row){await c.env.DB.prepare(`INSERT INTO file_hub_events(id,main_company_slug,storage_connection_id,file_asset_id,event_type,actor_type,device_name,details,created_at) VALUES(?,?,?,?,?,'AGENT',?,?,?)`).bind(crypto.randomUUID(),slug,text(data.storageConnectionId)||null,text(data.fileAssetId)||null,type,text(data.deviceName)||null,JSON.stringify(data.details||{}),now()).run();}
@@ -103,7 +103,7 @@ async function ingest(c:Context<AppEnv>){
 
 async function previewUpload(c:Context<AppEnv>){
   const form=(await c.req.parseBody({all:true})) as Record<string,any>;
-  const slug=text(form.mainCompanySlug||form.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"mecit-hakan").toLocaleLowerCase("tr-TR"),fileAssetId=text(form.fileAssetId),candidate=form.file;
+  const slug=text(form.mainCompanySlug||form.main_company_slug||c.req.header("X-KYERP-Tenant-Slug")||"").toLocaleLowerCase("tr-TR"),fileAssetId=text(form.fileAssetId),candidate=form.file;
   if(!(await verifyFileHubAgentCredential(c,slug)).ok)return c.json(err("AGENT_UNAUTHORIZED","Bu firma için File Agent anahtarı geçersiz."),401);
   const file=candidate instanceof File?candidate:Array.isArray(candidate)?candidate.find((x:any)=>x instanceof File):null;
   if(!fileAssetId||!file)return c.json(err("REQUIRED","fileAssetId ve file zorunludur."),422);
