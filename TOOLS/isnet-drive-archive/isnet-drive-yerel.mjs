@@ -606,7 +606,7 @@ if(process.env.KY_ISNET_SELFTEST==="1"){
   state.connected=true;state.documents=[doc];
   const stable=await archiveListed(doc.sourceId,doc.sourceKey);
   if(!stable.pdfReused||stable.errors[0]!==PDF_REVIEW_CODE)throw Error("QA_REPEAT_DOWNLOAD_NOT_SKIPPED");
-  const variant=Buffer.from("%PDF-1.4\\nQA-ALTERNATIVE");
+  const variant=Buffer.from("%PDF-1.4\nQA-ALTERNATIVE");
   const candidate=await preservePdfAlternative(doc,variant);
   const repeated=await preservePdfAlternative(doc,variant);
   if(candidate?.sha256!==sha256(variant)||repeated?.sha256!==candidate.sha256)
@@ -615,7 +615,7 @@ if(process.env.KY_ISNET_SELFTEST==="1"){
     status:"PENDING",reason:PDF_REVIEW_CODE,firstSeenAt:archivedAt(),candidates:[candidate]}});
   const reviews=await scanPdfReviews();
   if(reviews.length!==1||reviews[0].candidateCount!==1)throw Error("QA_PENDING_REVIEW_INDEX_FAILED");
-  if(!(await previewPdfReview(doc.sourceKey,doc.sourceId,"original")).equals(Buffer.from("%PDF-1.4\\nQA")) ||
+  if(!(await previewPdfReview(doc.sourceKey,doc.sourceId,"original")).equals(Buffer.from("%PDF-1.4\nQA")) ||
     !(await previewPdfReview(doc.sourceKey,doc.sourceId,"alternative")).equals(variant))
     throw Error("QA_PDF_PREVIEW_WRONG_CONTENT");
   await keepReviewedOriginal(doc.sourceKey,doc.sourceId);
