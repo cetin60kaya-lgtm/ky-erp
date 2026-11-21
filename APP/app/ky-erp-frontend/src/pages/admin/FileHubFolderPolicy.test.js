@@ -37,7 +37,8 @@ test("app exposes per-company purpose map but disables unsupported purposes", ()
   assert.match(ui,/\["map","Klasör Haritası"\]/);
   assert.match(ui,/mapModule==="ALL"\|\|x\.moduleCode===mapModule/);
   assert.match(ui,/STORAGE_PURPOSES_BY_MODULE\[item\.moduleCode\]\?\.includes\(item\.purposeCode\)/);
-  assert.match(ui,/changeModule\(item\.moduleCode\);changePurpose\(item\.purposeCode\);setTab\("bindings"\)/);
+  assert.match(ui,/if\(matched\)\{selectBinding\(matched\)\}/);
+  assert.match(ui,/moduleCode:item\.moduleCode,purposeCode:item\.purposeCode/);
   assert.match(ui,/Gerçek bağlantılar firma D1 kaydından alınır/);
 });
 
