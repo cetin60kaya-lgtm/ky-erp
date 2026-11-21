@@ -55,26 +55,38 @@ Name: "{autoprograms}\KY ERP\Entegrasyon Merkezini Başlat"; Filename: "{sys}\ws
 
 [Tasks]
 Name: "desktopicon"; Description: "Masaüstünde KY ERP Masaüstü kısayolu oluştur"; GroupDescription: "Kısayollar:"; Flags: checkedonce
+Name: "pdksservice"; Description: "PDKS cihaz hizmetini de kur/güncelle (canlı cihaz bakım onayı gerekir)"; GroupDescription: "İsteğe bağlı cihaz hizmeti:"; Flags: unchecked
 
 
 [Run]
-Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent durduruluyor..."
-Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent kaydı temizleniyor..."
-Filename: "{sys}\sc.exe"; Parameters: "create KYERP.PDKS.Agent binPath= &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; start= delayed-auto DisplayName= &quot;KY ERP PDKS Agent&quot;"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent kuruluyor..."
-Filename: "{sys}\sc.exe"; Parameters: "description KYERP.PDKS.Agent &quot;KY ERP kart cihazı toplama ve D1 arka plan senkron servisi&quot;"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "failure KYERP.PDKS.Agent reset= 86400 actions= restart/5000/restart/15000/restart/30000"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "failureflag KYERP.PDKS.Agent 1"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "start KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent başlatılıyor..."
+Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent durduruluyor..."; Tasks: pdksservice
+Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "Eski PDKS Agent kaydı temizleniyor..."; Tasks: pdksservice
+Filename: "{sys}\sc.exe"; Parameters: "create KYERP.PDKS.Agent binPath= &quot;{app}\Agent\KYERP.PDKS.Agent.exe&quot; start= delayed-auto DisplayName= &quot;KY ERP PDKS Agent&quot;"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent kuruluyor..."; Tasks: pdksservice
+Filename: "{sys}\sc.exe"; Parameters: "description KYERP.PDKS.Agent &quot;KY ERP kart cihazı toplama ve D1 arka plan senkron servisi&quot;"; Flags: runhidden waituntilterminated; Tasks: pdksservice
+Filename: "{sys}\sc.exe"; Parameters: "failure KYERP.PDKS.Agent reset= 86400 actions= restart/5000/restart/15000/restart/30000"; Flags: runhidden waituntilterminated; Tasks: pdksservice
+Filename: "{sys}\sc.exe"; Parameters: "failureflag KYERP.PDKS.Agent 1"; Flags: runhidden waituntilterminated; Tasks: pdksservice
+Filename: "{sys}\sc.exe"; Parameters: "start KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; StatusMsg: "KY ERP PDKS Agent başlatılıyor..."; Tasks: pdksservice
 Filename: "{app}\KY ERP Masaüstü.exe"; Description: "KY ERP Masaüstü uygulamasını aç"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
-Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated
+Filename: "{sys}\sc.exe"; Parameters: "stop KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; Check: IsThisInstallerPdksAgent
+Filename: "{sys}\sc.exe"; Parameters: "delete KYERP.PDKS.Agent"; Flags: runhidden waituntilterminated; Check: IsThisInstallerPdksAgent
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
 
 [Code]
+function IsThisInstallerPdksAgent(): Boolean;
+var
+  RegisteredPath: String;
+  ExpectedPath: String;
+begin
+  Result := False;
+  ExpectedPath := Lowercase(ExpandConstant('{app}') + '\Agent\KYERP.PDKS.Agent.exe');
+  if RegQueryStringValue(HKLM, 'SYSTEM\CurrentControlSet\Services\KYERP.PDKS.Agent', 'ImagePath', RegisteredPath) then
+    Result := Pos(ExpectedPath, Lowercase(RegisteredPath)) > 0;
+end;
+
 function InitializeSetup(): Boolean;
 begin
   Result := True;
