@@ -83,7 +83,7 @@
 
                 <StackPanel Margin="18,18,18,12">
                     <TextBlock Text="KY ERP" Foreground="White" FontSize="26" FontWeight="Bold"/>
-                    <TextBlock Text="MASAÜSTÜ • 1.5.1" Foreground="#84A7C8" FontSize="11" FontWeight="SemiBold" Margin="1,2,0,0"/>
+                    <TextBlock Text="MASAÜSTÜ • 1.5.2" Foreground="#84A7C8" FontSize="11" FontWeight="SemiBold" Margin="1,2,0,0"/>
                     <Border Background="#183B5D" CornerRadius="8" Margin="0,14,0,0" Padding="10,8">
                         <StackPanel Orientation="Horizontal">
                             <Ellipse x:Name="SidebarConnectionDot" Width="8" Height="8" Fill="#F2B84B" Margin="0,0,8,0" VerticalAlignment="Center"/>
@@ -168,6 +168,24 @@
 
             <Grid Grid.Row="1" Background="#F3F6FA">
                 <wv2:WebView2 x:Name="ErpWebView" Visibility="Visible"/>
+
+                <!-- Local İşNet runs in the KY ERP WPF window, not in an external browser.
+                     Its original XML/PDF are still handled by the approved loopback 8791 service. -->
+                <Grid x:Name="IsnetWorkspace" Visibility="Collapsed" Background="#F3F6FA">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="48"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+                    <Border Grid.Row="0" Background="White" BorderBrush="{StaticResource ShellBorder}" BorderThickness="0,0,0,1">
+                        <DockPanel Margin="14,6">
+                            <Button x:Name="IsnetCloudButton" DockPanel.Dock="Right" Style="{StaticResource TopButton}"
+                                    Click="IsnetCloudButton_Click" Content="KY ERP e-Belge / Entegrasyonlar"/>
+                            <TextBlock Text="İşNet • Dört Yönlü XML + PDF Otomatik Arşiv" VerticalAlignment="Center"
+                                       FontWeight="Bold" Foreground="{StaticResource ShellText}" FontSize="14"/>
+                        </DockPanel>
+                    </Border>
+                    <wv2:WebView2 x:Name="IsnetWebView" Grid.Row="1"/>
+                </Grid>
 
                 <Grid x:Name="OfflineCenter" Visibility="Collapsed" Background="#F3F6FA">
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
