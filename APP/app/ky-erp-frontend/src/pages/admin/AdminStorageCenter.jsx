@@ -217,7 +217,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
    }
    setBinding({
      moduleCode:template.moduleCode,purposeCode:template.purposeCode,storageConnectionId:selected.id,
-     rootPath:existing?.root_path||template.rootPath,folderSelected:Boolean(existing),
+     rootPath:existing ? (existing.root_path||"") : template.rootPath,folderSelected:Boolean(existing),
      readEnabled:existing?.readEnabled??true,writeEnabled:existing?.writeEnabled??false,
      syncEnabled:existing?.syncEnabled??false,
    });
@@ -267,7 +267,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
            const status=archiveAssignmentStatus(template,bindings,connections);
            return <button type="button" className="storage-secondary" key={template.moduleCode+"-"+template.purposeCode} onClick={()=>openArchiveBinding(template)}>
              <span>{purposeLabel(template.purposeCode)}</span>
-             <small>{status.state==="CONNECTED"?"Bağlı: "+(status.rootPath||"Ana kök"):"Öneri: "+template.rootPath}</small>
+             <small>{status.state==="CONNECTED"?"Atanan yol: "+(status.rootPath||"Servis ana kökü"):"Öneri: "+template.rootPath}</small>
            </button>;
          })}</div>:<p className="storage-muted">Mevcut klasör korunur; henüz File Hub ataması yoktur.</p>}
        </article>;
