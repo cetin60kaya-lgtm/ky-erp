@@ -6,10 +6,11 @@ import "./AdminStorageCenter.css";
 import "./StorageCloudHub.css";
 import "./StorageOperationsPolish.css";
 import AdminMailConnectionsV2 from "./AdminMailConnectionsV2";
+import fileHubFolderPolicy from "./FileHubFolderPolicy.v1.json";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 
 const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-mail":"mail","depolama-atamalar":"bindings","depolama-dosyalar":"files","depolama-senkronizasyon":"sync","depolama-yedekleme":"logs"};
-const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
+const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["map","Klasör Haritası"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
 const MODULES=STORAGE_MODULES;
 const PURPOSES=STORAGE_PURPOSES;
 const PURPOSES_BY_MODULE=STORAGE_PURPOSES_BY_MODULE;
@@ -89,7 +90,7 @@ function ServiceCard({row,loading,onSync,onDisconnect}){
 }
 
 export default function AdminStorageCenter({activeMainCompany,activeTab,showToolbar=true}){
- const[preview,setPreview]=useState(null),[previewLoading,setPreviewLoading]=useState(false),[tab,setTab]=useState(ROUTE_TO_TAB[activeTab]||"overview"),[overview,setOverview]=useState({}),[insights,setInsights]=useState([]),[connections,setConnections]=useState([]),[bindings,setBindings]=useState([]),[files,setFiles]=useState([]),[providers,setProviders]=useState([]),[accounts,setAccounts]=useState([]),[mailAccounts,setMailAccounts]=useState([]),[credential,setCredential]=useState(null),[newSecret,setNewSecret]=useState(null),[wizard,setWizard]=useState(null),[folderPicker,setFolderPicker]=useState(null),[binding,setBinding]=useState({moduleCode:"DESEN",purposeCode:"MODEL_IMAGE",storageConnectionId:"",rootPath:"",readEnabled:true,writeEnabled:true,syncEnabled:true,folderSelected:false}),[search,setSearch]=useState(""),[searchDraft,setSearchDraft]=useState(""),[fileOffset,setFileOffset]=useState(0),[fileTotal,setFileTotal]=useState(null),[statusFilter,setStatusFilter]=useState(""),[loading,setLoading]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
+ const[preview,setPreview]=useState(null),[previewLoading,setPreviewLoading]=useState(false),[tab,setTab]=useState(ROUTE_TO_TAB[activeTab]||"overview"),[overview,setOverview]=useState({}),[insights,setInsights]=useState([]),[connections,setConnections]=useState([]),[bindings,setBindings]=useState([]),[files,setFiles]=useState([]),[providers,setProviders]=useState([]),[accounts,setAccounts]=useState([]),[mailAccounts,setMailAccounts]=useState([]),[credential,setCredential]=useState(null),[newSecret,setNewSecret]=useState(null),[wizard,setWizard]=useState(null),[folderPicker,setFolderPicker]=useState(null),[binding,setBinding]=useState({moduleCode:"DESEN",purposeCode:"MODEL_IMAGE",storageConnectionId:"",rootPath:"",readEnabled:true,writeEnabled:true,syncEnabled:true,folderSelected:false}),[mapModule,setMapModule]=useState("ALL"),[search,setSearch]=useState(""),[searchDraft,setSearchDraft]=useState(""),[fileOffset,setFileOffset]=useState(0),[fileTotal,setFileTotal]=useState(null),[statusFilter,setStatusFilter]=useState(""),[loading,setLoading]=useState(false),[message,setMessage]=useState(""),[error,setError]=useState("");
  const slug=String(activeMainCompany?.slug||"").trim(),companyName=activeMainCompany?.name||activeMainCompany?.title||slug||"Aktif firma seçilmedi",tenantParams=useMemo(()=>({mainCompanySlug:slug}),[slug]);
   const activeSlugRef=useRef(slug);
   activeSlugRef.current=slug;
@@ -204,6 +205,20 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
   {activeConnections.length?<div className="storage-service-grid">{activeConnections.map(row=><ServiceCard key={row.id} row={row} loading={loading} onSync={syncConnection} onDisconnect={disconnect}/>)}</div>:<div className="storage-empty-v2"><strong>{companyName} için kayıtlı dosya servisi yok</strong><p>Önce Google Drive veya OneDrive hesabını bağlayın, sonra klasör seçin. Diğerini daha sonra da ekleyebilirsiniz.</p></div>}
  </section>:null}
  {tab==="mail"?<AdminMailConnectionsV2 activeMainCompany={activeMainCompany} openModule={(module,options={})=>window.location.assign(`/${module}/${options.tabKey||"mail-gelen"}`)}/>:null}
+ {tab==="map"?<section className="storage-card-v2" aria-label="Firma klasör haritası">
+  <div className="storage-section-head"><div><h3>{companyName} — Klasör Haritası</h3><p>Her firma kendi gerçek Google Drive, OneDrive, SharePoint, NAS veya yerel klasörünü dosya amacıyla eşleştirir. Bu tablo fiziksel klasör oluşturmaz, taşımaz ya da silmez. Gerçek bağlantılar firma D1 kaydından alınır.</p></div><button className="storage-secondary" type="button" onClick={()=>setTab("bindings")}>Klasör Atamalarını Yönet</button></div>
+  <div className="storage-form-grid"><label>Bölüm filtrele<select value={mapModule} onChange={e=>setMapModule(e.target.value)}><option value="ALL">Tüm bölümler</option>{[...new Set(fileHubFolderPolicy.initialModulePurposeAssignments.map(x=>x.moduleCode))].map(code=><option value={code} key={code}>{moduleLabel(code)}</option>)}</select></label></div>
+  <div className="storage-notice storage-hint"><strong>Tek dosya, birçok yetkili görünüm.</strong> Model görseli, yerleşim PDF ve PSD önizlemesi aynı model kaydından gösterilir; orijinal PSD yetkili Desen arşivinde kalır. Muhasebeden İmalat'a yalnız modele ilişkilendirilmiş müşteri irsaliyesi açılabilir. İzinler bu listeden kendiliğinden verilmez.</div>
+  <div className="storage-binding-list">{fileHubFolderPolicy.initialModulePurposeAssignments.filter(x=>mapModule==="ALL"||x.moduleCode===mapModule).map(item=>{
+   const matched=bindings.find(b=>b.module_code===item.moduleCode&&b.purpose_code===item.purposeCode);
+   const bindable=Boolean(STORAGE_PURPOSES_BY_MODULE[item.moduleCode]?.includes(item.purposeCode));
+   return <div className="storage-binding-row" key={item.moduleCode+"-"+item.purposeCode}>
+    <div><strong>{moduleLabel(item.moduleCode)} · {item.label}</strong><small>{item.purposeCode} · {matched?("Bağlı klasör: "+(matched.root_path||"Servis kökü")):"Henüz klasör atanmamış"} · {item.implementationStatus==="KOD_KATALOG"?"Katalogda var":"Geliştirme bekliyor"}</small><small>{item.note||"Dosya amacı ve görünürlük firma yöneticisi tarafından yetkilendirilir."}</small></div>
+    {bindable?<button type="button" className="storage-secondary" onClick={()=>{changeModule(item.moduleCode);changePurpose(item.purposeCode);setTab("bindings")}}>{matched?"Atamayı Düzenle":"Klasör Bağla"}</button>:<span className="storage-muted">Kod desteği bekliyor</span>}
+   </div>;
+  })}</div>
+  <div className="storage-notice storage-hint"><strong>Windows kurulum paketi:</strong> Yayınlandığında yalnız doğrulanmış sürüm, SHA-256 ve yetkili indirme bağlantısı bu Yönetim alanında gösterilecek. Şu anda üretim indirme bağlantısı yayımlanmadı. GitHub'daki sürümlü politika ve firma bazlı D1 atamaları esas alınır; Excel yalnız yönetim dökümüdür.</div>
+ </section>:null}
  {tab==="bindings"?<div className="storage-binding-layout">
   <section className="storage-card-v2">
    <h3>Bölüm → Dosya Türü → Depolama</h3><p>Önce bölüm ve dosya türünü seçin. Mevcut atamayı değiştirmek için sağdaki kayda tıklayın.</p>
