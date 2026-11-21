@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 21.11.2026 — X masaüstü 1.5.1 taşınabilir kabulü + tüm firmalara uyumlu File Hub klasör haritası
+- Kanonik kaynak `32d6be738a908d61d20dfdfdb1d8378a2d1bdf77`; X'te `D:\KYERP-TEST-20261121\portable\KY ERP Masaüstü.exe` WPF açık, aynı kaynak `portable-verified` ile SHA256 `E27CBA23CCD468836D20AFA280ACA5AE3EF46A938AF3D759D7772818CBD38BB6`, .NET birim test komut çıkışı 0, publish çıkışı 0. 10 entegrasyon dosyası eş hash, Node --check PASS. 8788 İşNet adapter health true/connected false, 8791 arşiv alıcısı ayrı dinliyor. PDKS hizmetlerine kurulum/müdahale yok.
+- X DriveFS `KY-ISNET-BELGELER/_DURUM/KY_X_FILEHUB_SYNC_CHECK_20261121.txt` yükleme sonucu bulut klasöründe içerik birebir doğrulandı. `_UYGULAMA` X yerelde üç dosya, Drive API'de yalnız `KULLANIM.md`; EXE/kod dağıtımının Drive'da tam bulunduğu kanıtlanmadı.
+- Tüm ana firmalara firma kökünden bağımsız 44 slotlu Excel uyumlu CSV ve dinamik yönetim/ACL sözleşmesi **taslak PR #632**: `DOCS/KY_ERP_TUM_FIRMALAR_FILE_HUB_KLASOR_HARITASI_20261121.csv`, `DOCS/KY_ERP_TUM_FIRMALAR_FILE_HUB_SISTEM_SOZLESMESI_20261121.md`. X'te CSV 44/44 unique; File Hub live 44 slotu kullanmıyor (UNIQUE binding), migration+API+UI şart.
+- İşNet e-Belge ve Drive JPEG Model Kartı düzeltmesi PR #631 hâlâ taslak, cloud yayın ve gerçek D1 kabulü yok. Firma OAuth/izinli klasör ataması, tek JPEG Model Kartı, İşNet XML+PDF Belge Havuzu ve çoklu cihaz kabulü **bekliyor**. Yönetimden imzalı kurulum dağıtımı **henüz geliştirilmedi**.
+
 ## 20.11.2026 — İşNet tek yerel Drive arşivinin son kullanıcı yönlendirmesi
 - DESEN'de aynı amaç için oluşmuş iki yerel İşNet arşiv klasörü tespit edildi. **Tek kalıcı kaynak:** Google Drive'ın zaten eşitlediği `Hakan Emp/KY-ISNET-BELGELER`. Diğer geçici `Firma Yedekleri/ISNET_EBELGE` klasörü tamamen boş olduğu doğrulanıp kaldırıldı; yalnız bizim 8790 yerel süreç/görev/deneme çalışma kopyası kapatıldı. Mevcut 8791 uygulamasına ve eski dosyalara müdahale edilmedi.
 - Gerçek Windows `http://127.0.0.1:8791/` HTTP 200; Drive bağlı hesapta `KY-ISNET-BELGELER` klasörü doğrulandı. Mevcut yerel program dört yönde XML/PDF arşivi ve SHA-256 mükerrer koruması içerir; **gerçek fatura/irsaliye indirme bu sohbetin son kontrolünde henüz yapılmadı**, boş arşive sahte PASS yazılmaz.
