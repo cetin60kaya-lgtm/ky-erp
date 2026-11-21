@@ -502,6 +502,15 @@ public partial class KyErpShellWindow : Window
         ErpWebView.Visibility = visible || _offlineCenterVisible ? Visibility.Collapsed : Visibility.Visible;
     }
 
+    private void IsnetStorageButton_Click(object sender, RoutedEventArgs e)
+    {
+        ShowIsnetCenter(false);
+        ShowOfflineCenter(false);
+        var path = "/depolama/depolama-atamalar";
+        ErpWebView.CoreWebView2?.Navigate(new Uri(AppUri, path).ToString());
+        UpdatePageTitle(path);
+    }
+
     private void IsnetCloudButton_Click(object sender, RoutedEventArgs e)
     {
         ShowIsnetCenter(false);
