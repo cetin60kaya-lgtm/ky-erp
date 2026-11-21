@@ -17,6 +17,12 @@ const SELECT=`
  WHERE a.status='AVAILABLE' AND c.is_active=1 AND c.sync_mode='CLOUD_API'
    AND c.provider_type IN ('GOOGLE_DRIVE','ONEDRIVE','SHAREPOINT')
    AND UPPER(a.extension) IN ('XML','PDF')
+   -- _INCELEME contains competing PDFs, _DURUM/ _UYGULAMA contain
+   -- local control/diagnostic artifacts: none are new official e-documents.
+   AND LOWER(REPLACE(l.relative_path,'\\','/')) NOT LIKE '%/_inceleme/%'
+   AND LOWER(REPLACE(l.relative_path,'\\','/')) NOT LIKE '%/_durum/%'
+   AND LOWER(REPLACE(l.relative_path,'\\','/')) NOT LIKE '%/_uygulama/%'
+   AND LOWER(l.relative_path) NOT LIKE '%.partial-%'
    AND COALESCE(a.size_bytes,0) BETWEEN 1 AND 20971520
    AND b.read_enabled=1 AND b.sync_enabled=1
    AND ((b.module_code IN ('E_BELGE','EBELGE') AND b.purpose_code='E_DOCUMENT')
