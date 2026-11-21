@@ -252,6 +252,9 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     return Boolean(root)&&(path.toLocaleLowerCase("tr-TR").startsWith((root+"/").toLocaleLowerCase("tr-TR"))||path.toLocaleLowerCase("tr-TR")===root.toLocaleLowerCase("tr-TR"));
   });
   if(!authorized)throw Object.assign(new Error("Belge bu firma için atanmış senkron klasöründe değil."),{code:"DOCUMENT_BINDING_MISSING"});
+  const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
+    .bind(slug,assetId).first<Row>();
+  if(previous?.entity_id)return {documentId:text(previous.entity_id),duplicate:true,alreadyIndexed:true};
   // The unique XML in the same provider folder owns its sibling PDF.
   // No OCR, duplicate financial document or invoice-number-only matching.
   if(ext==="PDF"){
@@ -282,9 +285,6 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
       }
     }
   }
-  const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
-    .bind(slug,assetId).first<Row>();
-  if(previous?.entity_id)return {documentId:text(previous.entity_id),duplicate:true,alreadyIndexed:true};
   const downloaded=await readFileHubAssetForMail(c,slug,assetId,20*1024*1024);
   const bytes=downloaded.bytes;
   let parsed:Row;
