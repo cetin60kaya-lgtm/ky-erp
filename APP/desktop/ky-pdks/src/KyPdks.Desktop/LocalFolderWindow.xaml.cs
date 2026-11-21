@@ -24,6 +24,7 @@ public partial class LocalFolderWindow : Window
         InitializeComponent();
         _company = string.IsNullOrWhiteSpace(company) ? "" : company.Trim();
         CompanyInput.Text = _company;
+        CompanyInput.IsReadOnly = !string.IsNullOrWhiteSpace(_company);
         RefreshGrants();
         RefreshStartup();
     }
@@ -191,8 +192,10 @@ public partial class LocalFolderWindow : Window
                     : "KY ERP için yalnız okuma izni verilecek klasörü seçin",
             };
             if (picker.ShowDialog(this) != true) return;
+            if (string.IsNullOrWhiteSpace(_company))
+                throw new InvalidOperationException("Önce KY ERP ana firmasını seçin.");
             var grant = LocalFolderService.Grant(picker.FolderName, NameInput.Text.Trim(),
-                purpose, CompanyInput.Text.Trim());
+                purpose, _company);
             RefreshGrants();
             ShowStatus($"{grant.Name} için {grant.Permission} izni verildi: {grant.FullPath}");
         }
