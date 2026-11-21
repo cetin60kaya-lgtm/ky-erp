@@ -1,5 +1,16 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — KY ERP Masaüstü tek firma arşivi / çok bilgisayar geliştirmesi
+
+- **Yeni aktif feature branch:** `feature/kyerp-masaustu-tek-arsiv-cok-firma-20261122` (İşNet/File Hub PR #634 dalını temel alır).
+- **Klasör sözleşmesi:** `DOCS/KY_ERP_FIRMA_TEK_KOK_MEVCUT_HAKAN_EMP_KLASOR_STANDART_20261122.md`. Gerçek Hakan Emp Google Drive kökü 12 mevcut klasör + 1 mevcut XLSM içerir. Eski klasörler aynen korunur, 00..99'a yeniden adlandırma yok; diğer firmalar aynı isimleri eksikse alır.
+- Masaüstü seçili yetkili firma için **tek ana klasör seçici**, eksik klasörleri idempotent kurulum, diğer firmanın köküne yanlış bağlanma koruması ve Windows kullanıcı kapsamlı salt okunur File Hub izni eklendi. 8791 arşiv yolu yalnız **sonraki kontrollü servis açılışında** kullanıcı ortamından okunacak; var olan portal süreci durdurulmuyor.
+- İşNet 8791 girişinde **açık onaylı Windows DPAPI şifre kasası**, oturum açılışında yetkili portal firma kimliğini kontrol edip son tercihi doğrulayarak seçme, isteğe bağlı takip (varsayılan kapalı) ve indirilen orijinal XML/PDF koruması geliştirildi.
+- Masaüstü paket sürümü feature dalında **1.5.3** olarak birleştiriliyor; PDKS servisi installer'da varsayılan kapalı isteğe bağlı görev (mevcut PDKS durdurulmaz veya silinmez).
+- X üzerinde **izole QA**: xUnit 18/18, İşNet Node 5/5, arşiv selftest, sahte parola DPAPI roundtrip başarılı, masaüstü derlemesi 0 hata. Son versiyon/setup değişikliklerinin ayrıca build kabulü gereklidir.
+- **CANLIYA ALINMADI:** X'te açık 1.5.2 EXE ve 8791 oturumu değiştirilmedi; gerçek İşNet login, D1 firma OAuth/bağlantı/101 belge aktarımı, Outlook gönderimi, çok PC bulut karşılaştırması ve Cloudflare release henüz kabul edilmedi. Veri silme/taşıma, mali fiş ve gerçek e-posta yok.
+
+
 ## 21.11.2026 — Firma bazlı tek ana klasör ve kurumsal mail/Drive kuralı
 - **Sözleşme:** `DOCS/KY_ERP_FIRMA_BAZLI_TEK_KOK_MAIL_DRIVE_FILE_HUB_20261121.md`. KYERP.NET'teki her ana firma kendi doğrulanmış `main_company_slug`, kendi Gmail/Outlook hesapları (posta OAuth ayrı), Google Drive/OneDrive/SharePoint OAuth hesabı ve **tek seçili provider ana klasör ID** ile çalışır. Windows Google Drive senkronizasyonuyla aynı klasörün yerel görünümü kullanılır; File Hub bulut provider API üzerinden indeksler, aynı fiziksel dosya ikinci bir LOCAL_FOLDER/AGENT asset'ine dönüştürülmez. Bu kural hiçbir şirkete sabitlenmez.
 - **P0 izolasyon kodu PR #634:** `file-hub.ts` bütün kullanıcı dosya GET'lerinde/manuel ilişki işleminde oturumdaki şirket ile istenen şirket eşleşmesini zorunlu kılar; legacy global File Agent key'i şirket-düzeyli kimlik doğrulamayla değiştirildi ve sabit tenant fallback kaldırıldı. `file-hub-cloud-oauth.ts` OAuth hesap/klasör/SPO okuma isteklerini şirket oturumuyla sınırlar ve yeni bağlantıya kesin `oauthAccountId` saklar. `file-hub-agent-public.ts` sabit varsayılan şirketi kullanmaz. UI bağlı servis ile doğru sağlayıcı hesap ID/e-postasını eşleştirir, başka hesabı ilk seçenek diye otomatik seçmez; İşNet arşivi firmanın tek varsayılan kökü altından seçilir. Genel bakışta firmanın kökü, mail hesabı sayısı ve klasör ataması görülür.
