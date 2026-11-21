@@ -252,6 +252,36 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     return Boolean(root)&&(path.toLocaleLowerCase("tr-TR").startsWith((root+"/").toLocaleLowerCase("tr-TR"))||path.toLocaleLowerCase("tr-TR")===root.toLocaleLowerCase("tr-TR"));
   });
   if(!authorized)throw Object.assign(new Error("Belge bu firma için atanmış senkron klasöründe değil."),{code:"DOCUMENT_BINDING_MISSING"});
+  // The unique XML in the same provider folder owns its sibling PDF.
+  // No OCR, duplicate financial document or invoice-number-only matching.
+  if(ext==="PDF"){
+    const xmlRelativePath=path.replace(/\.pdf$/i,".xml");
+    if(xmlRelativePath!==path){
+      const siblings=await env.DB.prepare(`SELECT d.*
+        FROM accounting_documents d
+        JOIN file_hub_relations r
+          ON r.main_company_slug=d.main_company_slug
+         AND r.entity_type='DOCUMENT' AND r.entity_id=d.id
+         AND r.relation_type='XML'
+        JOIN file_hub_locations x
+          ON x.main_company_slug=r.main_company_slug
+         AND x.file_asset_id=r.file_asset_id AND x.is_available=1
+        WHERE d.main_company_slug=? AND d.deleted_at IS NULL
+          AND x.storage_connection_id=? AND LOWER(x.relative_path)=LOWER(?)
+        LIMIT 2`).bind(slug,text(asset.storage_connection_id),xmlRelativePath).all<Row>();
+      const matches=siblings.results||[];
+      if(matches.length>1)throw Object.assign(new Error("Aynı klasör için birden fazla XML belge kaydı bulundu."),{code:"DOCUMENT_XML_MATCH_AMBIGUOUS"});
+      if(matches.length===1){
+        const doc=matches[0];
+        if(text(doc.pdf_file_asset_id)&&text(doc.pdf_file_asset_id)!==assetId)
+          throw Object.assign(new Error("Belgede başka bir orijinal PDF zaten bağlı."),{code:"DOCUMENT_PDF_CONFLICT"});
+        const attached=await attachDuplicateFile(c,slug,doc,{
+          id:assetId,ext:"PDF",fileName:text(asset.file_name),canonicalSource:true,
+        });
+        return {...attached,source:"FILE_HUB_XML_PDF"};
+      }
+    }
+  }
   const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
     .bind(slug,assetId).first<Row>();
   if(previous?.entity_id)return {documentId:text(previous.entity_id),duplicate:true,alreadyIndexed:true};
