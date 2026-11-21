@@ -28,7 +28,7 @@ export const STORAGE_DOCUMENT_TYPES = Object.freeze([
   ["QUALITY_PHOTO","Kalite Fotoğrafı"],
   ["INVOICE","Fatura"],["E_INVOICE_XML","e-Fatura XML"],
   ["E_ARCHIVE_INVOICE","e-Arşiv Fatura"],["DELIVERY_NOTE","İrsaliye"],
-  ["E_DELIVERY_NOTE","e-İrsaliye"],["E_DOCUMENT","Diğer e-Belge"],
+  ["E_DELIVERY_NOTE","e-İrsaliye"],["E_DOCUMENT","e-Belge Arşivi (4 yön XML + PDF)"],
   ["PURCHASE_INVOICE","Alış Faturası"],["SALES_INVOICE","Satış Faturası"],
   ["CREDIT_NOTE","İade / Düzeltme Belgesi"],["EXPENSE_RECEIPT","Gider Fişi / Makbuz"],
   ["PAYMENT_DOCUMENT","Ödeme / Tahsilat Belgesi"],
