@@ -329,7 +329,7 @@ public partial class KyErpShellWindow : Window
             if (_allowedModules.Contains(permission) && !routes.Contains(route, StringComparer.OrdinalIgnoreCase)) routes.Add(route);
         }
         Add("MUHASEBE", "/muhasebe/yonetim-ozeti");
-        Add("ISNET", "/isnet/yonetim-merkezi");
+        Add("ISNET", "/e-belge/entegrasyonlar");
         Add("DESEN", "/desen/gelen-desenler");
         Add("BOYAHANE", "/boyahane/is-akisi");
         Add("IMALAT", "/uretim/uretim-merkezi");
@@ -554,7 +554,7 @@ public partial class KyErpShellWindow : Window
         PageTitleText.Text = path switch
         {
             var p when p.StartsWith("/muhasebe", StringComparison.OrdinalIgnoreCase) => "Muhasebe",
-            var p when p.StartsWith("/isnet", StringComparison.OrdinalIgnoreCase) => "İşNet / e-Belge",
+            var p when p.StartsWith("/e-belge", StringComparison.OrdinalIgnoreCase) || p.StartsWith("/isnet", StringComparison.OrdinalIgnoreCase) => "İşNet / e-Belge",
             var p when p.StartsWith("/desen", StringComparison.OrdinalIgnoreCase) => "Desen / Kalıp",
             var p when p.StartsWith("/boyahane", StringComparison.OrdinalIgnoreCase) => "Boyahane / Numune / Stok",
             var p when p.StartsWith("/uretim", StringComparison.OrdinalIgnoreCase) => "İmalat",
