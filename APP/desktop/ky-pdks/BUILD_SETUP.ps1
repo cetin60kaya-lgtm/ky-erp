@@ -46,6 +46,7 @@ New-Item $InstallerOut -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $IntegrationOut 'bin') -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $IntegrationOut 'file-hub-agent') -ItemType Directory -Force | Out-Null
 New-Item (Join-Path $IntegrationOut 'isnet') -ItemType Directory -Force | Out-Null
+New-Item (Join-Path $IntegrationOut 'isnet-archive') -ItemType Directory -Force | Out-Null
 
 Write-Host '1/5 Restore ve derleme...' -ForegroundColor Cyan
 Invoke-Native 'Shared restore' { dotnet restore $SharedProject }
@@ -111,6 +112,15 @@ $PortalSource = Join-Path $RepoRoot 'TOOLS\isnet-portal-adapter\server.mjs'
 if (-not (Test-Path -LiteralPath $PortalSource)) { throw 'İşNet yerel portal adaptörü bulunamadı.' }
 Copy-Item -LiteralPath $PortalSource -Destination (Join-Path $IntegrationOut 'isnet\server.mjs') -Force
 Invoke-Native 'İşNet adaptör Node kontrolü' { & $NodeExe --check $PortalSource }
+# Latest 8791 four-way archive engine. It uses an explicitly approved
+# KY_ISNET_ARCHIVE_ROOT and is never started during Setup installation.
+foreach ($file in @('isnet-drive-yerel.mjs','sync-core.mjs')) {
+    $source = Join-Path $RepoRoot "TOOLS\isnet-drive-archive\$file"
+    if (-not (Test-Path -LiteralPath $source)) { throw "İşNet arşiv motoru eksik: $file" }
+    Copy-Item -LiteralPath $source -Destination (Join-Path $IntegrationOut "isnet-archive\$file") -Force
+    Invoke-Native "İşNet arşiv Node kontrolü: $file" { & $NodeExe --check $source }
+}
+
 foreach ($file in @('start-kyerp-integrations.ps1','start-kyerp-integrations-hidden.vbs')) {
     $source = Join-Path $Root "integrations\$file"
     if (-not (Test-Path -LiteralPath $source)) { throw "Başlatıcı eksik: $file" }
@@ -157,7 +167,7 @@ $BuildInfo = [ordered]@{
     desktopVersion = [string]$DesktopVersion
     agentVersion = [string]$AgentVersion
     embeddedNodeVersion = $NodeVersion.ToString()
-    integrationModules = @('ISNET_PORTAL', 'FILE_HUB', 'ACCOUNTING_ARCHIVE', 'PSD_PREVIEW')
+    integrationModules = @('ISNET_PORTAL', 'ISNET_DRIVE_ARCHIVE', 'FILE_HUB', 'ACCOUNTING_ARCHIVE', 'PSD_PREVIEW')
     folderGrantsRequired = $true
     desktop = (Get-Item $DesktopExe).Length
     agent = (Get-Item $AgentExe).Length
