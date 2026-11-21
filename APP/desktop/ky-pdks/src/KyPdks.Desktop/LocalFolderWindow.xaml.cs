@@ -179,18 +179,26 @@ public partial class LocalFolderWindow : Window
                                  g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase)))
                 LocalFolderService.Grant(root, "Firma Ana Arşivi", "FILE_HUB", _company);
 
-            // Existing launcher reads this user-scoped archive root on its NEXT start.
-            // No existing portal process is killed, logged out or redirected silently.
-            var isnetRoot = Path.Combine(root, "KY-ISNET-BELGELER");
-            Environment.SetEnvironmentVariable("KY_ISNET_ARCHIVE_ROOT", isnetRoot,
-                EnvironmentVariableTarget.User);
+            // Optional accountant role only. Other company computers use cloud
+            // File Hub from the browser and never start a second portal session.
+            var isnetNotice = "İşNet yerel indirme ayarı değiştirilmedi.";
+            if (IsnetArchivistCheck.IsChecked == true)
+            {
+                var legacyRoot = Path.Combine(root, "KY-ISNET-BELGELER");
+                var isnetRoot = Directory.Exists(legacyRoot)
+                    ? legacyRoot : Path.Combine(root, "MUHASEBE", "e-Belgeler");
+                // Existing 8791 process is not restarted or logged out.
+                Environment.SetEnvironmentVariable("KY_ISNET_ARCHIVE_ROOT", isnetRoot,
+                    EnvironmentVariableTarget.User);
+                isnetNotice = "İşNet arşiv hedefi sonraki kontrollü başlatma için ayarlandı.";
+            }
             Environment.SetEnvironmentVariable("KYERP_ARCHIVE_ACTIVE_TENANT", _company,
                 EnvironmentVariableTarget.User);
             RefreshGrants();
             ShowStatus($"Firma klasörleri hazır: {_company} · Mevcut: {result.Existing} · " +
-                       $"Yeni: {result.Created}. İşNet arşiv yolu kullanıcı ayarına kaydedildi. " +
-                       "Çalışan 8791 oturumu değiştirilmedi; yeni yol sonraki kontrollü başlatmada kullanılır. " +
-                       "Drive/OneDrive OAuth ve D1 kabulü ayrı.");
+                       $"Yeni: {result.Created}. " + isnetNotice +
+                       " Çalışan uygulamalar ve İşNet oturumu değiştirilmedi. " +
+                       "Web bulut OAuth ve D1 kabulü ayrıca doğrulanır.");
         }
         catch (Exception error)
         {
