@@ -187,10 +187,10 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
     const saved=bindings.find(row=>["E_BELGE","EBELGE"].includes(row.module_code)&&row.purpose_code==="E_DOCUMENT");
     const preferred=saved
       ?activeConnections.find(row=>row.id===saved.storage_connection_id)
-      :cloudConnections.find(row=>/isnet|e.?belge|fatura|irsaliye/i.test(String(row.remote_root_name||"")));
+      :cloudConnections.find(row=>row.isPrimary) || (cloudConnections.length===1?cloudConnections[0]:null);
     if(!preferred){
       setTab("connections");
-      setMessage("Bu firmanın İşNet arşivi için açıkça seçilmiş bir bulut servisi bulunamadı. Önce bu firmaya ait Google/OneDrive hesabını bağlayın ve HAKİKİ e-Belge klasörünü seçin. Başka hesabın ilk klasörünü otomatik atamıyoruz.");
+      setMessage("Bu firmanın ana dosya servisi seçilmemiş. Önce firmanın Google Drive veya OneDrive hesabını ve TEK ana klasörünü kaydedip varsayılan servis yapın. Daha sonra İşNet'in o kök altındaki e-Belge klasörünü seçin; başka firmanın hesabı kullanılmaz.");
       return;
     }
     setBinding({
