@@ -241,6 +241,10 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     .bind(assetId,slug).first<Row>();
   if(!asset)throw Object.assign(new Error("File Hub kaynağı bulunamadı."),{code:"FILE_HUB_SOURCE_MISSING"});
   const path=text(asset.relative_path).replace(/\\/g,"/"),ext=upper(asset.extension);
+  // A competing PDF or control XML is never an authoritative invoice.
+  if(path.split("/").some(segment=>["_inceleme","_durum","_uygulama"].includes(segment.toLocaleLowerCase("tr-TR"))) ||
+     path.toLocaleLowerCase("tr-TR").includes(".partial-"))
+    throw Object.assign(new Error("İşNet kontrol/inceleme dosyası resmi belge olarak alınamaz."),{code:"DOCUMENT_INTERNAL_ARCHIVE_FILE"});
   if(!["XML","PDF"].includes(ext))throw Object.assign(new Error("XML/PDF dışında belge otomatik alınamaz."),{code:"DOCUMENT_FORMAT_UNSUPPORTED"});
   const bindings=await env.DB.prepare(`SELECT root_path FROM file_hub_bindings
     WHERE main_company_slug=? AND storage_connection_id=? AND read_enabled=1 AND sync_enabled=1
@@ -249,7 +253,7 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     .bind(slug,text(asset.storage_connection_id)).all<Row>();
   const authorized=(bindings.results||[]).some((b:Row)=>{
     const root=text(b.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
-    return Boolean(root)&&(path.toLocaleLowerCase("tr-TR").startsWith((root+"/").toLocaleLowerCase("tr-TR"))||path.toLocaleLowerCase("tr-TR")===root.toLocaleLowerCase("tr-TR"));
+    return !root || path.toLocaleLowerCase("tr-TR").startsWith((root+"/").toLocaleLowerCase("tr-TR")) || path.toLocaleLowerCase("tr-TR")===root.toLocaleLowerCase("tr-TR");
   });
   if(!authorized)throw Object.assign(new Error("Belge bu firma için atanmış senkron klasöründe değil."),{code:"DOCUMENT_BINDING_MISSING"});
   const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
