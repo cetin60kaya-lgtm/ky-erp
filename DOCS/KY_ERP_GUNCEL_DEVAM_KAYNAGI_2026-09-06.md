@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — Hakan Emp Drive'da 10 bölümlü V2, web öncelikli klasör düzeni
+
+- **Güncel tasarım ve fiziksel envanter**: `DOCS/KY_ERP_FIRMA_ARSIV_MODUL_SADE_V2_20261122.md`; önceki 12 düz klasör V1 kararı superseded.
+- Drive ana kökünde DESEN, MUHASEBE, BOYAHANE, İK, İMALAT, DENETİM, FORMLAR, YÖNETİM klasörleri açıldı. Otomasyon yerinde, eski gelen dosyalar yerinde. Yalnız eski boş DTF klasörü DESEN altına; eski firma yedekleri yönetim altındaki Geçmiş Arşiv'e (ID/içerik korunarak) taşındı. Boş mükerrer yeni klasörler silinip 0 tekrarlı alt bölüm doğrulandı.
+- Güncel kod dalı `feature/kyerp-masaustu-tek-arsiv-cok-firma-20261122`, PR #635. Yönetim → Depolama → Klasör Düzeni, File Hub üzerinden seçili firmaya modül/amaç ilişkisi; klasör adını firma değiştirebilir, modül kimliği sabittir. Opsiyonel Windows yalnız ilgili kişilere kurulur.
+- Kalan doğrulama: D1 firma OAuth/bağlı ana kök, tüm modüllerin gerçek yükleme->File Hub akışı (özellikle İK R2 fotoğraf), açık Outlook HKN/DDM, 8791 canlı kesintisiz geçiş, toplu legacy klasör taşıması, gerçek yedek/export ve Cloudflare yayın. Bu işler yeni klasör var diye PASS değildir.
+
+
 ## 22.11.2026 — Tek firma ana klasörü: mevcut Hakan Emp şemasını koru
 
 - Kullanıcının kesin düzeltmesi: `00_SISTEM` vb. alternatif kök klasör planı **iptal**; gerçek Drive arşivindeki `modeller`, `görsel`, `giden desenler`, `yerleşim dosyaları`, `DTF`, `KY-ISNET-BELGELER`, `HKN E-FATURA`, `DDM E-İRSALİYE`, `KESİMDEN GELEN İRSALİYE`, `gelen dosyalar`, `OTOMASYON`, `FIRMA YEDEKLERI` aynen kalır; ana XLSM korunur.
