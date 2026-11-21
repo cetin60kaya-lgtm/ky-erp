@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.5.1'
+$Version = '1.5.3'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
@@ -114,7 +114,7 @@ Copy-Item -LiteralPath $PortalSource -Destination (Join-Path $IntegrationOut 'is
 Invoke-Native 'İşNet adaptör Node kontrolü' { & $NodeExe --check $PortalSource }
 # Latest 8791 four-way archive engine. It uses an explicitly approved
 # KY_ISNET_ARCHIVE_ROOT and is never started during Setup installation.
-foreach ($file in @('isnet-drive-yerel.mjs','sync-core.mjs')) {
+foreach ($file in @('isnet-drive-yerel.mjs','sync-core.mjs',`n    'isnet-company-selection.mjs','isnet-windows-vault.mjs')) {
     $source = Join-Path $RepoRoot "TOOLS\isnet-drive-archive\$file"
     if (-not (Test-Path -LiteralPath $source)) { throw "İşNet arşiv motoru eksik: $file" }
     Copy-Item -LiteralPath $source -Destination (Join-Path $IntegrationOut "isnet-archive\$file") -Force
