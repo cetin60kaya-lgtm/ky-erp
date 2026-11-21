@@ -244,7 +244,7 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   if(!["XML","PDF"].includes(ext))throw Object.assign(new Error("XML/PDF dışında belge otomatik alınamaz."),{code:"DOCUMENT_FORMAT_UNSUPPORTED"});
   const bindings=await env.DB.prepare(`SELECT root_path FROM file_hub_bindings
     WHERE main_company_slug=? AND storage_connection_id=? AND read_enabled=1 AND sync_enabled=1
-      AND ((module_code='E_BELGE' AND purpose_code='E_DOCUMENT')
+      AND ((module_code IN ('E_BELGE','EBELGE') AND purpose_code='E_DOCUMENT')
        OR (module_code='MUHASEBE' AND purpose_code IN ('INVOICE','DELIVERY_NOTE')))`)
     .bind(slug,text(asset.storage_connection_id)).all<Row>();
   const authorized=(bindings.results||[]).some((b:Row)=>{
@@ -255,6 +255,36 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   const previous=await env.DB.prepare("SELECT entity_id FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1")
     .bind(slug,assetId).first<Row>();
   if(previous?.entity_id)return {documentId:text(previous.entity_id),duplicate:true,alreadyIndexed:true};
+  // The unique XML in the same provider folder owns its sibling PDF.
+  // No OCR, duplicate financial document or invoice-number-only matching.
+  if(ext==="PDF"){
+    const xmlRelativePath=path.replace(/\.pdf$/i,".xml");
+    if(xmlRelativePath!==path){
+      const siblings=await env.DB.prepare(`SELECT d.*
+        FROM accounting_documents d
+        JOIN file_hub_relations r
+          ON r.main_company_slug=d.main_company_slug
+         AND r.entity_type='DOCUMENT' AND r.entity_id=d.id
+         AND r.relation_type='XML'
+        JOIN file_hub_locations x
+          ON x.main_company_slug=r.main_company_slug
+         AND x.file_asset_id=r.file_asset_id AND x.is_available=1
+        WHERE d.main_company_slug=? AND d.deleted_at IS NULL
+          AND x.storage_connection_id=? AND LOWER(x.relative_path)=LOWER(?)
+        LIMIT 2`).bind(slug,text(asset.storage_connection_id),xmlRelativePath).all<Row>();
+      const matches=siblings.results||[];
+      if(matches.length>1)throw Object.assign(new Error("Aynı klasör için birden fazla XML belge kaydı bulundu."),{code:"DOCUMENT_XML_MATCH_AMBIGUOUS"});
+      if(matches.length===1){
+        const doc=matches[0];
+        if(text(doc.pdf_file_asset_id)&&text(doc.pdf_file_asset_id)!==assetId)
+          throw Object.assign(new Error("Belgede başka bir orijinal PDF zaten bağlı."),{code:"DOCUMENT_PDF_CONFLICT"});
+        const attached=await attachDuplicateFile(c,slug,doc,{
+          id:assetId,ext:"PDF",fileName:text(asset.file_name),canonicalSource:true,
+        });
+        return {...attached,source:"FILE_HUB_XML_PDF"};
+      }
+    }
+  }
   const downloaded=await readFileHubAssetForMail(c,slug,assetId,20*1024*1024);
   const bytes=downloaded.bytes;
   let parsed:Row;
@@ -280,6 +310,32 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   }
   const record=await createDocument(c,slug,parsed,{
     id:assetId,fileName:text(asset.file_name),ext,canonicalSource:true});
+  // XML is the document authority. Attach the unique sibling PDF even if
+  // PDF was indexed earlier, without requiring OCR or a second document.
+  if(ext==="XML"){
+    const siblingPath=path.replace(/\.xml$/i,".pdf");
+    if(siblingPath!==path){
+      const found=await env.DB.prepare(`SELECT a.id,a.file_name
+        FROM file_hub_locations l JOIN file_hub_assets a
+          ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug
+        WHERE l.main_company_slug=? AND l.storage_connection_id=?
+          AND LOWER(l.relative_path)=LOWER(?) AND l.is_available=1
+          AND a.status='AVAILABLE' AND UPPER(a.extension)='PDF' LIMIT 2`)
+        .bind(slug,text(asset.storage_connection_id),siblingPath).all<Row>();
+      if((found.results||[]).length===1){
+        const pdf=found.results![0];
+        const linkedDoc=await env.DB.prepare("SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1")
+          .bind(record.documentId,slug).first<Row>();
+        if(linkedDoc&&(!text(linkedDoc.pdf_file_asset_id)||text(linkedDoc.pdf_file_asset_id)===text(pdf.id))){
+          await attachDuplicateFile(c,slug,linkedDoc,{id:text(pdf.id),ext:"PDF",fileName:text(pdf.file_name),canonicalSource:true});
+          await env.DB.prepare(`UPDATE file_hub_assets SET metadata=json_set(
+            CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,
+            '$.accountingImportState','ATTACHED','$.accountingImportUpdatedAt',?)
+            WHERE id=? AND main_company_slug=?`).bind(now(),text(pdf.id),slug).run();
+        }
+      }
+    }
+  }
   const doc=await env.DB.prepare("SELECT id,document_type,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=?")
     .bind(record.documentId,slug).first<Row>();
   let reconciliation:Row|null=null;
