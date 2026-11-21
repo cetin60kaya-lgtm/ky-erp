@@ -186,6 +186,20 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
    catch(error){setError(error?.message||"Dosya indirilemedi; sağlayıcı veya önizleme henüz hazır olmayabilir.");}
  }
  async function saveBinding(){if(!binding.storageConnectionId)return setError("Önce depolama servisini seçin.");if(!binding.folderSelected)return setError("Hedef klasörü seçin; servis kökü kullanılacaksa klasör seçicide ana klasörü onaylayın.");setLoading(true);setError("");try{await apiFetch("/file-hub/bindings",{method:"PUT",body:{...binding,mainCompanySlug:slug}});setMessage(`${moduleLabel(binding.moduleCode)} / ${purposeLabel(binding.purposeCode)} klasörü bağlandı.`);await refresh()}catch(e){setError(e?.message||"Klasör ataması kaydedilemedi.")}finally{setLoading(false)}}
+ async function removeCurrentBinding(){
+   const current=bindings.find(b=>b.module_code===binding.moduleCode&&b.purpose_code===binding.purposeCode);
+   if(!current)return setError("Önce kaldırılacak kayıtlı klasör atamasını seçin.");
+   const question=moduleLabel(binding.moduleCode)+" / "+purposeLabel(binding.purposeCode)+" klasör bağlantısını kaldırmak istiyor musunuz? Google Drive, OneDrive, NAS ve Windows dosyaları SİLİNMEYECEK. Yalnız KY ERP bölüm ataması kaldırılır.";
+   if(!window.confirm(question))return;
+   setLoading(true);setError("");
+   try{
+     await apiFetch("/file-hub/bindings/"+encodeURIComponent(current.id)+"?mainCompanySlug="+encodeURIComponent(slug),{method:"DELETE"});
+     setBinding(x=>({...x,rootPath:"",folderSelected:false}));
+     setMessage("Klasör bağlantısı kaldırıldı. Fiziksel dosyalar ve diğer bölüm bağlantıları korundu.");
+     await refresh();
+   }catch(e){setError(e?.message||"Klasör bağlantısı kaldırılamadı.")}
+   finally{setLoading(false)}
+ }
  async function rotateCredential(){if(credential?.configured&&!window.confirm("File Agent anahtarı yenilenecek. Mevcut yerel/NAS ajanları eski anahtarla bağlanamaz. Yedek/yeniden yapılandırma hazırlığı olmadan devam etmeyin. Onaylıyor musunuz?"))return;setLoading(true);setNewSecret(null);try{const r=await apiPost("/file-hub/agent-credential/rotate",{mainCompanySlug:slug,label:"KY File Agent"});setNewSecret(r?.data||r);setMessage("Yerel/NAS Agent anahtarı yenilendi. Bu anahtar yalnız şimdi gösterilir.");await refresh()}catch(e){setError(e?.message||"Agent anahtarı yenilenemedi.")}finally{setLoading(false)}}
  async function copy(v){try{await navigator.clipboard.writeText(String(v||""));setMessage("Agent anahtarı panoya kopyalandı.")}catch{setError("Anahtar kopyalanamadı.")}}
  return <div className="admpro-page storage-page-v2"><section className="storage-company-banner"><div><small>KY ERP · BAĞLANTILAR & DEPOLAMA · AKTİF FİRMA</small><h2>{companyName} — Bağlantılar & Depolama</h2><p style={{margin:"6px 0 0",color:"#65758b"}}>Dosya servisleri, mail hesapları, bölüm klasörleri ve senkronizasyon sağlığı tek yönetim çatısında. Günlük mail ve dosya kullanımı Mail & Dosyalar bölümünde yapılır.</p></div><div className="storage-company-pill">Firma: {companyName}</div></section><div className="storage-toolbar-v2">{showToolbar?<div className="storage-tabs-v2">{TABS.map(([k,l])=><button type="button" key={k} className={tab===k?"active":""} onClick={()=>setTab(k)}>{l}</button>)}</div>:<div/>}<div style={{display:"flex",gap:8}}><button className="storage-secondary" type="button" disabled={loading} onClick={refresh}>Yenile</button>{tab!=="connections"&&tab!=="mail"?<button className="storage-primary" type="button" disabled={loading} onClick={()=>{setTab("connections");setWizard({})}}>+ Dosya Servisi</button>:null}</div></div>{message?<div className="storage-notice ok">{message}</div>:null}{error?<div className="storage-notice bad">{error}</div>:null}
@@ -249,6 +263,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
    </fieldset>
    <div className="storage-action-row"><button className="storage-secondary" type="button" disabled={!binding.storageConnectionId||loading} onClick={()=>setFolderPicker(connections.find(x=>x.id===binding.storageConnectionId)||null)}>📁 Klasör Seç</button>
     <button className="storage-primary" type="button" disabled={!binding.storageConnectionId||!binding.folderSelected||loading} onClick={saveBinding}>Atamayı Kaydet</button>
+    <button className="storage-secondary" type="button" disabled={loading||!bindings.some(x=>x.module_code===binding.moduleCode&&x.purpose_code===binding.purposeCode)} onClick={removeCurrentBinding}>Bağlantıyı Kaldır (Dosyayı Silmez)</button>
    </div>
    <p className="storage-muted">Bu işlem yeni klasör oluşturmaz, mevcut dosyaları taşımaz. Aynı dosya, ilgili fatura/çek/personel kaydına File Hub ilişki kimliğiyle bağlanabilir; klasör ataması ile kayıt ilişkisi farklı işlemlerdir.</p>
    {!activeConnections.length?<p className="storage-muted">Atama için önce Dosya Servisleri bölümünden gerçek bir servis bağlanmalıdır.</p>:null}
