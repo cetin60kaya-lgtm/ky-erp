@@ -51,6 +51,8 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
       {DIRECTIONS.map(([title,detail])=><div key={title}><FileText size={16}/><span><strong>{title}</strong><small>{detail}</small></span><FileCheck2 size={15}/></div>)}
     </div>
     <div className="eis-local-actions">
+      <button type="button" onClick={()=>openModule?.("depolama",{tabKey:"depolama-atamalar"})}><FolderOpen size={16}/> İşNet Arşiv Klasörünü Bağla</button>
+      <button type="button" onClick={()=>openModule?.("depolama",{tabKey:"depolama-dosyalar"})}><HardDrive size={16}/> Drive Dosya İndeksini Gör</button>
       <button type="button" onClick={()=>openModule?.("e-belge",{tabKey:"belge-havuzu"})}><FolderOpen size={16}/> KY ERP Belge Havuzu</button>
       <button type="button" onClick={()=>openModule?.("e-belge",{tabKey:"eslestirmeler"})}><Link2 size={16}/> Fatura–İrsaliye Eşleşmeleri</button>
     </div>
