@@ -310,6 +310,32 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   }
   const record=await createDocument(c,slug,parsed,{
     id:assetId,fileName:text(asset.file_name),ext,canonicalSource:true});
+  // XML is the document authority. Attach the unique sibling PDF even if
+  // PDF was indexed earlier, without requiring OCR or a second document.
+  if(ext==="XML"){
+    const siblingPath=path.replace(/\.xml$/i,".pdf");
+    if(siblingPath!==path){
+      const found=await env.DB.prepare(`SELECT a.id,a.file_name
+        FROM file_hub_locations l JOIN file_hub_assets a
+          ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug
+        WHERE l.main_company_slug=? AND l.storage_connection_id=?
+          AND LOWER(l.relative_path)=LOWER(?) AND l.is_available=1
+          AND a.status='AVAILABLE' AND UPPER(a.extension)='PDF' LIMIT 2`)
+        .bind(slug,text(asset.storage_connection_id),siblingPath).all<Row>();
+      if((found.results||[]).length===1){
+        const pdf=found.results![0];
+        const linkedDoc=await env.DB.prepare("SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1")
+          .bind(record.documentId,slug).first<Row>();
+        if(linkedDoc&&(!text(linkedDoc.pdf_file_asset_id)||text(linkedDoc.pdf_file_asset_id)===text(pdf.id))){
+          await attachDuplicateFile(c,slug,linkedDoc,{id:text(pdf.id),ext:"PDF",fileName:text(pdf.file_name),canonicalSource:true});
+          await env.DB.prepare(`UPDATE file_hub_assets SET metadata=json_set(
+            CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,
+            '$.accountingImportState','ATTACHED','$.accountingImportUpdatedAt',?)
+            WHERE id=? AND main_company_slug=?`).bind(now(),text(pdf.id),slug).run();
+        }
+      }
+    }
+  }
   const doc=await env.DB.prepare("SELECT id,document_type,posted_at FROM accounting_documents WHERE id=? AND main_company_slug=?")
     .bind(record.documentId,slug).first<Row>();
   let reconciliation:Row|null=null;
