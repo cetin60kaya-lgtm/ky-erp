@@ -1,0 +1,553 @@
+{
+  "schemaVersion": "1.0.0",
+  "date": "2026-11-21",
+  "title": "KY ERP Firma Bazlı Dosya ve Kurulum Politikası",
+  "canonicalSource": "GitHub repo (sürüm kontrollü); D1 her firmanın gerçek bağlantı ve yetki kaydı; Excel sadece yönetim envanteri",
+  "activationStatus": "DESIGN_ONLY_NEW_ITEMS_NOT_YET_DEPLOYED",
+  "companyIsolation": "main_company_slug; customer name guessed from JPEG forbidden",
+  "providerTypes": [
+    "GOOGLE_DRIVE",
+    "ONEDRIVE",
+    "SHAREPOINT",
+    "LOCAL_FOLDER",
+    "NAS"
+  ],
+  "rootSelection": "firmaya ait mevcut gerçek kök klasör yönetim ekranından seçilir; sabit Hakan Emp kökü yok",
+  "storageIdentity": "file_hub_assets.id; provider locations in file_hub_locations; entity relations in file_hub_relations; no extra physical copies",
+  "linkingRules": {
+    "modelCreate": "Only MODEL_IMAGE image file filename without extension creates canonical model card; idempotent",
+    "sharedModelViews": [
+      "MODEL_IMAGE",
+      "PLACEMENT",
+      "MODEL_PSD_PREVIEW"
+    ],
+    "psd": "Orijinal MODEL_SOURCE yetkili DESEN'de; genel görünüm önizleme",
+    "accountingVisibility": "No blanket accounting access; only model-associated customer dispatch to manufacturing",
+    "invoiceFilename": "<BelgeNo> <ModelAdi>.[xml|pdf] when model exists; XML ETTN is canonical source",
+    "synchronization": "Direct provider cloud API + D1 incremental indexing; local Windows optional for İşNet/Photoshop/RIP; no per-user repeated scan",
+    "folderOperations": "Add, attach, rename label, reassign, disable mapping, scan, preview move; physical move/rename separate approval; never delete originals on unbind",
+    "release": "Signed/verified setup artifact via admin page + SHA256; no binary embedded in public GitHub source; no install without approval"
+  },
+  "initialModulePurposeAssignments": [
+    {
+      "moduleCode": "DESEN",
+      "purposeCode": "MODEL_IMAGE",
+      "label": "Model JPEG / PNG / WEBP",
+      "readContext": "DESEN,IMALAT,NUMUNE,BOYAHANE",
+      "accessPolicy": "MODEL_ORTAK",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "JPEG adı model adıdır; yeni dosya tek canonical model kartı açar; müşteri tahmini yok",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "DESEN",
+      "purposeCode": "MODEL_SOURCE",
+      "label": "Orijinal PSD / AI / TIFF",
+      "readContext": "DESEN",
+      "accessPolicy": "DESEN_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Orijinal PSD genel model ekranına sunulmaz",
+      "fileKind": "SOURCE"
+    },
+    {
+      "moduleCode": "DESEN",
+      "purposeCode": "MODEL_PSD_PREVIEW",
+      "label": "PSD küçük görsel önizlemesi",
+      "readContext": "DESEN,IMALAT,NUMUNE,BOYAHANE",
+      "accessPolicy": "MODEL_ORTAK",
+      "implementationStatus": "PLAN_YENI",
+      "note": "PSD dosyasının kendisi değil türetilmiş, güvenli, hafif önizlemesi",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "DESEN",
+      "purposeCode": "PLACEMENT",
+      "label": "Yerleşim PDF",
+      "readContext": "DESEN,IMALAT,NUMUNE,BOYAHANE",
+      "accessPolicy": "MODEL_ORTAK",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Model kartındaki aynı dosya ilişkisidir, ikinci kopya yok",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "DESEN",
+      "purposeCode": "OUTGOING_DESIGN",
+      "label": "Giden desen / takım",
+      "readContext": "DESEN",
+      "accessPolicy": "DESEN_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "SOURCE"
+    },
+    {
+      "moduleCode": "DESEN",
+      "purposeCode": "CUSTOMER_REFERENCE",
+      "label": "Müşteri görsel referansı",
+      "readContext": "DESEN,NUMUNE",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "DTF",
+      "purposeCode": "RIP_PDF",
+      "label": "DTF / RIP PDF",
+      "readContext": "DESEN,DTF",
+      "accessPolicy": "DESEN_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "RIP dosyası gerçek üretim kaynağıdır; genel model ekranına otomatik açılmaz",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "DTF",
+      "purposeCode": "MODEL_SOURCE",
+      "label": "DTF kaynak",
+      "readContext": "DESEN,DTF",
+      "accessPolicy": "DESEN_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "SOURCE"
+    },
+    {
+      "moduleCode": "IMALAT",
+      "purposeCode": "PRODUCTION_PHOTO",
+      "label": "İmalat görselleri",
+      "readContext": "IMALAT,DESEN,NUMUNE",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "IMALAT",
+      "purposeCode": "TECHNICAL_SHEET",
+      "label": "İmalat teknik föyü",
+      "readContext": "IMALAT,BOYAHANE",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IMALAT",
+      "purposeCode": "QUALITY",
+      "label": "Kalite kontrol",
+      "readContext": "IMALAT,BOYAHANE,DENETIM",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IMALAT",
+      "purposeCode": "CUSTOMER_DISPATCH",
+      "label": "Modele bağlı müşteri irsaliyesi",
+      "readContext": "IMALAT,MUHASEBE",
+      "accessPolicy": "BELGE_MODELE_GORE",
+      "implementationStatus": "PLAN_YENI",
+      "note": "Sadece modele ilişkilendirilmiş irsaliye görünür; tüm muhasebe kapalı",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "NUMUNE",
+      "purposeCode": "SAMPLE_IMAGE",
+      "label": "Numune fotoğrafı",
+      "readContext": "NUMUNE,DESEN,IMALAT",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "PLAN_YENI",
+      "note": "Aynı model fotoğrafı ilişkilendirilir",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "NUMUNE",
+      "purposeCode": "SAMPLE_APPROVAL",
+      "label": "Numune onay belgesi",
+      "readContext": "NUMUNE,IMALAT",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "PLAN_YENI",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "BOYAHANE",
+      "purposeCode": "RECIPE",
+      "label": "Reçete",
+      "readContext": "BOYAHANE",
+      "accessPolicy": "BOYAHANE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "BOYAHANE",
+      "purposeCode": "QUALITY",
+      "label": "Boyahane kalite",
+      "readContext": "BOYAHANE,DENETIM",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "BOYAHANE",
+      "purposeCode": "PRODUCTION_PHOTO",
+      "label": "Üretim fotoğrafı",
+      "readContext": "BOYAHANE,IMALAT",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "INVOICE",
+      "label": "Faturalar",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Belgeler numara + boşluk + model adı dosya formatını kullanır",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "PURCHASE_INVOICE",
+      "label": "Gelen tedarikçi faturaları",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Kalem/tedarikçi/KDV ilişkisi D1'dedir",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "SALES_INVOICE",
+      "label": "Giden faturalar",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "DELIVERY_NOTE",
+      "label": "Gelen/giden irsaliye",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Modele bağlı müşteri irsaliyesi yalnız o modele sınırlı erişimle İmalat'ta",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "CHEQUE",
+      "label": "Çek görselleri",
+      "readContext": "MUHASEBE,KASA",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "IMAGE"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "PROMISSORY_NOTE",
+      "label": "Senet",
+      "readContext": "MUHASEBE,KASA",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "BANK_RECEIPT",
+      "label": "Banka dekontu",
+      "readContext": "MUHASEBE,KASA",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "EXPENSE_RECEIPT",
+      "label": "Gider fişleri",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "MUHASEBE",
+      "purposeCode": "TAX_DOCUMENT",
+      "label": "KDV / vergi belgeleri",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "EBELGE",
+      "purposeCode": "E_DOCUMENT",
+      "label": "İşNet gelen-giden XML / PDF",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "EBELGE / E_BELGE kod eşleştirmesi geriye uyumlu olmalı; dört belge türü tek belge motoru",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "EBELGE",
+      "purposeCode": "E_INVOICE_IN",
+      "label": "Gelen e-Fatura XML / PDF",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "PLAN_YENI",
+      "note": "İşNet tip bazlı klasör bağlantısı, eski E_DOCUMENT ataması korunur",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "EBELGE",
+      "purposeCode": "E_INVOICE_OUT",
+      "label": "Giden e-Fatura XML / PDF",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "PLAN_YENI",
+      "note": "",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "EBELGE",
+      "purposeCode": "E_DISPATCH_IN",
+      "label": "Gelen e-İrsaliye XML / PDF",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "PLAN_YENI",
+      "note": "",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "EBELGE",
+      "purposeCode": "E_DISPATCH_OUT",
+      "label": "Giden e-İrsaliye XML / PDF",
+      "readContext": "MUHASEBE",
+      "accessPolicy": "MUHASEBE_OZEL",
+      "implementationStatus": "PLAN_YENI",
+      "note": "",
+      "fileKind": "XML_PDF"
+    },
+    {
+      "moduleCode": "CARI",
+      "purposeCode": "CONTRACT",
+      "label": "Cari sözleşme",
+      "readContext": "CARI,MUHASEBE",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "KASA",
+      "purposeCode": "PAYMENT_DOCUMENT",
+      "label": "Ödeme ve tahsilat belgeleri",
+      "readContext": "KASA,MUHASEBE",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "STOK",
+      "purposeCode": "STOCK_DOCUMENT",
+      "label": "Mal kabul / stok evrakı",
+      "readContext": "STOK,IMALAT",
+      "accessPolicy": "MODEL_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "STOK",
+      "purposeCode": "TECHNICAL_SHEET",
+      "label": "MSDS / SDS / TDS",
+      "readContext": "STOK,BOYAHANE,DENETIM",
+      "accessPolicy": "URUN_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Ürün kartına ve alım kalemine bağla; bitiş/yeni revizyon izleme taslak",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "STOK",
+      "purposeCode": "PURCHASE_ORDER",
+      "label": "Satın alma siparişi",
+      "readContext": "STOK,MUHASEBE",
+      "accessPolicy": "FINANS_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IK",
+      "purposeCode": "PERSONNEL_DOCUMENT",
+      "label": "Personel özlük",
+      "readContext": "IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "SGK, kimlik, sağlık gibi belgeler ayrı yetki altında",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IK",
+      "purposeCode": "EMPLOYEE_MEDICAL",
+      "label": "Personel sağlık",
+      "readContext": "IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Sağlık belgeleri genel İK görünümünden de ayrı yetkide",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IK",
+      "purposeCode": "EMPLOYEE_PAYROLL",
+      "label": "Aylık bordro",
+      "readContext": "IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IK",
+      "purposeCode": "EMPLOYEE_PAYMENT",
+      "label": "Günlük / aylık ödeme belgeleri",
+      "readContext": "IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IK",
+      "purposeCode": "EMPLOYEE_CONTRACT",
+      "label": "Personel sözleşmesi",
+      "readContext": "IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "IK",
+      "purposeCode": "EMPLOYEE_LEAVE",
+      "label": "İzin evrakları",
+      "readContext": "IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "PDKS",
+      "purposeCode": "ATTENDANCE_REPORT",
+      "label": "PDKS kart hareketleri / puantaj",
+      "readContext": "PDKS,IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Cihaz ham kayıtları muhasebe ve DESEN'e açılmaz",
+      "fileKind": "CSV_PDF"
+    },
+    {
+      "moduleCode": "PDKS",
+      "purposeCode": "OVERTIME_APPROVAL",
+      "label": "Fazla mesai onayı",
+      "readContext": "PDKS,IK",
+      "accessPolicy": "IK_HASSAS",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "DENETIM",
+      "purposeCode": "AUDIT_REPORT",
+      "label": "Denetim raporu",
+      "readContext": "DENETIM",
+      "accessPolicy": "DENETIM_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "DENETIM",
+      "purposeCode": "AUDIT_EVIDENCE",
+      "label": "Denetim ekleri",
+      "readContext": "DENETIM",
+      "accessPolicy": "DENETIM_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "ANY"
+    },
+    {
+      "moduleCode": "DENETIM",
+      "purposeCode": "CERTIFICATE",
+      "label": "Sertifikalar",
+      "readContext": "DENETIM,STOK",
+      "accessPolicy": "URUN_IZINLI",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "FIRMA",
+      "purposeCode": "COMPANY_LICENSE",
+      "label": "Firma ruhsat / izin",
+      "readContext": "YONETIM,FIRMA",
+      "accessPolicy": "YONETIM_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "FIRMA",
+      "purposeCode": "COMPANY_REGISTRY",
+      "label": "Firma sicil / vergi",
+      "readContext": "YONETIM,FIRMA",
+      "accessPolicy": "YONETIM_OZEL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "",
+      "fileKind": "PDF"
+    },
+    {
+      "moduleCode": "GENEL",
+      "purposeCode": "GENERIC",
+      "label": "Genel ek / diğer",
+      "readContext": "YETKILI_BOLUM",
+      "accessPolicy": "FIRMA_ROL",
+      "implementationStatus": "KOD_KATALOG",
+      "note": "Firma yöneticisi uygun amaç ve erişim tanımlayabilir",
+      "fileKind": "ANY"
+    },
+    {
+      "moduleCode": "YONETIM",
+      "purposeCode": "SETTINGS_SNAPSHOT",
+      "label": "Ayar dışa aktarımı",
+      "readContext": "YONETIM",
+      "accessPolicy": "YONETIM_OZEL",
+      "implementationStatus": "PLAN_YENI",
+      "note": "D1 yedeği değildir; sürümlü manifest saklanır",
+      "fileKind": "JSON"
+    },
+    {
+      "moduleCode": "YONETIM",
+      "purposeCode": "RELEASE_PACKAGE",
+      "label": "Windows kurulum paketleri",
+      "readContext": "YONETIM",
+      "accessPolicy": "YONETIM_OZEL",
+      "implementationStatus": "PLAN_YENI",
+      "note": "SHA256, sürüm, yayın kanıtı, yalnız gerçek R2/GitHub Release indir bağlantısı",
+      "fileKind": "EXE"
+    }
+  ]
+}
