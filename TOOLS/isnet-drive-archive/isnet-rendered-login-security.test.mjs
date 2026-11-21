@@ -51,6 +51,20 @@ test("8791 gerçek HTML tarayıcı kodu çalışır; giriş hiçbir koşulda GET
     assert.match(inline[1],/api\("\/login",Object\.fromEntries\(f\)\)/);
     assert.match(inline[1],/querySelector\("#archiveAll"\)/);
     assert.match(inline[1],/querySelector\("#keepMonitoring"\)/);
+    assert.match(html,/id="reviewRefresh"/);
+    assert.match(html,/id="reviewPreview"/);
+    assert.match(inline[1],/showPdfReviews/);
+    assert.match(inline[1],/api\("\/review-resolve"/);
+    assert.match(inline[1],/api\("\/review-refresh"/);
+    const token=inline[1].match(/const csrf="([a-f0-9]{48})"/)?.[1];
+    assert.ok(token,"CSRF_MISSING");
+    const secureHeaders={"content-type":"application/json","x-ky-csrf":token,"origin":base};
+    for(const endpoint of ["/review-list","/review-pdf","/review-resolve","/review-refresh"]){
+      const response=await fetch(base+endpoint,{method:"POST",headers:secureHeaders,
+        body:JSON.stringify({sourceKey:"incoming_invoice",sourceId:"123",action:"KEEP_ORIGINAL",variant:"original"})});
+      assert.equal(response.status,400,endpoint+" must reject unauthenticated access");
+    }
+
     // Simulates an accidentally supplied GET query without storing any real credentials.
     const q=await fetch(base+"/?username=example&password=NOT_A_REAL_PASSWORD",{redirect:"manual"});
     assert.equal(q.status,303);
