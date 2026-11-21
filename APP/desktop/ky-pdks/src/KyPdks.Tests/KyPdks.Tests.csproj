@@ -8,6 +8,7 @@
   <ItemGroup>
     <ProjectReference Include="..\KyPdks.Shared\KyPdks.Shared.csproj" />
     <Compile Include="..\KyPdks.Desktop\LocalFolderService.cs" Link="Desktop\LocalFolderService.cs" />
+    <Compile Include="..\KyPdks.Desktop\CompanyArchiveLayout.cs" Link="Desktop\CompanyArchiveLayout.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2">
