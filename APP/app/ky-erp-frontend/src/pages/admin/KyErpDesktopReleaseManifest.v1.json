@@ -27,6 +27,6 @@
     "BACKUP_PDKS_CONFIGURATION",
     "ENSURE_PDKS_MAINTENANCE_APPROVED"
   ],
-  "risk": "Existing 1.5.1 Inno Setup stops/deletes/recreates KYERP.PDKS.Agent; do not install before a guarded installer revision and explicit maintenance approval.",
+  "risk": "Earlier 1.5.1 installer automatically stopped/deleted/recreated KYERP.PDKS.Agent. Current draft changes this to an unchecked, explicit PDKS service task; Inno compile and Windows installer tests still pending. No production installation without maintenance approval.",
   "notes": "X portable EXE tested, this is not the actual setup or signed release; no active download until status=PUBLISHED with verified https URL, SHA-256 and releaseCommit."
 }
