@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
+import { canManageOwnCompanyStorage, canReadOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 import { selectCloudModelBinding, canUseModelImageFolder, classifyDesignSourcePath, matchExistingDesignModelNames, normalizeDesignModelKey, findUniqueMissingDesignImageModel } from "./file-hub-cloud-model-binding";
 import { prioritizeGoogleScanQueue } from "./file-hub-google-priority";
@@ -1028,6 +1028,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/accounts", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c); if (!slug) return c.json(err("TENANT_REQUIRED", "Aktif firma seçimi gerekli."), 422);
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     const result = await c.env.DB.prepare(`SELECT id,provider_type,provider_account_id,account_email,display_name,token_expires_at,scopes,metadata,created_at,updated_at FROM file_hub_oauth_accounts WHERE main_company_slug=? ORDER BY updated_at DESC`).bind(slug).all<Row>();
     return c.json({ ok: true, data: (result.results || []).map((row) => ({ ...row, metadata: json(row.metadata) })) });
   });
@@ -1144,6 +1145,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/folders", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c), accountId = text(c.req.query("accountId")), parentId = text(c.req.query("parentId")) || "root", driveId = text(c.req.query("driveId"));
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     if (!slug || !accountId) return c.json(err("REQUIRED", "Aktif firma ve bulut hesabı zorunludur."), 422);
     try {
       const { account, accessToken } = await usableAccount(c, slug, accountId);
@@ -1156,6 +1158,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/sharepoint/sites", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c), accountId = text(c.req.query("accountId")), q = text(c.req.query("q"));
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     if (!slug || !accountId || q.length < 2) return c.json(err("REQUIRED", "SharePoint site araması için en az 2 karakter yazın."), 422);
     try {
       const { account, accessToken } = await usableAccount(c, slug, accountId); if (upper(account.provider_type) !== "SHAREPOINT") return c.json(err("INVALID_PROVIDER", "Bu hesap SharePoint hesabı değil."), 422);
@@ -1167,6 +1170,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/sharepoint/drives", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c), accountId = text(c.req.query("accountId")), siteId = text(c.req.query("siteId"));
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     if (!slug || !accountId || !siteId) return c.json(err("REQUIRED", "SharePoint site seçimi zorunludur."), 422);
     try {
       const { accessToken } = await usableAccount(c, slug, accountId);
@@ -1186,7 +1190,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     const id = crypto.randomUUID(), ts = now(), name = text(body.name) || `${text(account.display_name || account.account_email) || provider} · ${rootFolderName}`;
     if (isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts, gate.slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,last_sync_at,last_error,metadata,created_at,updated_at) VALUES(?,?,?,?,1,?,NULL,?,?,'CLOUD_API','CONNECTED',NULL,NULL,?,?,?)`)
-      .bind(id, gate.slug, provider, name, isPrimary ? 1 : 0, rootFolderId, rootFolderName, JSON.stringify({ cloudDirect: true, accountEmail: text(account.account_email), accountName: text(account.display_name), driveId: driveId || null }), ts, ts).run();
+      .bind(id, gate.slug, provider, name, isPrimary ? 1 : 0, rootFolderId, rootFolderName, JSON.stringify({ cloudDirect: true, oauthAccountId: accountId, accountEmail: text(account.account_email), accountName: text(account.display_name), driveId: driveId || null }), ts, ts).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_cloud_connection_accounts(connection_id,main_company_slug,oauth_account_id,provider_drive_id,created_at,updated_at) VALUES(?,?,?,?,?,?)`).bind(id, gate.slug, accountId, driveId || null, ts, ts).run();
     return c.json({ ok: true, data: { id } }, 201);
   });
