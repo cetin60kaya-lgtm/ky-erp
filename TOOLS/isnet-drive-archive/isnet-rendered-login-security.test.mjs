@@ -47,8 +47,15 @@ test("8791 gerçek HTML tarayıcı kodu çalışır; giriş hiçbir koşulda GET
     const inline=html.match(/<script>([\s\S]*?)<\/script>/);
     assert.ok(inline,"INLINE_SCRIPT_MISSING");
     assert.doesNotThrow(()=>new Script(inline[1],{filename:"isnet-rendered-ui.js"}));
-    assert.match(inline[1],/document\.querySelector\("#login"\)\.onsubmit/);
-    assert.match(inline[1],/api\("\/login",Object\.fromEntries\(f\)\)/);
+    assert.match(inline[1],/querySelector\('#login'\)\.onsubmit/);
+    assert.match(inline[1],/api\('\/login',\{username,password:/);
+    assert.match(inline[1],/api\('\/login-saved',\{username\}\)/);
+    assert.match(inline[1],/api\('\/password-delete',\{username\}\)/);
+    assert.match(html,/id="rememberPassword"/);
+    assert.match(html,/id="rememberCompany"/);
+    assert.match(html,/id="loginSaved"/);
+    assert.match(html,/id="deleteSaved"/);
+    assert.doesNotMatch(html,/id="keepMonitoring" type="checkbox" checked/);
     assert.match(inline[1],/querySelector\("#archiveAll"\)/);
     assert.match(inline[1],/querySelector\("#keepMonitoring"\)/);
     assert.match(html,/id="reviewRefresh"/);
