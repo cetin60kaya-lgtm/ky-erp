@@ -1,5 +1,7 @@
 # KY ERP — Mevcut Hakan Emp klasöründen türetilmiş tek firma arşivi sözleşmesi
 
+**22.11.2026 GÜNCELLEME — BU V1 İPTAL EDİLMİŞTİR.** Kullanıcı kökte 12 dağınık klasörü koruma kararını değiştirdi. Güncel yürürlükteki klasör sözleşmesi: `DOCS/KY_ERP_FIRMA_ARSIV_MODUL_SADE_V2_20261122.md`. Aşağıdaki tablo yalnız tarihî analizdir; fiziksel klasörleri V1'e göre yeniden oluşturmayın veya eski düzene taşımayın.
+
 **22.11.2026 | İş türü: korumalı tasarım + Windows geliştirme dalı | Production değildir.**
 
 ## Kullanıcı kararı
