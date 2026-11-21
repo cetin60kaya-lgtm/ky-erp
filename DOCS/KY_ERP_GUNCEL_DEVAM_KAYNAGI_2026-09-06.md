@@ -1,5 +1,14 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — Tek firma ana klasörü: mevcut Hakan Emp şemasını koru
+
+- Kullanıcının kesin düzeltmesi: `00_SISTEM` vb. alternatif kök klasör planı **iptal**; gerçek Drive arşivindeki `modeller`, `görsel`, `giden desenler`, `yerleşim dosyaları`, `DTF`, `KY-ISNET-BELGELER`, `HKN E-FATURA`, `DDM E-İRSALİYE`, `KESİMDEN GELEN İRSALİYE`, `gelen dosyalar`, `OTOMASYON`, `FIRMA YEDEKLERI` aynen kalır; ana XLSM korunur.
+- Klasör alt hiyerarşileri: `görsel` yıllara ayrılmış, `modeller` model adına göre, `KY-ISNET-BELGELER` gerçek dört belge yönüyle çalışır. `_DURUM/_UYGULAMA/_INCELEME` fatura olarak indekslenmez. Eksik modüller için yeni kökler eklenebilir ancak geçmiş dosyalar taşınmaz ve ikinci belge kopyası üretilmez.
+- Kod ve Windows QA: yeni feature `feature/kyerp-masaustu-tek-arsiv-cok-firma-20261122` ile masaüstünde tek kök seçme/eksik klasör kurma, 8791'de DPAPI kayıtlı şifre ve önceki yetkili firmayı yeniden doğrulayarak otomatik seçme; izolasyon testleri olumlu.
+- Firma başına tek Drive/OneDrive provider kök ID'si, cihaz başına ayrı kullanıcı onaylı yerel yol ve tek D1 iş otoritesi. Yerel Drive eşitlemesi tek başına Cloud D1 indeks kabulü değildir.
+- **Açık kalan:** yeni Setup'ın gerçek Windows paket doğrulaması, kullanıcı seçimiyle ilk kök onayı, İşNet'in ikinci tarayıcı oturum çatışması, her firma için OAuth/izin, 101 belge D1, doğrulanmış HKN/DDM → Outlook ve production release. Canlı veriler değiştirilmedi.
+
+
 ## 21.11.2026 — Firma bazlı tek ana klasör ve kurumsal mail/Drive kuralı
 - **Sözleşme:** `DOCS/KY_ERP_FIRMA_BAZLI_TEK_KOK_MAIL_DRIVE_FILE_HUB_20261121.md`. KYERP.NET'teki her ana firma kendi doğrulanmış `main_company_slug`, kendi Gmail/Outlook hesapları (posta OAuth ayrı), Google Drive/OneDrive/SharePoint OAuth hesabı ve **tek seçili provider ana klasör ID** ile çalışır. Windows Google Drive senkronizasyonuyla aynı klasörün yerel görünümü kullanılır; File Hub bulut provider API üzerinden indeksler, aynı fiziksel dosya ikinci bir LOCAL_FOLDER/AGENT asset'ine dönüştürülmez. Bu kural hiçbir şirkete sabitlenmez.
 - **P0 izolasyon kodu PR #634:** `file-hub.ts` bütün kullanıcı dosya GET'lerinde/manuel ilişki işleminde oturumdaki şirket ile istenen şirket eşleşmesini zorunlu kılar; legacy global File Agent key'i şirket-düzeyli kimlik doğrulamayla değiştirildi ve sabit tenant fallback kaldırıldı. `file-hub-cloud-oauth.ts` OAuth hesap/klasör/SPO okuma isteklerini şirket oturumuyla sınırlar ve yeni bağlantıya kesin `oauthAccountId` saklar. `file-hub-agent-public.ts` sabit varsayılan şirketi kullanmaz. UI bağlı servis ile doğru sağlayıcı hesap ID/e-postasını eşleştirir, başka hesabı ilk seçenek diye otomatik seçmez; İşNet arşivi firmanın tek varsayılan kökü altından seçilir. Genel bakışta firmanın kökü, mail hesabı sayısı ve klasör ataması görülür.
