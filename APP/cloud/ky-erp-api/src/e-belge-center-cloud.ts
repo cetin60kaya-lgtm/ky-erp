@@ -244,7 +244,7 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
   if(!["XML","PDF"].includes(ext))throw Object.assign(new Error("XML/PDF dışında belge otomatik alınamaz."),{code:"DOCUMENT_FORMAT_UNSUPPORTED"});
   const bindings=await env.DB.prepare(`SELECT root_path FROM file_hub_bindings
     WHERE main_company_slug=? AND storage_connection_id=? AND read_enabled=1 AND sync_enabled=1
-      AND ((module_code='E_BELGE' AND purpose_code='E_DOCUMENT')
+      AND ((module_code IN ('E_BELGE','EBELGE') AND purpose_code='E_DOCUMENT')
        OR (module_code='MUHASEBE' AND purpose_code IN ('INVOICE','DELIVERY_NOTE')))`)
     .bind(slug,text(asset.storage_connection_id)).all<Row>();
   const authorized=(bindings.results||[]).some((b:Row)=>{
