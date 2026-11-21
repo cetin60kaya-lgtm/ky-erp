@@ -49,6 +49,7 @@ test("Yönetim içindeki klasör taslağı gerçek File Hub seçicisine bağlıd
  assert.match(page,/tab==="archive"/);
  assert.match(page,/openArchiveBinding\(template\)/);
  assert.match(page,/folderSelected:Boolean\(existing\)/);
+ assert.match(page,/rootPath:existing \? \(existing\.root_path\|\|""\) : template\.rootPath/);
  assert.match(page,/Masaüstü kurulumu zorunlu değildir/);
  assert.doesNotMatch(page,/archiveLayoutForSection\(section\).*apiPost\(.*upload/s);
 });
