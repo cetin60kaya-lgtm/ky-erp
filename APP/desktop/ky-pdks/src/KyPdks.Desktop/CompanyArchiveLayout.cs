@@ -62,7 +62,7 @@ public static class CompanyArchiveLayout
             ["MODEL"] = "modeller",
             ["MODEL_IMAGE"] = "görsel",
             ["DTF"] = "DTF",
-            ["IMAlAT_CUTTING_DISPATCH"] = "KESİMDEN GELEN İRSALİYE",
+            ["IMALAT_CUTTING_DISPATCH"] = "KESİMDEN GELEN İRSALİYE",
             ["IMALAT"] = "İMALAT",
             ["BOYAHANE"] = "BOYAHANE",
             ["MUHASEBE"] = "MUHASEBE",
