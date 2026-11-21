@@ -342,6 +342,36 @@ async function previewPdfReview(sourceKey,sourceId,variant){
   if(!wanted||sha256(bytes)!==wanted||!bytes.subarray(0,5).equals(Buffer.from("%PDF-")))err("PDF_ONIZLEME_HASH_KONTROLU_HATASI");
   return bytes;
 }
+async function recheckPortalPdfReview(sourceKey,sourceId){
+  if(syncJob.running)err("SENKRONIZASYON_DEVAM_EDIYOR");
+  const record=await findPdfReview(sourceKey,sourceId);
+  const manifest=record.manifest;
+  const date=String(record.date||"").match(/(\d{2})\.(\d{2})\.(\d{4})/);
+  if(!date)err("INCELEME_BELGESI_TARIHSIZ");
+  const iso=date[3]+"-"+date[2]+"-"+date[1];
+  const documents=await listDocuments(iso,iso,sourceKey);
+  const doc=documents.find(d=>d.sourceId===String(sourceId)&&d.sourceKey===sourceKey);
+  if(!doc||doc.no!==record.documentNo)err("PORTAL_BELGE_REFERANSI_DEGISTI");
+  const {dir,stem}=archiveLocation(doc);
+  if(!(await verifyOriginalFiles(dir,stem,manifest)))err("ORIJINAL_XML_PDF_HASH_KONTROLU_HATASI");
+  const bytes=await downloadDocument(doc.sourceId,doc.sourceKey,"pdf");
+  if(sha256(bytes)===manifest.pdf.sha256){
+    await writeManifest(doc,{xml:null,pdf:null,errors:[],review:{
+      ...manifest.review,status:"RESOLVED_PORTAL_MATCH",reason:PDF_REVIEW_CODE,
+      resolvedAt:archivedAt(),confirmedOriginalSha256:manifest.pdf.sha256,
+      candidates:manifest.review?.candidates||[]}});
+    return {status:"PORTAL_PDF_AYNI",candidateCount:manifest.review?.candidates?.length||0};
+  }
+  const candidate=await preservePdfAlternative(doc,bytes);
+  const existing=(await readDocumentManifest(doc)).manifest;
+  const prior=Array.isArray(existing?.review?.candidates)?existing.review.candidates:[];
+  const candidates=candidate&&!prior.some(x=>x.sha256===candidate.sha256)?[...prior,candidate]:prior;
+  await writeManifest(doc,{xml:null,pdf:null,errors:[PDF_REVIEW_CODE],review:{
+    status:"PENDING",reason:PDF_REVIEW_CODE,firstSeenAt:existing?.review?.firstSeenAt||archivedAt(),
+    candidates}});
+  return {status:"ALTERNATIF_PDF_SAKLANDI",candidateCount:candidates.length};
+}
+
 async function keepReviewedOriginal(sourceKey,sourceId){
   const record=await findPdfReview(sourceKey,sourceId);
   const manifest=record.manifest,dir=dirname(record.manifestFile);
@@ -492,6 +522,15 @@ async function showPdfReviews(){
       alternative.onclick=()=>run(async()=>{await loadReviewPdf(record,"alternative");status.textContent="Alternatif PDF salt okunur açıldı; resmî arşive geçmez."});
       row.append(alternative);
     }
+    const recheck=document.createElement("button");recheck.textContent="Portaldaki PDF'yi bir kez yeniden kontrol et";
+    recheck.onclick=()=>run(async()=>{
+      const result=await api("/review-refresh",{sourceKey:record.sourceKey,sourceId:record.sourceId});
+      status.textContent=result.status==="PORTAL_PDF_AYNI"?
+        "Portal PDF'si arşivle birebir aynı. Uyuşmazlık kendiliğinden çözüldü.":
+        "Farklı PDF _INCELEME altında korundu; iki sürümü karşılaştırıp karar verin.";
+      await showPdfReviews();
+    });
+    row.append(recheck);
     const approve=document.createElement("button");approve.textContent="Mevcut orijinali koru · İncelemeyi kapat";
     approve.disabled=record.otherIssues>0;
     approve.onclick=()=>run(async()=>{
@@ -543,7 +582,7 @@ const server=createServer(async(req,res)=>{
   if(req.socket.remoteAddress!=="127.0.0.1"&&req.socket.remoteAddress!=="::ffff:127.0.0.1")return json(res,403,{error:"YEREL_ERISIM"});
   if(req.method==="GET"&&req.url?.startsWith("/?")){res.writeHead(303,{"location":"/","cache-control":"no-store","referrer-policy":"no-referrer"});return res.end();}
   if(req.method==="GET"&&req.url==="/"){res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer","x-content-type-options":"nosniff","content-security-policy":"frame-ancestors https://kyerp.net https://app.kyerp.net; default-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self' blob:; form-action 'self'; base-uri 'none'"});return res.end(html);}
-  if(req.method!=="POST"||!["/login","/company","/documents","/file","/clear","/archive-item","/sync-start","/sync-status","/sync-stop","/review-list","/review-pdf","/review-resolve"].includes(req.url))return json(res,404,{error:"BULUNAMADI"});
+  if(req.method!=="POST"||!["/login","/company","/documents","/file","/clear","/archive-item","/sync-start","/sync-status","/sync-stop","/review-list","/review-pdf","/review-resolve","/review-refresh"].includes(req.url))return json(res,404,{error:"BULUNAMADI"});
   if(req.headers["x-ky-csrf"]!==csrf||!["http://127.0.0.1:"+PORT,undefined].includes(req.headers.origin))return json(res,403,{error:"YETKISIZ_ISTEK"});
   try{
     const body=await readBody(req);
@@ -551,6 +590,10 @@ const server=createServer(async(req,res)=>{
       const records=await scanPdfReviews();
       return json(res,200,{reviews:records.map(({sourceKey,sourceId,documentNo,date,candidateCount,otherIssues})=>
         ({sourceKey,sourceId,documentNo,date,candidateCount,otherIssues}))});
+    }
+    if(req.url==="/review-refresh"){
+      const result=await recheckPortalPdfReview(safe(body.sourceKey),safe(body.sourceId));
+      return json(res,200,result);
     }
     if(req.url==="/review-resolve"){
       if(syncJob.running)err("SENKRONIZASYON_DEVAM_EDIYOR");
