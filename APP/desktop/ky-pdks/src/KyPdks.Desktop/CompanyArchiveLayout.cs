@@ -3,75 +3,75 @@ using System.Collections.ObjectModel;
 namespace KyPdks.Desktop;
 
 /// <summary>
-/// One canonical on-disk structure for every company. The existing Hakan Emp
-/// folder names are the standard; there is no 00..99 renaming or migration.
-/// Selecting a root is a local user decision; cloud OAuth and tenant binding
-/// remain separate and must be verified by KY ERP.
+/// Optional Windows companion only. The same company cloud root is the sole
+/// archive; file-hub cloud binding is authoritative for browser-only users.
+/// Legacy paths are kept if present; this class NEVER migrates physical files.
 /// </summary>
 public static class CompanyArchiveLayout
 {
-    public const string Version = "KYERP_COMPANY_ARCHIVE_HAKAN_EMP_V1";
-
+    public const string Version = "KYERP_COMPANY_ARCHIVE_SECTIONS_V2_20261122";
     public static IReadOnlyList<string> ExistingCompanyFolders { get; } =
         Array.AsReadOnly(new[]
         {
-            "FIRMA YEDEKLERI",
-            "KY-ISNET-BELGELER",
-            "HKN E-FATURA",
-            "DDM E-İRSALİYE",
-            "DTF",
-            "OTOMASYON",
-            "gelen dosyalar",
-            "modeller",
-            "yerleşim dosyaları",
-            "görsel",
-            "giden desenler",
-            "KESİMDEN GELEN İRSALİYE"
+            "DESEN", "MUHASEBE", "BOYAHANE", "İK", "İMALAT",
+            "DENETİM", "FORMLAR", "YÖNETİM", "OTOMASYON", "gelen dosyalar"
         });
 
-    // Absent from the original root. Added without moving or changing any
-    // existing files. These folders remain unindexed until module authorizations
-    // and (for HR/PDKS) cloud + Windows privacy boundaries are separately set.
     public static IReadOnlyList<string> ModuleExtensionFolders { get; } =
-        Array.AsReadOnly(new[] { "MUHASEBE", "İMALAT", "BOYAHANE", "İK", "PDKS", "RAPORLAR" });
+        Array.AsReadOnly(new[]
+        {
+            "DESEN/Modeller", "DESEN/Görseller", "DESEN/Giden Desenler",
+            "DESEN/Yerleşim Dosyaları", "DESEN/DTF",
+            "MUHASEBE/e-Belgeler",
+            "MUHASEBE/Sahadan Gelen İrsaliye", "MUHASEBE/Çek ve Ödemeler",
+            "MUHASEBE/Cari ve Gider Evrakları", "MUHASEBE/Vergi ve KDV",
+            "BOYAHANE/Model Formları", "BOYAHANE/Reçeteler", "BOYAHANE/Kalite",
+            "İK/Personel Evrakları", "İK/Bordro ve Ödemeler", "İK/İzin ve Puantaj",
+            "İMALAT/İş Emirleri", "İMALAT/Sevkiyat",
+            "DENETİM/Denetim Evrakları", "DENETİM/MSDS", "DENETİM/TDS",
+            "DENETİM/Periyodik Bakımlar", "DENETİM/Standartlar",
+            "FORMLAR/Yemek", "FORMLAR/Temizlik", "FORMLAR/Genel",
+            "YÖNETİM/Firma Yedekleri", "YÖNETİM/Loglar",
+            "YÖNETİM/Sistem Raporları", "YÖNETİM/Firma Belgeleri"
+        });
 
-    // Keep the İşNet portal's real four-direction tree. The tenant-named
-    // branches and year/model folders are generated from verified documents,
-    // not speculatively from this empty layout.
     public static IReadOnlyList<string> ExistingArchiveSubfolders { get; } =
         Array.AsReadOnly(new[]
         {
-            "KY-ISNET-BELGELER/GELEN-FATURA",
-            "KY-ISNET-BELGELER/GIDEN-FATURA",
-            "KY-ISNET-BELGELER/GELEN-IRSALIYE",
-            "KY-ISNET-BELGELER/GIDEN-IRSALIYE",
-            "KY-ISNET-BELGELER/_DURUM",
-            "OTOMASYON/DTF_IZLEME",
-            "OTOMASYON/PSD_ONIZLEME"
+            "MUHASEBE/e-Belgeler/Gelen e-Fatura",
+            "MUHASEBE/e-Belgeler/Giden e-Fatura",
+            "MUHASEBE/e-Belgeler/Gelen e-İrsaliye",
+            "MUHASEBE/e-Belgeler/Giden e-İrsaliye",
+            "DENETİM/Denetim Evrakları/Disney",
+            "DENETİM/Denetim Evrakları/FAMA"
         });
 
     public static IReadOnlyDictionary<string, string> ModulePaths { get; } =
         new ReadOnlyDictionary<string, string>(new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["E_BELGE"] = "KY-ISNET-BELGELER",
-            ["DOCUMENT"] = "KY-ISNET-BELGELER",
-            ["HKN_PDF_LEGACY"] = "HKN E-FATURA",
-            ["DDM_PDF_LEGACY"] = "DDM E-İRSALİYE",
-            ["DESEN"] = "giden desenler",
-            ["DESEN_LAYOUT"] = "yerleşim dosyaları",
-            ["MODEL"] = "modeller",
-            ["MODEL_IMAGE"] = "görsel",
-            ["DTF"] = "DTF",
-            ["IMALAT_CUTTING_DISPATCH"] = "KESİMDEN GELEN İRSALİYE",
+            ["E_BELGE"] = "MUHASEBE/e-Belgeler",
+            ["DOCUMENT"] = "MUHASEBE/e-Belgeler",
+            ["DESEN"] = "DESEN/Giden Desenler",
+            ["DESEN_LAYOUT"] = "DESEN/Yerleşim Dosyaları",
+            ["MODEL"] = "DESEN/Modeller",
+            ["MODEL_IMAGE"] = "DESEN/Görseller",
+            ["DTF"] = "DESEN/DTF",
+            ["IMALAT_CUTTING_DISPATCH"] = "MUHASEBE/Sahadan Gelen İrsaliye",
             ["IMALAT"] = "İMALAT",
             ["BOYAHANE"] = "BOYAHANE",
             ["MUHASEBE"] = "MUHASEBE",
             ["IK"] = "İK",
-            ["PDKS"] = "PDKS",
-            ["REPORTS"] = "RAPORLAR",
+            ["PDKS"] = "İK/İzin ve Puantaj",
+            ["DENETIM"] = "DENETİM",
+            ["FORMLAR"] = "FORMLAR",
+            ["YONETIM"] = "YÖNETİM",
             ["INBOX"] = "gelen dosyalar",
             ["AUTOMATION"] = "OTOMASYON",
-            ["BACKUP_LEGACY"] = "FIRMA YEDEKLERI",
+            ["LEGACY_ISNET"] = "KY-ISNET-BELGELER",
+            ["LEGACY_HKN_PDF"] = "HKN E-FATURA",
+            ["LEGACY_DDM_PDF"] = "DDM E-İRSALİYE",
+            ["LEGACY_CUTTING"] = "KESİMDEN GELEN İRSALİYE",
+            ["LEGACY_BACKUP"] = "FIRMA YEDEKLERI",
         });
 
     public static IReadOnlyList<string> StandardPaths { get; } =
