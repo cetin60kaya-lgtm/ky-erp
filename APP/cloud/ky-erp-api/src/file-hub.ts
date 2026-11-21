@@ -23,6 +23,14 @@ async function requireCompanyOwner(c: Context<AppEnv>, body: Row = {}) {
   return canManageOwnCompanyStorage(u, slugOf(c, body)) ? u : null;
 }
 async function requireUser(c: Context<AppEnv>) { return await getAuthenticatedUser(c) as Row | null; }
+async function requireTenantUser(c: Context<AppEnv>) {
+  const user=await requireUser(c);
+  if(!user)return null;
+  const signedSlug=text(user.mainCompanySlug || user.main_company_slug || user.security?.main_company_slug).toLowerCase();
+  const requestedSlug=slugOf(c).toLowerCase();
+  // A client-selected tenant header/query is not authorization.
+  return signedSlug&&requestedSlug&&signedSlug===requestedSlug ? user : null;
+}
 function agentAllowed(c: Context<AppEnv>) { const expected = text(c.env.FILE_HUB_AGENT_KEY); const actual = text(c.req.header("X-KYERP-Agent-Key")); return Boolean(expected && actual && expected === actual); }
 async function event(c: Context<AppEnv>, slug: string, eventType: string, data: Row = {}) { await c.env.DB.prepare(`INSERT INTO file_hub_events(id,main_company_slug,storage_connection_id,file_asset_id,event_type,actor_type,actor_id,device_name,details,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),slug,text(data.storageConnectionId)||null,text(data.fileAssetId)||null,eventType,text(data.actorType||"SYSTEM"),text(data.actorId)||null,text(data.deviceName)||null,JSON.stringify(data.details||{}),now()).run(); }
 
@@ -40,7 +48,7 @@ const restrictedPurposes = new Set([
 
 export function registerFileHubRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/diagnostics", async c => {
-    if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
     const slug=slugOf(c);
     const [connections,bindings,agents,unmatched,missing]=await Promise.all([
       c.env.DB.prepare("SELECT id,name,provider_type,is_active,sync_mode,connection_status,last_sync_at,last_error,metadata FROM file_hub_connections WHERE main_company_slug=?").bind(slug).all<Row>(),
@@ -54,7 +62,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/overview", async c => {
-    if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
     const slug = slugOf(c);
     const [connections,assets,unmatched,missing,events,agents] = await Promise.all([
       c.env.DB.prepare(`SELECT COUNT(*) n FROM file_hub_connections WHERE main_company_slug=? AND is_active=1`).bind(slug).first<Row>(),
@@ -68,7 +76,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/connections", async c => {
-    if (!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
     const slug=slugOf(c); const r=await c.env.DB.prepare(`SELECT * FROM file_hub_connections WHERE main_company_slug=? ORDER BY is_primary DESC,name COLLATE NOCASE`).bind(slug).all<Row>();
     return c.json({ok:true,data:(r.results||[]).map(rowView)});
   });
@@ -93,7 +101,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     await event(c,slug,"CONNECTION_UPDATED",{actorType:"USER",actorId:owner.id,storageConnectionId:id}); return c.json({ok:true});
   });
 
-  app.get("/api/file-hub/bindings", async c => { if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c); const r=await c.env.DB.prepare(`SELECT b.*,c.name connection_name,c.provider_type FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? ORDER BY b.module_code,b.purpose_code`).bind(slug).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(rowView)}); });
+  app.get("/api/file-hub/bindings", async c => { if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c); const r=await c.env.DB.prepare(`SELECT b.*,c.name connection_name,c.provider_type FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? ORDER BY b.module_code,b.purpose_code`).bind(slug).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(rowView)}); });
 
   app.put("/api/file-hub/bindings", async c => {
     const b=await bodyOf(c),owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Bölüm / dosya depolama yönlendirmesini yalnız firma sahibi veya kendi firmasında uygulama sahibi değiştirebilir."),403);
@@ -125,7 +133,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/resolve-storage", async c => {
-    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),moduleCode=upper(c.req.query("moduleCode")),purposeCode=upper(c.req.query("purposeCode"));
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),moduleCode=upper(c.req.query("moduleCode")),purposeCode=upper(c.req.query("purposeCode"));
     let row=await c.env.DB.prepare(`SELECT b.*,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? AND b.module_code=? AND b.purpose_code=? AND c.is_active=1 LIMIT 1`).bind(slug,moduleCode,purposeCode).first<Row>();
     if(!row && restrictedPurposes.has(purposeCode)) return c.json(err("SENSITIVE_BINDING_REQUIRED","Hassas belge için ana firma kökü yerine özel yetkilendirilmiş klasör ataması zorunludur."),404);
     if(!row) row=await c.env.DB.prepare(`SELECT NULL id,'' module_code,'' purpose_code,c.id storage_connection_id,'' root_path,1 read_enabled,1 write_enabled,1 sync_enabled,1 is_default,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_connections c WHERE c.main_company_slug=? AND c.is_active=1 AND c.is_primary=1 LIMIT 1`).bind(slug).first<Row>();
@@ -133,7 +141,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/files", async c => {
-    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")),status=upper(c.req.query("status")),take=Math.min(500,Math.max(1,Number(c.req.query("take")||100))),offset=Math.min(1000000,Math.max(0,Math.floor(Number(c.req.query("offset")||0)||0)));
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")),status=upper(c.req.query("status")),take=Math.min(500,Math.max(1,Number(c.req.query("take")||100))),offset=Math.min(1000000,Math.max(0,Math.floor(Number(c.req.query("offset")||0)||0)));
     const where=["a.main_company_slug=?"],args:any[]=[slug]; if(q){where.push("(a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ?)"); const like=`%${q}%`; args.push(like,like,like);} if(status){where.push("a.status=?");args.push(status);}
     const whereSql=where.join(" AND ");
     const totalRow=await c.env.DB.prepare(`SELECT COUNT(DISTINCT a.id) total FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug AND l.location_role='PRIMARY' WHERE ${whereSql}`).bind(...args).first<Row>();
@@ -144,7 +152,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/entity-files", async c => {
-    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),entityType=upper(c.req.query("entityType")),entityId=text(c.req.query("entityId")); if(!entityType||!entityId) return c.json(err("REQUIRED","entityType ve entityId zorunludur."),422);
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),entityType=upper(c.req.query("entityType")),entityId=text(c.req.query("entityId")); if(!entityType||!entityId) return c.json(err("REQUIRED","entityType ve entityId zorunludur."),422);
     const r=await c.env.DB.prepare(`SELECT a.*,r.relation_type,r.is_primary relation_primary,r.confidence,r.source,l.relative_path,l.storage_connection_id,c.provider_type,c.name connection_name FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id WHERE r.main_company_slug=? AND r.entity_type=? AND r.entity_id=? ORDER BY r.is_primary DESC,a.updated_at DESC`).bind(slug,entityType,entityId).all<Row>(); return c.json({ok:true,data:(r.results||[]).map(rowView)});
   });
 
@@ -155,7 +163,7 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
   });
 
   app.get("/api/file-hub/search", async c => {
-    if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")); if(!q) return c.json({ok:true,data:[]}); const like=`%${q}%`;
+    if(!await requireTenantUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),q=text(c.req.query("q")); if(!q) return c.json({ok:true,data:[]}); const like=`%${q}%`;
     const r=await c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.status,a.logical_key,a.updated_at,l.relative_path,c.provider_type,r.entity_type,r.entity_id,r.relation_type FROM file_hub_assets a LEFT JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.location_role='PRIMARY' LEFT JOIN file_hub_connections c ON c.id=l.storage_connection_id LEFT JOIN file_hub_relations r ON r.file_asset_id=a.id WHERE a.main_company_slug=? AND (a.file_name LIKE ? OR a.logical_key LIKE ? OR l.relative_path LIKE ? OR r.entity_id LIKE ?) ORDER BY a.updated_at DESC LIMIT 100`).bind(slug,like,like,like,like).all<Row>(); return c.json({ok:true,data:r.results||[]});
   });
 
