@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { compare } from "bcryptjs";
+import { registerMobilePasskeyRoutes } from "./auth-mobile-passkey";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { AUTH_SECURITY_SCOPES, securityStorePut as securityStorePut } from "./auth-security-core";
 import { turnstilePublicConfig, verifyTurnstileForLogin } from "./turnstile-cloud";
@@ -507,7 +508,15 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
   }
   await audit(c, "SESSION_CREATED_POLICY", user.id, user.id, text(security.main_company_slug), sid, { policy, ttl, expiresAt });
   const kySecurityCodeVerified = Boolean(source.kySecurityCodeVerified);
-  if (kySecurityCodeVerified) {
+  const passkeyVerified = Boolean(source.passkeyVerified);
+  if (passkeyVerified) {
+    try {
+      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, {
+        sessionId: sid, userId: text(user.id), status: "VERIFIED", source: "PASSKEY_LOGIN", decidedAt: timestamp,
+      });
+      await audit(c, "SESSION_VERIFIED_BY_PASSKEY", user.id, user.id, text(security.main_company_slug), sid);
+    } catch (error) { logAuthError(c, "PASSKEY_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid }); }
+  } else if (kySecurityCodeVerified) {
     try {
       await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, {
         sessionId: sid,
@@ -531,7 +540,7 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
       await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", user.id, user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
     } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
   }
-  if (!kySecurityCodeVerified && !text(source.phoneApprovalId)) {
+  if (!passkeyVerified && !kySecurityCodeVerified && !text(source.phoneApprovalId)) {
     // Girişte yönetici onayı kapali ise oturum sonradan tekrar onaya dusmez.
     // Giris onayi verilmis bir oturum icin de ikinci bir onay kuyruğu acilmaz.
     const managerReviewRequired = Boolean(security.approval_required) && !isSuper(role) && !isCompanyAdmin(role);
@@ -599,6 +608,11 @@ async function consumeChallenge(c: any, challenge: AnyRow) {
 }
 async function revokeSecurityState(c: any, userId: string, actorUserId = "", reason = "SECURITY_POLICY_CHANGED") {
   const timestamp = nowIso();
+  // A password/MFA/account recovery must also revoke saved mobile passkeys.
+  if (await tableExists(c, "json_store")) {
+    await c.env.DB.prepare("UPDATE json_store SET data=json_set(data,'$.active',json('false'),'$.revokedAt',?),updated_at=? WHERE scope='AUTH_MOBILE_PASSKEY_V1' AND json_extract(data,'$.userId')=?")
+      .bind(timestamp, timestamp, userId).run();
+  }
   await c.env.DB.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND revoked_at IS NULL").bind(timestamp, actorUserId || userId, userId).run();
   await c.env.DB.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(timestamp, userId).run();
   await c.env.DB.prepare("UPDATE auth_login_approvals SET status='DENIED',decided_at=?,decided_by=?,consumed_at=COALESCE(consumed_at,?) WHERE user_id=? AND status IN ('PENDING','APPROVED')").bind(timestamp, actorUserId || userId, timestamp, userId).run();
@@ -840,6 +854,7 @@ async function updateOwnerRecoveryEnabled(c: any, userId: string) {
 }
 
 export function registerAuthPolicyRoutes(app: any) {
+  registerMobilePasskeyRoutes(app, { userById, userByIdentity, createChallenge, challengeFromRequest, afterFactors, effectivePolicy, roleOf, audit });
   app.get("/api/auth/turnstile-config", (c: any) => {
     return c.json({ ok: true, ...turnstilePublicConfig(c) });
   });

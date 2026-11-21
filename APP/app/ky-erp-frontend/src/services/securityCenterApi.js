@@ -8,6 +8,8 @@ function unwrap(payload) {
 
 export async function getSecurityCenterOverview() { return unwrap(await apiGet("/security-center/overview", { _ts: Date.now() })); }
 export async function listSecurityCenterSessions() { return unwrap(await apiGet("/security-center/sessions", { _ts: Date.now() })); }
+export async function listOwnPasskeyCredentials() { return unwrap(await apiGet("/auth/passkey/status", { _ts: Date.now() })); }
+export async function revokeOwnPasskeyCredential(credentialId) { return unwrap(await apiDelete(`/auth/passkey/credentials/${encodeURIComponent(credentialId)}`)); }
 export async function listTrustedLoginDevices() { return unwrap(await apiGet("/security-center/trusted-devices", { _ts: Date.now() })); }
 export async function revokeOwnTrustedLoginDevice(deviceId) { return unwrap(await apiDelete(`/security-center/trusted-devices/${encodeURIComponent(deviceId)}`)); }
 export async function listSecurityCenterAudit(limit = 250, companySlug = "") { return unwrap(await apiGet("/security-center/audit", { limit, ...(companySlug ? { companySlug } : {}), _ts: Date.now() })); }

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import InlineSecurityApproval from "../pro/InlineSecurityApproval";
 import { useAuth } from "../context/AuthContext";
+import { isMobileAppPage, isMobilePasskeySupported, rememberedMobileUser } from "../context/mobilePasskeyClient";
 import "./LoginPage.css";
 import "./LoginPageV2.css";
 import "../styles/ky-pro-access.css";
@@ -121,10 +122,11 @@ function loadTurnstileScript() {
   return turnstileScriptPromise;
 }
 
-export default function LoginPage({ onClose }) {
+export default function LoginPage({ onClose, initialFlow = null, initialError = "" }) {
   const {
     getTurnstileConfig,
     login,
+    loginMobilePasskey,
     verifyMfa,
     startOwnerRecovery,
     verifyOwnerRecovery,
@@ -135,14 +137,14 @@ export default function LoginPage({ onClose }) {
     useAuthenticatorFallback: runAuthenticatorFallback,
   } = useAuth();
 
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(() => rememberedMobileUser());
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [selectedProvider, setSelectedProvider] = useState("GOOGLE");
   const [resetProvider, setResetProvider] = useState("");
-  const [flow, setFlow] = useState({ stage: "CREDENTIALS" });
+  const [flow, setFlow] = useState(() => initialFlow?.stage ? initialFlow : { stage: "CREDENTIALS" });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(initialError || "");
   const [phoneStatusMessage, setPhoneStatusMessage] = useState("");
   const [qrError, setQrError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -263,6 +265,19 @@ export default function LoginPage({ onClose }) {
     setShowPassword(false);
     setCapsLock(false);
     setError(message);
+  }
+
+  async function handlePasskeyLogin() {
+    if (loading) return;
+    try {
+      setLoading(true);
+      setError("");
+      applyResponse(await loginMobilePasskey(normalizeIdentity(username) || rememberedMobileUser()));
+    } catch (requestError) {
+      setError(requestError?.message || "Parmak izi / Windows Hello girişinde sorun oluştu. Şifreyle devam edebilirsiniz.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleLogin(event) {
@@ -617,6 +632,13 @@ export default function LoginPage({ onClose }) {
 
             {stage === "CREDENTIALS" ? (
               <form className="auth-form" onSubmit={handleLogin}>
+                {isMobilePasskeySupported() ? <div className="auth-mobile-passkey-entry">
+                  <button type="button" onClick={handlePasskeyLogin} disabled={loading || !(normalizeIdentity(username) || rememberedMobileUser())}>
+                    {loading ? "Cihaz doğrulanıyor..." : (isMobileAppPage() ? "Parmak İzi / Yüz Tanıma / PIN ile Giriş" : "Windows Hello / Parmak İzi / PIN ile Giriş")}
+                  </button>
+                  <small>İlk kullanımda normal giriş ve güvenlik onayını tamamlayıp bu cihazda hızlı girişi etkinleştirin. Parmak izi verisi KY ERP'ye gönderilmez.</small>
+                  <div className="auth-mobile-passkey-divider">veya kullanıcı adı ve şifre ile</div>
+                </div> : null}
                 <label>Kullanıcı adı veya e-posta
                   <input
                     name="username"

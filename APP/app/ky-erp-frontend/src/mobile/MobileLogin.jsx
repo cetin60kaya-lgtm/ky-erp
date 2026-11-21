@@ -2,9 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { mobileApiPost, mobileApiGet } from "./mobileApi";
 import { API_BASE } from "../utils/api";
 import {saveStaffSession} from "./personnelSession";
+import {assertMobilePasskey, rememberedMobileUser, rememberMobileUser, rememberMobileCredential, isMobilePasskeySupported} from "../context/mobilePasskeyClient";
 
 export default function MobileLogin({ onLogin, personnelOnly = false }) {
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(() => personnelOnly ? "" : rememberedMobileUser());
   const [personnelMode, setPersonnelMode] = useState(personnelOnly);
   const [companies, setCompanies] = useState([]);
   const [turnstileConfig,setTurnstileConfig] = useState(null);
@@ -36,6 +37,61 @@ export default function MobileLogin({ onLogin, personnelOnly = false }) {
     script.addEventListener("load",render);render();
     return ()=>{removed=true;script.removeEventListener("load",render);};
   },[turnstileConfig]);
+
+  const acceptMobileSession = (payload, identity) => {
+    const token = payload?.token || payload?.access_token || payload?.accessToken || payload?.jwt || payload?.data?.token;
+    if (!token) {
+      const stage = String(payload?.stage || "");
+      if (stage === "APPROVAL_PENDING") throw new Error("Firma yöneticisinin telefon onayı gerekiyor. Onaydan sonra normal KY ERP giriş ekranından devam edin.");
+      throw new Error("Sunucu yeni bir oturum vermedi; şifre ve mevcut MFA yolunu kullanın.");
+    }
+    const userObj = payload?.user || payload?.data?.user || { username: identity };
+    if (String(userObj.role || "").toUpperCase() === "PERSONNEL") throw new Error("Personel öz-servis hesabı ERP yönetim girişini kullanamaz.");
+    localStorage.setItem("kyerp_auth_token", token);
+    localStorage.setItem("kyerp_auth_user", JSON.stringify(userObj));
+    localStorage.setItem("kyerp_mobile_user", JSON.stringify(userObj));
+    rememberMobileUser(identity);
+    onLogin({ personnel: false });
+  };
+  async function waitForCompanyApproval(payload, identity) {
+    if (!payload?.approvalId || !payload?.approvalToken) throw new Error("Firma giriş onayı başlatılamadı.");
+    setError("Firma yöneticisi onayı bekleniyor. Bu ekran açık kalacak.");
+    for (let attempt = 0; attempt < 48; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 2500));
+      if (document.visibilityState === "hidden") continue;
+      const result = await mobileApiPost("auth/approval/" + encodeURIComponent(payload.approvalId) + "/status",
+        { approvalToken: payload.approvalToken });
+      if (!result.ok) throw new Error(result.data?.error?.message || "Yönetici onayı kontrol edilemedi.");
+      const data = result.data || {};
+      const stage = String(data.stage || "").toUpperCase();
+      if (stage === "AUTHENTICATED") { acceptMobileSession(data, identity); return; }
+      if (stage.includes("DENIED") || stage.includes("EXPIRED") || stage.includes("REJECTED"))
+        throw new Error("Yönetici onayı verilmedi veya süresi doldu. Normal giriş yolu açıktır.");
+    }
+    throw new Error("Yönetici onayı devam ediyor. Normal giriş yöntemini de kullanabilirsiniz.");
+  }
+  async function handleFastLogin() {
+    if (loading || personnelMode) return;
+    const identity = String(username || rememberedMobileUser()).trim();
+    if (!identity) { setError("İlk kurulumda kullanıcı adınızla normal giriş yapın."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const start = await mobileApiPost("auth/passkey/login/start", { username: identity });
+      if (!start.ok) throw new Error(start.data?.error?.message || "Bu hesap için hızlı giriş kayıtlı değil.");
+      const opts = start.data?.data || {};
+      const assertion = await assertMobilePasskey(opts);
+      const finish = await mobileApiPost("auth/passkey/login/finish",
+        { challengeId: opts.challengeId, challengeToken: opts.challengeToken, assertion });
+      if (!finish.ok) throw new Error(finish.data?.error?.message || "Güvenli giriş doğrulanamadı.");
+      if (String(finish.data?.stage || "").toUpperCase() === "APPROVAL_PENDING") await waitForCompanyApproval(finish.data, identity);
+      else {
+        acceptMobileSession(finish.data, identity);
+        rememberMobileCredential(finish.data?.user?.id, assertion.credentialId);
+      }
+    } catch (err) { setError(err?.message || "Parmak izi/PIN ile giriş olmadı. Şifreyle devam edin."); }
+    finally { setLoading(false); }
+  }
 
   async function handleLogin(e) {
     e.preventDefault();
@@ -119,6 +175,13 @@ export default function MobileLogin({ onLogin, personnelOnly = false }) {
           <button type="button" onClick={()=>setPersonnelMode(false)} style={{flex:1,padding:10,borderRadius:8,background:!personnelMode?"#1453a3":"#e2e8f0",color:!personnelMode?"white":"#374151",border:0}}>Yönetim / Muhasebe</button>
           <button type="button" onClick={()=>setPersonnelMode(true)} style={{flex:1,padding:10,borderRadius:8,background:personnelMode?"#1453a3":"#e2e8f0",color:personnelMode?"white":"#374151",border:0}}>Personel Girişi</button>
         </div> : <p style={{fontSize:12,color:"#64748b",marginBottom:12}}>Bu personel girişi yöneticinin açık oturumunu değiştirmez.</p>}
+        {!personnelMode && isMobilePasskeySupported() ? <div style={{display:"grid",gap:7,width:"100%",marginBottom:14}}>
+          <button type="button" onClick={handleFastLogin} disabled={loading || !(username.trim() || rememberedMobileUser())}
+            style={{minHeight:52,border:0,borderRadius:13,background:"#165aaa",color:"#fff",fontSize:15,fontWeight:800}}>
+            {loading ? "Telefon doğrulanıyor..." : "Parmak İzi / Yüz Tanıma / PIN ile Giriş"}
+          </button>
+          <small style={{color:"#64748b",lineHeight:1.5}}>İlk kullanımda şifre ve MFA ile giriş yapın. Sonra bu telefonda hızlı girişi etkinleştirin.</small>
+        </div> : null}
         <form onSubmit={handleLogin} style={{ width: "100%", display: "flex", flexDirection: "column", gap: 14 }}>
           {personnelMode ? <label style={{fontSize:13,fontWeight:600,color:"#374151"}}>Firma
             <select value={company} onChange={e=>setCompany(e.target.value)} required style={{display:"block",width:"100%",padding:13,border:"2px solid #e5e7eb",borderRadius:12,marginTop:6}}>

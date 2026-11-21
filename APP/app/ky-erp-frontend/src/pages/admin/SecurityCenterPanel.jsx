@@ -8,6 +8,8 @@ import {
   listSecurityCenterLoginApprovals,
   listSecurityCenterSessions,
   listTrustedLoginDevices,
+  listOwnPasskeyCredentials,
+  revokeOwnPasskeyCredential,
   listSecurityGrantUsers,
   runPhoneApprovedSecurityAction,
   revokeOwnTrustedLoginDevice,
@@ -52,6 +54,7 @@ export default function SecurityCenterPanel() {
   const [overview, setOverview] = useState(null);
   const [sessions, setSessions] = useState([]);
   const [trustedDevices, setTrustedDevices] = useState([]);
+  const [passkeys, setPasskeys] = useState([]);
   const [audit, setAudit] = useState([]);
   const [approvals, setApprovals] = useState([]);
   const [preferences, setPreferences] = useState({});
@@ -103,7 +106,7 @@ export default function SecurityCenterPanel() {
       const allowSessionView = base?.scopeType === "SELF" || base?.scopeType === "SYSTEM" || base?.capabilities?.includes("SESSION_VIEW");
       const allowAudit = base?.scopeType === "SELF" || base?.scopeType === "SYSTEM" || base?.capabilities?.includes("AUDIT_VIEW");
       const allowManage = base?.canDelegateSecurity === true;
-      const [sessionResult, trustedResult, auditResult, approvalResult, prefResult, userResult, grantResult] = await Promise.allSettled([
+      const [sessionResult, trustedResult, auditResult, approvalResult, prefResult, userResult, grantResult, passkeyResult] = await Promise.allSettled([
         allowSessionView ? listSecurityCenterSessions() : Promise.resolve([]),
         allowSessionView ? listTrustedLoginDevices() : Promise.resolve([]),
         allowAudit ? listSecurityCenterAudit(300) : Promise.resolve([]),
@@ -111,15 +114,17 @@ export default function SecurityCenterPanel() {
         getSecurityNotificationPreferences(),
         allowManage ? listSecurityGrantUsers() : Promise.resolve([]),
         allowManage ? listSecurityCapabilityGrants() : Promise.resolve([]),
+        listOwnPasskeyCredentials(),
       ]);
       setSessions(sessionResult.status === "fulfilled" ? rows(sessionResult.value) : []);
       setTrustedDevices(trustedResult.status === "fulfilled" ? rows(trustedResult.value) : []);
+      setPasskeys(passkeyResult.status === "fulfilled" ? rows(passkeyResult.value?.credentials) : []);
       setAudit(auditResult.status === "fulfilled" ? rows(auditResult.value) : []);
       setApprovals(approvalResult.status === "fulfilled" ? rows(approvalResult.value) : []);
       setPreferences(prefResult.status === "fulfilled" ? prefResult.value || {} : {});
       setUsers(userResult.status === "fulfilled" ? rows(userResult.value) : []);
       setGrants(grantResult.status === "fulfilled" ? rows(grantResult.value) : []);
-      const failedSources=[sessionResult,trustedResult,auditResult,approvalResult,prefResult,userResult,grantResult].filter((job)=>job.status==="rejected").length;
+      const failedSources=[sessionResult,trustedResult,auditResult,approvalResult,prefResult,userResult,grantResult,passkeyResult].filter((job)=>job.status==="rejected").length;
       setMessage(failedSources?`Güvenlik kontrolünün ${failedSources} kaynağı yanıt vermedi. Eksik listeler sıfır kayıt değildir.`:"KY Güvenlik Merkezi güncel.");
     } catch (error) {
       setMessage(`Hata: ${messageOf(error, "Güvenlik Merkezi yüklenemedi.")}`);
@@ -158,6 +163,18 @@ export default function SecurityCenterPanel() {
       return;
     }
     return critical({ operation: "TRUSTED_DEVICE_REVOKE", targetUserId: row.userId, deviceId: row.deviceId }, "Cihaz güveni KY Güvenlik onayıyla kaldırıldı. Sonraki girişte yeniden onay gerekecek.");
+  }
+
+  async function revokePasskey(row) {
+    if (!row?.credentialId) return;
+    if (!window.confirm("Bu cihazın parmak izi / Windows Hello hızlı giriş anahtarı kaldırılsın mı? Diğer oturumlarınız etkilenmez.")) return;
+    setBusy(true);
+    try {
+      await revokeOwnPasskeyCredential(row.credentialId);
+      setMessage("Bu hızlı giriş anahtarı iptal edildi. Bu cihazda yeniden kurulum için şifre ve güvenlik onayı gerekir.");
+      await loadAll();
+    } catch (error) { setMessage(`Hata: ${messageOf(error, "Giriş anahtarı kaldırılamadı. Yeni güvenli giriş gerekebilir.")}`); }
+    finally { setBusy(false); }
   }
 
   async function savePreferences() {
@@ -222,7 +239,14 @@ export default function SecurityCenterPanel() {
           <span className="sc-actions compact"><button className="danger" disabled={busy} onClick={() => revokeTrustedDevice(row)}>Güveni Kaldır</button></span>
         </div>)}
       </div>
-      {!trustedDevices.length && <div className="sc-empty">Henüz onaylı cihaz yok. Bir oturum “Güven” ile onaylandığında cihaz burada kalıcı olarak görünür.</div>}
+      {!trustedDevices.length && <div className="sc-empty">Henüz onaylı tarayıcı yok. Bir oturum “Güven” ile onaylandığında cihaz burada görünür.</div>}
+      <div className="sc-panel-head"><div><h3>Parmak İzi / Windows Hello Giriş Anahtarlarım</h3>
+        <p>Bunlar telefon, tablet veya bilgisayardaki geçiş anahtarlarıdır. KY PRO dahil aynı hesabın hızlı girişinde kullanılır; diğer kullanıcıların anahtarları gösterilmez.</p></div></div>
+      {passkeys.length ? <div className="sc-list">{passkeys.map((row) =>
+        <div className="sc-row" key={row.credentialId}>
+          <div className="sc-row-main"><strong>{row.label || "Güvenli giriş anahtarı"}</strong><small>Kaydedildi: {dateText(row.createdAt)} · Son kullanım: {dateText(row.lastUsedAt)}</small></div>
+          <div className="sc-actions"><button className="danger" type="button" disabled={busy} onClick={() => revokePasskey(row)}>Anahtarı Kaldır</button></div>
+        </div>)}</div> : <div className="sc-empty">Bu hesapta kayıtlı parmak izi / Windows Hello hızlı giriş anahtarı yok.</div>}
     </div>}
 
     {tab === "sessions" && canSessionView && <div className="sc-panel">
