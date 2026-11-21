@@ -80,7 +80,21 @@ public static class CompanyArchiveLayout
 
     private static string Resolve(string validatedRoot, string relativePath)
     {
-        var target = Path.GetFullPath(Path.Combine(validatedRoot, relativePath.Replace('/', Path.DirectorySeparatorChar)));
+        var segments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length == 0 || segments.Any(s => s is "." or ".." ||
+               s.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
+            throw new UnauthorizedAccessException("Geçersiz standart klasör yolu.");
+        var current = validatedRoot;
+        foreach (var segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            if (File.Exists(current))
+                throw new IOException("Klasör yolunda dosya çakışması: " + relativePath);
+            if (Directory.Exists(current) &&
+                (new DirectoryInfo(current).Attributes & FileAttributes.ReparsePoint) != 0)
+                throw new UnauthorizedAccessException("Bağlantı/junction dizini ayrı izin gerektirir: " + relativePath);
+        }
+        var target = Path.GetFullPath(current);
         var prefix = validatedRoot + Path.DirectorySeparatorChar;
         if (!target.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
             throw new UnauthorizedAccessException("Klasör firma ana kökünün dışına çıkıyor.");
