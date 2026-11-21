@@ -7,7 +7,6 @@ type Variables = { requestId: string };
 type AppEnv = { Bindings: Bindings; Variables: Variables };
 type Row = Record<string, any>;
 
-const DEFAULT_COMPANY = "mecit-hakan";
 const text = (value: unknown) => value === undefined || value === null ? "" : String(value).trim();
 const upper = (value: unknown) => text(value).toLocaleUpperCase("tr-TR");
 const nowIso = () => new Date().toISOString();
@@ -17,10 +16,15 @@ const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
 async function authContext(c: Context<AppEnv>) {
   const user = await getAuthenticatedUser(c);
   if (!user) return null;
+  // The authenticated server session owns the HR tenant. Client headers and
+  // query parameters can only confirm it; they can never select another one.
   const company = text(
-    c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanyId") || c.req.query("mainCompanySlug") ||
-    user.mainCompanySlug || user.security?.main_company_slug || DEFAULT_COMPANY,
-  ).toLocaleLowerCase("tr-TR");
+    user.mainCompanySlug || user.main_company_slug || user.security?.main_company_slug,
+  ).toLowerCase();
+  const requestedCompany = text(
+    c.req.header("X-KYERP-Tenant-Slug") || c.req.query("mainCompanyId") || c.req.query("mainCompanySlug"),
+  ).toLowerCase();
+  if (!company || (requestedCompany && requestedCompany !== company)) return null;
   let audit = upper(user.role) === "DENETIM" || text(user.username).toLocaleLowerCase("tr-TR") === "denetim";
   if (!audit) {
     try {
