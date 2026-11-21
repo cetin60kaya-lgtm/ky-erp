@@ -1,0 +1,32 @@
+{
+  "schemaVersion": "1.0.0",
+  "product": "KY ERP Masaüstü",
+  "intendedVersion": "1.5.1",
+  "releaseStatus": "TEST_LOCAL_ONLY",
+  "channel": "STABLE",
+  "publishedAt": null,
+  "setupFileName": "KY-ERP-Masaustu-Setup-1.5.1.exe",
+  "setupSha256": null,
+  "setupSizeBytes": null,
+  "downloadUrl": null,
+  "releaseCommit": null,
+  "releaseNotesUrl": null,
+  "authorization": "ONLY_MAIN_COMPANY_OWNER_OR_PLATFORM_ADMIN",
+  "sourceOfTruth": "KY ERP GitHub + verified release storage; Desktop Windows installer not uploaded",
+  "components": [
+    "KYERP_WPF",
+    "ISNET_PORTAL_8788",
+    "FILE_HUB_AGENT",
+    "ACCOUNTING_ARCHIVE",
+    "PSD_PREVIEW",
+    "PDKS_DEVICE_AGENT"
+  ],
+  "preInstallChecks": [
+    "SHOW_WINDOWS_ADMIN_CONSENT",
+    "VERIFY_SETUP_SHA256_AND_SIGNATURE",
+    "BACKUP_PDKS_CONFIGURATION",
+    "ENSURE_PDKS_MAINTENANCE_APPROVED"
+  ],
+  "risk": "Existing 1.5.1 Inno Setup stops/deletes/recreates KYERP.PDKS.Agent; do not install before a guarded installer revision and explicit maintenance approval.",
+  "notes": "X portable EXE tested, this is not the actual setup or signed release; no active download until status=PUBLISHED with verified https URL, SHA-256 and releaseCommit."
+}
