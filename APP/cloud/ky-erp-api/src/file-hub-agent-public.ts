@@ -39,6 +39,12 @@ async function autoLink(c:Context<AppEnv>,slug:string,connectionId:string,fileAs
   const binding=(result.results||[]).find(row=>bindingMatches(text(row.root_path),relativePath));
   if(!binding)return null;
   const moduleCode=upper(binding.module_code),purposeCode=upper(binding.purpose_code),logical=modelIdentity(b.logicalKey||b.fileName);
+  // Never turn İşNet internal QA, state or competing PDF revisions into
+  // canonical financial documents. They remain in Drive for protected review.
+  const internalParts=normPath(relativePath).split("/");
+  if(["ISNET","E_BELGE","EBELGE"].includes(moduleCode) &&
+     internalParts.some(part=>["_inceleme","_durum","_uygulama"].includes(part)))return null;
+
   const modelPurposes=new Set(["MODEL_IMAGE","MODEL_SOURCE","PLACEMENT","OUTGOING_DESIGN","RIP_PDF"]);
   if((moduleCode==="DESEN"||moduleCode==="DTF"||moduleCode==="IMALAT")&&modelPurposes.has(purposeCode)&&logical){
     await insertRelation(c,slug,fileAssetId,"MODEL",logical,purposeCode,"AUTO_RULE",{moduleCode,purposeCode});
