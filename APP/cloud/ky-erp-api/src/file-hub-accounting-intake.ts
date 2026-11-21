@@ -19,9 +19,9 @@ const SELECT=`
    AND UPPER(a.extension) IN ('XML','PDF')
    -- _INCELEME contains competing PDFs, _DURUM/ _UYGULAMA contain
    -- local control/diagnostic artifacts: none are new official e-documents.
-   AND LOWER(REPLACE(l.relative_path,'\\','/')) NOT LIKE '%/_inceleme/%'
-   AND LOWER(REPLACE(l.relative_path,'\\','/')) NOT LIKE '%/_durum/%'
-   AND LOWER(REPLACE(l.relative_path,'\\','/')) NOT LIKE '%/_uygulama/%'
+   AND INSTR('/'||LOWER(REPLACE(l.relative_path,'\\','/'))||'/','/_inceleme/')=0
+   AND INSTR('/'||LOWER(REPLACE(l.relative_path,'\\','/'))||'/','/_durum/')=0
+   AND INSTR('/'||LOWER(REPLACE(l.relative_path,'\\','/'))||'/','/_uygulama/')=0
    AND LOWER(l.relative_path) NOT LIKE '%.partial-%'
    AND COALESCE(a.size_bytes,0) BETWEEN 1 AND 20971520
    AND b.read_enabled=1 AND b.sync_enabled=1
