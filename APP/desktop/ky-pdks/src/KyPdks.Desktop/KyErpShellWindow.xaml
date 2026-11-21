@@ -99,7 +99,7 @@
                         <Expander x:Name="FinanceGroup" Style="{StaticResource NavGroup}" Header="FİNANS &amp; BELGELER">
                             <StackPanel>
                                 <Button x:Name="MuhasebeButton" Style="{StaticResource NavButton}" Tag="/muhasebe/yonetim-ozeti" Click="ModuleButton_Click" Content="▣   Muhasebe"/>
-                                <Button x:Name="IsnetButton" Style="{StaticResource NavButton}" Tag="/isnet/yonetim-merkezi" Click="ModuleButton_Click" Content="⇄   İşNet / e-Belge"/>
+                                <Button x:Name="IsnetButton" Style="{StaticResource NavButton}" Tag="/e-belge/entegrasyonlar" Click="ModuleButton_Click" Content="⇄   İşNet / e-Belge"/>
                             </StackPanel>
                         </Expander>
 
