@@ -32,7 +32,7 @@ const SELECT=`
      OR (json_extract(a.metadata,'$.accountingImportState')='PROCESSING'
        AND COALESCE(json_extract(a.metadata,'$.accountingImportClaimedAt'),'')<?)
    )
- ORDER BY a.last_seen_at DESC LIMIT 12`;
+ ORDER BY CASE WHEN UPPER(a.extension)='XML' THEN 0 ELSE 1 END, a.last_seen_at DESC LIMIT 12`;
 
 function stamp(){return new Date().toISOString();}
 async function update(db:any,slug:string,id:string,state:string,attempts:number,extra:Row={}){
