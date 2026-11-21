@@ -19,7 +19,7 @@ const SELECT=`
    AND UPPER(a.extension) IN ('XML','PDF')
    AND COALESCE(a.size_bytes,0) BETWEEN 1 AND 20971520
    AND b.read_enabled=1 AND b.sync_enabled=1
-   AND ((b.module_code='E_BELGE' AND b.purpose_code='E_DOCUMENT')
+   AND ((b.module_code IN ('E_BELGE','EBELGE') AND b.purpose_code='E_DOCUMENT')
     OR (b.module_code='MUHASEBE' AND b.purpose_code IN ('INVOICE','DELIVERY_NOTE')))
    AND LENGTH(TRIM(COALESCE(b.root_path,''),'/'))>0
    AND (LOWER(REPLACE(l.relative_path,'\\','/')) = LOWER(TRIM(REPLACE(b.root_path,'\\','/'),'/'))
