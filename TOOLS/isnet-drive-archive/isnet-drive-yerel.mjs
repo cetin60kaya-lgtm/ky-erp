@@ -3,7 +3,7 @@
 import { createServer } from "node:http";
 import { randomBytes, createHash } from "node:crypto";
 import { mkdir, readFile, writeFile, rename, unlink, readdir } from "node:fs/promises";
-import { join, isAbsolute } from "node:path";
+import { join, isAbsolute, dirname } from "node:path";
 import {runIsnetArchiveSync,splitDateWindows} from "./sync-core.mjs";
 
 const HOST = "127.0.0.1";
@@ -293,6 +293,72 @@ async function preservePdfAlternative(doc,bytes){
   return {sha256:digest,bytes:bytes.length,fileName,detectedAt:archivedAt()};
 }
 
+
+async function scanPdfReviews(){
+  if(!state.connected||!state.companyId)err("ONCE_FIRMA_OTURUMU_ACIN");
+  const companyFolder=cleanName(state.companyName)+"_"+cleanName(state.companyId);
+  const result=[];
+  for(const sourceKey of Object.keys(FOLDERS)){
+    const root=join(ARCHIVE_ROOT,FOLDERS[sourceKey],companyFolder);
+    let names=[];
+    try{names=await readdir(root,{recursive:true})}
+    catch(e){if(e.code==="ENOENT")continue;throw e;}
+    if(names.length>30000)err("INCELEME_DIZINI_COK_BUYUK");
+    for(const relative of names){
+      if(!relative.endsWith("belge-kayit.json"))continue;
+      if(relative.split(/[\/\\]/).at(-1)!=="belge-kayit.json")continue;
+      const file=join(root,relative);
+      let manifest;
+      try{manifest=JSON.parse(await readFile(file,"utf8"))}
+      catch{continue}
+      if(manifest?.sourceKey!==sourceKey||!/^\d+$/.test(String(manifest?.sourceId||""))||!pendingPdfReview(manifest))continue;
+      const otherErrors=(manifest.errors||[]).filter(x=>!legacyPdfConflict(x));
+      result.push({sourceKey,sourceId:String(manifest.sourceId),documentNo:String(manifest.documentNo||""),
+        date:String(manifest.date||""),candidateCount:manifest.review?.candidates?.length||0,
+        otherIssues:otherErrors.length,manifestFile:file,manifest});
+      if(result.length>=200)return result;
+    }
+  }
+  return result;
+}
+async function findPdfReview(sourceKey,sourceId){
+  selectedSource(sourceKey);
+  if(!/^\d+$/.test(String(sourceId)))err("BELGE_KIMLIGI_GECERSIZ");
+  const reviews=await scanPdfReviews();
+  const match=reviews.filter(x=>x.sourceKey===sourceKey&&x.sourceId===String(sourceId));
+  if(match.length!==1)err("PDF_INCELEME_KAYDI_BULUNAMADI");
+  return match[0];
+}
+async function previewPdfReview(sourceKey,sourceId,variant){
+  if(!["original","alternative"].includes(variant))err("PDF_SURUM_SECIMI_GECERSIZ");
+  const record=await findPdfReview(sourceKey,sourceId);
+  const dir=dirname(record.manifestFile),stem=cleanName(record.documentNo),manifest=record.manifest;
+  const candidate=manifest.review?.candidates?.at(-1);
+  if(variant==="alternative"&&!candidate)err("PDF_ALTERNATIF_DOSYASI_YOK");
+  const name=variant==="original"?stem+".pdf":"PDF-ALTERNATIF-"+String(candidate.sha256).slice(0,16)+".pdf";
+  const path=variant==="original"?join(dir,name):join(dir,"_INCELEME",name);
+  const bytes=await readFile(path);
+  const wanted=variant==="original"?manifest.pdf?.sha256:candidate?.sha256;
+  if(!wanted||sha256(bytes)!==wanted||!bytes.subarray(0,5).equals(Buffer.from("%PDF-")))err("PDF_ONIZLEME_HASH_KONTROLU_HATASI");
+  return bytes;
+}
+async function keepReviewedOriginal(sourceKey,sourceId){
+  const record=await findPdfReview(sourceKey,sourceId);
+  const manifest=record.manifest,dir=dirname(record.manifestFile);
+  if((manifest.errors||[]).some(e=>!legacyPdfConflict(e)))err("BASKA_BELGE_HATASI_INCELEME_GEREKLI");
+  if(!(await verifyOriginalFiles(dir,cleanName(record.documentNo),manifest)))err("ORIJINAL_XML_PDF_HASH_KONTROLU_HATASI");
+  const contents={...manifest,lastCheckedAt:archivedAt(),errors:[],
+    review:{...manifest.review,status:"RESOLVED_KEEP_ORIGINAL",
+      reason:PDF_REVIEW_CODE,resolvedAt:archivedAt(),confirmedOriginalSha256:manifest.pdf.sha256,
+      candidates:manifest.review?.candidates||[]}};
+  const temp=record.manifestFile+".partial-"+randomBytes(6).toString("hex");
+  try{
+    await writeFile(temp,JSON.stringify(contents,null,2),{flag:"wx"});
+    await rename(temp,record.manifestFile);
+  }finally{await unlink(temp).catch(e=>{if(e.code!=="ENOENT")throw e;});}
+  return {ok:true,reviewStatus:"RESOLVED_KEEP_ORIGINAL"};
+}
+
 let archiveBusy=false;
 async function archiveListed(id,sourceKey) {
   if(archiveBusy)err("BIR_ISLEM_SURUYOR");
@@ -389,8 +455,57 @@ function startArchiveJob(start,end,monitor=false){
   })();
 }
 
-const html=`<!doctype html><html lang=\"tr\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"referrer\" content=\"no-referrer\"><title>KY ERP · İşNet Yerel Drive Arşivi</title>\n<style>body{font:14px system-ui;background:#f4f6fb;color:#1b2b44;margin:0;padding:18px}main{max-width:1100px;margin:auto}h1{font-size:24px;margin:8px 0}h3{font-size:16px}section{background:white;padding:18px;margin:14px 0;border:1px solid #d9e0ed;border-radius:12px}input,select,button{padding:10px;font:inherit;border:1px solid #b5c3d8;border-radius:8px;margin:4px}button{background:#183f7a;color:white;cursor:pointer}button:focus{outline:2px solid #4777c1}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:9px;border-bottom:1px solid #e4e8f2}td button{padding:7px}small{color:#52637a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}.pill{background:#e9f0fd;padding:5px 9px;border-radius:99px;color:#16417f}#status{white-space:pre-wrap;padding:12px;background:#f4f7fd;border-radius:6px}.overflow{overflow-x:auto}</style>\n<main><h1>KY ERP · İşNet Yerel Drive Arşivi</h1><small>Yerel arşiv · XML + PDF Google Drive eşitleme klasörüne kaydedilir (bulut kaydı ayrıca doğrulanır) · Şifre/çerez hiçbir dosyaya yazılmaz · Resmî belge gönderilmez</small>\n<section><h3>1. İşNet giriş</h3><form id=\"login\" method=\"post\" action=\"/login\" autocomplete=\"off\" onsubmit=\"return false\"><input name=\"username\" autocomplete=\"username\" placeholder=\"Kullanıcı / VKN\" required><input name=\"password\" type=\"password\" autocomplete=\"off\" placeholder=\"Şifre\" required><button>Bağlan ve firmaları getir</button></form></section>\n<section><h3>2. Firma</h3><form id=\"company\"><select name=\"id\" id=\"companies\"><option value=\"\">Önce bağlanın</option></select><button>Firma oturumu aç</button></form></section>\n<section><h3>3. Belgeleri sorgula</h3><form id=\"invoices\"><div class=\"grid\"><label>Belge türü<br><select name=\"sourceKey\"><option value=\"incoming_invoice\">Gelen e-Fatura</option><option value=\"outgoing_invoice\">Giden e-Fatura</option><option value=\"incoming_dispatch\">Gelen e-İrsaliye</option><option value=\"outgoing_dispatch\">Giden e-İrsaliye</option></select></label><label>Başlangıç<br><input name=\"start\" type=\"date\" required></label><label>Bitiş<br><input name=\"end\" type=\"date\" required></label></div><button>Belge listesini getir</button></form><p><small>Tek arşiv: dört belge türünün XML ve PDF dosyaları ayrı klasörlerde korunur. Bir sorgu en fazla 31 gün / tür başına 200 kayıt.</small></p><button type=\"button\" id=\"archiveAll\">Dört Yönü Otomatik Senkronize Et · XML + PDF</button><button type=\"button\" id=\"stopArchive\" disabled>İşlemden Sonra Durdur</button><label style=\"display:inline-flex;align-items:center;gap:6px;font-size:12px;\"><input id=\"keepMonitoring\" type=\"checkbox\" checked>Oturum açıkken 15 dakikada bir kontrolü sürdür</label><div class=\"overflow\"><table><thead><tr><th>Tarih</th><th>Belge numarası</th><th>Firma</th><th>Tutar</th><th>Portal durumu</th><th>XML</th><th>PDF</th><th>Drive Arşiv</th></tr></thead><tbody id=\"results\"></tbody></table></div></section>\n<section><b>Test sonucu</b><div id=\"status\">Hazır; portal girişi bekleniyor.</div><button type=\"button\" id=\"clear\">Oturumu temizle</button></section></main>\n<script>\nconst csrf=\"{{CSRF}}\";const status=document.querySelector(\"#status\");
+const html=`<!doctype html><html lang=\"tr\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><meta name=\"referrer\" content=\"no-referrer\"><title>KY ERP · İşNet Yerel Drive Arşivi</title>\n<style>body{font:14px system-ui;background:#f4f6fb;color:#1b2b44;margin:0;padding:18px}main{max-width:1100px;margin:auto}h1{font-size:24px;margin:8px 0}h3{font-size:16px}section{background:white;padding:18px;margin:14px 0;border:1px solid #d9e0ed;border-radius:12px}input,select,button{padding:10px;font:inherit;border:1px solid #b5c3d8;border-radius:8px;margin:4px}button{background:#183f7a;color:white;cursor:pointer}button:focus{outline:2px solid #4777c1}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:9px;border-bottom:1px solid #e4e8f2}td button{padding:7px}small{color:#52637a}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:10px}.pill{background:#e9f0fd;padding:5px 9px;border-radius:99px;color:#16417f}#status{white-space:pre-wrap;padding:12px;background:#f4f7fd;border-radius:6px}.overflow{overflow-x:auto}</style>\n<main><h1>KY ERP · İşNet Yerel Drive Arşivi</h1><small>Yerel arşiv · XML + PDF Google Drive eşitleme klasörüne kaydedilir (bulut kaydı ayrıca doğrulanır) · Şifre/çerez hiçbir dosyaya yazılmaz · Resmî belge gönderilmez</small>\n<section><h3>1. İşNet giriş</h3><form id=\"login\" method=\"post\" action=\"/login\" autocomplete=\"off\" onsubmit=\"return false\"><input name=\"username\" autocomplete=\"username\" placeholder=\"Kullanıcı / VKN\" required><input name=\"password\" type=\"password\" autocomplete=\"off\" placeholder=\"Şifre\" required><button>Bağlan ve firmaları getir</button></form></section>\n<section><h3>2. Firma</h3><form id=\"company\"><select name=\"id\" id=\"companies\"><option value=\"\">Önce bağlanın</option></select><button>Firma oturumu aç</button></form></section>\n<section><h3>3. Belgeleri sorgula</h3><form id=\"invoices\"><div class=\"grid\"><label>Belge türü<br><select name=\"sourceKey\"><option value=\"incoming_invoice\">Gelen e-Fatura</option><option value=\"outgoing_invoice\">Giden e-Fatura</option><option value=\"incoming_dispatch\">Gelen e-İrsaliye</option><option value=\"outgoing_dispatch\">Giden e-İrsaliye</option></select></label><label>Başlangıç<br><input name=\"start\" type=\"date\" required></label><label>Bitiş<br><input name=\"end\" type=\"date\" required></label></div><button>Belge listesini getir</button></form><p><small>Tek arşiv: dört belge türünün XML ve PDF dosyaları ayrı klasörlerde korunur. Bir sorgu en fazla 31 gün / tür başına 200 kayıt.</small></p><button type=\"button\" id=\"archiveAll\">Dört Yönü Otomatik Senkronize Et · XML + PDF</button><button type=\"button\" id=\"stopArchive\" disabled>İşlemden Sonra Durdur</button><label style=\"display:inline-flex;align-items:center;gap:6px;font-size:12px;\"><input id=\"keepMonitoring\" type=\"checkbox\" checked>Oturum açıkken 15 dakikada bir kontrolü sürdür</label><div class=\"overflow\"><table><thead><tr><th>Tarih</th><th>Belge numarası</th><th>Firma</th><th>Tutar</th><th>Portal durumu</th><th>XML</th><th>PDF</th><th>Drive Arşiv</th></tr></thead><tbody id=\"results\"></tbody></table></div></section>\n<section><h3>4. PDF sürüm uyuşmazlıkları</h3><small>Orijinal XML/PDF korunur. Yeni PDF farklıysa _INCELEME altında tek hash'li alternatif olarak saklanır; kendiliğinden resmî belge yerine geçmez.</small><p><button type="button" id="reviewRefresh">İnceleme kayıtlarını göster</button></p><div id="reviewList" style="display:grid;gap:8px"></div><iframe id="reviewPreview" title="PDF Sürüm Önizleme" style="width:100%;height:510px;border:1px solid #d9e0ed;border-radius:8px;display:none"></iframe></section>
+<section><b>Test sonucu</b><div id=\"status\">Hazır; portal girişi bekleniyor.</div><button type=\"button\" id=\"clear\">Oturumu temizle</button></section></main>\n<script>\nconst csrf=\"{{CSRF}}\";const status=document.querySelector(\"#status\");
 let stopArchive=false,archiveRunning=false;\nconst form=document.querySelector(\"#invoices\"),today=new Date();form.elements.end.value=today.toISOString().slice(0,10);today.setDate(today.getDate()-7);form.elements.start.value=today.toISOString().slice(0,10);\nasync function api(path,data){const res=await fetch(path,{method:\"POST\",headers:{\"content-type\":\"application/json\",\"x-ky-csrf\":csrf},body:JSON.stringify(data)});const obj=await res.json();if(!res.ok)throw Error(obj.error||\"Bilinmeyen hata\");return obj}\nasync function run(task){status.textContent=\"İşlem yürütülüyor...\";try{await task()}catch(e){status.textContent=\"HATA: \"+e.message}}\ndocument.querySelector(\"#login\").onsubmit=e=>{e.preventDefault();run(async()=>{const f=new FormData(e.target);const r=await api(\"/login\",Object.fromEntries(f));e.target.elements.password.value=\"\";const sel=document.querySelector(\"#companies\");sel.replaceChildren();const first=document.createElement(\"option\");first.value=\"\";first.textContent=\"Firma seçin\";sel.append(first);r.companies.forEach(c=>{const option=document.createElement(\"option\");option.value=c.id;option.textContent=c.name;sel.append(option)});status.textContent=r.companies.length+\" yetkili firma bulundu\"})};\ndocument.querySelector(\"#company\").onsubmit=e=>{e.preventDefault();run(async()=>{const sel=document.querySelector(\"#companies\");if(!sel.value)throw Error(\"Firma seçin\");await api(\"/company\",{id:sel.value,name:sel.selectedOptions[0].textContent});status.textContent=\"Firma oturumu açıldı\"})};\nasync function download(d,format){status.textContent=format.toUpperCase()+\" indiriliyor...\";try{const response=await fetch(\"/file\",{method:\"POST\",headers:{\"content-type\":\"application/json\",\"x-ky-csrf\":csrf},body:JSON.stringify({id:d.sourceId,sourceKey:d.sourceKey,format})});if(!response.ok){const obj=await response.json();throw Error(obj.error)}const blob=await response.blob();const url=URL.createObjectURL(blob),link=document.createElement(\"a\");link.href=url;link.download=(d.no||\"isnet-belge\").replace(/[^a-zA-Z0-9_-]/g,\"_\")+\".\"+format;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);status.textContent=d.no+\" \"+format.toUpperCase()+\" tarayıcıya indirildi, Drive arşivi değildir (\"+blob.size+\" bayt).\"}catch(e){status.textContent=\"HATA: \"+e.message}}\nform.onsubmit=e=>{e.preventDefault();run(async()=>{const r=await api(\"/documents\",Object.fromEntries(new FormData(form)));const tbody=document.querySelector(\"#results\");tbody.replaceChildren();r.documents.forEach(d=>{const tr=document.createElement(\"tr\");for(const field of [\"date\",\"no\",\"company\",\"amount\",\"status\"]){const td=document.createElement(\"td\");td.textContent=d[field]||\"—\";tr.append(td)}for(const fmt of [\"xml\",\"pdf\"]){const cell=document.createElement(\"td\"),button=document.createElement(\"button\");button.textContent=fmt.toUpperCase()+\" elle indir\";button.onclick=()=>download(d,fmt);cell.append(button);tr.append(cell)}const archiveCell=document.createElement(\"td\"),archiveButton=document.createElement(\"button\");archiveButton.textContent=\"XML + PDF Kaydet\";archiveButton.onclick=()=>run(async()=>{const saved=await api(\"/archive-item\",{id:d.sourceId,sourceKey:d.sourceKey});status.textContent=d.no+\" · XML \"+(saved.xmlSaved?\"OK\":\"Eksik\")+\" / PDF \"+(saved.pdfSaved?\"OK\":\"Eksik\")+(saved.errors.length?\" · \"+saved.errors.join(\", \"):\"\")});archiveCell.append(archiveButton);tr.append(archiveCell);tbody.append(tr)});status.textContent=r.documents.length+\" belge listelendi; seçilen tür: \"+form.elements.sourceKey.selectedOptions[0].textContent})};\ndocument.querySelector(\"#clear\").onclick=()=>run(async()=>{await api(\"/clear\",{});document.querySelector(\"#results\").replaceChildren();status.textContent=\"Oturum bilgileri temizlendi.\"});
+
+const reviewList=document.querySelector("#reviewList");
+const reviewFrame=document.querySelector("#reviewPreview");
+let previewObjectUrl="";
+async function loadReviewPdf(record,variant){
+  const res=await fetch("/review-pdf",{method:"POST",headers:{"content-type":"application/json","x-ky-csrf":csrf},
+    body:JSON.stringify({sourceKey:record.sourceKey,sourceId:record.sourceId,variant})});
+  if(!res.ok){const e=await res.json();throw Error(e.error||"ONIZLEME_HATASI");}
+  const blob=await res.blob();
+  if(previewObjectUrl)URL.revokeObjectURL(previewObjectUrl);
+  previewObjectUrl=URL.createObjectURL(blob);
+  reviewFrame.src=previewObjectUrl;
+  reviewFrame.style.display="block";
+}
+async function showPdfReviews(){
+  const payload=await api("/review-list",{});
+  reviewList.replaceChildren();
+  if(!payload.reviews.length){
+    const empty=document.createElement("span");empty.textContent="Bekleyen PDF sürüm incelemesi yok.";reviewList.append(empty);return;
+  }
+  for(const record of payload.reviews){
+    const row=document.createElement("div");
+    row.style.cssText="padding:10px;border:1px solid #d8e2ef;border-radius:7px;display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+    const title=document.createElement("strong");
+    title.textContent=record.documentNo+" · "+record.sourceKey+" · "+(record.candidateCount?record.candidateCount+" alternatif PDF":"eski sürüm farkı kaydı");
+    row.append(title);
+    const original=document.createElement("button");original.textContent="Arşivdeki PDF'yi göster";
+    original.onclick=()=>run(async()=>{await loadReviewPdf(record,"original");status.textContent="Arşivdeki orijinal PDF salt okunur açıldı."});
+    row.append(original);
+    if(record.candidateCount){
+      const alternative=document.createElement("button");alternative.textContent="Farklı PDF'yi karşılaştır";
+      alternative.onclick=()=>run(async()=>{await loadReviewPdf(record,"alternative");status.textContent="Alternatif PDF salt okunur açıldı; resmî arşive geçmez."});
+      row.append(alternative);
+    }
+    const approve=document.createElement("button");approve.textContent="Mevcut orijinali koru · İncelemeyi kapat";
+    approve.disabled=record.otherIssues>0;
+    approve.onclick=()=>run(async()=>{
+      if(!confirm("XML ve PDF'nin mevcut arşiv sürümünü koruyup bu PDF uyuşmazlık incelemesini kapatmak istiyor musunuz? Alternatif dosyalar silinmez."))return;
+      await api("/review-resolve",{sourceKey:record.sourceKey,sourceId:record.sourceId,action:"KEEP_ORIGINAL"});
+      status.textContent="Mevcut orijinal korundu; karar kayıt dosyasına işlendi. Alternatifler silinmedi.";
+      await showPdfReviews();
+    });
+    row.append(approve);
+    reviewList.append(row);
+  }
+}
+document.querySelector("#reviewRefresh").onclick=()=>run(async()=>{await showPdfReviews();status.textContent="PDF inceleme listesi güncellendi."});
+
 let syncPolling=null;
 async function refreshSyncStatus(){
   try{
@@ -427,11 +542,28 @@ async function readBody(req){const chunks=[];let size=0;for await(const chunk of
 const server=createServer(async(req,res)=>{
   if(req.socket.remoteAddress!=="127.0.0.1"&&req.socket.remoteAddress!=="::ffff:127.0.0.1")return json(res,403,{error:"YEREL_ERISIM"});
   if(req.method==="GET"&&req.url?.startsWith("/?")){res.writeHead(303,{"location":"/","cache-control":"no-store","referrer-policy":"no-referrer"});return res.end();}
-  if(req.method==="GET"&&req.url==="/"){res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer","x-content-type-options":"nosniff","content-security-policy":"frame-ancestors https://kyerp.net https://app.kyerp.net; default-src 'self' 'unsafe-inline'; connect-src 'self'; form-action 'self'; base-uri 'none'"});return res.end(html);}
-  if(req.method!=="POST"||!["/login","/company","/documents","/file","/clear","/archive-item","/sync-start","/sync-status","/sync-stop"].includes(req.url))return json(res,404,{error:"BULUNAMADI"});
+  if(req.method==="GET"&&req.url==="/"){res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer","x-content-type-options":"nosniff","content-security-policy":"frame-ancestors https://kyerp.net https://app.kyerp.net; default-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self' blob:; form-action 'self'; base-uri 'none'"});return res.end(html);}
+  if(req.method!=="POST"||!["/login","/company","/documents","/file","/clear","/archive-item","/sync-start","/sync-status","/sync-stop","/review-list","/review-pdf","/review-resolve"].includes(req.url))return json(res,404,{error:"BULUNAMADI"});
   if(req.headers["x-ky-csrf"]!==csrf||!["http://127.0.0.1:"+PORT,undefined].includes(req.headers.origin))return json(res,403,{error:"YETKISIZ_ISTEK"});
   try{
     const body=await readBody(req);
+    if(req.url==="/review-list"){
+      const records=await scanPdfReviews();
+      return json(res,200,{reviews:records.map(({sourceKey,sourceId,documentNo,date,candidateCount,otherIssues})=>
+        ({sourceKey,sourceId,documentNo,date,candidateCount,otherIssues}))});
+    }
+    if(req.url==="/review-resolve"){
+      if(syncJob.running)err("SENKRONIZASYON_DEVAM_EDIYOR");
+      if(safe(body.action)!=="KEEP_ORIGINAL")err("PDF_KARAR_SECIMI_GECERSIZ");
+      const decision=await keepReviewedOriginal(safe(body.sourceKey),safe(body.sourceId));
+      return json(res,200,decision);
+    }
+    if(req.url==="/review-pdf"){
+      const bytes=await previewPdfReview(safe(body.sourceKey),safe(body.sourceId),safe(body.variant));
+      res.writeHead(200,{"content-type":"application/pdf","cache-control":"no-store",
+        "content-disposition":"inline; filename=review.pdf","x-content-type-options":"nosniff"});
+      return res.end(bytes);
+    }
     if(req.url==="/sync-status")return json(res,200,{job:syncJob});
     if(req.url==="/sync-stop"){syncJob.stop=true;syncJob.monitor=false;if(monitorTimer){clearTimeout(monitorTimer);monitorTimer=null;}return json(res,200,{stopRequested:syncJob.running});}
     if(req.url==="/sync-start"){startArchiveJob(safe(body.start),safe(body.end),body.monitor===true);return json(res,202,{started:true});}
