@@ -136,6 +136,49 @@ public partial class LocalFolderWindow : Window
         }
     }
 
+    private void ChooseCompanyRoot_Click(object sender, RoutedEventArgs e)
+    {
+        // The user approves precisely one company root on this Windows device.
+        // This does not authorize cloud OAuth, financial posting or File Hub writes.
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_company))
+                throw new InvalidOperationException("Önce KY ERP'de ana firmayı seçin. Firma kimliği boşsa klasör kurulmaz.");
+            var picker = new Microsoft.Win32.OpenFolderDialog
+            {
+                Title = "Seçili firmaya ait mevcut Google Drive / OneDrive ana klasörünü seçin",
+            };
+            if (picker.ShowDialog(this) != true) return;
+            var root = LocalFolderService.ValidateRoot(picker.FolderName);
+            var grants = LocalFolderService.Load();
+            if (grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+                                !g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Bu Windows klasörü başka bir KY ERP firmasına bağlı. Yanlış firmaya arşiv bağlanamaz.");
+
+            var missing = CompanyArchiveLayout.MissingPaths(root);
+            var preview = $"{_company} firması\n\nAna klasör: {root}\n" +
+                $"Mevcut klasörler korunacak. Oluşturulacak eksik standart klasör: {missing.Count}.\n\n" +
+                "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
+                "Seçili köke yalnız File Hub okuma izni verilecek; bulut OAuth ve yazma izni ayrıca doğrulanır.\n\n" +
+                "Bu klasör düzenini kurmak istiyor musunuz?";
+            if (MessageBox.Show(this, preview, "KY ERP · Firma Arşivi",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+            var result = CompanyArchiveLayout.EnsureMissingPaths(root);
+            if (!grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+                                 g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
+                                 g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase)))
+                LocalFolderService.Grant(root, "Firma Ana Arşivi", "FILE_HUB", _company);
+            RefreshGrants();
+            ShowStatus($"Arşiv klasörleri hazır · Firma: {_company} · Korunan: {result.Existing} · Oluşturulan: {result.Created}. " +
+                       "Drive/OneDrive ve KY ERP D1 bağlantısı ayrı kabul gerektirir.");
+        }
+        catch (Exception error)
+        {
+            ShowStatus("Firma ana klasörü kurulamadı: " + error.Message, true);
+        }
+    }
+
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
         try
