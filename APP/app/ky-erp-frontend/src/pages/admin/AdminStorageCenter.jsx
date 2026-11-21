@@ -7,10 +7,11 @@ import "./StorageCloudHub.css";
 import "./StorageOperationsPolish.css";
 import AdminMailConnectionsV2 from "./AdminMailConnectionsV2";
 import fileHubFolderPolicy from "./FileHubFolderPolicy.v1.json";
+import desktopRelease from "./KyErpDesktopReleaseManifest.v1.json";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 
 const ROUTE_TO_TAB={"depolama-genel":"overview","depolama-kaynaklar":"connections","depolama-mail":"mail","depolama-atamalar":"bindings","depolama-dosyalar":"files","depolama-senkronizasyon":"sync","depolama-yedekleme":"logs"};
-const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["map","Klasör Haritası"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
+const TABS=[["overview","Genel Bakış"],["connections","Dosya Servisleri"],["mail","E-posta Hesapları"],["bindings","Bölüm / Dosya Atamaları"],["map","Klasör Haritası"],["desktop","Masaüstü Kurulum"],["files","Dosya İndeksi"],["sync","Senkronizasyon & Agent"],["logs","Yedekleme & Loglar"]];
 const MODULES=STORAGE_MODULES;
 const PURPOSES=STORAGE_PURPOSES;
 const PURPOSES_BY_MODULE=STORAGE_PURPOSES_BY_MODULE;
@@ -218,6 +219,16 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
    </div>;
   })}</div>
   <div className="storage-notice storage-hint"><strong>Windows kurulum paketi:</strong> Yayınlandığında yalnız doğrulanmış sürüm, SHA-256 ve yetkili indirme bağlantısı bu Yönetim alanında gösterilecek. Şu anda üretim indirme bağlantısı yayımlanmadı. GitHub'daki sürümlü politika ve firma bazlı D1 atamaları esas alınır; Excel yalnız yönetim dökümüdür.</div>
+ </section>:null}
+ {tab==="desktop"?<section className="storage-card-v2" aria-label="KY ERP Masaüstü kurulum paketi">
+   <h3>KY ERP Masaüstü — Kurulum ve Sürüm Yönetimi</h3><p>İşNet, File Hub, muhasebe arşivi, PSD önizleme ve yerel dosya yetkisi tek Windows uygulamasında. Her firma aynı kurumsal sürümü indirir; gerçek dosya bağlantıları kendi firma D1 ayarlarında yönetilir.</p>
+   <div className="storage-stats-v2"><div className="storage-stat-v2"><span>Hedef sürüm</span><strong>{desktopRelease.intendedVersion}</strong><small>{desktopRelease.product}</small></div><div className="storage-stat-v2"><span>Yayın</span><strong>{desktopRelease.releaseStatus==="PUBLISHED"?"Doğrulanıyor":"Testte"}</strong><small>{desktopRelease.releaseCommit?"GitHub "+desktopRelease.releaseCommit.slice(0,12):"Üretim sürüm kanıtı henüz yok"}</small></div></div>
+   <div className="storage-binding-list">
+    <div className="storage-binding-row"><div><strong>Dosya bütünlüğü</strong><small>Kurulum SHA-256: {desktopRelease.setupSha256||"Henüz yayımlanmadı"} · Kurulum dosyası: {desktopRelease.setupFileName}</small></div></div>
+    <div className="storage-binding-row"><div><strong>İşNet ve File Hub</strong><small>İşNet portal oturumu kullanıcı tarafından açılır. Firma klasörleri Yönetim → Klasör Haritası üzerinden seçilir; dosyalar orada taşınmaz.</small></div></div>
+    <div className="storage-binding-row"><div><strong>PDKS servis güvenliği</strong><small>Mevcut Inno kurulum PDKS Agent hizmetini değiştirebilir. Canlı PDKS cihazında bakım onayı ve güvenli kurulum testi olmadan kullanılmaz.</small></div></div>
+   </div>
+   {(()=>{const trusted=desktopRelease.releaseStatus==="PUBLISHED"&&/^https:\/\/(github\.com\/cetin60kaya-lgtm\/ky-erp\/releases\/download\/|api\.kyerp\.net\/api\/desktop\/releases\/)/i.test(desktopRelease.downloadUrl||"")&&/^[a-f0-9]{64}$/i.test(desktopRelease.setupSha256||"")&&/^[a-f0-9]{7,40}$/i.test(desktopRelease.releaseCommit||"");return trusted?<a href={desktopRelease.downloadUrl} className="storage-primary" rel="noopener noreferrer" target="_blank">KY ERP Masaüstü Kurulumunu İndir</a>:<div className="storage-notice storage-hint"><strong>İndirme henüz kapalı.</strong> Gerçek imzalı/onaylı paket, sürüm SHA-256 ve canlı yayın kaydı doğrulanınca bu alandan açılacak. Şimdiki X taşınabilir test sürümü üretim kurulum paketi değildir.</div>})()}
  </section>:null}
  {tab==="bindings"?<div className="storage-binding-layout">
   <section className="storage-card-v2">
