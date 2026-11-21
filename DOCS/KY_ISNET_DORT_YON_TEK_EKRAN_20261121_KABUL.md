@@ -33,3 +33,22 @@ Dört belge türünün klasörleri tek belirlenmiş fiziksel arşivde tür + fir
 - Windows portable EXE `D:\KYERP-TEST-20261121\isnet-1.5.2-secure-smoke\portable\KY ERP Masaüstü.exe`, sürüm `1.5.2`, SHA256 `5D2DB434829F099338F312A61CEFE85709669D70A3461D833B4C70E4C0050109`; dotnet test ve publish exit 0. X WPF PID 11716. 8791 Node PID 40808.
 - Gerçek render HTML'nin JavaScript sözdizimi Node VM kontrolünden geçti; formun varsayılan GET ile URL'ye şifre koyması önlendi, `Referrer-Policy` ve 303 redirect doğrulandı. Kullanıcının **önceki Chrome geçmişindeki şifreli URL'leri** kod düzeltmesi otomatik silmez; ilgili URL geçmişini kullanıcı ayrıca temizlemeli ve gerçek parola ifşa olduysa değiştirmelidir.
 - **Henüz canlıda yapılmadı:** İşNet portal hesabıyla yeni sürümde giriş, dört yön toplu gerçek dosya alma, Google Drive→File Hub/D1 tek canonical fatura/irsaliye iş kaydı ve model/cari bağlantısı, Cloudflare Pages/Worker deploy, imzalı/sahip onaylı Yönetim kurulum paketi. PDKS hizmeti ve mevcut belge orijinalleri değişmedi.
+
+
+## 21.11.2026 — PDF uyuşmazlığında kalıcı sürüm koruması (X 8791 yerel kabulü)
+
+**Gerçek neden:** Arşivde hem orijinal XML hem orijinal PDF SHA-256 ile doğrulansa bile `belge-kayit.json.errors` geçmişte `PDF:ARŞİVDE_FARKLI_ORİJİNAL_VAR_INCELEYIN` içeriyorsa `alreadyArchived` eskiden tam arşivi reddediyordu. Her yeniden taramada İşNet PDF tekrar indiriliyor, farklı üretilmiş PDF aynı belgeye ait olsa bile yeniden çatışma yaratıyordu; PDF fiziksel olarak mevcutken `pdfSaved=false` gösterilebiliyordu.
+
+**Yeni kural:**
+1. Mevcut XML ve PDF diskten okunur; manifest SHA-256 ile her ikisi de aynıysa **dosya çiftinin mevcut olduğu kabul edilir**, otomatik yeni indirme yapılmaz. Eski sürüm uyuşmazlığı ayrı `NEEDS_REVIEW` kalır; belgeye sahte `COMPLETE` verilmez.
+2. Kullanıcı **PDF sürüm uyuşmazlıkları** ekranındaki `Portaldaki PDF'yi bir kez yeniden kontrol et` düğmesini kullanabilir. Resmî portal PDF'si mevcut orijinalle byte-byte aynıysa hata kararı otomatik kapanır; değilse farklı PDF `_INCELEME/PDF-ALTERNATIF-<sha16>.pdf` adıyla ayrı saklanır, orijinal değişmez.
+3. Aynı alternatif hash yeniden gelirse ikinci kopya oluşmaz. Bir belgenin en fazla sekiz alternatif sürümü korunur; üst sınır kontrol uyarısıdır. Geçmiş sürüm farkında alternatif byte'lar önceki testte saklanmadıysa varmış gibi davranılmaz.
+4. Kullanıcı gerekirse aynı sayfada orijinal ve alternatif PDF'yi salt okunur önizler; yalnız **Mevcut orijinali koru · İncelemeyi kapat** onaylı eylemi inceleme kararını manifestte `RESOLVED_KEEP_ORIGINAL` olarak kalıcılaştırır. Otomatik mali/stok kesin kaydı veya fiziksel XML/PDF silme yok.
+5. File Hub `_INCELEME`, `_DURUM`, `_UYGULAMA` yol parçalarını resmî belge olarak içe almaktan ve otomatik DOCUMENT ilişkisi kurmaktan kaçınır. Test XML/TXT de mali belgeye dönüşmez.
+
+**X Windows gerçek QA / yerel uygulama geçişi:**
+- İzole Node QA `sync-core`, güvenli gerçek render HTML ve PDF uyuşmazlık/test kararı **9/9 PASS**. Yeni File Hub iç klasör filtresi sözleşme testi **1/1 PASS**. Canlı XML/PDF dosyası testte değiştirilmedi.
+- X'teki eski `8791` işlemi yalnız durdurulmuş senkron halinde, PID **40808**, kapatıldı. Yeni korumalı Node kaynak SHA256 `FFC7047B2CA8DC5B07B0AC94EB1100267787DA4ED5BF5CB1D29FD936ABE9258A` ile PID **4024** olarak açıldı; HTTP 200, otomatik senkron `running=false`, yeni PDF inceleme paneli mevcut. Eski kod ayrı rollback klasöründe, masaüstü portable `Integrations/isnet-archive` kodu aynı sürüme eşitlendi.
+- WPF 1.5.2 önceki PID **11716** normal kapatıldı, yeni PID **28588** açıldı. Windows UIAutomation ile `İşNet / e-Belge` tıklanıp aynı WPF penceresinde `PDF sürüm uyuşmazlıkları` ve `İnceleme kayıtlarını göster` alanları görüldü.
+- **Hâlâ bekleyen gerçek kullanıcı kabulü:** Önceki portal giriş oturumu Node restart ile sıfırlandı. Firma yetkisiyle bir kez giriş sonrası 1 tarihli PDF kontrolü yapılacak; PDF aynıysa otomatik çözülecek, farklıysa kullanıcı iki PDF'yi karşılaştırıp açık karar verecek. Bu tarihî uyarı kullanıcı incelemesi olmadan resmen çözülmüş sayılmaz.
+- Bu değişiklik **X'te çalışan yerel 8791 ve WPF test paketi** için doğrulandı. Cloudflare Worker/Pages, D1 Belge Havuzu gerçek bağlama ve resmî yönetim kurulum yayını için ayrı üretim kabulü gerekir. GitHub Actions tetiklenmedi, canlı PDKS/finans verisi değiştirilmedi.
