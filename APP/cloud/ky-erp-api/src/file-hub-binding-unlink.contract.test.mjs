@@ -22,3 +22,12 @@ test("unlink removes only binding and logs operation; never deletes source files
   assert.doesNotMatch(block,/DELETE FROM file_hub_(assets|locations|relations|connections)/);
   assert.doesNotMatch(block,/\b(fs\.|unlinkSync|rmSync|rmdirSync|del\s+\/)/);
 });
+
+test("all File Hub user reads verify the signed tenant instead of trusting query/header", () => {
+  assert.match(source,/async function requireTenantUser\(c:/);
+  assert.match(source,/signedSlug=text\(user\.mainCompanySlug \|\| user\.main_company_slug \|\| user\.security\?\.main_company_slug\)\.toLowerCase\(\)/);
+  assert.match(source,/requestedSlug=slugOf\(c\)\.toLowerCase\(\)/);
+  assert.match(source,/signedSlug===requestedSlug \? user : null/);
+  assert.equal((source.match(/if\(!await requireTenantUser\(c\)\)/g)||[]).length,8);
+  assert.equal((source.match(/if\(!await requireUser\(c\)\)/g)||[]).length,0);
+});
