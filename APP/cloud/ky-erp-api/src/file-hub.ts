@@ -106,6 +106,24 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     await event(c,slug,"BINDING_SAVED",{actorType:"USER",actorId:owner.id,storageConnectionId:connectionId,details:{moduleCode,purposeCode,rootPath:text(b.rootPath)}}); return c.json({ok:true,data:{id}});
   });
 
+  // Disconnect only the selected module/purpose mapping. Never remove
+  // provider files, source folders, asset records or other tenant bindings.
+  app.delete("/api/file-hub/bindings/:id", async c => {
+    const slug=text(c.req.query("mainCompanySlug") || c.req.header("X-KYERP-Tenant-Slug"));
+    if(!slug) return c.json(err("MAIN_COMPANY_REQUIRED","Bağlantıyı kaldırmak için aktif ana firma seçin."),422);
+    const owner=await requireCompanyOwner(c,{mainCompanySlug:slug});
+    if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Klasör atamasını yalnız yetkili ana firma sahibi kaldırabilir."),403);
+    const id=text(c.req.param("id"));
+    const row=await c.env.DB.prepare("SELECT id,module_code,purpose_code,storage_connection_id,root_path FROM file_hub_bindings WHERE id=? AND main_company_slug=? LIMIT 1").bind(id,slug).first<Row>();
+    if(!row) return c.json(err("NOT_FOUND","Firma için klasör bağlantısı bulunamadı."),404);
+    const deleted=await c.env.DB.prepare("DELETE FROM file_hub_bindings WHERE id=? AND main_company_slug=?").bind(id,slug).run();
+    if(Number(deleted.meta?.changes||0)!==1)return c.json(err("NOT_FOUND","Klasör bağlantısı zaten kaldırılmış."),404);
+    await event(c,slug,"BINDING_UNLINKED",{actorType:"USER",actorId:owner.id,storageConnectionId:text(row.storage_connection_id),details:{
+      bindingId:id,moduleCode:text(row.module_code),purposeCode:text(row.purpose_code),rootPath:text(row.root_path),physicalFilesDeleted:0,
+    }});
+    return c.json({ok:true,data:{id,physicalFilesDeleted:0}});
+  });
+
   app.get("/api/file-hub/resolve-storage", async c => {
     if(!await requireUser(c)) return c.json(err("UNAUTHORIZED","Oturum gerekli."),401); const slug=slugOf(c),moduleCode=upper(c.req.query("moduleCode")),purposeCode=upper(c.req.query("purposeCode"));
     let row=await c.env.DB.prepare(`SELECT b.*,c.provider_type,c.name connection_name,c.local_root_path,c.remote_root_id,c.remote_root_name,c.sync_mode,c.connection_status,c.last_sync_at,c.last_error FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id WHERE b.main_company_slug=? AND b.module_code=? AND b.purpose_code=? AND c.is_active=1 LIMIT 1`).bind(slug,moduleCode,purposeCode).first<Row>();
