@@ -1268,14 +1268,15 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       const { link, accessToken } = await connectionAccount(c, slug, connectionId);
       const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
+        // Central metadata index ALWAYS gets the first turn. Even a very
+        // large design image archive must not block fresh e-Belge metadata.
+        await runGoogleSyncBatch(c, slug, connectionId, 3, true);
         if (provider === "GOOGLE_DRIVE") {
+          // Existing model image workflow remains an independent small page.
+          // Its failure never rolls back the shared File Hub index cursor.
           try { await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken); }
           catch { console.warn("FILE_HUB_MODEL_FAST_SCAN_WARNING"); }
-          // MODEL_IMAGE background scan must not starve e-Belge and all-file
-          // indexing. The shared D1 lease is released before the next batch.
-          // Both operations are idempotent and use one cloud connection.
         }
-        await runGoogleSyncBatch(c, slug, connectionId, 3, true);
         continue;
       }
       const rootId=text(link.remote_root_id)||"root", rootName=text(link.remote_root_name)||"Ana Klasör", seenAt=now();
