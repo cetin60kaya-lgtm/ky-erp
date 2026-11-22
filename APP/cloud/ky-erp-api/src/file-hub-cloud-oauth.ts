@@ -1195,6 +1195,16 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     if (!account) return c.json(err("ACCOUNT_NOT_FOUND", "Bulut hesabı bulunamadı."), 404);
     const provider = upper(account.provider_type); if (!["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT", "DROPBOX"].includes(provider)) return c.json(err("INVALID_PROVIDER", "Bulut hesabı sağlayıcısı geçersiz."), 422);
     if (provider === "SHAREPOINT" && !driveId) return c.json(err("DRIVE_REQUIRED", "SharePoint belge kitaplığı seçimi zorunludur."), 422);
+    // Same company + provider account + remote root = ONE D1 index. A second
+    // Windows machine or repeated wizard cannot create another scan queue.
+    const existing = await c.env.DB.prepare(
+      "SELECT c.id,c.is_primary FROM file_hub_connections c JOIN file_hub_cloud_connection_accounts a " +
+      "ON a.connection_id=c.id AND a.main_company_slug=c.main_company_slug " +
+      "WHERE c.main_company_slug=? AND c.provider_type=? AND c.sync_mode='CLOUD_API' AND c.is_active=1 " +
+      "AND a.oauth_account_id=? AND c.remote_root_id=? AND COALESCE(a.provider_drive_id,'')=? LIMIT 1"
+    ).bind(gate.slug, provider, accountId, rootFolderId, driveId).first<Row>();
+    if (existing?.id) return c.json({ok:true,data:{id:existing.id,reused:true,
+      message:"Bu firmaya ait aynı Drive/OneDrive kökü zaten bağlı; mevcut ortak indeks kullanılıyor."}});
     const id = crypto.randomUUID(), ts = now(), name = text(body.name) || `${text(account.display_name || account.account_email) || provider} · ${rootFolderName}`;
     if (isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts, gate.slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,last_sync_at,last_error,metadata,created_at,updated_at) VALUES(?,?,?,?,1,?,NULL,?,?,'CLOUD_API','CONNECTED',NULL,NULL,?,?,?)`)
