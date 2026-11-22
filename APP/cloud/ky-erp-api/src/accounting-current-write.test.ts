@@ -7,8 +7,8 @@ import { accountingAccess, accountingTenantCandidates } from "./accounting-acces
 function fixture() {
   const sql = new DatabaseSync(":memory:");
   sql.exec(`
-    CREATE TABLE companies(id TEXT PRIMARY KEY,main_company_slug TEXT,name TEXT,payment_mode TEXT,supplier_debt_tracking INTEGER,customer_receivable_tracking INTEGER,current_balance REAL,deleted_at TEXT,updated_at TEXT);
-    INSERT INTO companies VALUES('supplier','tenant-a','Test supplier','CREDIT',1,0,0,NULL,NULL),('customer','tenant-a','Test customer','CASH',0,1,0,NULL,NULL),('cash','tenant-a','Cash supplier','CASH',1,0,0,NULL,NULL),('foreign','tenant-b','Foreign','CREDIT',1,0,0,NULL,NULL);
+    CREATE TABLE companies(id TEXT PRIMARY KEY,main_company_slug TEXT,name TEXT,payment_mode TEXT,supplier_debt_tracking INTEGER,customer_receivable_tracking INTEGER,current_balance REAL,opening_balance REAL DEFAULT 0,deleted_at TEXT,updated_at TEXT);
+    INSERT INTO companies VALUES('supplier','tenant-a','Test supplier','CREDIT',1,0,0,0,NULL,NULL),('customer','tenant-a','Test customer','CASH',0,1,0,0,NULL,NULL),('cash','tenant-a','Cash supplier','CASH',1,0,0,0,NULL,NULL),('foreign','tenant-b','Foreign','CREDIT',1,0,0,0,NULL,NULL);
     CREATE TABLE current_account_movements(id TEXT PRIMARY KEY,main_company_slug TEXT,company_id TEXT,movement_date TEXT,movement_type TEXT,source_type TEXT,document_no TEXT,description TEXT,debit REAL,credit REAL,amount REAL,effect REAL,balance_after REAL,record_type TEXT,raw TEXT,created_at TEXT,updated_at TEXT);
     CREATE TABLE accounting_ledger_entries(id TEXT PRIMARY KEY,main_company_slug TEXT,company_id TEXT,company_name TEXT,entry_date TEXT,entry_type TEXT,record_scope TEXT,description TEXT,debit REAL,credit REAL,currency TEXT,payment_method TEXT,created_by TEXT,created_at TEXT,updated_at TEXT);
     CREATE TABLE json_store(id TEXT PRIMARY KEY,scope TEXT,main_company_slug TEXT,file_name TEXT,data TEXT,created_at TEXT,updated_at TEXT);
@@ -44,6 +44,21 @@ test("supplier debt/payment and customer receivable/collection balance to zero",
   }
   assert.equal(sql.prepare("SELECT COUNT(*) n FROM accounting_ledger_entries WHERE record_scope='INTERNAL'").get()!.n, 2);
   assert.equal(sql.prepare("SELECT revision FROM accounting_live_revision WHERE main_company_slug='tenant-a'").get()!.revision, 4);
+  sql.close();
+});
+
+test("existing opening receivable remains after each new movement", async () => {
+  const { sql, context } = fixture();
+  sql.exec("UPDATE companies SET opening_balance=500,current_balance=500 WHERE id='customer'");
+  const charge = await writeCurrentAccount(context, "tenant-a", {
+    companyId: "customer", transactionType: "DEBIT", amount: 100, requestId: "opening-debit",
+  }, "tester");
+  assert.equal(charge.balanceAfter, 600);
+  const collection = await writeCurrentAccount(context, "tenant-a", {
+    companyId: "customer", transactionType: "COLLECTION", amount: 50, requestId: "opening-collection",
+  }, "tester");
+  assert.equal(collection.balanceAfter, 550);
+  assert.equal(sql.prepare("SELECT current_balance FROM companies WHERE id='customer'").get()!.current_balance, 550);
   sql.close();
 });
 
