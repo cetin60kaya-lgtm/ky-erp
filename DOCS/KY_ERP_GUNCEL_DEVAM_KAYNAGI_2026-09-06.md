@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — Tüm firmalar için tek File Hub indeksi ve Windows junction genel düzeltmesi
+
+- **PR #638 merge SHA `3851f3801588fe41dd98298e6e3436f8f96e176f`**: Windows Drive/OneDrive junction altındaki gerçek firma klasörünün, kullanıcı onaylı mutlak yol ile aynı güvenlik doğrulamasından geçirilmesi (Masaüstü **1.5.5**); sabit X/DESEN yolu yok.
+- **Bulut tek indeks:** Aynı firma+OAuth hesabı+sağlayıcı+kök bağlantısı tekrar açılmaz; D1 ortak dosya yolu/provider ID/checkpoint/lease kullanılır. Google Drive/Graph ilk tam tarama sonrası delta; 30 metadata/sayfa, firma e-Belge klasörü önce, DESEN görsel işlemi ana indeksin gerisinde; mevcut D1 geçmiş korunur. Mimari/kabul: `DOCS/KY_FILE_HUB_FIRMA_TEK_ORTAK_INDEKS_JUNCTION_20261122.md`.
+- **Worker canlı PASS:** 44978436011, D1 Time Travel/schema sağlıklı, migration ve SQL export yok. **Frontend canlı PASS:** 44978538790, Pages deploy+asset doğrulaması.
+- **X test:** Masaüstü 1.5.5 kaynak WPF derleme 0 hata; 15/15 dar cloud kontrat + PR tam Worker/Frontend CI başarılı. **Açık:** Windows 1.5.5 Setup/kurulum gerçek onayı; Hakan Emp yerel grant; Google/Graph delta gerçek ilk çevrim ve e-Belge XML/PDF D1 havuz tekil belge kabulü. Çalışan 1.5.4, 8791 portal, PDKS, DESEN değiştirilmedi.
+
+
 ## 22.11.2026 — İşNet kayıt ve arşiv açıklaması düzeltmesi
 
 - Seçili gelen fatura X'in gerçek Drive-eşitleme klasöründe XML+PDF+manifest olarak **önceden bulunuyor**; iki orijinal SHA256 manifestle eşleşiyor, hata yok. Kaydet düğmesi İndirilenler'e dosya indirmez; kullanıcının iki ayrı `elle indir` tıklaması tarayıcıya dosya indirmiştir.
