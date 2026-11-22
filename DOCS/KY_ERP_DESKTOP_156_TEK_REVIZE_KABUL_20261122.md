@@ -13,8 +13,8 @@ Aynı Google Drive / OneDrive firma kökünü farklı Windows bilgisayarlarda, d
 ## Sürüm öncesi kabul sırası
 - [x] `KyPdks.Tests` gerçek X .NET testi: **21/21 PASS**, sıfır başarısız, sıfır atlanan (feature commit `ffa456a6fcf9dec766312d56bf0d546a19228b19`).
 - [x] WPF Desktop test derlemesi: **0 hata, 0 uyarı** (X QA; kurulu 1.5.5 değiştirilmedi).
-- [ ] Yeni tek revizyon numarası Desktop, Agent, VERSION, setup, build scripti ve manifestte tutarlı.
-- [ ] Mevcut QA test kopyasında tam Setup derleme ve SHA256 doğrulama.
+- [x] Tek revizyon **1.5.6**: Desktop, Agent, VERSION, Inno Setup ve BUILD_SETUP.ps1 dosyaları aynı sürüm; kaynak commit `3e37312fc46c9e1a40ba233b3a2af16ba775262f`.
+- [x] X QA **BUILD_156_SUCCESS**, Inno Setup 6.7.3 başarılı; `KY-ERP-Masaustu-Setup-1.5.6.exe`, 93.273.006 byte, SHA256 `AB8166E4E9441B3AE05E8F7C20C1FBEAE649D6ECA6B1CD45F1AAFC45588B3C56`, ProductVersion 1.5.6; 21/21 test PASS; önceki 1.5.5 Setup SHA doğrulanarak QA arşivine korundu.
 - [ ] Windows onay penceresinde varsa düzeltilen tam yol ve seçili firma görülür; yanlış şirket klasörü bağlanmaz.
 - [ ] Kullanıcı `Yes` vermeden File Hub grant veya yeni klasör oluşturulmaz.
 - [ ] Onaydan sonra tek firma + tek kök + `FILE_HUB` + `READ_ONLY` kaydı; tekrar tıklamada ikinci grant üretilmez.
