@@ -619,7 +619,7 @@ export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,m
 
   if(["ACCOUNTING_STAGING","E_DOCUMENT_PROVIDER"].includes(upper(asset.source_type))&&text(asset.preview_storage_key)){
     const object=await c.env.FILES.get(text(asset.preview_storage_key));
-    if(!object)throw Object.assign(new Error("Muhasebe belge eki R2 intake alanında bulunamadı."),{code:"MAIL_ATTACHMENT_R2_MISSING",status:404});
+    if(!object)throw Object.assign(new Error("Muhasebe orijinal belge nesnesi R2 alanında bulunamadı."),{code:"MAIL_ATTACHMENT_R2_MISSING",status:404});
     const buffer=await object.arrayBuffer();
     if(buffer.byteLength>maxBytes)throw Object.assign(new Error("Mail eki 25 MB sınırını aşıyor."),{code:"MAIL_ATTACHMENT_TOO_LARGE",status:413,sizeBytes:buffer.byteLength,maxBytes});
     return{fileAssetId:assetId,fileName,mimeType,sizeBytes:buffer.byteLength,bytes:new Uint8Array(buffer),source:"R2_INTAKE"};
