@@ -60,6 +60,14 @@ test("8791 gerçek HTML tarayıcı kodu çalışır; giriş hiçbir koşulda GET
     assert.match(inline[1],/querySelector\("#keepMonitoring"\)/);
     assert.match(html,/id="reviewRefresh"/);
     assert.match(html,/id="reviewPreview"/);
+    assert.match(html,/İndirme ve arşiv farkı/);
+    assert.match(html,/tarayıcı indirmesi açılmaz/);
+    assert.match(inline[1],/Drive'a XML \+ PDF Kaydet/);
+    assert.match(inline[1],/archiveState.setAttribute\("role","status"\)/);
+    assert.match(inline[1],/XML \+ PDF Drive arşivine kaydedildi/);
+    assert.match(inline[1],/Drive arşivinde zaten mevcut/);
+    assert.match(inline[1],/Arşiv kaydı başarısız/);
+    assert.match(inline[1],/archiveButton.disabled=true/);
     assert.match(inline[1],/showPdfReviews/);
     assert.match(inline[1],/api\("\/review-resolve"/);
     assert.match(inline[1],/api\("\/review-refresh"/);
