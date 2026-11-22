@@ -204,7 +204,8 @@ public partial class LocalFolderWindow : Window
         // Manual entry is a Windows junction dialog fallback, not a bypass.
         if (string.IsNullOrWhiteSpace(_company))
             throw new InvalidOperationException("Önce KY ERP'de ana firmayı seçin. Firma kimliği boşsa klasör kurulmaz.");
-        var resolution = LocalFolderService.ResolveUserEnteredRoot(selectedPath);
+        ShowStatus("Firma arşivi Windows üzerinde doğrulanıyor; dosyalar değiştirilmiyor.");
+        var resolution = await Task.Run(() => LocalFolderService.ResolveUserEnteredRoot(selectedPath));
         var root = resolution.FullPath;
         // Corrected filesystem spelling is shown before the user's explicit approval.
         // This does NOT create a folder or bypass the existing tenant/grant checks.
@@ -219,11 +220,19 @@ public partial class LocalFolderWindow : Window
             throw new InvalidOperationException("Firma için başka bir File Hub ana klasörü zaten onaylı. " +
                 "Eski yetkiyi kullanıcı onayıyla kaldırmadan aynı firmaya ikinci kök açılamaz.");
 
-        var missing = CompanyArchiveLayout.MissingPaths(root);
+        var isMountedCloud = CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root);
+        if (isMountedCloud)
+        {
+            // A cloud mount may contain other junctions; never create files
+            // through a WebView2-hosted confirmation action.
+            CreateMissingFoldersCheck.IsChecked = false;
+            CreateMissingFoldersCheck.IsEnabled = false;
+        }
+        var missing = await Task.Run(() => CompanyArchiveLayout.MissingPaths(root));
         var correctedNotice = resolution.Corrected
             ? $"Windows klasör adı otomatik düzeltildi.\nGirilen: {selectedPath}\nGerçek: {root}\n\n"
             : "";
-        var createMissingFolders = CreateMissingFoldersCheck.IsChecked == true;
+        var createMissingFolders = !isMountedCloud && CreateMissingFoldersCheck.IsChecked == true;
         var preview = correctedNotice + $"{_company} firması\n\nAna klasör: {root}\n" +
             $"Eksik standart klasör: {missing.Count}. Yeni klasör oluşturulacak: {(createMissingFolders ? missing.Count : 0)}.\n\n" +
             "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
