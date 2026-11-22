@@ -1785,3 +1785,15 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - **Worker production:** `45038960291` SUCCESS, release attempt 61; D1 schema + Time Travel, test/build/deploy + health; migration kapalı.
 - **Frontend production:** `45038985205` SUCCESS, release attempt 8; lint/test/build/Pages yayın ve canlı kontrol. Muhasebe e-Belge Genel Bakış/Belge Havuzu işleminde `XML'den Carileri Eşleştir` düğmesi.
 - **Canlı veri KABUL AÇIK:** X gerçek kurulu WPF uygulaması Muhasebe e-Belge'ye tekrar girerken `KY ERP Güvenli Giriş` görüntüledi. MFA/parola dolanılmadı, oturumlu toplu veri işlemi henüz gönderilmedi; **yeni firma sayısı ve azalan kontrol bekleyen sayısı doğrulanmadı**. Kullanıcı geçerli oturum açınca düğmeyi çalıştırıp dönen `created/linked/reviewRequired/errors` sayılarıyla ve D1 güncel uyarı sayısıyla son kabul yapılacak. Onaylanmış/posted belgeler değiştirilmedi, resmî İşNet gönderimi, bordro, ödeme, dosya/klasör taşıma ve migration yok.
+
+
+## 22.11.2026 — Muhasebe e-Belge PDF görüntüleme ve tekrar çıkışa atma düzeltmesi PR #644
+
+- Kullanıcı canlı kyerp.net'te Orijinal PDF -> Görüntüle/Yazdır sonrasında `KY ERP belgesi hazırlanıyor` sekmesinde kalma ve sık sık `Güvenli Giriş` ekranına atılmayı gösterdi.
+- **PR #644** canonical merge `99e8ab671e9ed797fdb2c998a073238849e07898`. Yetkili e-Belge `DOCUMENT` ilişkisine sahip PDF/XML'in R2 (E_DOCUMENT_PROVIDER/ACCOUNTING_STAGING) veya tenant-scope Google/Graph kaynağındaki **asıl byte'larının** okunması; thumbnail'in PDF sanılmaması; PDF %PDF- başlığı, 25 MB sınırı, inline/no-store/nosniff, mevcut görünüm yetkisi korunur. Kaynak dosyalar değiştirilmedi.
+- Chrome popup hata halinde kapanır, PDF hatası ana uygulamada gösterilir. Popup engellendiğinde **ana KY ERP oturumu blob URL'sine taşınmaz**; 10 dk object URL süresi yazdırmaya yeterlidir. Dosya görüntüleme işlemi gereksiz belge tekrar yüklemesi çağırmaz.
+- Auth: genel iş endpointi `401 UNAUTHORIZED` cevabı tek başına tüm oturumu temizlemez. Gerçek oturum geçersizliği `/auth/me` 401, açık SESSION_EXPIRED/REVOKED/TOKEN_INVALID/EXPIRED kodları, JWT expiry ve MFA hâlâ zorunludur. Eski 401 cevapları yenilenmiş tokenı silemez. Blob hata JSON'u ayrıştırılır.
+- **CI:** canonical `45044729835` Worker typecheck/test/build ve Frontend lint/test/build **SUCCESS**.
+- **Canlı Worker release:** attempt **62**, run `45044905778` **SUCCESS**: Time Travel + D1 schema + Worker deploy + API health. Migration 0060 ve diğerleri **SKIPPED**.
+- **Canlı Pages release:** attempt **9**, run `45044932000` **SUCCESS**: Pages deploy + gerçek canlı bundle smoke. D1/muhasebe/vergi/onay/ödeme/İşNet gönderimi değişmedi.
+- **AÇIK gerçek kabul:** Kullanıcının mevcut Chrome oturumunda tekrar girişten sonra kyerp.net'i yenileyip PDF görüntüle/yazdır denemesi. Canlı üretim PDF'nin açılması ve oturumun düşmemesi kullanıcı ekranından görülmeden Windows/browser uçtan uca PASS denmez. Bekleyen açık belge incelemesi ve XML firma doğrulaması ayrı iştir.
