@@ -731,6 +731,39 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
       AND json_extract(CASE WHEN json_valid(js.data) THEN js.data ELSE '{}' END,'$.status')='PRINTED')`);
   }
   const base=`FROM accounting_documents d WHERE ${where.join(" AND ")}`,count=await c.env.DB.prepare(`SELECT COUNT(*) n ${base}`).bind(...args).first<Row>(),rows=await c.env.DB.prepare(`SELECT d.*,(SELECT COUNT(*) FROM accounting_document_lines l WHERE l.main_company_slug=d.main_company_slug AND l.document_id=d.id) line_count,(SELECT COUNT(*) FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')) issue_count,(SELECT status FROM accounting_document_archive_jobs a WHERE a.main_company_slug=d.main_company_slug AND a.document_id=d.id ORDER BY a.created_at DESC LIMIT 1) archive_status ${base} ORDER BY COALESCE(d.issue_date,d.created_at) DESC LIMIT ? OFFSET ?`).bind(...args,pageSize,(page-1)*pageSize).all<Row>();const stats=await c.env.DB.prepare(`SELECT COUNT(*) total,SUM(CASE WHEN direction='INCOMING' AND (document_type LIKE '%FATURA%' OR document_type LIKE '%ARSIV%' OR document_type LIKE '%INVOICE%' OR document_type LIKE '%IADE%') THEN 1 ELSE 0 END) incomingInvoices,SUM(CASE WHEN direction='OUTGOING' AND (document_type LIKE '%FATURA%' OR document_type LIKE '%ARSIV%' OR document_type LIKE '%INVOICE%' OR document_type LIKE '%IADE%') THEN 1 ELSE 0 END) outgoingInvoices,SUM(CASE WHEN document_type LIKE '%IRSALIYE%' THEN 1 ELSE 0 END) dispatches,SUM(CASE WHEN status='POSTED' THEN 1 ELSE 0 END) posted FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`).bind(slug).first<Row>();return c.json({ok:true,data:{items:rows.results||[],page,pageSize,total:numberValue(count?.n),stats}})});
+  // Original bytes, never the Google Drive File Hub thumbnail/cache.
+  // Both tenant and document-file relation are mandatory.
+  app.get("/api/e-belge/documents/:id/files/:fileId/original",async c=>{
+    const user=await getAuthenticatedUser(c),slug=slugOf(c),id=c.req.param("id"),fileId=c.req.param("fileId");
+    if(!user)return c.json(error("UNAUTHORIZED","Güvenli oturum gerekli."),401);
+    if(!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"GET",c.req.path))
+      return c.json(error("ACCOUNTING_FORBIDDEN","Bu firmanın muhasebe belgesini görüntüleme yetkisi gerekli."),403);
+    const file=await c.env.DB.prepare("SELECT a.id,a.file_name,a.extension FROM accounting_documents d "+
+      "JOIN file_hub_relations r ON r.entity_type='DOCUMENT' AND r.entity_id=d.id AND r.main_company_slug=d.main_company_slug "+
+      "JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug "+
+      "WHERE d.id=? AND d.main_company_slug=? AND d.deleted_at IS NULL AND a.id=? "+
+      "AND UPPER(a.extension) IN ('PDF','XML') LIMIT 1")
+      .bind(id,slug,fileId).first<Row>();
+    if(!file)return c.json(error("ORIGINAL_FILE_NOT_LINKED","Orijinal dosya bu belgeye bağlı değil."),404);
+    try{
+      const source=await readFileHubAssetForMail(c,slug,fileId,MAX_FILE_BYTES);
+      const ext=upper(file.extension);
+      if(ext==="PDF"){
+        const bytes=source.bytes;
+        if(bytes.length<5||bytes[0]!==37||bytes[1]!==80||bytes[2]!==68||bytes[3]!==70||bytes[4]!==45)
+          return c.json(error("ORIGINAL_PDF_INVALID","Bu kayıtta gerçek PDF bulunamadı; XML/PDF arşiv kaynağını kontrol edin."),422);
+      }
+      const fileName=text(file.file_name)||(ext==="PDF"?"fatura.pdf":"belge.xml");
+      return new Response(source.bytes,{headers:{
+        "Content-Type":ext==="PDF"?"application/pdf":"application/xml",
+        "Content-Disposition":"inline; filename*=UTF-8''"+encodeURIComponent(fileName),
+        "Cache-Control":"private, no-store","X-Content-Type-Options":"nosniff"
+      }});
+    }catch(e:any){
+      const status=Number(e?.status)||502;
+      return c.json(error(text(e?.code)||"ORIGINAL_FILE_UNAVAILABLE",text(e?.message)||"Orijinal belge kaynağı okunamadı."),status>=400&&status<600?status:502);
+    }
+  });
   app.get("/api/e-belge/documents/:id",async c=>{const slug=slugOf(c),id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();if(!doc)return c.json(error("NOT_FOUND","Belge bulunamadı."),404);const [lines,issues,relations,files,archive]=await Promise.all([c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_issues WHERE main_company_slug=? AND document_id=? ORDER BY is_resolved,severity DESC,created_at DESC`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT r.*,d.document_no related_document_no,d.document_type related_document_type FROM accounting_document_relations r LEFT JOIN accounting_documents d ON d.id=r.related_document_id AND d.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.document_id=? ORDER BY r.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.preview_status,a.source_type FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM accounting_document_archive_jobs WHERE main_company_slug=? AND document_id=? ORDER BY created_at DESC`).bind(slug,id).all<Row>()]);let physicalOperations:Row[]=[];let physicalStatus="READY";
     try{physicalOperations=await readPhysicalDocumentStatus(c.env.DB,slug,id)}
     catch(e:any){if(text(e?.code)==="PHYSICAL_SCHEMA_APPROVAL_REQUIRED")physicalStatus="SCHEMA_APPROVAL_REQUIRED";
