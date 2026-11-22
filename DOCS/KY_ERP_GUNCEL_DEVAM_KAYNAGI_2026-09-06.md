@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — Masaüstü 1.5.5 gerçek Windows Setup derleme PASS
+
+- X Windows QA: `BUILD_SETUP.ps1` 1.5.5 restore/build/xUnit/self-contained publish/integrations/InnoSetup tam PASS. Kurulum dosyası `D:\KYERP-TEST-20261121\kyerp-desktop-archive-build-qa\APP\desktop\ky-pdks\dist\setup\KY-ERP-Masaustu-Setup-1.5.5.exe`. Uzunluk **93.276.722 byte**; SHA256 **ABFD7E6A45703A5CE872E45F45A9DAEC872107EE8900132DE8CC4A40E666A53C**, ProductVersion **1.5.5**. Gerçek derleyici çıkışı `SETUP_155_QA_PASS` / exit 0.
+- Paket **kullanıcı Windows yönetici onayıyla** kurulur, şu an X'in kalıcı kurulumunun 1.5.5 olduğunu iddia etme. Eski 1.5.4 ve canlı 8791 kuruluma kadar korunur. Optional PDKS servis işaretlenmez. Yeni `Yolu Doğrula ve Önizle` alanına mevcut seçili firma kökü girilir; Windows junction kendisi değil kök altındaki gerçek klasör onaylanır.
+- Bulut Worker (run 44978436011) + Pages (44978538790) production PASS. D1 cloud scan devam konumu korunur, gerçek provider delta ve Muhasebe Belge Havuzu XML/PDF ilk canlı kabulü ayrıca kontrol edilir.
+
+
 ## 22.11.2026 — Tüm firmalar için tek File Hub indeksi ve Windows junction genel düzeltmesi
 
 - **PR #638 merge SHA `3851f3801588fe41dd98298e6e3436f8f96e176f`**: Windows Drive/OneDrive junction altındaki gerçek firma klasörünün, kullanıcı onaylı mutlak yol ile aynı güvenlik doğrulamasından geçirilmesi (Masaüstü **1.5.5**); sabit X/DESEN yolu yok.
