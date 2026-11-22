@@ -1,5 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — Masaüstü sürüm başlığı düzeltildi (1.5.4)
+- Kullanıcının kurduğu 1.5.3 Windows Program Files EXE, Uninstall kaydı ve iki kısayolda doğrulandı. Yanlış MASAÜSTÜ • 1.5.2 etiketi KyErpShellWindow.xaml içinde sabit kalmıştı; kurulum hatası değildi.
+- Düzeltme: gerçek assembly sürümünü okuyarak dinamik sürüm gösterimi. Desktop, Agent, VERSION, BUILD_SETUP ve Inno Setup 1.5.4. PR #636 merge SHA: 740a75c95a6bc811afaad653ee5f64784498ad1c.
+- X tam Windows .NET/xUnit/publish/Inno Setup PASS. KY-ERP-Masaustu-Setup-1.5.4.exe boyutu 93.278.796 byte, SHA256 0133C5685C2FBAF8023496C24825EE1E7FB710162F38F74BEFD64131862642D8. EXE ve setup ProductVersion 1.5.4, kaynak sabit 1.5.2 etiketi yok.
+- 1.5.4 kalıcı Program Files kurulumu kullanıcı UAC onayı bekliyor. 1.5.3 kuruluya, İşNet 8791'e, PDKS'ye ve D1'e onarım sırasında dokunulmadı; son ekrandaki 1.5.4 görsel kabul henüz yapılmadı.
+
+
 ## 22.11.2026 — İşNet 4 yön ve 10 bölümlü firma arşivi prod yayını
 - **Desktop 1.5.3 Setup DERLEME PASS (X):** Inno Setup full compile, EXE/Agent/Node/İşNet entegrasyonları paketlendi. Setup boyutu 93.274.251 byte, SHA256 `81EBECC188A2C53EC6E4C272773BCB2C14A5A740C335C2F3529B8F83A1FD9B9E`. X üzerinde 1.5.3 gerçek WPF penceresi PID 32416 açıldı. Eski 1.5.2 PID 40248 normal `CloseMainWindow` ile kapandı; zorla kapatma yok. **Setup henüz UAC yönetici onayı ile kurulmadı**; mevcut X PowerShell oturumu elevated değil. İsteğe bağlı PDKS servis kutusu default unchecked; bu turda kurulmamalı. Yeni 8791 PID 24368 HTTP 200 çalışıyor.
 
