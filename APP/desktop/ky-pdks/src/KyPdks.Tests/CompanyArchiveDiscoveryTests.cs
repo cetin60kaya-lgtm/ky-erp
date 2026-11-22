@@ -79,6 +79,28 @@ public sealed class CompanyArchiveDiscoveryTests
     }
 
     [Fact]
+    public void ExistingVerifiedHintIsOnlyAcceptedInsideAnActualCloudRoot()
+    {
+        var root = Path.Combine(Path.GetTempPath(), "ky-hint-probe-" + Guid.NewGuid().ToString("N"));
+        var company = Path.Combine(root, "Googledrive", "Drive'ım", "Hakan Emp");
+        var outside = Path.Combine(root, "NotCloud", "Hakan Emp");
+        foreach (var parent in new[] { company, outside })
+        {
+            Directory.CreateDirectory(Path.Combine(parent, "MUHASEBE"));
+            Directory.CreateDirectory(Path.Combine(parent, "DESEN"));
+        }
+        try
+        {
+            Assert.Equal(Path.GetFullPath(company),
+                CompanyArchiveDiscovery.ValidateArchiveHint(company));
+            Assert.Null(CompanyArchiveDiscovery.ValidateArchiveHint(outside));
+            Assert.Null(CompanyArchiveDiscovery.ValidateArchiveHint(
+                Path.Combine(root, "Googledrive", "Drive'ım", "Missing Company")));
+        }
+        finally { Directory.Delete(root, recursive: true); }
+    }
+
+    [Fact]
     public void MultipleExistingArchivesRequireExplicitSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-cloud-discovery-" + Guid.NewGuid().ToString("N"));
