@@ -315,7 +315,9 @@ export async function apiFetch(path, options = {}) {
       shouldClearStoredAuthForStatus(response.status, responseCode, requestPath) &&
       !suppressUnauthorized
     ) {
-      onUnauthorized?.();
+      // Ignore an obsolete 401 from a previous token after another tab or
+      // phone approval has already installed a newer, valid session.
+      if (token && String(authTokenGetter?.() || "").trim() === token) onUnauthorized?.();
     }
 
     if (!response.ok) {
@@ -503,7 +505,8 @@ export async function downloadFile(path, params, fileName = "export.xlsx") {
       let payload = text;
       try { payload = text ? JSON.parse(text) : null; } catch { /* plain text */ }
       const responseCode = payload?.error?.code || payload?.code || "";
-      if (shouldClearStoredAuthForStatus(response.status, responseCode, requestPath)) onUnauthorized?.();
+      if (token && String(authTokenGetter?.() || "").trim() === token &&
+        shouldClearStoredAuthForStatus(response.status, responseCode, requestPath)) onUnauthorized?.();
       throw createRequestError(buildApiErrorMessage(response, payload), {
         status: response.status,
         code: responseCode,
