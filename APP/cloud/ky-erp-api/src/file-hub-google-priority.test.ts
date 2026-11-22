@@ -46,3 +46,24 @@ test("DESEN RGB geçici sağlayıcı hatasında sayfa geri alınır ve D1 lease 
   assert.match(cloud,/MODEL_IMAGE_LEASE_CONFLICT/);
   assert.match(cloud,/if\(problem\)throw Object\.assign/);
 });
+
+test("firma bazlı e-Belge klasörü geçmiş büyük desen arşivini beklemez", () => {
+  const queue = [
+    {id:"design",path:"görsel/2026",pageToken:"design-next"},
+    {id:"invoice",path:"Muhasebe/Özel Gelen Belgeler",pageToken:""},
+    {id:"historic",path:"modeller",pageToken:"abc"},
+    {id:"legacy",path:"KY-ISNET-BELGELER/GELEN-FATURA",pageToken:"continue"},
+  ];
+  prioritizeGoogleScanQueue(queue,["Muhasebe/Özel Gelen Belgeler"]);
+  assert.equal(queue[0].id,"invoice");
+  assert.equal(queue[1].id,"legacy");
+  assert.equal(queue[1].pageToken,"continue");
+  assert.ok(googleFolderScanPriority("MUHASEBE/e-Belgeler")<googleFolderScanPriority("görsel/2026"));
+  assert.ok(googleFolderScanPriority("KY-ISNET-BELGELER/GIDEN-FATURA")<googleFolderScanPriority("giden desenler"));
+});
+
+test("özel firma klasör adının üst dizini önce sıraya alınır",()=>{
+  const queue=[{path:"DESEN",id:"design"},{path:"Belgeler",id:"parent"}];
+  prioritizeGoogleScanQueue(queue,["Belgeler/Muhasebe/2026"]);
+  assert.equal(queue[0].id,"parent");
+});
