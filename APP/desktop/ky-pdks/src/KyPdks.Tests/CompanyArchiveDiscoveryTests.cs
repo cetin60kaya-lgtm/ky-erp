@@ -53,6 +53,32 @@ public sealed class CompanyArchiveDiscoveryTests
     }
 
     [Fact]
+    public void DirectCloudFolderProbeWorksWithoutVolumeLabelOrShellPicker()
+    {
+        var fakeDrive = Path.Combine(Path.GetTempPath(), "ky-drive-probe-" + Guid.NewGuid().ToString("N"));
+        var cloud = Path.Combine(fakeDrive, "Googledrive");
+        var company = Path.Combine(cloud, "Drive'ım", "Hakan Emp");
+        Directory.CreateDirectory(Path.Combine(company, "MUHASEBE"));
+        Directory.CreateDirectory(Path.Combine(company, "DESEN"));
+        try
+        {
+            Assert.Contains(cloud, CompanyArchiveDiscovery.FindCloudRootsOnDrive(fakeDrive));
+            Assert.Contains(company, CompanyArchiveDiscovery.FindWithinCloudRoot(cloud));
+        }
+        finally { Directory.Delete(fakeDrive, recursive: true); }
+    }
+
+    [Fact]
+    public void UnknownFoldersNeverBecomeCloudRoots()
+    {
+        var fakeDrive = Path.Combine(Path.GetTempPath(), "ky-drive-probe-" + Guid.NewGuid().ToString("N"));
+        var unrelated = Path.Combine(fakeDrive, "Unrelated");
+        Directory.CreateDirectory(unrelated);
+        try { Assert.Empty(CompanyArchiveDiscovery.FindCloudRootsOnDrive(fakeDrive)); }
+        finally { Directory.Delete(fakeDrive, recursive: true); }
+    }
+
+    [Fact]
     public void MultipleExistingArchivesRequireExplicitSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-cloud-discovery-" + Guid.NewGuid().ToString("N"));
