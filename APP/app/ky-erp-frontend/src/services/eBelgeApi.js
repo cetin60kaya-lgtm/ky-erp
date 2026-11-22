@@ -168,6 +168,12 @@ export const saveEBelgeProductAlias = (productId, alias, documentId = "") =>
 export const getEBelgeIntegrations = () =>
   apiGet("/e-belge/integrations", undefined, { timeoutMs: 30_000 }).then(unwrap);
 
+export const getEBelgeOriginalDocumentFile = (documentId, fileId) =>
+  apiFetch(`/e-belge/documents/${encodeURIComponent(documentId)}/files/${encodeURIComponent(fileId)}/original`, {
+    responseType: "blob",
+    timeoutMs: 60_000,
+  });
+
 export const getEBelgeFilePreview = (fileId) =>
   apiFetch(`/file-hub/files/${encodeURIComponent(fileId)}/preview`, {
     responseType: "blob",
