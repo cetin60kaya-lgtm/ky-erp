@@ -1,6 +1,7 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
 ## 22.11.2026 — İşNet 4 yön ve 10 bölümlü firma arşivi prod yayını
+- **Desktop 1.5.3 Setup DERLEME PASS (X):** Inno Setup full compile, EXE/Agent/Node/İşNet entegrasyonları paketlendi. Setup boyutu 93.274.251 byte, SHA256 `81EBECC188A2C53EC6E4C272773BCB2C14A5A740C335C2F3529B8F83A1FD9B9E`. X üzerinde 1.5.3 gerçek WPF penceresi PID 32416 açıldı. Eski 1.5.2 PID 40248 normal `CloseMainWindow` ile kapandı; zorla kapatma yok. **Setup henüz UAC yönetici onayı ile kurulmadı**; mevcut X PowerShell oturumu elevated değil. İsteğe bağlı PDKS servis kutusu default unchecked; bu turda kurulmamalı. Yeni 8791 PID 24368 HTTP 200 çalışıyor.
 
 - **PR #635 birleştirildi**, merge SHA `70941e1ec20be36029f0acedfa991177717b64d1`, içinde önceki PR #634 İşNet dört yön ve File Hub kodu da var. Production canonical branch `codex/model-uretim-kontrol-merkezi-final`; tarihî main değil.
 - **Worker Cloudflare production PASS:** 22.11.2026 `RELEASES/kyerp-worker-production-release.json` attempt 56, yayın commit `dbcd23381325e09592d6b59cb6c0cdd42fe043ac`, GitHub Action run `44966783483` success, typecheck/test/build, gerçek D1 Time Travel bookmark, canlı schema okuma, `wrangler deploy`, `api.kyerp.net/api/health` PASS. `applyMigrations=false`. Üretim D1 SQL export GitHub artifact'a yüklenmiyor; Time Travel bağımsız uzun dönem yedek değildir.
