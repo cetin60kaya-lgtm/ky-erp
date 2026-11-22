@@ -1193,7 +1193,8 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     // Snapshot the provider's change cursor when the one-time full index ends.
     // Any later additions/renames are fetched by runGoogleDeltaBatch.
     if (complete && providerType==="GOOGLE_DRIVE") {
-      const deltaToken=text(cursor.deltaBaselineToken)||await googleChangeStartToken(accessToken);
+      let deltaToken=text(cursor.deltaBaselineToken);
+      if(!deltaToken){try{deltaToken=await googleChangeStartToken(accessToken)}catch{deltaToken=""}}
       if (deltaToken) {
         meta.cloudDeltaToken=deltaToken;
         meta.cloudDeltaPageToken=null;
@@ -1202,7 +1203,8 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       }
     }
     if(complete&&["ONEDRIVE","SHAREPOINT"].includes(providerType)){
-      const graphUrl=text(cursor.graphDeltaBaselineUrl)||await graphLatestDeltaUrl(accessToken,text(link.provider_drive_id),rootId);
+      let graphUrl=text(cursor.graphDeltaBaselineUrl);
+      if(!graphUrl){try{graphUrl=await graphLatestDeltaUrl(accessToken,text(link.provider_drive_id),rootId)}catch{graphUrl=""}}
       if(graphUrl){
         meta.cloudGraphDeltaLink=graphUrl;
         meta.cloudGraphDeltaNextLink=null;
