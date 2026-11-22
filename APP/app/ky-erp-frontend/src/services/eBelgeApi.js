@@ -133,6 +133,10 @@ export const getEBelgeVisualSample = (issuer, kind) =>
 export const recoverEBelgeCompanyFromXml = (id) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/recover-company-from-xml`, { confirmed: true }).then(unwrap);
 
+export const recoverVerifiedEBelgeCompaniesBatch = (cursor = null) =>
+  apiPost("/e-belge/recover-companies-batch", { confirmed: true, ...(cursor ? { cursor } : {}) },
+    { timeoutMs: 120_000 }).then(unwrap);
+
 export const reconcileEBelge = (id) =>
   apiPost(`/e-belge/documents/${encodeURIComponent(id)}/reconcile`, {}).then(unwrap);
 
