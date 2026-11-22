@@ -977,7 +977,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     .bind(JSON.stringify({ ...meta, cloudSyncLeaseId: leaseId, cloudSyncLeaseUntil: leaseUntil }), connectionId, slug, raw).run();
   if (Number(acquired.meta?.changes || 0) !== 1) return { inProgress: true, busy: true };
 
-  let cursor = resumed
+  let cursor: Row = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
   // Capture a provider changes token BEFORE the full traversal so updates
@@ -1105,7 +1105,8 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         if (provider === "GOOGLE_DRIVE") {
-          const priority=await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken);
+          try { await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken); }
+          catch { console.warn("FILE_HUB_MODEL_FAST_SCAN_WARNING"); }
           // MODEL_IMAGE background scan must not starve e-Belge and all-file
           // indexing. The shared D1 lease is released before the next batch.
           // Both operations are idempotent and use one cloud connection.
