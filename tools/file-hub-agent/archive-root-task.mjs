@@ -10,7 +10,6 @@ const base = path.join(process.env.LOCALAPPDATA || "", "KY ERP", "Desktop", "Arc
 const requestFile = path.join(base, "request.json");
 const responseFile = path.join(base, "response.json");
 const pendingFile = path.join(base, "response.pending");
-const probe = path.join(path.dirname(new URL(import.meta.url).pathname), "archive-root-probe.mjs");
 
 function publish(payload) {
   fs.mkdirSync(base, { recursive: true });
