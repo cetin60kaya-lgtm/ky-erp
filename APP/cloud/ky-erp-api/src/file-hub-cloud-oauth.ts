@@ -885,6 +885,9 @@ async function runGoogleDeltaBatch(
 
   let changed=0, unlinked=0, folderChanges=false;
   try {
+    const scopedRootId=rootId==="root"
+      ? text((await providerJson("https://www.googleapis.com/drive/v3/files/root?fields=id",accessToken)).id)||rootId
+      : rootId;
     const params=new URLSearchParams({
       pageToken:firstToken,pageSize:"25",spaces:"drive",
       fields:"nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,modifiedTime,size,webViewLink,md5Checksum,parents,trashed))"
@@ -901,11 +904,16 @@ async function runGoogleDeltaBatch(
         ).bind(now(),slug,connectionId,fileId).run();
         unlinked+=Number(updated.meta?.changes||0);
       };
-      if(change.removed || file?.trashed || !file){await remove();continue;}
+      if(change.removed || file?.trashed || !file){
+        await remove();
+        // A deleted folder can contain indexed descendants; reconcile safely.
+        folderChanges=true;
+        continue;
+      }
       const parents=Array.isArray(file.parents)?file.parents:[];
       const parentId=text(parents[0]);
-      if(!parentId){continue;}
-      const base=await googleRelativeFolderPath(accessToken,parentId,rootId,folderCache);
+      if(!parentId){folderChanges=true;continue;}
+      const base=await googleRelativeFolderPath(accessToken,parentId,scopedRootId,folderCache);
       if(base===null){await remove();continue;}
       if(text(file.mimeType)==="application/vnd.google-apps.folder"){
         // A changed folder can rename descendants. Schedule a safe full
@@ -1014,6 +1022,11 @@ async function runMicrosoftDeltaBatch(
   if(Number(claim.meta?.changes||0)!==1)return{busy:true,inProgress:true};
   let changed=0,unlinked=0,folderChanges=false;
   try{
+    const scopedRootId=rootId==="root"
+      ? text((await providerJson(driveId
+          ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/root?$select=id"
+          : "https://graph.microsoft.com/v1.0/me/drive/root?$select=id",accessToken)).id)||rootId
+      : rootId;
     const page=await providerJson(validateGraphDeltaUrl(target),accessToken,
       {headers:{"Prefer":"odata.maxpagesize=25"}});
     const folders=new Map<string,Row|null>();
@@ -1027,10 +1040,10 @@ async function runMicrosoftDeltaBatch(
         ).bind(now(),slug,connectionId,fileId).run();
         unlinked+=Number(update.meta?.changes||0);
       };
-      if(item.deleted){await remove();continue;}
+      if(item.deleted){await remove();folderChanges=true;continue;}
       const parentId=text(item.parentReference?.id);
-      if(!parentId)continue;
-      const base=await graphRelativeFolderPath(accessToken,parentId,rootId,driveId,folders);
+      if(!parentId){folderChanges=true;continue;}
+      const base=await graphRelativeFolderPath(accessToken,parentId,scopedRootId,driveId,folders);
       if(base===null){await remove();continue;}
       if(item.folder){folderChanges=true;continue;}
       if(!item.file)continue;
