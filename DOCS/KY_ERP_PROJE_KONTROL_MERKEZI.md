@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — İşNet 4 yön ve 10 bölümlü firma arşivi prod yayını
+
+- **PR #635 birleştirildi**, merge SHA `70941e1ec20be36029f0acedfa991177717b64d1`, içinde önceki PR #634 İşNet dört yön ve File Hub kodu da var. Production canonical branch `codex/model-uretim-kontrol-merkezi-final`; tarihî main değil.
+- **Worker Cloudflare production PASS:** 22.11.2026 `RELEASES/kyerp-worker-production-release.json` attempt 56, yayın commit `dbcd23381325e09592d6b59cb6c0cdd42fe043ac`, GitHub Action run `44966783483` success, typecheck/test/build, gerçek D1 Time Travel bookmark, canlı schema okuma, `wrangler deploy`, `api.kyerp.net/api/health` PASS. `applyMigrations=false`. Üretim D1 SQL export GitHub artifact'a yüklenmiyor; Time Travel bağımsız uzun dönem yedek değildir.
+- **Frontend Cloudflare Pages production PASS:** 22.11.2026 yayın commit `b6533b86dd3630688d4534dd3574b5107f4d2757`, run `44966893307` success; npm lint/test/build, production Pages deploy ve canlı chunk SHA doğrulaması PASS.
+- **X yerel İşNet 8791 PASS:** yeni şifre Windows DPAPI kasa UI, kayıtlı giriş, doğrulanmış firma otomatik seçim butonları 8792 QA, sonra gerçek 8791 portunda HTTP 200 ile doğrulandı. Eski PID 4024 kapandı; yeni PID 24368. Kodu dört dosya SHA ile güncellendi, timestamp'li rollback kaynak dizini X üzerinde tutuldu. Aynı fiziksel `Hakan Emp/KY-ISNET-BELGELER` arşiv kökü yerinde. Portal gerçek yetkili oturumuna yeniden giriş gerekir; otomatik kayıt/Outlook/resmî gönderim yapılmadı.
+- **Desktop 1.5.3 Setup:** Windows X izole QA'da build sürüyor / final Inno paket doğrulaması ayrı; çalışan PDKS ve DESEN'e müdahale edilmedi.
+- **KALAN SON KULLANICI KABULÜ:** yetkili firma `kyerp.net → Yönetim → Bağlantılar & Depolama → Dosya Servisleri` içinde kendi Google/OneDrive OAuth hesabıyla **tek ana firma klasörü** bağlar; e-Belge `E_BELGE/E_DOCUMENT` alt klasör atamasının mevcut dolu `KY-ISNET-BELGELER` olduğundan emin olunur (yeni boş `MUHASEBE/e-Belgeler` değil); önce 1 XML+PDF gerçek D1 havuz eşleştirme, sonra 101 belge veri bütünlüğü; Outlook müşteri gönderimi kullanıcı ayrı gerçek işlem kabulüne tabidir. Yüksek boyutlu tarihî PSD/HKN/DDM kaynakları üretim yoluyla eşleşme olmadan topluca taşınmadı; İK R2 fotoğraf geçişi ve Boyahane gerçek doküman yüklemeleri ayrı entegrasyon bekliyor.
+
+
 ## 22.11.2026 — Canlı Drive bölüm arşivi V2 / KY ERP Yönetim klasör haritası
 
 - Kullanıcının kesin kararı: her firma tek Google Drive/OneDrive/SharePoint ana klasörü; **10 sade bölüm** (`DESEN`, `MUHASEBE`, `BOYAHANE`, `İK`, `İMALAT`, `DENETİM`, `FORMLAR`, `YÖNETİM`, mevcut `OTOMASYON` ve `gelen dosyalar`). Kaynak `DOCS/KY_ERP_FIRMA_ARSIV_MODUL_SADE_V2_20261122.md`. 12 düz kök V1 tasarımı tarihî oldu.
