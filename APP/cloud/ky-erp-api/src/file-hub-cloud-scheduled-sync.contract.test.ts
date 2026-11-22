@@ -81,3 +81,19 @@ test("OneDrive and SharePoint use Graph delta on the same tenant-scoped D1 index
   assert.match(cloud, /odata.maxpagesize=25/);
   assert.match(cloud, /GRAPH_DELTA_TOKEN_EXPIRED/);
 });
+
+test("manual scan advances the shared checkpoint before any DESEN image-only scan", () => {
+  const start = cloud.indexOf('app.post("/api/file-hub/cloud/connections/:id/sync"');
+  const end = cloud.indexOf('app.get("/api/file-hub/cloud/files/:assetId/download"', start);
+  assert.ok(start > 0 && end > start);
+  const manual = cloud.slice(start, end);
+  assert.match(manual, /await runGoogleSyncBatch\(c, gate\.slug, connectionId, 1, false\)/);
+  assert.doesNotMatch(manual, /syncRecentBoundGoogleImages|designImagePriority/);
+  // Scheduled fast image indexing remains independent of the central index.
+  const cronStart = cloud.indexOf("export async function runFileHubCloudScheduledSync");
+  const cronEnd = cloud.indexOf("export function registerFileHubCloudOauthRoutes", cronStart);
+  const cron = cloud.slice(cronStart, cronEnd);
+  const indexAt = cron.indexOf("await runGoogleSyncBatch(c, slug, connectionId, 3, true)");
+  const imageAt = cron.indexOf("await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken)");
+  assert.ok(indexAt >= 0 && imageAt > indexAt);
+});
