@@ -1,6 +1,7 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
 ## 22.11.2026 — Son canlı yayın ve İşNet yerel kabul özeti
+- **X Desktop son durum:** 1.5.3 self-contained EXE ve 93.274.251 byte Inno Setup installer full build PASS, SHA256 `81EBECC188A2C53EC6E4C272773BCB2C14A5A740C335C2F3529B8F83A1FD9B9E`. 1.5.3 WPF canlı Windows PID 32416, 1.5.2 normal kapanış PASS. Setup kalıcı kurulumu Windows UAC onayı istediği için **yapılmadı**; uygulamanın geçici QA konumu kalıcı kurulum gibi gösterilmez. PDKS cihaz servisi değişmedi.
 
 - Production merge `70941e1ec20be36029f0acedfa991177717b64d1` / PR #635 (PR #634 de birleşim kapsamında). İşNet dört yön + Windows kasası + otomatik yetkili firma seçimi + web File Hub on bölüm haritası.
 - Worker canlı release run `44966783483` **SUCCESS**; D1 Time Travel read-only PASS, migration yok, private D1 SQL GitHub artifact yok. Frontend live release run `44966893307` **SUCCESS**, Pages gerçek asset hash kabulü.
