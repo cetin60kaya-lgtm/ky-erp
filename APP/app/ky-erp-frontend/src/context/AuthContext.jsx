@@ -362,6 +362,7 @@ export function AuthProvider({ children }) {
   const authSnapshotRef = useRef({ user, permissions });
   const tokenRef = useRef(token);
   const authMutationRef = useRef(new Map());
+  const unauthorizedCheckRef = useRef(null);
   const tabIdRef = useRef(stableTabId());
   authSnapshotRef.current = { user, permissions };
   tokenRef.current = token;
@@ -386,6 +387,28 @@ export function AuthProvider({ children }) {
     cleanLegacyAuthStorage();
   }, []);
 
+  // A business endpoint's 401 is not itself proof that the signed-in
+  // browser session was revoked. Verify the exact token via /auth/me.
+  // This never refreshes owner sessions or bypasses MFA/revocation.
+  const verifyUnauthorized = useCallback(async ({ requestedToken } = {}) => {
+    const checkedToken=String(requestedToken||"");
+    if(!checkedToken || tokenRef.current!==checkedToken)return;
+    if(unauthorizedCheckRef.current)return unauthorizedCheckRef.current;
+    const verification=(async()=>{
+      try{
+        await directAuthRequest("/auth/me",{method:"GET",token:checkedToken,timeoutMs:12000});
+      }catch(error){
+        const status=Number(error?.status||0),code=String(error?.code||"");
+        if(shouldClearStoredAuthForStatus(status,code,"/api/auth/me") &&
+            tokenRef.current===checkedToken)clearAuth();
+        // Timeout, network and server errors must not discard a valid token.
+      }
+    })();
+    unauthorizedCheckRef.current=verification;
+    try{await verification}
+    finally{if(unauthorizedCheckRef.current===verification)unauthorizedCheckRef.current=null}
+  },[clearAuth]);
+
   const saveAuth = useCallback((nextToken, nextUser, nextPermissions) => {
     const normalizedPermissions = normalizePermissionRows(nextPermissions);
     const payload = { token: String(nextToken || ""), user: nextUser || null, permissions: normalizedPermissions };
@@ -395,7 +418,7 @@ export function AuthProvider({ children }) {
       clearResilientDataCache();
     }
     tokenRef.current = payload.token;
-    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: (reason) => { void verifyUnauthorized(reason); } });
     const storedUser = JSON.stringify({ ...payload.user, permissions: payload.permissions });
     const ownerSession = isOwnerAuthPair(payload.token, payload.user);
     try {
@@ -417,7 +440,7 @@ export function AuthProvider({ children }) {
     } catch { /* noop */ }
     setAuthState(payload);
     return true;
-  }, [clearAuth]);
+  }, [clearAuth, verifyUnauthorized]);
 
   const finalizeResponse = useCallback((response) => {
     if (!response?.token || !response?.user) return response;
@@ -512,8 +535,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     tokenRef.current = token;
-    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
-  }, [clearAuth, token]);
+    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: (reason) => { void verifyUnauthorized(reason); } });
+  }, [clearAuth, token, verifyUnauthorized]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -654,12 +677,12 @@ export function AuthProvider({ children }) {
       const stored = readStoredAuth();
       tokenRef.current = stored.token;
       setAuthState(stored);
-      if (stored.token) setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+      if (stored.token) setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: (reason) => { void verifyUnauthorized(reason); } });
       else setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
     };
     window.addEventListener("storage", syncFromStorage);
     return () => window.removeEventListener("storage", syncFromStorage);
-  }, [clearAuth]);
+  }, [clearAuth, verifyUnauthorized]);
 
   const getTurnstileConfig = useCallback(() => directAuthRequest("/auth/turnstile-config", { method: "GET" }), []);
 
