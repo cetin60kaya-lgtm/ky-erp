@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { auditCompanyBalance, summarizeCompanyBalanceAudit } from "./accounting-balance-audit";
+import { auditCompanyBalance, summarizeCompanyBalanceAudit } from "./accounting-balance-audit.ts";
 
 test("legacy positive opening balance is a real current balance, not an automatic error", () => {
   const row = auditCompanyBalance({ id: "one", name: "Firma", opening_balance: 50000, current_balance: 50000, movement_net: 0, debit_credit_net: 0, movement_count: 0 });
