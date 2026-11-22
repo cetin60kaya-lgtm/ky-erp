@@ -1,5 +1,11 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — Windows 1.5.4 düzeltme paketi
+- Gerçek X: kurulu uygulama 1.5.3, sol başlığın 1.5.2 yazması sabit XAML metninden. Yeni dinamik sürüm etiketi PR #636 SHA 740a75c95a6bc811afaad653ee5f64784498ad1c ile canonical kod dalına birleştirildi.
+- Windows QA 1.5.4 Setup tam derleme başarılı; dosya 93.278.796 byte ve SHA256 0133C5685C2FBAF8023496C24825EE1E7FB710162F38F74BEFD64131862642D8. Mevcut kurulum kaldırılmadı.
+- Son kullanıcı kabulü: 1.5.3 açık penceresini kapat, 1.5.4 Setup'ı UAC ile kur (PDKS optional servis kutusu boş), kurulu kısayoldan aç ve sol menü 1.5.4 görünümünü onayla. Gerçek kurulum henüz yapılmadı.
+
+
 ## 22.11.2026 — Son canlı yayın ve İşNet yerel kabul özeti
 - **X Desktop son durum:** 1.5.3 self-contained EXE ve 93.274.251 byte Inno Setup installer full build PASS, SHA256 `81EBECC188A2C53EC6E4C272773BCB2C14A5A740C335C2F3529B8F83A1FD9B9E`. 1.5.3 WPF canlı Windows PID 32416, 1.5.2 normal kapanış PASS. Setup kalıcı kurulumu Windows UAC onayı istediği için **yapılmadı**; uygulamanın geçici QA konumu kalıcı kurulum gibi gösterilmez. PDKS cihaz servisi değişmedi.
 
