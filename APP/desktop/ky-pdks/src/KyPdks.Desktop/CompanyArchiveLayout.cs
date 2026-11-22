@@ -104,6 +104,8 @@ public static class CompanyArchiveLayout
     public static IReadOnlyList<string> MissingPaths(string approvedRoot)
     {
         var root = LocalFolderService.ValidateRoot(approvedRoot);
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
+            return CloudArchiveProbe.Inspect(root, StandardPaths).MissingPaths;
         var missing = new List<string>();
         foreach (var relative in StandardPaths)
         {
@@ -124,6 +126,13 @@ public static class CompanyArchiveLayout
     public static (int Existing, int Created) EnsureMissingPaths(string approvedRoot)
     {
         var root = LocalFolderService.ValidateRoot(approvedRoot);
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
+        {
+            // Called only after the explicit user-facing Yes and optional
+            // Create Missing Folders checkbox.
+            var result = CloudArchiveProbe.Ensure(root, StandardPaths);
+            return (StandardPaths.Count - result.MissingPaths.Count, result.MissingPaths.Count);
+        }
         var missing = MissingPaths(root);
         foreach (var relative in missing)
         {
