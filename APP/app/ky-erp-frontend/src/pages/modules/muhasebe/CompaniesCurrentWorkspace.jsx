@@ -204,6 +204,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companyForm, setCompanyForm] = useState(emptyCompany);
   const [companySaving, setCompanySaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
+  const [balanceAudit, setBalanceAudit] = useState({ open: false, loading: false, rows: [], totals: null, error: "" });
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergePreview, setMergePreview] = useState(null);
@@ -316,6 +317,25 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     const payable = visibleFirms.filter((firm) => Number(firm.currentBalance || 0) < 0).reduce((sum, firm) => sum + Math.abs(Number(firm.currentBalance || 0)), 0);
     return { receivable, payable, balance: receivable - payable };
   }, [visibleFirms]);
+
+  const inspectBalances = useCallback(async () => {
+    setBalanceAudit((current) => ({ ...current, open: true, loading: true, error: "" }));
+    try {
+      const response = await apiGet("/muhasebe/cari-bakiye-denetimi", { ...params, _ts: Date.now() });
+      const data = objectOf(response);
+      setBalanceAudit({
+        open: true, loading: false,
+        rows: Array.isArray(data.rows) ? data.rows : [],
+        totals: data.totals || null,
+        error: "",
+      });
+    } catch (requestError) {
+      setBalanceAudit((current) => ({
+        ...current, open: true, loading: false,
+        error: requestError?.message || "Cari bakiye denetimi yüklenemedi.",
+      }));
+    }
+  }, [params]);
 
   const loadMovements = useCallback(async (firm) => {
     if (!firm?.id) return;
@@ -634,6 +654,35 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <div><span>Toplam borç</span><strong>{money(totals.payable)}</strong></div>
         <div className={totals.balance >= 0 ? "success" : "negative"}><span>Net bakiye</span><strong>{money(totals.balance)}</strong></div>
       </section>
+
+      <section className="ccw-audit-controls" aria-label="Cari bakiye kaynağı kontrolü">
+        <div><strong>Cari bakiye kaynağı</strong><small>Gerçek açılış bakiyesi, hareketler ve saklanan bakiyeyi karşılaştırın. Bu işlem hiçbir finansal kayıt değiştirmez.</small></div>
+        <button type="button" onClick={() => balanceAudit.open ? setBalanceAudit((current) => ({ ...current, open: false })) : void inspectBalances()}>
+          {balanceAudit.open ? "Denetimi Kapat" : "Bakiye Kaynağını İncele"}
+        </button>
+      </section>
+
+      {balanceAudit.open ? <section className="ccw-audit-result" aria-label="Salt okunur cari bakiye denetimi">
+        {balanceAudit.loading ? <p>Gerçek cari bakiyeler karşılaştırılıyor…</p> : null}
+        {balanceAudit.error ? <div className="ccw-error" role="alert">{balanceAudit.error}</div> : null}
+        {!balanceAudit.loading && !balanceAudit.error ? <>
+          <p><strong>{balanceAudit.totals?.companyCount ?? balanceAudit.rows.length} firma</strong> · {balanceAudit.totals?.discrepancyCount ?? 0} bakiye farkı · {balanceAudit.totals?.movementEncodingDiscrepancyCount ?? 0} hareket kodlama farkı. Kayıtlar değiştirilmedi.</p>
+          <div className="ccw-table-wrap">
+            <table className="ccw-audit-table">
+              <thead><tr><th>Firma</th><th>Açılış</th><th>Hareket neti</th><th>Hareket sayısı</th><th>Kaydedilen</th><th>Hesaplanan</th><th>Fark</th><th>Durum</th></tr></thead>
+              <tbody>{[...balanceAudit.rows].sort((a, b) => Math.abs(Number(b.storedBalance || 0)) - Math.abs(Number(a.storedBalance || 0))).map((row) => (
+                <tr key={row.companyId}>
+                  <td>{row.companyName}</td><td>{money(row.openingBalance)}</td><td>{money(row.movementNet)}</td>
+                  <td>{row.movementCount}</td><td><strong>{money(row.storedBalance)}</strong></td>
+                  <td>{money(row.expectedBalance)}</td><td>{money(row.discrepancy)}</td>
+                  <td>{row.hasDiscrepancy ? "Fark var — kontrol" : row.movementEncodingDiscrepancy ? "Hareket türü kontrol" : "Uyumlu"}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          <small>Açılış + net hareket toplamı gösterilir. Bekleyen faturalar bu hesapta otomatik cari hareket sayılmaz. Şüpheli farkları kaynağını görmeden sıfırlamayın.</small>
+        </> : null}
+      </section> : null}
 
       {error ? <div className="ccw-error"><CircleAlert size={18} /> {error}</div> : null}
 
