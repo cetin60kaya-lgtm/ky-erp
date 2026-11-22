@@ -228,13 +228,22 @@ public partial class LocalFolderWindow : Window
             CreateMissingFoldersCheck.IsChecked = false;
             CreateMissingFoldersCheck.IsEnabled = false;
         }
-        var missing = await Task.Run(() => CompanyArchiveLayout.MissingPaths(root));
+        // Only local physical directories need the optional standard-folder
+        // inventory. Google Drive's virtual filesystem can block for minutes
+        // on this scan, while a read-only File Hub grant creates zero folders.
+        // Do not claim all standard directories exist if they were not read.
+        IReadOnlyList<string> missing = isMountedCloud
+            ? Array.Empty<string>()
+            : await Task.Run(() => CompanyArchiveLayout.MissingPaths(root));
         var correctedNotice = resolution.Corrected
             ? $"Windows klasör adı otomatik düzeltildi.\nGirilen: {selectedPath}\nGerçek: {root}\n\n"
             : "";
         var createMissingFolders = !isMountedCloud && CreateMissingFoldersCheck.IsChecked == true;
+        var inventoryText = isMountedCloud
+            ? "Eksik standart klasör sayımı bu salt-okunur bağlantıda yapılmaz. Yeni klasör oluşturulacak: 0."
+            : $"Eksik standart klasör: {missing.Count}. Yeni klasör oluşturulacak: {(createMissingFolders ? missing.Count : 0)}.";
         var preview = correctedNotice + $"{_company} firması\n\nAna klasör: {root}\n" +
-            $"Eksik standart klasör: {missing.Count}. Yeni klasör oluşturulacak: {(createMissingFolders ? missing.Count : 0)}.\n\n" +
+            inventoryText + "\n\n" +
             "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
             "Seçili köke yalnız File Hub okuma izni verilir. Windows kullanıcı ortamında " +
             "İşNet arşiv hedefi tanımlanır; çalışan İşNet servisi yeniden başlatılmaz.\n" +
@@ -272,10 +281,13 @@ public partial class LocalFolderWindow : Window
         Environment.SetEnvironmentVariable(CompanyArchiveDiscovery.ExistingArchiveHintVariable,
             root, EnvironmentVariableTarget.User);
         RefreshGrants();
-        ShowStatus($"Firma klasörleri hazır: {_company} · Mevcut: {result.Existing} · " +
-                   $"Yeni: {result.Created}. " + isnetNotice +
-                   " Çalışan uygulamalar ve İşNet oturumu değiştirilmedi. " +
-                   "Web bulut OAuth ve D1 kabulü ayrıca doğrulanır.");
+        ShowStatus(isMountedCloud
+            ? $"Firma bulut arşivi salt-okunur bağlandı: {_company}. Yeni klasör: 0. " +
+              isnetNotice + " İşNet oturumu ve dosyalar değişmedi; bulut D1 kabulü ayrı."
+            : $"Firma klasörleri hazır: {_company} · Mevcut: {result.Existing} · " +
+              $"Yeni: {result.Created}. " + isnetNotice +
+              " Çalışan uygulamalar ve İşNet oturumu değiştirilmedi. " +
+              "Web bulut OAuth ve D1 kabulü ayrıca doğrulanır.");
     }
 
     private void AddFolder_Click(object sender, RoutedEventArgs e)
