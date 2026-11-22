@@ -1,4 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
+## 22.11.2026 — Masaüstü 1.5.7 kurulu, gerçek Windows Test 1 PASS
+
+- **PR #640 feature dalı:** Otomatik cloud arşiv bulma ile eski `OpenFolderDialog` firma-kök akışından çıkarıldı. Test: 25/25 PASS, gerçek X Google Drive mount otomatik keşif PASS, WPF build PASS.
+- **X Setup PASS:** 1.5.7 Inno tam build 93.273.249 byte, SHA256 `D6B0B42787DD062588A09FDFF665039D744DBCEB195DDF380C4FF929D77CCC0E`; kurulu Windows EXE `ProductVersion=1.5.7+642853e2a27bfb96467b4a727f5617d1b3d84b37`, kurulum sihirbazı kapalı, KY ERP Masaüstü çalışıyor, optional PDKS servisi kurulmadı. 1.5.6 Setup ayrıca korundu.
+- **Kabul açık:** Firma arşivi için kullanıcı onaylı tek `FILE_HUB READ_ONLY` grant, tekrar bağlantı mükerrerliği, canlı İşNet/OAuth/D1 delta/tek XML+PDF Muhasebe Belge Havuzu, diğer Windows cihazları. Veriler ve İşNet 8791 müdahalesiz korunuyor. Kod PR taslak; sırf Setup install ile production branch merge/deploy başarı sayılmaz.
+
+
 
 ## 22.11.2026 — Masaüstü tek revizyon 1.5.6 Setup QA (PR #640)
 
