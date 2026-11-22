@@ -40,6 +40,11 @@ public partial class KyErpShellWindow : Window
     public KyErpShellWindow()
     {
         InitializeComponent();
+        // Read the actual installed assembly version. Never hardcode sidebar releases.
+        var runningVersion = typeof(KyErpShellWindow).Assembly.GetName().Version;
+        SidebarVersionText.Text = runningVersion is null
+            ? "MASAÜSTÜ • sürüm bilinmiyor"
+            : $"MASAÜSTÜ • {runningVersion.Major}.{runningVersion.Minor}.{runningVersion.Build}";
         _connectionTimer.Tick += async (_, _) => await CheckConnectionAsync();
 
         // Masaüstü tek ürün: KY ERP'nin tamamı. PDKS yalnız İK altındaki cihaz katmanıdır.
