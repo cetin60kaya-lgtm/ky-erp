@@ -667,7 +667,7 @@ export function AuthProvider({ children }) {
     };
     window.addEventListener("storage", syncFromStorage);
     return () => window.removeEventListener("storage", syncFromStorage);
-  }, [clearAuth]);
+  }, [verifyUnauthorized]);
 
   const getTurnstileConfig = useCallback(() => directAuthRequest("/auth/turnstile-config", { method: "GET" }), []);
 
