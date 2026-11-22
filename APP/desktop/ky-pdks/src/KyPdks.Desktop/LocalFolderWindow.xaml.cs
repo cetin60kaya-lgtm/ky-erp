@@ -14,6 +14,9 @@ public partial class LocalFolderWindow : Window
 {
     private readonly string _company;
     private bool _startupLoaded;
+    // Serialize discovery, manual validation and selection: an older timeout
+    // must never overwrite a successfully approved File Hub grant.
+    private bool _archiveOperationActive;
     private const string RunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunName = "KY ERP Integrations";
     private static string IntegrationStarter => Path.Combine(AppContext.BaseDirectory,
@@ -27,6 +30,7 @@ public partial class LocalFolderWindow : Window
         CompanyInput.IsReadOnly = !string.IsNullOrWhiteSpace(_company);
         RefreshGrants();
         RefreshStartup();
+        ShowSavedCompanyGrant();
     }
 
     private void RefreshStartup()
@@ -137,12 +141,77 @@ public partial class LocalFolderWindow : Window
         }
     }
 
-    private async void ChooseCompanyRoot_Click(object sender, RoutedEventArgs e)
+    private LocalFolderGrant? SavedCompanyGrant()
     {
-        ChooseCompanyRootButton.IsEnabled = false;
-        ApproveCompanyRootPathButton.IsEnabled = false;
+        return LocalFolderService.Load().FirstOrDefault(grant =>
+            grant.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
+            grant.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase) &&
+            grant.Permission.Equals("READ_ONLY", StringComparison.OrdinalIgnoreCase));
+    }
+
+    private void ShowSavedCompanyGrant()
+    {
         try
         {
+            var grant = SavedCompanyGrant();
+            if (grant is null) return;
+            CompanyRootPathInput.Text = grant.FullPath;
+            ShowStatus($"Onaylı firma arşivi kayıtlı: {_company} · Salt okunur (READ_ONLY) · " +
+                       $"{grant.FullPath}. Yeniden klasör seçmeniz gerekmez.");
+        }
+        catch (Exception error) { ShowStatus("Mevcut File Hub izni okunamadı: " + error.Message, true); }
+    }
+
+    private void ShowArchiveFailure(string title, Exception error)
+    {
+        // A second background probe can fail after an explicit Yes was saved.
+        // Do not misrepresent the persisted grant as a failed authorization.
+        try
+        {
+            var saved = SavedCompanyGrant();
+            if (saved is not null)
+            {
+                RefreshGrants();
+                ShowStatus($"Firma arşivi izni zaten kayıtlı: {_company} · READ_ONLY · " +
+                           $"{saved.FullPath}. Yeni kontrol başarısız: {error.Message}", true);
+                return;
+            }
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        ShowStatus(title + error.Message, true);
+    }
+
+    private bool BeginArchiveOperation()
+    {
+        if (_archiveOperationActive) return false;
+        _archiveOperationActive = true;
+        ChooseCompanyRootButton.IsEnabled = false;
+        ApproveCompanyRootPathButton.IsEnabled = false;
+        return true;
+    }
+
+    private void EndArchiveOperation()
+    {
+        _archiveOperationActive = false;
+        ChooseCompanyRootButton.IsEnabled = true;
+        ApproveCompanyRootPathButton.IsEnabled = true;
+    }
+
+    private async void ChooseCompanyRoot_Click(object sender, RoutedEventArgs e)
+    {
+        if (!BeginArchiveOperation()) return;
+        try
+        {
+            var saved = SavedCompanyGrant();
+            var requested = CompanyRootPathInput.Text.Trim().Trim('"');
+            if (saved is not null && (requested.Length == 0 ||
+                requested.Equals(saved.FullPath, StringComparison.OrdinalIgnoreCase)))
+            {
+                RefreshGrants();
+                ShowSavedCompanyGrant();
+                return;
+            }
             // Never use OpenFolderDialog for a cloud company root. It rejects
             // Google Drive junction ancestors on otherwise healthy Windows systems.
             var entered = CompanyRootPathInput.Text.Trim().Trim('"');
@@ -174,27 +243,43 @@ public partial class LocalFolderWindow : Window
         catch (Exception error)
         {
             CompanyRootPathInput.Focus();
-            ShowStatus("Firma ana arşivi bulunamadı veya doğrulanamadı: " + error.Message, true);
+            ShowArchiveFailure("Firma ana arşivi bulunamadı veya doğrulanamadı: ", error);
         }
-        finally { ChooseCompanyRootButton.IsEnabled = true; ApproveCompanyRootPathButton.IsEnabled = true; }
+        finally { EndArchiveOperation(); }
     }
 
     private async void ArchiveCandidates_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ArchiveCandidates.SelectedItem is not string selectedPath) return;
-        ArchiveCandidates.Visibility = Visibility.Collapsed;
-        CompanyRootPathInput.Text = selectedPath;
-        try { await ApproveCompanyRootAsync(selectedPath); }
-        catch (Exception error) { ShowStatus("Firma ana klasörü doğrulanamadı: " + error.Message, true); }
+        if (ArchiveCandidates.SelectedItem is not string selectedPath ||
+            !BeginArchiveOperation()) return;
+        try
+        {
+            ArchiveCandidates.Visibility = Visibility.Collapsed;
+            CompanyRootPathInput.Text = selectedPath;
+            await ApproveCompanyRootAsync(selectedPath);
+        }
+        catch (Exception error) { ShowArchiveFailure("Firma ana klasörü doğrulanamadı: ", error); }
+        finally { EndArchiveOperation(); }
     }
 
     private async void ApproveCompanyRootPath_Click(object sender, RoutedEventArgs e)
     {
-        ChooseCompanyRootButton.IsEnabled = false;
-        ApproveCompanyRootPathButton.IsEnabled = false;
-        try { await ApproveCompanyRootAsync(CompanyRootPathInput.Text.Trim().Trim('"')); }
-        catch (Exception error) { ShowStatus("Firma ana klasörü doğrulanamadı: " + error.Message, true); }
-        finally { ChooseCompanyRootButton.IsEnabled = true; ApproveCompanyRootPathButton.IsEnabled = true; }
+        if (!BeginArchiveOperation()) return;
+        try
+        {
+            var requested = CompanyRootPathInput.Text.Trim().Trim('"');
+            var saved = SavedCompanyGrant();
+            if (saved is not null &&
+                requested.Equals(saved.FullPath, StringComparison.OrdinalIgnoreCase))
+            {
+                RefreshGrants();
+                ShowSavedCompanyGrant();
+                return;
+            }
+            await ApproveCompanyRootAsync(requested);
+        }
+        catch (Exception error) { ShowArchiveFailure("Firma ana klasörü doğrulanamadı: ", error); }
+        finally { EndArchiveOperation(); }
     }
 
     private async Task ApproveCompanyRootAsync(string selectedPath)
