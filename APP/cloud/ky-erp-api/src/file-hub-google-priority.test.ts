@@ -16,7 +16,7 @@ test("2026 model dosyalari tarihsel binlerce klasor oncesinde indekslenir",()=>{
   assert.equal(queue[0].pageToken,"next-page");
   assert.ok(googleFolderScanPriority("görsel")<googleFolderScanPriority("modeller"));
   assert.ok(googleFolderScanPriority("görsel\\2026")<googleFolderScanPriority("görsel/2025"));
-  assert.match(cloud,/prioritizeGoogleScanQueue\(cursor\.queue\)/);
+  assert.match(cloud,/prioritizeGoogleScanQueue\(cursor\.queue, preferredPaths\)/);
   assert.match(cloud,/cloudSyncCursor/);
 });
 test("hata sonrasi onceki sayfa imleci silinmez",()=>{
