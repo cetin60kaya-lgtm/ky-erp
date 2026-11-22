@@ -37,6 +37,17 @@ public sealed class CompanyArchiveDiscoveryTests
     }
 
     [Fact]
+    public void OptionalRealMountedCloudRootProbe()
+    {
+        // Used only for an explicitly configured local Windows acceptance run.
+        // CI runs without this variable and never reads user archive contents.
+        var cloudRoot = Environment.GetEnvironmentVariable("KYERP_TEST_CLOUD_DISCOVERY_ROOT");
+        if (string.IsNullOrWhiteSpace(cloudRoot)) return;
+        Assert.True(Directory.Exists(cloudRoot), "The requested existing cloud mount is unavailable.");
+        Assert.NotEmpty(CompanyArchiveDiscovery.FindWithinCloudRoot(cloudRoot));
+    }
+
+    [Fact]
     public void MultipleExistingArchivesRequireExplicitSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-cloud-discovery-" + Guid.NewGuid().ToString("N"));
