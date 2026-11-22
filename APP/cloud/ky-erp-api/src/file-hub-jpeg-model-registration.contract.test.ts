@@ -22,15 +22,13 @@ test("Drive File Hub MODEL relation refers to the actual saved model ID", () => 
   assert.match(cloud, /JOIN model_records m ON m\.id=r\.entity_id/);
 });
 
-test("only unambiguous TAHA GIYIM company ID can be assigned by default", () => {
-  assert.match(design, /const candidates = \(result\.results \|\| \[\]\)\.filter/);
-  assert.match(design, /normalize\(row\.name\)\.startsWith\("TAHA GIYIM"\)/);
-  assert.match(design, /candidates\.length === 1 \? candidates\[0\] : null/);
-  assert.match(design, /companyId: text\(matched\?\.id\)/);
+test("JPEG creates a model card without guessing a customer company", () => {
+  assert.doesNotMatch(design, /TAHA GİYİM|TAHA GIYIM/);
+  assert.match(design, /return \{ companyId: "", companyName: "" \}/);
   assert.match(design, /existingCanonicalModel\(c, slug, modelName\)/);
   assert.match(design, /!current && !canonical && purposeCode !== "MODEL_IMAGE"/);
-  assert.match(design, /id: identity\.id/);
   assert.match(design, /await ensureCanonicalModel\(c, slug,/);
+  assert.match(design, /id: identity\.id/);
 });
 
 test("Cloud JPG preview caches a provider thumbnail, not the original PSD or JPEG", () => {

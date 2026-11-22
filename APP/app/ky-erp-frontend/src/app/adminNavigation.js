@@ -14,6 +14,7 @@ export const ADMIN_SECTIONS=[
   {key:"system",label:"Sistem",description:"Uygulama, bağlantı ve yayın kontrolleri",panels:[
     {route:"admin-sistem",label:"Uygulama Ayarları",description:"Arayüz ve hızlı işlem tercihleri",icon:"settings"},
     {route:"dosya-klasor-yonetimi",label:"Dosya ve Depolama",description:"Klasörler, servisler ve agent",icon:"database"},
+    {route:"depolama-klasor-duzeni",label:"Firma Klasör Düzeni",description:"Tek ana arşiv ve bölüm bağlantıları",icon:"folder"},
     {route:"eslestirmeler",label:"Firma / Ürün Eşleştirme",description:"Ürün ve firma eşleştirmeleri",icon:"git"},
     {route:"yedekleme-loglar",label:"Yedek ve Kayıtlar",description:"Yedekleme, geri yükleme ve loglar",icon:"archive"},
     {route:"surum-merkezi",label:"Windows Build",description:"Sürüm ve kurulum paketi üretimi",icon:"package"},

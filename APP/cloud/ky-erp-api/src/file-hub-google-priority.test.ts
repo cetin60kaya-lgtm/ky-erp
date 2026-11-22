@@ -25,19 +25,24 @@ test("hata sonrasi onceki sayfa imleci silinmez",()=>{
 });
 
 
-test("DESEN RGB taraması 100 dosyadan sonra imleçle sürer, erken tamamlandı demez",()=>{
-  assert.match(cloud,/const resume = text\(progress\.rootPath\) === rootPath && Boolean\(text\(progress\.nextPageToken\)\)/);
-  assert.match(cloud,/if\(cursor\) params\.set\("pageToken",cursor\)/);
-  assert.match(cloud,/nextPageToken = text\(page\.nextPageToken\)/);
-  assert.match(cloud,/completed = !nextPageToken/);
+test("DESEN RGB taraması tüm sayfa ve alt klasörlerde D1 kuyruğuyla sürer, erken tamamlanmaz",()=>{
+  assert.match(cloud,/Array\.isArray\(progress\.queue\)\&\&progress\.queue\.length>0/);
+  assert.match(cloud,/const checkpoint=queue\.map\(f=>\(\{\.\.\.f\}\)\)/);
+  assert.match(cloud,/const page=await googleChildrenPage\(accessToken,text\(current\.id\),text\(current\.pageToken\)\)/);
+  assert.match(cloud,/if\(page\.nextPageToken\)queue\.push\(\{\.\.\.current,pageToken:page\.nextPageToken\}\)/);
+  assert.match(cloud,/queue\.push\(\.\.\.discovered\)/);
+  assert.match(cloud,/completed=queue\.length===0/);
+  assert.match(cloud,/pendingFolders:queue\.length/);
   assert.match(cloud,/modelImageFastProgress',json\(\?\)/);
   assert.match(cloud,/hasMore:!completed,scannedTotal:priorScanned\+scanned,linkedTotal:priorLinked\+linked/);
-  assert.match(cloud,/modelImageSync:json\(metadata\.modelImageFastProgress\)/);
 });
 
-test("DESEN RGB gecici sağlayıcı hatasında imleç korunur ve D1 lease bırakılır",()=>{
-  assert.match(cloud,/nextPageToken:problem \? cursor : nextPageToken/);
-  assert.match(cloud,/problem \? 0 : scanned/);
+test("DESEN RGB geçici sağlayıcı hatasında sayfa geri alınır ve D1 lease bırakılır",()=>{
+  assert.match(cloud,/const checkpoint=queue\.map\(f=>\(\{\.\.\.f\}\)\)/);
+  assert.match(cloud,/queue=checkpoint/);
+  assert.match(cloud,/scannedTotal:priorScanned\+\(problem\?0:scanned\)/);
+  assert.match(cloud,/linkedTotal:priorLinked\+\(problem\?0:linked\)/);
   assert.match(cloud,/cloudSyncLeaseId',NULL,'\$\.cloudSyncLeaseUntil',NULL/);
   assert.match(cloud,/MODEL_IMAGE_LEASE_CONFLICT/);
+  assert.match(cloud,/if\(problem\)throw Object\.assign/);
 });

@@ -30,7 +30,7 @@ test("direct cloud file scan invokes model sync for new changed or unlinked file
 
 test("File Hub model sync keeps workflow and canonical model_records aligned", () => {
   assert.match(design, /defaultDesignCompany/);
-  assert.match(design, /TAHA GİYİM SAN\. VE TİC\./);
+  assert.match(design, /return \{ companyId: "", companyName: "" \}/);
   assert.match(design, /upsertCanonicalModelRecord/);
   assert.match(design, /PRAGMA table_info\("model_records"\)/);
   assert.match(design, /await upsertCanonicalModelRecord\(c, slug, saved\)/);

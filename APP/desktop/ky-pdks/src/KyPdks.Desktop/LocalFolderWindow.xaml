@@ -41,6 +41,14 @@
         </StackPanel>
         <Border Grid.Row="1" Style="{StaticResource SoftCard}">
             <StackPanel>
+                <TextBlock Text="0 · Firma Ana Arşivi" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
+                <TextBlock Text="Bu Windows uygulaması isteğe bağlıdır. Firma için bulut arşivi zaten KY ERP web üzerinden bağlanabilir. Yerel dosyaları büyük PSD/AI veya İşNet indirmesi amacıyla kullanacaksanız ana klasörü seçin. Yalnız eksik bölüm klasörleri oluşturulur."
+                           TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,3,0,9"/>
+                <CheckBox x:Name="IsnetArchivistCheck" Content="Bu bilgisayar İşNet faturalarını indirip arşivleyecek (muhasebe bilgisayarı)"
+                          IsChecked="False" Margin="0,2,0,8" Foreground="{StaticResource Text}"/>
+                <Button x:Name="ChooseCompanyRootButton" Content="Firma Ana Klasörünü Seç ve Eksikleri Kur" Click="ChooseCompanyRoot_Click"
+                        Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,0,0,14"/>
+                <Separator Margin="0,0,0,13"/>
                 <TextBlock Text="1 · Klasöre izin ver" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
                 <TextBlock Text="İşlem amacı seçin, firmanızı ve klasör adını yazın. Windows klasör seçicisi yalnız siz onaylayınca açılır."
                            Foreground="{StaticResource Muted}" Margin="0,3,0,10"/>

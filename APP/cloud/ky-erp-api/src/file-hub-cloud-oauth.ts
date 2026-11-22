@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { canManageOwnCompanyStorage } from "./file-hub-company-owner-access";
+import { canManageOwnCompanyStorage, canReadOwnCompanyStorage } from "./file-hub-company-owner-access";
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 import { selectCloudModelBinding, canUseModelImageFolder, classifyDesignSourcePath, matchExistingDesignModelNames, normalizeDesignModelKey, findUniqueMissingDesignImageModel } from "./file-hub-cloud-model-binding";
 import { prioritizeGoogleScanQueue } from "./file-hub-google-priority";
@@ -699,91 +699,94 @@ async function syncRecentBoundGoogleImages(
   c: Context<AppEnv>, slug: string, connectionId: string, link: Row, accessToken: string, force = false,
 ): Promise<{ ran: boolean; scanned: number; linked: number; hasMore: boolean; scannedTotal: number; linkedTotal: number }> {
   const skip = {ran:false,scanned:0,linked:0,hasMore:false,scannedTotal:0,linkedTotal:0};
-  if (upper(link.provider_type) !== "GOOGLE_DRIVE") return skip;
-  const binding = await c.env.DB.prepare(
-    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1",
-  ).bind(slug, connectionId).first<Row>();
-  const rootPath = text(binding?.root_path).replace(/^\/+|\/+$/g, "");
-  if (!rootPath || !canUseModelImageFolder(rootPath)) return skip;
+  if (upper(link.provider_type)!=="GOOGLE_DRIVE") return skip;
+  const binding=await c.env.DB.prepare(
+    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND read_enabled=1 AND sync_enabled=1 LIMIT 1",
+  ).bind(slug,connectionId).first<Row>();
+  const rootPath=text(binding?.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"");
+  // Only an explicitly assigned image folder may open new model cards.
+  if(!rootPath||!canUseModelImageFolder(rootPath))return skip;
 
-  const raw = text(link.connection_metadata), meta = json(raw);
-  const progress = json(meta.modelImageFastProgress);
-  const resume = text(progress.rootPath) === rootPath && Boolean(text(progress.nextPageToken));
-  const lastCompletedAt = Date.parse(text(progress.completedAt || meta.modelImageFastAt)) || 0;
-  if (!force && !resume && lastCompletedAt && Date.now() - lastCompletedAt < 30 * 60000) return skip;
+  const raw=text(link.connection_metadata),meta=json(raw),progress=json(meta.modelImageFastProgress);
+  const resume=text(progress.rootPath)===rootPath&&Array.isArray(progress.queue)&&progress.queue.length>0;
+  const lastCompletedAt=Date.parse(text(progress.completedAt||meta.modelImageFastAt))||0;
+  if(!force&&!resume&&lastCompletedAt&&Date.now()-lastCompletedAt<30*60000)return skip;
 
-  const stamp = now(), leaseId = crypto.randomUUID();
-  const claimed = await c.env.DB.prepare(
+  const stamp=now(),leaseId=crypto.randomUUID();
+  const claim=await c.env.DB.prepare(
     "UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? AND COALESCE(metadata,'')=? AND COALESCE(json_extract(metadata,'$.cloudSyncLeaseUntil'),'')<=? AND is_active=1",
   ).bind(JSON.stringify({...meta,cloudSyncLeaseId:leaseId,cloudSyncLeaseUntil:new Date(Date.now()+180000).toISOString()}),connectionId,slug,raw,stamp).run();
-  if (Number(claimed.meta?.changes || 0) !== 1) return skip;
+  if(Number(claim.meta?.changes||0)!==1)return skip;
 
-  // Continuation is saved per tenant/connection. Re-running a page after an error
-  // is safe: assets, relations and UUID-based image updates are idempotent.
-  const priorScanned = resume ? Number(progress.scannedTotal || 0) : 0;
-  const priorLinked = resume ? Number(progress.linkedTotal || 0) : 0;
-  const cursor = resume ? text(progress.nextPageToken) : "";
-  let nextPageToken = cursor, scanned = 0, linked = 0, problem = "";
-  let completed = false;
+  const priorScanned=resume?Number(progress.scannedTotal||0):0;
+  const priorLinked=resume?Number(progress.linkedTotal||0):0;
+  // One provider page per pass: large historical libraries resume automatically
+  // without a browser tab, an open desktop or repeated manual clicks.
+  let queue:Row[]=resume?progress.queue.map((f:Row)=>({id:text(f.id),path:text(f.path),pageToken:text(f.pageToken)})):[];
+  const checkpoint=queue.map(f=>({...f}));
+  let scanned=0,linked=0,completed=false,problem="";
   try {
-    let parent = text(link.remote_root_id) || "root";
-    for(const part of rootPath.split("/").filter(Boolean)){
-      const params = new URLSearchParams({
-        q:"'"+googleQueryValue(parent)+"' in parents and name='"+googleQueryValue(part)+"' and mimeType='application/vnd.google-apps.folder' and trashed=false",
-        fields:"files(id,name)",pageSize:"10",spaces:"drive",
-      });
-      const folders = await providerJson("https://www.googleapis.com/drive/v3/files?"+params,accessToken);
-      const matches = (Array.isArray(folders.files)?folders.files:[]).filter((r:Row)=>text(r.name)===part && text(r.id));
-      if(matches.length!==1) throw new Error("MODEL_IMAGE_ROOT_AMBIGUOUS_OR_MISSING");
-      parent = text(matches[0].id); // Asla yeni klasör oluşturma.
-    }
-    const q="'"+googleQueryValue(parent)+"' in parents and trashed=false and (mimeType='image/jpeg' or mimeType='image/png' or mimeType='image/webp')";
-    const params = new URLSearchParams({
-      q,fields:"nextPageToken,files(id,name,mimeType,size,modifiedTime,md5Checksum,webViewLink)",
-      pageSize:"100",spaces:"drive",orderBy:"modifiedTime desc",
-    });
-    if(cursor) params.set("pageToken",cursor);
-    const page = await providerJson("https://www.googleapis.com/drive/v3/files?"+params,accessToken);
-    const existing = await c.env.DB.prepare(
-      "SELECT id,model_name,model_code,image_url,deleted_at FROM model_records WHERE main_company_slug=? AND COALESCE(TRIM(deleted_at),'')='' LIMIT 10000",
-    ).bind(slug).all<Row>();
-    const models = existing.results || [];
-    for(const f of Array.isArray(page.files)?page.files:[]){
-      scanned += 1;
-      const name = text(f.name);
-      const modelId = findUniqueMissingDesignImageModel(models,name);
-      if(!modelId) continue;
-      const item = {id:text(f.id),name,mimeType:text(f.mimeType),size:Number(f.size||0),
-        modifiedAt:text(f.modifiedTime),checksum:text(f.md5Checksum),webUrl:text(f.webViewLink)};
-      const relativePath = rootPath+"/"+name;
-      const indexed = await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",item,relativePath,now());
-      // Eski indeksin modeli olmasına rağmen image_url boşsa tekrar bağla.
-      const result = await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,item,relativePath,"GOOGLE_DRIVE");
-      if(result?.modelId === modelId){
-        linked += 1;
-        const row = models.find((m:Row)=>text(m.id)===modelId);
-        if(row) row.image_url = "LINKED_THIS_BATCH"; // Sadece bellek içindeki tekrarı engeller.
+    if(!queue.length){
+      let parent=text(link.remote_root_id)||"root";
+      for(const part of rootPath.split("/").filter(Boolean)){
+        const params=new URLSearchParams({
+          q:"'"+googleQueryValue(parent)+"' in parents and name='"+googleQueryValue(part)+"' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+          fields:"files(id,name)",pageSize:"10",spaces:"drive",
+        });
+        const result=await providerJson("https://www.googleapis.com/drive/v3/files?"+params,accessToken);
+        const matches=(Array.isArray(result.files)?result.files:[]).filter((f:Row)=>text(f.name)===part&&text(f.id));
+        if(matches.length!==1)throw new Error("MODEL_IMAGE_ROOT_AMBIGUOUS_OR_MISSING");
+        parent=text(matches[0].id);
       }
+      queue=[{id:parent,path:rootPath,pageToken:""}];
     }
-    nextPageToken = text(page.nextPageToken);
-    completed = !nextPageToken;
-  }catch(error:any){problem = text(error?.code || error?.message || "MODEL_IMAGE_QUICK_SCAN_FAILED").slice(0,160);}
-  finally {
-    const finishedAt = now();
-    const state = {
-      rootPath, nextPageToken:problem ? cursor : nextPageToken,
-      scannedTotal:priorScanned + (problem ? 0 : scanned),
-      linkedTotal:priorLinked + (problem ? 0 : linked),
-      completedAt:completed && !problem ? finishedAt : null,
-      lastRunAt:finishedAt, error:problem || null,
+    prioritizeGoogleScanQueue(queue);
+    const current=queue.shift()!;
+    if(!text(current.id)||!text(current.path))throw new Error("MODEL_IMAGE_CURSOR_INVALID");
+    const page=await googleChildrenPage(accessToken,text(current.id),text(current.pageToken));
+    const discovered:Row[]=[];
+    for(const item of page.children){
+      const relativePath=text(current.path)+"/"+text(item.name);
+      if(item.isFolder){
+        discovered.push({id:text(item.id),path:relativePath,pageToken:""});
+        continue;
+      }
+      const extension=upper(text(item.name).split(".").pop());
+      if(!["JPG","JPEG","PNG","WEBP"].includes(extension) ||
+          !["image/jpeg","image/png","image/webp"].includes(text(item.mimeType).toLowerCase()))continue;
+      scanned+=1;
+      const indexed=await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",item,relativePath,now());
+      if(!indexed.needsModelSync)continue;
+      // New JPEG names create canonical model cards. Existing model IDs are
+      // reused; source PSD/PDF cannot create ghost models.
+      const model=await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,item,relativePath,"GOOGLE_DRIVE");
+      if(model?.modelId)linked+=1;
+    }
+    if(page.nextPageToken)queue.push({...current,pageToken:page.nextPageToken});
+    queue.push(...discovered);
+    prioritizeGoogleScanQueue(queue);
+    completed=queue.length===0;
+  }catch(error:any){
+    problem=text(error?.code||error?.message||"MODEL_IMAGE_SCAN_FAILED").slice(0,160);
+    // A partially written page is retried from its previous cursor.
+    queue=checkpoint;
+  }finally{
+    const finishedAt=now();
+    const state={
+      rootPath,queue:completed&&!problem?[]:queue,
+      scannedTotal:priorScanned+(problem?0:scanned),
+      linkedTotal:priorLinked+(problem?0:linked),
+      pendingFolders:queue.length,
+      completedAt:completed&&!problem?finishedAt:null,
+      lastRunAt:finishedAt,error:problem||null,
     };
-    const released = await c.env.DB.prepare(
+    const released=await c.env.DB.prepare(
       "UPDATE file_hub_connections SET metadata=json_set(COALESCE(NULLIF(metadata,''),'{}'),'$.cloudSyncLeaseId',NULL,'$.cloudSyncLeaseUntil',NULL,'$.modelImageFastProgress',json(?),'$.modelImageFastAt',?,'$.modelImageFastError',?),updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?",
-    ).bind(JSON.stringify(state),completed && !problem ? finishedAt : "",problem || null,finishedAt,connectionId,slug,leaseId).run();
-    if(Number(released.meta?.changes || 0)!==1) throw Object.assign(new Error("MODEL_IMAGE_LEASE_CONFLICT"),{code:"MODEL_IMAGE_LEASE_CONFLICT",status:409});
+    ).bind(JSON.stringify(state),completed&&!problem?finishedAt:"",problem||null,finishedAt,connectionId,slug,leaseId).run();
+    if(Number(released.meta?.changes||0)!==1)throw Object.assign(new Error("MODEL_IMAGE_LEASE_CONFLICT"),{code:"MODEL_IMAGE_LEASE_CONFLICT",status:409});
   }
-  if(problem) throw Object.assign(new Error("DESEN görsel taraması tamamlanamadı; sonraki denemede aynı sayfadan devam edilir."),{code:"MODEL_IMAGE_QUICK_SCAN_FAILED"});
-  return {ran:true,scanned,linked,hasMore:!completed,scannedTotal:priorScanned+scanned,linkedTotal:priorLinked+linked};
+  if(problem)throw Object.assign(new Error("DESEN görsel taraması tamamlanamadı; sonraki turda aynı klasör/sayfadan devam edilir."),{code:"MODEL_IMAGE_SCAN_FAILED"});
+  return{ran:true,scanned,linked,hasMore:!completed,scannedTotal:priorScanned+scanned,linkedTotal:priorLinked+linked};
 }
 
 // Dosyalar klasor atamasi oncesinde indekslendiyse root taramasini beklemeden
@@ -1025,6 +1028,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/accounts", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c); if (!slug) return c.json(err("TENANT_REQUIRED", "Aktif firma seçimi gerekli."), 422);
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     const result = await c.env.DB.prepare(`SELECT id,provider_type,provider_account_id,account_email,display_name,token_expires_at,scopes,metadata,created_at,updated_at FROM file_hub_oauth_accounts WHERE main_company_slug=? ORDER BY updated_at DESC`).bind(slug).all<Row>();
     return c.json({ ok: true, data: (result.results || []).map((row) => ({ ...row, metadata: json(row.metadata) })) });
   });
@@ -1141,6 +1145,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/folders", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c), accountId = text(c.req.query("accountId")), parentId = text(c.req.query("parentId")) || "root", driveId = text(c.req.query("driveId"));
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     if (!slug || !accountId) return c.json(err("REQUIRED", "Aktif firma ve bulut hesabı zorunludur."), 422);
     try {
       const { account, accessToken } = await usableAccount(c, slug, accountId);
@@ -1153,6 +1158,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/sharepoint/sites", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c), accountId = text(c.req.query("accountId")), q = text(c.req.query("q"));
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     if (!slug || !accountId || q.length < 2) return c.json(err("REQUIRED", "SharePoint site araması için en az 2 karakter yazın."), 422);
     try {
       const { account, accessToken } = await usableAccount(c, slug, accountId); if (upper(account.provider_type) !== "SHAREPOINT") return c.json(err("INVALID_PROVIDER", "Bu hesap SharePoint hesabı değil."), 422);
@@ -1164,6 +1170,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
   app.get("/api/file-hub/cloud/sharepoint/drives", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     const slug = companySlug(c), accountId = text(c.req.query("accountId")), siteId = text(c.req.query("siteId"));
+    if (!canReadOwnCompanyStorage(user,slug)) return c.json(err("TENANT_FORBIDDEN","Başka firmanın bulut hesabı veya klasörleri görüntülenemez."),403);
     if (!slug || !accountId || !siteId) return c.json(err("REQUIRED", "SharePoint site seçimi zorunludur."), 422);
     try {
       const { accessToken } = await usableAccount(c, slug, accountId);
@@ -1183,7 +1190,7 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     const id = crypto.randomUUID(), ts = now(), name = text(body.name) || `${text(account.display_name || account.account_email) || provider} · ${rootFolderName}`;
     if (isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts, gate.slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,last_sync_at,last_error,metadata,created_at,updated_at) VALUES(?,?,?,?,1,?,NULL,?,?,'CLOUD_API','CONNECTED',NULL,NULL,?,?,?)`)
-      .bind(id, gate.slug, provider, name, isPrimary ? 1 : 0, rootFolderId, rootFolderName, JSON.stringify({ cloudDirect: true, accountEmail: text(account.account_email), accountName: text(account.display_name), driveId: driveId || null }), ts, ts).run();
+      .bind(id, gate.slug, provider, name, isPrimary ? 1 : 0, rootFolderId, rootFolderName, JSON.stringify({ cloudDirect: true, oauthAccountId: accountId, accountEmail: text(account.account_email), accountName: text(account.display_name), driveId: driveId || null }), ts, ts).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_cloud_connection_accounts(connection_id,main_company_slug,oauth_account_id,provider_drive_id,created_at,updated_at) VALUES(?,?,?,?,?,?)`).bind(id, gate.slug, accountId, driveId || null, ts, ts).run();
     return c.json({ ok: true, data: { id } }, 201);
   });

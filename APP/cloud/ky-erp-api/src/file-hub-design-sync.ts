@@ -25,27 +25,11 @@ export function preserveCanonicalImageUrl(...candidates: unknown[]): string | nu
   return candidates.map(text).find(Boolean) || null;
 }
 
-// Model JPEG dosyası tek başına kayda yeterlidir. Firma ID'si tahmin edilmez:
-// tam TAHA GİYİM kartı tekilse kullanılır, değilse ad korunup ID boş bırakılır.
-const DEFAULT_DESIGN_COMPANY_NAME = "TAHA GİYİM SAN. VE TİC.";
-async function defaultDesignCompany(c: Context<AppEnv>, slug: string) {
-  try {
-    const result = await c.env.DB.prepare(
-      `SELECT id,name FROM companies
-         WHERE main_company_slug=? AND deleted_at IS NULL
-           AND COALESCE(is_active,1)=1 AND name LIKE 'TAHA%' COLLATE NOCASE`,
-    ).bind(slug).all<Row>();
-    const candidates = (result.results || []).filter((row: Row) =>
-      normalize(row.name).startsWith("TAHA GIYIM"),
-    );
-    const matched = candidates.length === 1 ? candidates[0] : null;
-    return {
-      companyId: text(matched?.id),
-      companyName: text(matched?.name) || DEFAULT_DESIGN_COMPANY_NAME,
-    };
-  } catch {
-    return { companyId:"", companyName:DEFAULT_DESIGN_COMPANY_NAME };
-  }
+// Model görseli ana firmada model kartı açar, müşteri firmasını JPEG adından
+// tahmin etmez. Müşteri eşleşmesi yalnız mevcut canonical kart veya onaylı
+// model/fatura/irsaliye ilişkisi üzerinden gelir.
+async function defaultDesignCompany(_c: Context<AppEnv>, _slug: string) {
+  return { companyId: "", companyName: "" };
 }
 
 // Desen JSON kaydı henüz yoksa mevcut imalat/model ana kartını tekrar oluşturma.

@@ -17,12 +17,37 @@ const SELECT=`
  WHERE a.status='AVAILABLE' AND c.is_active=1 AND c.sync_mode='CLOUD_API'
    AND c.provider_type IN ('GOOGLE_DRIVE','ONEDRIVE','SHAREPOINT')
    AND UPPER(a.extension) IN ('XML','PDF')
+   -- _INCELEME contains competing PDFs, _DURUM/ _UYGULAMA contain
+   -- local control/diagnostic artifacts: none are new official e-documents.
+   AND INSTR('/'||LOWER(REPLACE(l.relative_path,'\\','/'))||'/','/_inceleme/')=0
+   AND INSTR('/'||LOWER(REPLACE(l.relative_path,'\\','/'))||'/','/_durum/')=0
+   AND INSTR('/'||LOWER(REPLACE(l.relative_path,'\\','/'))||'/','/_uygulama/')=0
+   AND LOWER(l.relative_path) NOT LIKE '%.partial-%'
    AND COALESCE(a.size_bytes,0) BETWEEN 1 AND 20971520
+   -- Batch intake is XML-authoritative: a PDF can be staged only after
+   -- the XML of the same provider path is linked to an actual document.
+   -- This prevents OCR from creating a duplicate if the PDF syncs first.
+   AND (UPPER(a.extension)='XML' OR EXISTS (
+     SELECT 1 FROM file_hub_locations lx
+     JOIN file_hub_relations rx ON rx.file_asset_id=lx.file_asset_id
+       AND rx.main_company_slug=lx.main_company_slug AND rx.entity_type='DOCUMENT'
+       AND rx.relation_type='XML'
+     JOIN accounting_documents ad ON ad.id=rx.entity_id
+       AND ad.main_company_slug=rx.main_company_slug AND ad.deleted_at IS NULL
+     WHERE lx.main_company_slug=l.main_company_slug
+       AND lx.storage_connection_id=l.storage_connection_id
+       AND lx.is_available=1
+       AND LOWER(REPLACE(lx.relative_path,'\\','/'))=
+         LOWER(SUBSTR(REPLACE(l.relative_path,'\\','/'),1,LENGTH(REPLACE(l.relative_path,'\\','/'))-4)||'.xml')
+   ))
    AND b.read_enabled=1 AND b.sync_enabled=1
-   AND ((b.module_code='E_BELGE' AND b.purpose_code='E_DOCUMENT')
+   AND ((b.module_code IN ('E_BELGE','EBELGE') AND b.purpose_code='E_DOCUMENT')
     OR (b.module_code='MUHASEBE' AND b.purpose_code IN ('INVOICE','DELIVERY_NOTE')))
-   AND LENGTH(TRIM(COALESCE(b.root_path,''),'/'))>0
-   AND (LOWER(REPLACE(l.relative_path,'\\','/')) = LOWER(TRIM(REPLACE(b.root_path,'\\','/'),'/'))
+   -- An explicitly selected connection root is a valid E_BELGE archive.
+   -- Empty root_path means "this provider connection's selected root", not a
+   -- company-global fallback. Binding and tenant owner are still required.
+   AND (TRIM(COALESCE(b.root_path,''),'/')=''
+     OR LOWER(REPLACE(l.relative_path,'\\','/')) = LOWER(TRIM(REPLACE(b.root_path,'\\','/'),'/'))
      OR LOWER(REPLACE(l.relative_path,'\\','/')) LIKE LOWER(TRIM(REPLACE(b.root_path,'\\','/'),'/')||'/%'))
    AND (
      json_extract(a.metadata,'$.accountingImportState') IS NULL
@@ -32,7 +57,7 @@ const SELECT=`
      OR (json_extract(a.metadata,'$.accountingImportState')='PROCESSING'
        AND COALESCE(json_extract(a.metadata,'$.accountingImportClaimedAt'),'')<?)
    )
- ORDER BY a.last_seen_at DESC LIMIT 12`;
+ ORDER BY CASE WHEN UPPER(a.extension)='XML' THEN 0 ELSE 1 END, a.last_seen_at DESC LIMIT 12`;
 
 function stamp(){return new Date().toISOString();}
 async function update(db:any,slug:string,id:string,state:string,attempts:number,extra:Row={}){

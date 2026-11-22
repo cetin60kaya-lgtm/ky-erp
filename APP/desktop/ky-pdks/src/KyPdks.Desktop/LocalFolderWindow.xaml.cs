@@ -24,6 +24,7 @@ public partial class LocalFolderWindow : Window
         InitializeComponent();
         _company = string.IsNullOrWhiteSpace(company) ? "" : company.Trim();
         CompanyInput.Text = _company;
+        CompanyInput.IsReadOnly = !string.IsNullOrWhiteSpace(_company);
         RefreshGrants();
         RefreshStartup();
     }
@@ -136,6 +137,76 @@ public partial class LocalFolderWindow : Window
         }
     }
 
+    private async void ChooseCompanyRoot_Click(object sender, RoutedEventArgs e)
+    {
+        // The authenticated tenant is taken from KY ERP, not the editable form.
+        // This one-time local permission is NOT a cloud or financial authorization.
+        ChooseCompanyRootButton.IsEnabled = false;
+        try
+        {
+            if (string.IsNullOrWhiteSpace(_company))
+                throw new InvalidOperationException("Önce KY ERP'de ana firmayı seçin. Firma kimliği boşsa klasör kurulmaz.");
+            var picker = new Microsoft.Win32.OpenFolderDialog
+            {
+                Title = "Seçili firmaya ait mevcut Google Drive / OneDrive ana klasörünü seçin",
+            };
+            if (picker.ShowDialog(this) != true) return;
+            var root = LocalFolderService.ValidateRoot(picker.FolderName);
+            var grants = LocalFolderService.Load();
+            if (grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+                                !g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Bu Windows klasörü başka bir KY ERP firmasına bağlı.");
+            if (grants.Any(g => g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase) &&
+                                g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
+                                !g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Firma için başka bir File Hub ana klasörü zaten onaylı. " +
+                    "Eski yetkiyi kullanıcı onayıyla kaldırmadan aynı firmaya ikinci kök açılamaz.");
+
+            var missing = CompanyArchiveLayout.MissingPaths(root);
+            var preview = $"{_company} firması\n\nAna klasör: {root}\n" +
+                $"Mevcut klasörler korunacak. Oluşturulacak eksik standart klasör: {missing.Count}.\n\n" +
+                "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
+                "Seçili köke yalnız File Hub okuma izni verilir. Windows kullanıcı ortamında " +
+                "İşNet arşiv hedefi tanımlanır; çalışan İşNet servisi yeniden başlatılmaz.\n" +
+                "Bulut OAuth, yazma izni ve hassas klasör erişimleri ayrıca doğrulanır.\n\n" +
+                "Bu klasör düzenini kurmak istiyor musunuz?";
+            if (MessageBox.Show(this, preview, "KY ERP · Firma Arşivi",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+
+            var result = await Task.Run(() => CompanyArchiveLayout.EnsureMissingPaths(root));
+            if (!grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
+                                 g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
+                                 g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase)))
+                LocalFolderService.Grant(root, "Firma Ana Arşivi", "FILE_HUB", _company);
+
+            // Optional accountant role only. Other company computers use cloud
+            // File Hub from the browser and never start a second portal session.
+            var isnetNotice = "İşNet yerel indirme ayarı değiştirilmedi.";
+            if (IsnetArchivistCheck.IsChecked == true)
+            {
+                var legacyRoot = Path.Combine(root, "KY-ISNET-BELGELER");
+                var isnetRoot = Directory.Exists(legacyRoot)
+                    ? legacyRoot : Path.Combine(root, "MUHASEBE", "e-Belgeler");
+                // Existing 8791 process is not restarted or logged out.
+                Environment.SetEnvironmentVariable("KY_ISNET_ARCHIVE_ROOT", isnetRoot,
+                    EnvironmentVariableTarget.User);
+                isnetNotice = "İşNet arşiv hedefi sonraki kontrollü başlatma için ayarlandı.";
+            }
+            Environment.SetEnvironmentVariable("KYERP_ARCHIVE_ACTIVE_TENANT", _company,
+                EnvironmentVariableTarget.User);
+            RefreshGrants();
+            ShowStatus($"Firma klasörleri hazır: {_company} · Mevcut: {result.Existing} · " +
+                       $"Yeni: {result.Created}. " + isnetNotice +
+                       " Çalışan uygulamalar ve İşNet oturumu değiştirilmedi. " +
+                       "Web bulut OAuth ve D1 kabulü ayrıca doğrulanır.");
+        }
+        catch (Exception error)
+        {
+            ShowStatus("Firma ana klasörü kurulamadı: " + error.Message, true);
+        }
+        finally { ChooseCompanyRootButton.IsEnabled = true; }
+    }
+
     private void AddFolder_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -148,8 +219,10 @@ public partial class LocalFolderWindow : Window
                     : "KY ERP için yalnız okuma izni verilecek klasörü seçin",
             };
             if (picker.ShowDialog(this) != true) return;
+            if (string.IsNullOrWhiteSpace(_company))
+                throw new InvalidOperationException("Önce KY ERP ana firmasını seçin.");
             var grant = LocalFolderService.Grant(picker.FolderName, NameInput.Text.Trim(),
-                purpose, CompanyInput.Text.Trim());
+                purpose, _company);
             RefreshGrants();
             ShowStatus($"{grant.Name} için {grant.Permission} izni verildi: {grant.FullPath}");
         }

@@ -20,6 +20,22 @@ function Start-Agent {
 }
 # Fixed loopback İşNet portal adapter; user enters credentials only through KY ERP.
 Start-Agent -Script $portal -WorkDir (Split-Path -Parent $portal)
+# Optional 8791 archive starts only when the Windows user already configured
+# an absolute, existing approved Drive/local root; it never stores credentials.
+$archiveScript = Join-Path $root 'isnet-archive\isnet-drive-yerel.mjs'
+$archiveRoot = [Environment]::GetEnvironmentVariable('KY_ISNET_ARCHIVE_ROOT','User')
+if (-not $archiveRoot) {
+  $archiveRoot = [Environment]::GetEnvironmentVariable('KY_ISNET_ARCHIVE_ROOT','Machine')
+}
+if ($archiveRoot -and [IO.Path]::IsPathRooted($archiveRoot) -and
+    (Test-Path -LiteralPath $archiveRoot -PathType Container) -and
+    (Test-Path -LiteralPath $archiveScript -PathType Leaf)) {
+  $listener = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 8791 -State Listen -ErrorAction SilentlyContinue
+  if (-not $listener) {
+    $env:KY_ISNET_ARCHIVE_ROOT = $archiveRoot
+    Start-Agent -Script $archiveScript -WorkDir (Split-Path -Parent $archiveScript)
+  }
+}
 # File Hub requires existing authorized secret and explicit local folder grants.
 $agentKey = [Environment]::GetEnvironmentVariable('KYERP_AGENT_KEY','User')
 if (-not $agentKey) { $agentKey = [Environment]::GetEnvironmentVariable('KYERP_AGENT_KEY','Machine') }
