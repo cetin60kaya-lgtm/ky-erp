@@ -2,10 +2,11 @@
  * Bir firmanın TEK ortak File Hub indeksinin tarama sırası.
  * Gerçek bölüm klasörü kullanıcıya göre değişebilir; e-Belge kökleri
  * yalnız bu firmanın D1 klasör atamalarından gelir. Fiziksel dosya taşımaz.
+ * Stable Unicode casing avoids Turkish dotless-I changing KY-ISNET into a different key.
  */
 const normalizeFolder = (input: unknown): string =>
   String(input ?? "").normalize("NFC").replace(/\\/g, "/")
-    .replace(/^\/+|\/+$/g, "").toLocaleLowerCase("tr-TR");
+    .replace(/^\/+|\/+$/g, "").toLocaleLowerCase("en-US");
 
 export function googleFolderScanPriority(input: unknown, preferredPaths: readonly string[] = []): number {
   const path = normalizeFolder(input);
