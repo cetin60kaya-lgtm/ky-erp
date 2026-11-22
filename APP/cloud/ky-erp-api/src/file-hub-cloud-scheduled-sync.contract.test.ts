@@ -97,3 +97,16 @@ test("manual scan advances the shared checkpoint before any DESEN image-only sca
   const imageAt = cron.indexOf("await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken)");
   assert.ok(indexAt >= 0 && imageAt > indexAt);
 });
+
+
+test("Worker code-only release skips unrelated personnel preflight but retains D1 schema gate", () => {
+  const workflow = readFileSync(new URL("../../../../.github/workflows/worker-production-release.yml", import.meta.url), "utf8");
+  const preflightStart = workflow.indexOf("- name: Personel 0060 icin canli D1 on kosul dogrulamasi");
+  const migrationStart = workflow.indexOf("- name: Personel 0060 hedefli eklemeli D1 migration", preflightStart);
+  assert.ok(preflightStart > 0 && migrationStart > preflightStart);
+  const preflight = workflow.slice(preflightStart, migrationStart);
+  assert.match(preflight, /if: steps\.migration_gate\.outputs\.apply == 'true'/);
+  assert.match(workflow, /- name: Canli D1 hedefli salt okunur schema dogrulamasi/);
+  assert.match(workflow, /- name: Cloudflare D1 Time Travel geri donus noktasini dogrula/);
+  assert.match(workflow, /- name: Worker'i api\.kyerp\.net adresine dagit/);
+});
