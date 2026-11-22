@@ -70,3 +70,14 @@ test("DESEN image queue no longer starves the common file index",()=>{
   assert.match(cloud, /await runGoogleSyncBatch\(c, slug, connectionId, 3, true\)/);
   assert.doesNotMatch(cloud, /if \(priority\.ran\) continue/);
 });
+
+test("OneDrive and SharePoint use Graph delta on the same tenant-scoped D1 index",()=>{
+  assert.match(cloud, /runMicrosoftDeltaBatch/);
+  assert.match(cloud, /graphLatestDeltaUrl/);
+  assert.match(cloud, /cloudGraphDeltaLink/);
+  assert.match(cloud, /cloudGraphDeltaNextLink/);
+  assert.match(cloud, /graphRelativeFolderPath/);
+  assert.match(cloud, /validateGraphDeltaUrl/);
+  assert.match(cloud, /odata.maxpagesize=25/);
+  assert.match(cloud, /GRAPH_DELTA_TOKEN_EXPIRED/);
+});
