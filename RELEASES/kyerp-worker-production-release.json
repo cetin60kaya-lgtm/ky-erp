@@ -3,9 +3,9 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "e8e59a594f753efbed552d0cbd471ea39ec1c90e",
+  "sourceCommit": "6dcdba4b304583a39956fe0914530aff5c5711d3",
   "requestedAt": "2026-11-22",
-  "attempt": 55,
+  "attempt": 56,
   "scope": [
     "PR634-and-PR635-merged-to-canonical-70941e1ec20be36029f0acedfa991177717b64d1",
     "WORKER-FILE-HUB-CLOUD-OAUTH-ISNET-4-DIRECTIONS-XML-FIRST-PDF",
@@ -14,7 +14,7 @@
     "CLOUDFLARE-D1-TIME-TRAVEL-CHECK-ONLY",
     "NO-PRODUCTION-MIGRATIONS-NO-OFFICIAL-DOCUMENT-SEND"
   ],
-  "note": "22 Kasım 2026 kullanıcının açık kod canlı yayın onayı. PR 635 ile birleşen İşNet/Muhasebe/File Hub, güvenli arşiv eşleştirmesi ve firma izolasyonu. D1 SQL export yerine yalnız Cloudflare Time Travel geri dönüş noktası doğrulanır. Bu kod release'i veritabanında migration veya resmî fatura/Outlook gönderimi yapmaz. Gerçek OAuth ve kullanıcı canlı belge kabulü ayrıca gerekli.",
+  "note": "22 Kasım 2026 kullanıcının açık kod canlı yayın onayı. PR 635 ile birleşen İşNet/Muhasebe/File Hub, güvenli arşiv eşleştirmesi ve firma izolasyonu. D1 SQL export yerine yalnız Cloudflare Time Travel geri dönüş noktası doğrulanır. Bu kod release'i veritabanında migration veya resmî fatura/Outlook gönderimi yapmaz. Gerçek OAuth ve kullanıcı canlı belge kabulü ayrıca gerekli. İlk CI denemesinde D1 info JSON sürüm karşılaştırması farklı format nedeniyle bloke etti; ikinci sürüm yalnız gerçek Time Travel bookmark okumasına bakacak. İlk deneme hiçbir Worker deploy veya D1 verisi dışa aktarımı yapmadı.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
