@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { ensureCloudModelImagePreview } from "./file-hub-cloud-oauth";
+import { ensureCloudModelImagePreview, readFileHubAssetForMail } from "./file-hub-cloud-oauth";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -126,6 +126,58 @@ export function registerFileHubPreviewRoutes(app: Hono<AppEnv>) {
       }
     }
 
+    // An original accounting XML/PDF is not a generated File Hub thumbnail.
+    // This fast path uses the already-verified document relation and exactly
+    // the same viewer permissions checked above. Never rewrite the archive.
+    const ext = upper(asset.extension);
+    if (["PDF","XML"].includes(ext)) {
+      const originalLink = await c.env.DB.prepare(
+        "SELECT 1 ok FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='DOCUMENT' LIMIT 1"
+      ).bind(slug,id).first<Row>();
+      if (originalLink) {
+        if (upper(asset.status) !== "AVAILABLE") {
+          return c.json({ok:false,error:{code:"ORIGINAL_NOT_AVAILABLE",message:"Orijinal belge arşiv kaynağında kullanılamıyor."}},409);
+        }
+        const MAX_ORIGINAL = 25 * 1024 * 1024;
+        try {
+          let bytes: Uint8Array;
+          const source = upper(asset.source_type);
+          if ((source === "E_DOCUMENT_PROVIDER" || source === "ACCOUNTING_STAGING") &&
+               text(asset.preview_storage_key) &&
+               !text(asset.preview_storage_key).startsWith("file-hub/previews/cloud/")) {
+            const object = await c.env.FILES.get(text(asset.preview_storage_key));
+            if (!object) return c.json({ok:false,error:{code:"ORIGINAL_R2_MISSING",message:"Orijinal PDF/XML dosyası arşivde bulunamadı."}},404);
+            if (Number(object.size || 0) > MAX_ORIGINAL) return c.json({ok:false,error:{code:"ORIGINAL_TOO_LARGE",message:"Orijinal belge 25 MB sınırını aşıyor."}},413);
+            bytes = new Uint8Array(await object.arrayBuffer());
+          } else {
+            // CLOUD_API assets have no R2 original. Read their real Google/Graph
+            // source using the existing tenant/OAuth-aware File Hub reader.
+            const original = await readFileHubAssetForMail(c,slug,id,MAX_ORIGINAL);
+            bytes = original.bytes;
+          }
+          if (!bytes.byteLength || bytes.byteLength > MAX_ORIGINAL) {
+            return c.json({ok:false,error:{code:"ORIGINAL_INVALID_SIZE",message:"Orijinal belge boş veya çok büyük."}},422);
+          }
+          if (ext === "PDF") {
+            const signature = new TextDecoder("latin1").decode(bytes.slice(0,1024));
+            if (!signature.includes("%PDF-")) {
+              return c.json({ok:false,error:{code:"ORIGINAL_NOT_PDF",message:"Arşivden geçerli PDF alınamadı; PDF yerine görsel önizleme gösterilmeyecek."}},422);
+            }
+          }
+          const headers = new Headers();
+          headers.set("content-type", ext === "PDF" ? "application/pdf" : "application/xml; charset=utf-8");
+          headers.set("content-disposition", `${ext === "PDF" ? "inline" : "attachment"}; filename*=UTF-8''${encodeURIComponent(text(asset.file_name) || (ext === "PDF" ? "fatura.pdf" : "fatura.xml"))}`);
+          headers.set("cache-control","private, no-store");
+          headers.set("x-content-type-options","nosniff");
+          return new Response(bytes,{status:200,headers});
+        } catch (error: any) {
+          const status = [404,409,413].includes(Number(error?.status)) ? Number(error.status) : 502;
+          const detail = status === 502 ? "Orijinal dosya Drive/İşNet arşivinden okunamadı; kaynağı kontrol edin." :
+            text(error?.message) || "Orijinal belgeye erişilemiyor.";
+          return c.json({ok:false,error:{code:text(error?.code)||"ORIGINAL_READ_FAILED",message:detail}},status);
+        }
+      }
+    }
     let key = text(asset.preview_storage_key);
     let status = upper(asset.preview_status);
     if ((!key || status !== "READY") && upper(asset.source_type) === "CLOUD_API" &&

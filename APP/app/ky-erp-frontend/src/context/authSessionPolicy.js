@@ -1,5 +1,4 @@
 const SESSION_INVALID_CODES = new Set([
-  "UNAUTHORIZED",
   "SESSION_EXPIRED",
   "SESSION_REVOKED",
   "SESSION_INVALID",
@@ -15,6 +14,9 @@ export function shouldClearStoredAuthForStatus(status, code = "", requestPath = 
   const normalizedCode = String(code || "").trim().toUpperCase();
   const rawPath = String(requestPath || "").trim();
 
+  // A generic business-route UNAUTHORIZED can mean a missing file permission,
+  // temporary provider error, or a stale in-flight request. Only /auth/me or
+  // explicit session-invalid proof may clear the entire browser login.
   if (SESSION_INVALID_CODES.has(normalizedCode)) return true;
 
   // AuthContext'in doğrudan /auth/me restore kontrolü eski çağrı imzasıyla

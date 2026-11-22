@@ -325,7 +325,15 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   };
   const preview = async (file) => {
     const reservedWindow = reserveEBelgePreviewTab();
-    return action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id), reservedWindow));
+    setBusy(`file-${file.id}`); setError("");
+    try {
+      openEBelgeBlob(await getEBelgeFilePreview(file.id), reservedWindow);
+    } catch (e) {
+      if (reservedWindow && !reservedWindow.closed) reservedWindow.close();
+      setError(e?.message || "Orijinal belge açılamadı. PDF kaynağını kontrol edin.");
+    } finally {
+      setBusy("");
+    }
   };
   const openSupplierAccountingPdf=async()=>{
     const reservedWindow=reserveEBelgePreviewTab();

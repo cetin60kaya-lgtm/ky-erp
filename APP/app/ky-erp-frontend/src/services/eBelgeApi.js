@@ -168,11 +168,19 @@ export const saveEBelgeProductAlias = (productId, alias, documentId = "") =>
 export const getEBelgeIntegrations = () =>
   apiGet("/e-belge/integrations", undefined, { timeoutMs: 30_000 }).then(unwrap);
 
-export const getEBelgeFilePreview = (fileId) =>
-  apiFetch(`/file-hub/files/${encodeURIComponent(fileId)}/preview`, {
+export const getEBelgeFilePreview = async (fileId) => {
+  const blob = await apiFetch(`/file-hub/files/${encodeURIComponent(fileId)}/preview`, {
     responseType: "blob",
     timeoutMs: 60_000,
   });
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error("Belge dosyası boş geldi. Orijinal arşiv kaynağını kontrol edin.");
+  // The File Hub preview must never return a Google thumbnail, HTML error,
+  // or an image while the accounting screen promises an original PDF.
+  if (/text\/html|image\//i.test(blob.type)) {
+    throw new Error("Orijinal PDF yerine farklı içerik döndü. Belge arşiv kaynağını kontrol edin.");
+  }
+  return blob;
+};
 
 export function reserveEBelgePreviewTab() {
   try {
@@ -187,14 +195,18 @@ export function reserveEBelgePreviewTab() {
 }
 
 export function openEBelgeBlob(blob, reservedWindow = null) {
+  if (!(blob instanceof Blob) || blob.size === 0) throw new Error("PDF/XML dosyası boş geldi.");
+  if (!reservedWindow || reservedWindow.closed) {
+    throw new Error("Belge sekmesi açılamadı. Chrome'da kyerp.net için açılır pencereye izin verin.");
+  }
   const url = URL.createObjectURL(blob);
-  let opened = false;
   try {
-    if (reservedWindow && !reservedWindow.closed) {
-      reservedWindow.location.href = url;
-      opened = true;
-    } else opened = Boolean(window.open(url, "_blank", "noopener,noreferrer"));
-  } catch { opened = false; }
-  if (!opened) window.location.assign(url);
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    reservedWindow.location.replace(url);
+  } catch {
+    URL.revokeObjectURL(url);
+    throw new Error("Belge yeni sekmede açılamadı. Tarayıcı açılır pencere izinlerini kontrol edin.");
+  }
+  // Do not navigate the authenticated ERP tab to a blob URL, and keep PDF
+  // object URLs alive long enough for the user to print from Chrome.
+  window.setTimeout(() => URL.revokeObjectURL(url), 10 * 60_000);
 }
