@@ -21,9 +21,10 @@ test("normal Worker release D1 migrationlarini kullanici ayri izni olmadan calis
   }
 });
 
-test("migration gerekmeyen release tam D1 yedegi ve salt okunur schema kontrolu korur", () => {
-  assert.match(workflow, /Canli D1 tam yedegini al/);
-  assert.match(workflow, /D1 yedegini artifact olarak sakla/);
+test("normal release D1 verisini GitHub runnerina kopyalamadan Time Travel ve salt okunur schema kontrolu korur", () => {
+  assert.match(workflow, /Cloudflare D1 Time Travel geri donus noktasini dogrula/);
+  assert.match(workflow, /D1_TIME_TRAVEL_READY=true/);
+  assert.doesNotMatch(workflow, /wrangler d1 export|actions\\/upload-artifact|database-backup\\//);
   assert.match(workflow, /Canli D1 hedefli salt okunur schema dogrulamasi/);
   assert.match(workflow, /accounting_document_issues/);
   assert.match(workflow, /Worker'i api.kyerp.net adresine dagit/);
