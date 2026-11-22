@@ -722,3 +722,22 @@
 .ccw-merge-target select,.ccw-merge-target input{min-height:38px;width:100%;border:1px solid #c8d9e9;border-radius:8px;background:#fff;padding:7px 10px;color:#1f3f61;font-size:12px}
 .ccw-merge-target select:focus,.ccw-merge-target input:focus{outline:2px solid #8fc2f3}
 .ccw-merge-hint{font-size:11px;line-height:1.6;color:#54718e;background:#f0f6fc;border:1px solid #dce9f6;border-radius:8px;padding:10px;margin:10px 0}
+
+/* Cari bakiye incelemesi, yalnız kullanıcının isteğiyle yüklenir. */
+.ccw-audit-controls,
+.ccw-audit-result {
+  background: var(--surface-card, #fff);
+  border: 1px solid var(--border-color, #dfe4ea);
+  border-radius: 12px;
+  padding: 13px 15px;
+}
+.ccw-audit-controls { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.ccw-audit-controls > div { display: grid; gap: 4px; }
+.ccw-audit-controls small, .ccw-audit-result small { color: var(--text-secondary, #667085); }
+.ccw-audit-controls button { min-height: 38px; padding: 0 12px; border: 1px solid var(--border-color, #dfe4ea); background: var(--surface-muted, #f7f9fb); border-radius: 9px; cursor: pointer; font-weight: 700; }
+.ccw-audit-result { display: grid; gap: 10px; overflow: hidden; }
+.ccw-audit-result p { margin: 0; }
+.ccw-audit-table { min-width: 950px; width: 100%; border-collapse: collapse; }
+.ccw-audit-table th, .ccw-audit-table td { padding: 10px 9px; border-bottom: 1px solid var(--border-color, #e7ebf0); font-size: 12px; text-align: right; white-space: nowrap; }
+.ccw-audit-table th:first-child, .ccw-audit-table td:first-child { text-align: left; white-space: normal; min-width: 190px; }
+.ccw-audit-table th { background: var(--surface-muted, #f7f9fb); color: var(--text-secondary, #667085); }
