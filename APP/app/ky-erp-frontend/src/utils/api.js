@@ -315,7 +315,9 @@ export async function apiFetch(path, options = {}) {
       shouldClearStoredAuthForStatus(response.status, responseCode, requestPath) &&
       !suppressUnauthorized
     ) {
-      onUnauthorized?.();
+      // Ask AuthContext to verify this exact token against /auth/me first.
+      // Endpoint-specific 401 responses must not silently clear valid sessions.
+      onUnauthorized?.({ requestedToken: token, requestPath, code: responseCode });
     }
 
     if (!response.ok) {
