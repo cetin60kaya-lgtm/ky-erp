@@ -38,3 +38,35 @@ test("DESEN File Hub cron başka görevin hatasından etkilenmez ve gizli veri l
   // Hata metni serbest provider/OAuth yanıtı değil, sabit gizli-verisiz kod.
   assert.doesNotMatch(entry, /FILE_HUB_CLOUD_CRON_FAILED.*\+.*error/);
 });
+
+test("full index runs once per company and provider delta, not per Desktop client", () => {
+  assert.match(cloud, /runGoogleDeltaBatch/);
+  assert.match(cloud, /cloudDeltaToken/);
+  assert.match(cloud, /changes\/startPageToken/);
+  assert.match(cloud, /\/drive\/v3\/changes\?/);
+  assert.match(cloud, /cloudDeltaPageToken/);
+  assert.match(cloud, /cloudSyncLeaseId/);
+  assert.match(cloud, /provider_file_id=\? AND is_available=1/);
+  assert.match(cloud, /runGoogleDeltaBatch\(c,slug,connectionId,link,accessToken,raw,meta\)/);
+  assert.match(cloud, /meta\.cloudNeedsFullRescan/);
+  assert.doesNotMatch(cloud, /DELETE FROM file_hub_assets/);
+});
+
+test("scan priority comes from tenant E_BELGE / E_DOCUMENT, never machine path",()=>{
+  assert.match(cloud, /module_code='E_BELGE' AND purpose_code='E_DOCUMENT'/);
+  assert.match(cloud, /prioritizeGoogleScanQueue\(cursor\.queue, preferredPaths\)/);
+  assert.match(cloud, /pageSize: "30"/);
+  assert.doesNotMatch(cloud, /D:\\\\Googledrive\\\\Drive/);
+});
+
+test("same account and root are reused; no duplicate D1 scan queue",()=>{
+  assert.match(cloud, /a\.oauth_account_id=\? AND c\.remote_root_id=\?/);
+  assert.match(cloud, /reused:true/);
+  assert.match(cloud, /rootFolderId, driveId\)\.first<Row>\(\)/);
+});
+
+test("DESEN image queue no longer starves the common file index",()=>{
+  assert.match(cloud, /await syncRecentBoundGoogleImages\(c,slug,connectionId,link,accessToken\)/);
+  assert.match(cloud, /await runGoogleSyncBatch\(c, slug, connectionId, 3, true\)/);
+  assert.doesNotMatch(cloud, /if \(priority\.ran\) continue/);
+});
