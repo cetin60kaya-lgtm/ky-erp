@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — Son canlı yayın ve İşNet yerel kabul özeti
+
+- Production merge `70941e1ec20be36029f0acedfa991177717b64d1` / PR #635 (PR #634 de birleşim kapsamında). İşNet dört yön + Windows kasası + otomatik yetkili firma seçimi + web File Hub on bölüm haritası.
+- Worker canlı release run `44966783483` **SUCCESS**; D1 Time Travel read-only PASS, migration yok, private D1 SQL GitHub artifact yok. Frontend live release run `44966893307` **SUCCESS**, Pages gerçek asset hash kabulü.
+- X üzerindeki 8791 portal Node güncellendi, yeni UI gerçek HTTP 200, mevcut tek KY-ISNET-BELGELER kökü korundu. Portal oturumu kullanıcı yeniden giriş yapana kadar gerçek belge indirme canlı kabulü değildir.
+- Bekleyen: KYERP.NET firma OAuth/tek root ve `E_BELGE/E_DOCUMENT` gerçek D1 binding/scan; 1 gerçek XML+PDF aynı belge havuzuna indeks/kalem, 101 dört yön kontrolü, Outlook doğru müşteri eşleştirmesi, Desktop 1.5.3 kurulum kabulü, tarihî PSD/model/HKN/DDM klasör yolu geçişi, İK R2 ve Boyahane gerçek belge akışı. Hiçbir resmi belge gönderimi veya üretim D1 migration yapılmadı.
+
+
 ## 22.11.2026 — Hakan Emp Drive'da 10 bölümlü V2, web öncelikli klasör düzeni
 
 - **Güncel tasarım ve fiziksel envanter**: `DOCS/KY_ERP_FIRMA_ARSIV_MODUL_SADE_V2_20261122.md`; önceki 12 düz klasör V1 kararı superseded.
