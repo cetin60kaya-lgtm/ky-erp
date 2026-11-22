@@ -258,6 +258,10 @@ public partial class LocalFolderWindow : Window
         }
         Environment.SetEnvironmentVariable("KYERP_ARCHIVE_ACTIVE_TENANT", _company,
             EnvironmentVariableTarget.User);
+        // Save only the user's explicitly approved root as a future discovery
+        // hint. Never treat this preference as authorization or auto-create.
+        Environment.SetEnvironmentVariable(CompanyArchiveDiscovery.ExistingArchiveHintVariable,
+            root, EnvironmentVariableTarget.User);
         RefreshGrants();
         ShowStatus($"Firma klasörleri hazır: {_company} · Mevcut: {result.Existing} · " +
                    $"Yeni: {result.Created}. " + isnetNotice +
