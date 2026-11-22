@@ -143,28 +143,47 @@ public partial class LocalFolderWindow : Window
         ApproveCompanyRootPathButton.IsEnabled = false;
         try
         {
-            // A typed cloud path takes priority over the Windows shell picker, which
-            // may reject junction mounts even if the selected child folder exists.
+            // Never use OpenFolderDialog for a cloud company root. It rejects
+            // Google Drive junction ancestors on otherwise healthy Windows systems.
             var entered = CompanyRootPathInput.Text.Trim().Trim('"');
-            if (!string.IsNullOrEmpty(entered))
+            if (entered.Length != 0)
             {
                 await ApproveCompanyRootAsync(entered);
                 return;
             }
-            var picker = new Microsoft.Win32.OpenFolderDialog
+
+            var candidates = await Task.Run(CompanyArchiveDiscovery.FindExistingCompanyRoots);
+            if (candidates.Count == 0)
             {
-                Title = "Seçili firmaya ait mevcut Google Drive / OneDrive ana klasörünü seçin",
-            };
-            if (picker.ShowDialog(this) != true) return;
-            CompanyRootPathInput.Text = picker.FolderName;
-            await ApproveCompanyRootAsync(picker.FolderName);
+                CompanyRootPathInput.Focus();
+                ShowStatus("Bu cihazda mevcut firma arşivi otomatik bulunamadı. Mevcut tam yolu üstteki alana girin; Windows klasör seçicisi açılmaz.", true);
+                return;
+            }
+            if (candidates.Count > 1)
+            {
+                ArchiveCandidates.ItemsSource = candidates;
+                ArchiveCandidates.Visibility = Visibility.Visible;
+                ShowStatus("Birden fazla mevcut firma arşivi bulundu. Üstteki listeden doğru firmayı seçin; onay verilmeden bağlantı kurulmaz.");
+                return;
+            }
+            CompanyRootPathInput.Text = candidates[0];
+            await ApproveCompanyRootAsync(candidates[0]);
         }
         catch (Exception error)
         {
             CompanyRootPathInput.Focus();
-            ShowStatus("Windows klasör seçicisi bu bulut yolunu açamıyorsa üstteki firma ana arşiv yolu alanına yazıp 'Yolu Doğrula ve Önizle'yi kullanın: " + error.Message, true);
+            ShowStatus("Firma ana arşivi bulunamadı veya doğrulanamadı: " + error.Message, true);
         }
         finally { ChooseCompanyRootButton.IsEnabled = true; ApproveCompanyRootPathButton.IsEnabled = true; }
+    }
+
+    private async void ArchiveCandidates_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ArchiveCandidates.SelectedItem is not string selectedPath) return;
+        ArchiveCandidates.Visibility = Visibility.Collapsed;
+        CompanyRootPathInput.Text = selectedPath;
+        try { await ApproveCompanyRootAsync(selectedPath); }
+        catch (Exception error) { ShowStatus("Firma ana klasörü doğrulanamadı: " + error.Message, true); }
     }
 
     private async void ApproveCompanyRootPath_Click(object sender, RoutedEventArgs e)
@@ -202,8 +221,9 @@ public partial class LocalFolderWindow : Window
         var correctedNotice = resolution.Corrected
             ? $"Windows klasör adı otomatik düzeltildi.\nGirilen: {selectedPath}\nGerçek: {root}\n\n"
             : "";
+        var createMissingFolders = CreateMissingFoldersCheck.IsChecked == true;
         var preview = correctedNotice + $"{_company} firması\n\nAna klasör: {root}\n" +
-            $"Mevcut klasörler korunacak. Oluşturulacak eksik standart klasör: {missing.Count}.\n\n" +
+            $"Eksik standart klasör: {missing.Count}. Yeni klasör oluşturulacak: {(createMissingFolders ? missing.Count : 0)}.\n\n" +
             "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
             "Seçili köke yalnız File Hub okuma izni verilir. Windows kullanıcı ortamında " +
             "İşNet arşiv hedefi tanımlanır; çalışan İşNet servisi yeniden başlatılmaz.\n" +
@@ -212,7 +232,11 @@ public partial class LocalFolderWindow : Window
         if (MessageBox.Show(this, preview, "KY ERP · Firma Arşivi",
                 MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
 
-        var result = await Task.Run(() => CompanyArchiveLayout.EnsureMissingPaths(root));
+        // Read-only local access is the safe default. Directory creation is a
+        // separately visible user choice and never required merely to bind File Hub.
+        var result = createMissingFolders
+            ? await Task.Run(() => CompanyArchiveLayout.EnsureMissingPaths(root))
+            : (Existing: CompanyArchiveLayout.StandardPaths.Count - missing.Count, Created: 0);
         if (!grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
                              g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase) &&
                              g.Purpose.Equals("FILE_HUB", StringComparison.OrdinalIgnoreCase)))
