@@ -52,13 +52,14 @@
                            Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <DockPanel Margin="0,0,0,14">
                     <Button x:Name="ApproveCompanyRootPathButton" DockPanel.Dock="Right" Content="Yolu Doğrula ve Önizle"
-                            Click="ApproveCompanyRootPath_Click" Margin="9,0,0,0" Padding="12,6"/>
+                            Click="ApproveCompanyRootPath_Click" Style="{StaticResource AccentButton}" Margin="9,0,0,0" Padding="12,6"/>
                     <TextBox x:Name="CompanyRootPathInput" Height="34" VerticalContentAlignment="Center"
                              ToolTip="Mevcut Hakan Emp gibi firma ana klasörünün mutlak Windows yolu; yeni arşiv oluşturulmaz."/>
                 </DockPanel>
                 <Separator Margin="0,0,0,13"/>
-                <TextBlock Text="1 · Klasöre izin ver" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
-                <TextBlock Text="İşlem amacı seçin, firmanızı ve klasör adını yazın. Windows klasör seçicisi yalnız siz onaylayınca açılır."
+                <Expander Header="1 · Ek bir klasöre izin ver (isteğe bağlı)" IsExpanded="False" Foreground="{StaticResource Text}" Margin="0,0,0,4">
+                    <StackPanel Margin="0,9,0,0">
+                <TextBlock Text="Burası yalnız ikinci bir klasöre ayrıca izin vermek içindir. Ana firma arşivi için ÜSTTEKİ yolu doğrulayın. İşlem amacı seçin, firma ve klasör adını yazın."
                            Foreground="{StaticResource Muted}" Margin="0,3,0,10"/>
                 <Grid>
                     <Grid.ColumnDefinitions>
@@ -98,6 +99,8 @@
                     <TextBox x:Name="ExtraFolderPathInput" Height="32" VerticalContentAlignment="Center"
                              ToolTip="Windows klasör seçicisi bağlama noktası hatası verirse yalnız seçtiğiniz gerçek alt klasör yolunu yazın."/>
                 </DockPanel>
+                    </StackPanel>
+                </Expander>
             </StackPanel>
         </Border>
 
