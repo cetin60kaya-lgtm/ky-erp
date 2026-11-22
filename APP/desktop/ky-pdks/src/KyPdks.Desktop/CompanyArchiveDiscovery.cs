@@ -139,23 +139,14 @@ public static class CompanyArchiveDiscovery
         // when the WebView2-hosting WPF process has RedirectionTrust enabled.
         if (CloudArchiveProbe.Available)
         {
-            try
-            {
-                var probed = CloudArchiveProbe.Discover();
-                if (probed.Candidates.Count != 0)
-                {
-                    // The user's existing verified Windows archive hint is a
-                    // preference, never an access grant. Avoid prompting with
-                    // unrelated indexed company roots when it matches exactly.
-                    var hint = Environment.GetEnvironmentVariable(ExistingArchiveHintVariable,
-                        EnvironmentVariableTarget.User);
-                    var validHint = ValidateArchiveHint(hint);
-                    return (PreferExactVerifiedHint(probed.Candidates, validHint),
-                        probed.RootsChecked);
-                }
-            }
-            catch (IOException) { /* retain normal-drive discovery below */ }
-            catch (TimeoutException) { /* retain normal-drive discovery below */ }
+            var probed = CloudArchiveProbe.Discover();
+            // Do not silently fall back to the WPF process after a protected
+            // mount fails. Surface the real failure to the user instead.
+            var hint = Environment.GetEnvironmentVariable(ExistingArchiveHintVariable,
+                EnvironmentVariableTarget.User);
+            var validHint = ValidateArchiveHint(hint);
+            return (PreferExactVerifiedHint(probed.Candidates, validHint),
+                probed.RootsChecked);
         }
         var finalRootsChecked = 0;
         for (var attempt = 0; attempt < 2; attempt++)
