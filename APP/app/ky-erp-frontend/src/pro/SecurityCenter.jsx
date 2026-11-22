@@ -1,9 +1,13 @@
 import {useCallback,useEffect,useState} from "react";
 import {ShieldCheck,RefreshCw,LockKeyhole,KeyRound,MonitorSmartphone,Activity,History,NotebookPen,MessageCircle} from "lucide-react";
 import {decideTrustedApproval,decideTrustedSecurityAction,getSignedSecurityResponse,getTrustedDevice,unlockTrustedDevice,closeTrustedSession} from "./securityDevice";
+import {useAuth} from "../context/AuthContext";
+import {listOwnPasskeyCredentials,revokeOwnPasskeyCredential} from "../services/securityCenterApi";
 
 // Same mounted React tree as ERP. The section never redirects to /guvenlik/ or reloads AuthProvider.
 export default function SecurityCenter(){
+ const {isAuthenticated}=useAuth();
+ const [passkeys,setPasskeys]=useState([]);
  const [section,setSection]=useState("approvals");
  const [pending,setPending]=useState([]),[critical,setCritical]=useState([]),[criticalError,setCriticalError]=useState(""),[control,setControl]=useState(null),[device,setDevice]=useState(null);
  const [status,setStatus]=useState(""),[busy,setBusy]=useState(false);
@@ -11,6 +15,25 @@ export default function SecurityCenter(){
  const [notes,setNotes]=useState([]),[noteText,setNoteText]=useState("");
  const [peers,setPeers]=useState([]),[selectedPeer,setSelectedPeer]=useState(null);
  const [messages,setMessages]=useState([]),[messageText,setMessageText]=useState("");
+ const refreshPasskeys=useCallback(async()=>{
+   if(!isAuthenticated){setPasskeys([]);return;}
+   try{
+     const result=await listOwnPasskeyCredentials();
+     setPasskeys(Array.isArray(result?.credentials)?result.credentials:[]);
+   }catch(error){setStatus(error?.message||"Hızlı giriş anahtarları okunamadı.");}
+ },[isAuthenticated]);
+ useEffect(()=>{if(section==="keys")refreshPasskeys()},[section,refreshPasskeys]);
+ const revokePasskey=async row=>{
+   if(!isAuthenticated||!row?.credentialId||busy)return;
+   if(!window.confirm("Bu KY PRO / parmak izi hızlı giriş anahtarı kaldırılsın mı? Diğer cihazlarınız korunur."))return;
+   setBusy(true);
+   try{
+     await revokeOwnPasskeyCredential(row.credentialId);
+     await refreshPasskeys();
+     setStatus("Seçili hızlı giriş anahtarı kaldırıldı. Bu cihazda yeniden kurulum için normal güvenli giriş gerekir.");
+   }catch(error){setStatus(error?.message||"Hızlı giriş anahtarı kaldırılamadı.");}
+   finally{setBusy(false);}
+ };
  const refresh=useCallback(async()=>{
    try{
      const stored=await getTrustedDevice();
@@ -96,7 +119,7 @@ export default function SecurityCenter(){
    setBusy(true);try{await getSignedSecurityResponse("/auth/push/device/workspace/chat/messages",{method:"POST",body:{toUserId:selectedPeer.id,message:messageText.trim()}});setMessageText("");await openMessages(selectedPeer)}
    catch(e){setStatus(e?.message||"Mesaj gönderilemedi.")}finally{setBusy(false)}
  };
- const sections=[["approvals","Onaylar",ShieldCheck],["code","Giriş Kodu",KeyRound],["sessions","Oturumlar",MonitorSmartphone],["devices","Cihazlar",MonitorSmartphone],["activity","Hareketler",Activity],["logs","Loglar",History],["notes","Notlar",NotebookPen],["chat","Mesajlar",MessageCircle]];
+ const sections=[["approvals","Onaylar",ShieldCheck],["code","Giriş Kodu",KeyRound],["sessions","Oturumlar",MonitorSmartphone],["devices","Cihazlar",MonitorSmartphone],["keys","Hızlı Giriş",KeyRound],["activity","Hareketler",Activity],["logs","Loglar",History],["notes","Notlar",NotebookPen],["chat","Mesajlar",MessageCircle]];
  const rows=section==="sessions"?control?.sessions:section==="devices"?control?.devices:section==="activity"?control?.activity:control?.audit;
  return <main className="ky-pro-security" aria-label="Tek uygulama güvenlik kontrol merkezi">
   <header className="ky-pro-security-hero"><span>KY ERP PRO · GÜVENLİK MERKEZİ</span><h1>Güvenlik & Onaylar</h1>
@@ -117,7 +140,7 @@ export default function SecurityCenter(){
       <div className="ky-pro-security-actions"><button type="button" disabled={busy} onClick={()=>criticalDecision(item,"APPROVED")}><LockKeyhole size={17}/>PIN ile Onayla</button>
       <button type="button" disabled={busy} onClick={()=>criticalDecision(item,"DENIED")}>Reddet</button></div>
     </article>)}
-    {!pending.length&&!critical.length?<div className="ky-pro-security-card"><ShieldCheck size={28}/><h2>Bekleyen giriş onayı yok</h2><p>Yeni istekler otomatik denetleniyor.</p></div>:null}
+    {!pending.length&&!critical.length?<div className="ky-pro-security-card"><ShieldCheck size={28}/><h2>Bekleyen giriş onayı yok</h2><p>Yeni istekler otomatik denetleniyor. KY PRO'ya kendi girişiniz için üstteki Parmak İziyle Aç düğmesini kullanın; bu onay bölümü başka cihazlar içindir.</p></div>:null}
     {pending.map(item=><article className="ky-pro-security-card" key={item.id}>
       <h2>{item.title||"Giriş Onayı"}</h2><p>{item.body||"Güvenilir telefon onayı bekleniyor."}</p>
       {/^\d{2}$/.test(String(item.matchNumber||""))?<label>Ekrandaki iki haneli numara
@@ -127,6 +150,17 @@ export default function SecurityCenter(){
       <div className="ky-pro-security-actions"><button type="button" disabled={busy} onClick={()=>decision(item,"APPROVE")}><LockKeyhole size={17}/>PIN ile Onayla</button>
        <button type="button" disabled={busy} onClick={()=>decision(item,"DENY")}>Reddet</button></div></article>)}
   </div>:null}
+  {section==="keys"?<section className="ky-pro-security-card">
+    <h2>KY PRO · Parmak İzi / Windows Hello</h2>
+    {!isAuthenticated?<p>Giriş anahtarlarınızı görmek veya kaldırmak için önce kendi ERP oturumunuzu açın.</p>:<>
+      <p>Bu hesaba tanımlanan hızlı giriş anahtarları. Telefonun parmak izi verisi KY ERP sunucusuna gönderilmez.</p>
+      {passkeys.length?passkeys.map(row=><div className="ky-pro-security-row" key={row.credentialId}>
+        <strong>{row.label||"Hızlı giriş anahtarı"}</strong>
+        <small>Kaydedildi: {row.createdAt?new Date(row.createdAt).toLocaleString("tr-TR"):"-"} · Son kullanım: {row.lastUsedAt?new Date(row.lastUsedAt).toLocaleString("tr-TR"):"-"}</small>
+        <button type="button" disabled={busy} onClick={()=>revokePasskey(row)}>Bu Anahtarı Kaldır</button>
+      </div>):<p>Bu hesap için henüz hızlı giriş anahtarı kayıtlı değil. Normal girişten sonra cihazda kurulum önerilir.</p>}
+    </>}
+   </section>:null}
   {section==="code"?<section className="ky-pro-security-card"><h2>Tek kullanımlık giriş kodu</h2>
     <p>Parmak izi / PIN ile doğrulanmış 60 saniyelik kod.</p>
     <div className="ky-pro-generated-code">{code&&Date.parse(code.expiresAt)>Date.now()?String(code.code||"").replace(/(\d{3})(\d{3})/,"$1 $2"):"— — — — — —"}</div>
