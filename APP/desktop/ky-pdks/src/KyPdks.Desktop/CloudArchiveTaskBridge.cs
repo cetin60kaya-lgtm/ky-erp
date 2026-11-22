@@ -31,6 +31,7 @@ public static class CloudArchiveTaskBridge
         throw new InvalidOperationException("Windows kullanıcı kimliği okunamadı.");
 
     private static string TaskName => "KYERP.CloudArchiveProbe." + CurrentSid.Replace('-', '_');
+    private static bool _taskRegisteredForProcess;
 
     /// <summary>
     /// Extract a strictly matching response envelope. Exposed for regression
@@ -59,27 +60,46 @@ public static class CloudArchiveTaskBridge
             ?? throw new InvalidOperationException("Windows görev zamanlayıcı açılamadı.");
         service.Connect();
         dynamic folder = service.GetFolder("\\");
-        dynamic definition = service.NewTask(0);
-        definition.RegistrationInfo.Description =
-            "KY ERP salt okunur Google Drive/OneDrive klasör doğrulaması; isteğe bağlı";
-        definition.Principal.UserId = WindowsIdentity.GetCurrent().Name;
-        definition.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
-        definition.Principal.RunLevel = 0;  // TASK_RUNLEVEL_LUA, never elevated
-        definition.Settings.Enabled = true;
-        definition.Settings.AllowDemandStart = true;
-        definition.Settings.ExecutionTimeLimit = "PT1M";
-        definition.Settings.MultipleInstances = 2; // Ignore a simultaneous run
-        definition.Settings.DisallowStartIfOnBatteries = false;
-        definition.Settings.StopIfGoingOnBatteries = false;
-        dynamic action = definition.Actions.Create(0); // TASK_ACTION_EXEC
-        action.Path = NodeExe;
-        action.Arguments = "\"" + RunnerScript + "\"";
-        action.WorkingDirectory = Path.GetDirectoryName(RunnerScript);
-        // On-demand only: no logon, time or recurring trigger.
-        // Create/update ensures an old or tampered user task isn't blindly run.
-        dynamic registered = folder.RegisterTaskDefinition(
-            TaskName, definition, 6, WindowsIdentity.GetCurrent().Name,
-            null, 3, null); // TASK_CREATE_OR_UPDATE; INTERACTIVE_TOKEN
+        dynamic registered;
+        if (!_taskRegisteredForProcess)
+        {
+            dynamic definition = service.NewTask(0);
+            definition.RegistrationInfo.Description =
+                "KY ERP salt okunur Google Drive/OneDrive klasör doğrulaması; isteğe bağlı";
+            definition.Principal.UserId = WindowsIdentity.GetCurrent().Name;
+            definition.Principal.LogonType = 3; // TASK_LOGON_INTERACTIVE_TOKEN
+            definition.Principal.RunLevel = 0;  // TASK_RUNLEVEL_LUA, never elevated
+            definition.Settings.Enabled = true;
+            definition.Settings.AllowDemandStart = true;
+            definition.Settings.ExecutionTimeLimit = "PT1M";
+            // A new inspection may be requested while the previous task is
+            // finalizing its response. Queue the next run; IgnoreNew loses it.
+            definition.Settings.MultipleInstances = 1; // TASK_INSTANCES_QUEUE
+            definition.Settings.DisallowStartIfOnBatteries = false;
+            definition.Settings.StopIfGoingOnBatteries = false;
+            dynamic action = definition.Actions.Create(0); // TASK_ACTION_EXEC
+            action.Path = NodeExe;
+            action.Arguments = "\"" + RunnerScript + "\"";
+            action.WorkingDirectory = Path.GetDirectoryName(RunnerScript);
+            // On-demand only: no logon, time or recurring trigger.
+            registered = folder.RegisterTaskDefinition(
+                TaskName, definition, 6, WindowsIdentity.GetCurrent().Name,
+                null, 3, null); // TASK_CREATE_OR_UPDATE; INTERACTIVE_TOKEN
+            _taskRegisteredForProcess = true;
+        }
+        else
+        {
+            // Do not rewrite a still-running task definition for every
+            // confirmation step. Verify the installed executable every time.
+            registered = folder.GetTask(TaskName);
+            dynamic current = registered.Definition.Actions.Item(1);
+            string actualPath = current.Path;
+            string actualArgs = current.Arguments;
+            if (!actualPath.Equals(NodeExe, StringComparison.OrdinalIgnoreCase) ||
+                !actualArgs.Equals("\"" + RunnerScript + "\"", StringComparison.Ordinal))
+                throw new UnauthorizedAccessException(
+                    "Windows salt okunur doğrulama görevi beklenmeyen bir işlem gösteriyor.");
+        }
         registered.Run(null);
     }
 
