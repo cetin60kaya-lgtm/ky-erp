@@ -954,6 +954,122 @@ async function runGoogleDeltaBatch(
   }
 }
 
+/** OneDrive/SharePoint use the same tenant-scoped D1 index and Graph delta.
+ * Graph does not reliably provide parentReference.path in delta responses,
+ * so the provider folder ID hierarchy is checked before changing D1 paths.
+ */
+function graphDeltaBaseUrl(driveId: string, rootId: string): string {
+  const base=driveId
+    ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/"
+    : "https://graph.microsoft.com/v1.0/me/drive/";
+  return base+(rootId&&rootId!=="root"?"items/"+encodeURIComponent(rootId):"root")+"/delta";
+}
+function validateGraphDeltaUrl(value: string): string {
+  const parsed=new URL(value);
+  if(parsed.origin!=="https://graph.microsoft.com"||!parsed.pathname.startsWith("/v1.0/"))
+    throw Object.assign(new Error("Microsoft Graph değişiklik adresi geçersiz."),{code:"INVALID_GRAPH_DELTA_URL"});
+  return parsed.toString();
+}
+async function graphLatestDeltaUrl(token: string, driveId: string, rootId: string) {
+  const url=graphDeltaBaseUrl(driveId,rootId)+"?token=latest";
+  const response=await providerJson(url,token);
+  const delta=text(response["@odata.deltaLink"]);
+  return delta?validateGraphDeltaUrl(delta):"";
+}
+async function graphRelativeFolderPath(
+  token:string,parentId:string,rootId:string,driveId:string,cache:Map<string,Row|null>,
+):Promise<string|null> {
+  const segments:string[]=[];
+  const visited=new Set<string>();
+  let id=parentId;
+  for(let depth=0;depth<40;depth++){
+    if(id===rootId)return segments.reverse().join("/");
+    if(!id||id==="root"||visited.has(id))return null;
+    visited.add(id);
+    if(!cache.has(id)){
+      const base=driveId
+        ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/items/"
+        : "https://graph.microsoft.com/v1.0/me/drive/items/";
+      const info=await providerJson(base+encodeURIComponent(id)+"?$select=id,name,parentReference,folder,deleted",token);
+      cache.set(id,info?.folder&&!info?.deleted?info:null);
+    }
+    const folder=cache.get(id);
+    if(!folder)return null;
+    segments.push(text(folder.name));
+    id=text(folder.parentReference?.id);
+  }
+  return null;
+}
+async function runMicrosoftDeltaBatch(
+  c:Context<AppEnv>,slug:string,connectionId:string,link:Row,accessToken:string,raw:string,meta:Row,
+) {
+  const driveId=text(link.provider_drive_id),rootId=text(link.remote_root_id)||"root";
+  const target=text(meta.cloudGraphDeltaNextLink||meta.cloudGraphDeltaLink);
+  if(!target)return {skipped:true,reason:"GRAPH_DELTA_NOT_READY"};
+  if((Date.parse(text(meta.cloudSyncLeaseUntil))||0)>Date.now())return{busy:true,inProgress:true};
+  const leaseId=crypto.randomUUID(),leaseUntil=new Date(Date.now()+180000).toISOString();
+  const claim=await c.env.DB.prepare(
+    "UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? AND COALESCE(metadata,'')=? AND is_active=1"
+  ).bind(JSON.stringify({...meta,cloudSyncLeaseId:leaseId,cloudSyncLeaseUntil:leaseUntil}),connectionId,slug,raw).run();
+  if(Number(claim.meta?.changes||0)!==1)return{busy:true,inProgress:true};
+  let changed=0,unlinked=0,folderChanges=false;
+  try{
+    const page=await providerJson(validateGraphDeltaUrl(target),accessToken,
+      {headers:{"Prefer":"odata.maxpagesize=25"}});
+    const folders=new Map<string,Row|null>();
+    for(const item of (Array.isArray(page.value)?page.value:[]) as Row[]){
+      const fileId=text(item.id);
+      if(!fileId)continue;
+      const remove=async()=>{
+        const update=await c.env.DB.prepare(
+          "UPDATE file_hub_locations SET is_available=0,updated_at=? WHERE main_company_slug=? " +
+          "AND storage_connection_id=? AND provider_file_id=? AND is_available=1"
+        ).bind(now(),slug,connectionId,fileId).run();
+        unlinked+=Number(update.meta?.changes||0);
+      };
+      if(item.deleted){await remove();continue;}
+      const parentId=text(item.parentReference?.id);
+      if(!parentId)continue;
+      const base=await graphRelativeFolderPath(accessToken,parentId,rootId,driveId,folders);
+      if(base===null){await remove();continue;}
+      if(item.folder){folderChanges=true;continue;}
+      if(!item.file)continue;
+      const relativePath=base?base+"/"+text(item.name):text(item.name);
+      const file={id:fileId,name:text(item.name),mimeType:text(item.file.mimeType),
+        size:Number(item.size||0),modifiedAt:text(item.lastModifiedDateTime),
+        webUrl:text(item.webUrl),checksum:text(item.eTag||item.cTag)};
+      const indexed=await upsertCloudFile(c,slug,connectionId,upper(link.provider_type),file,relativePath,now());
+      if(indexed.changed)changed++;
+      if(indexed.needsModelSync)await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,file,relativePath,upper(link.provider_type));
+    }
+    const next=text(page["@odata.nextLink"]),last=text(page["@odata.deltaLink"]);
+    if(!next&&!last)throw Object.assign(new Error("Graph delta sayfası imleç döndürmedi."),{code:"GRAPH_DELTA_CURSOR_MISSING"});
+    const updated=now(),data={...meta,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,
+      cloudGraphDeltaNextLink:next?validateGraphDeltaUrl(next):null,
+      cloudGraphDeltaLink:last?validateGraphDeltaUrl(last):text(meta.cloudGraphDeltaLink),
+      cloudDeltaCheckedAt:updated,cloudDeltaChanges:Number(meta.cloudDeltaChanges||0)+changed,
+      cloudDeltaUnavailable:Number(meta.cloudDeltaUnavailable||0)+unlinked,
+      cloudNeedsFullRescan:Boolean(meta.cloudNeedsFullRescan||folderChanges),cloudDeltaError:null};
+    const saved=await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=?,connection_status='CONNECTED',last_error=NULL,last_sync_at=?,updated_at=? " +
+      "WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
+    ).bind(JSON.stringify(data),updated,updated,connectionId,slug,leaseId).run();
+    if(Number(saved.meta?.changes||0)!==1)throw Object.assign(new Error("Graph delta kilidi değişti."),{code:"GRAPH_DELTA_LEASE_CONFLICT"});
+    return {delta:true,changedFiles:changed,unavailableFiles:unlinked,
+      pages:1,hasMore:!!next,requiresFullReconciliation:folderChanges};
+  }catch(error:any){
+    const expired=Number(error?.status)===410;
+    const reset={...meta,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,
+      cloudDeltaError:expired?"GRAPH_DELTA_TOKEN_EXPIRED":text(error?.code||"GRAPH_DELTA_FAILED").slice(0,80),
+      ...(expired?{cloudNeedsFullRescan:true,cloudGraphDeltaLink:null,cloudGraphDeltaNextLink:null}:{})};
+    await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=?,updated_at=? WHERE id=? AND main_company_slug=? " +
+      "AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
+    ).bind(JSON.stringify(reset),now(),connectionId,slug,leaseId).run().catch(()=>{});
+    throw error;
+  }
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   const providerType=upper(link.provider_type);
@@ -971,8 +1087,11 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
   // The initial tree walk is shared in D1. All subsequent routine Google
   // checks use provider change tokens, not another 22,000-file tree walk.
-  if (scheduled && !resumed && previousComplete && !meta.cloudNeedsFullRescan && providerType==="GOOGLE_DRIVE" && text(meta.cloudDeltaToken)) {
-    return await runGoogleDeltaBatch(c,slug,connectionId,link,accessToken,raw,meta);
+  if (scheduled && !resumed && previousComplete && !meta.cloudNeedsFullRescan) {
+    if(providerType==="GOOGLE_DRIVE" && text(meta.cloudDeltaToken))
+      return await runGoogleDeltaBatch(c,slug,connectionId,link,accessToken,raw,meta);
+    if(["ONEDRIVE","SHAREPOINT"].includes(providerType) && text(meta.cloudGraphDeltaLink))
+      return await runMicrosoftDeltaBatch(c,slug,connectionId,link,accessToken,raw,meta);
   }
   if (scheduled && !resumed && !meta.cloudNeedsFullRescan && previousComplete && Date.now() - previousComplete < 24 * 3600000) return { skipped: true };
   if ((Date.parse(text(meta.cloudSyncLeaseUntil)) || 0) > Date.now()) return { inProgress: true, busy: true, ...json(meta.cloudSyncProgress) };
@@ -992,6 +1111,10 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     // the completed scan will retry the token before marking success.
     try { cursor.deltaBaselineToken=await googleChangeStartToken(accessToken); }
     catch { cursor.deltaBaselineToken=""; }
+  }
+  if(["ONEDRIVE","SHAREPOINT"].includes(providerType) && !text(cursor.graphDeltaBaselineUrl)){
+    try { cursor.graphDeltaBaselineUrl=await graphLatestDeltaUrl(accessToken,text(link.provider_drive_id),rootId); }
+    catch { cursor.graphDeltaBaselineUrl=""; }
   }
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
   prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
@@ -1065,6 +1188,15 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       if (deltaToken) {
         meta.cloudDeltaToken=deltaToken;
         meta.cloudDeltaPageToken=null;
+        meta.cloudDeltaCheckedAt=now();
+        meta.cloudNeedsFullRescan=false;
+      }
+    }
+    if(complete&&["ONEDRIVE","SHAREPOINT"].includes(providerType)){
+      const graphUrl=text(cursor.graphDeltaBaselineUrl)||await graphLatestDeltaUrl(accessToken,text(link.provider_drive_id),rootId);
+      if(graphUrl){
+        meta.cloudGraphDeltaLink=graphUrl;
+        meta.cloudGraphDeltaNextLink=null;
         meta.cloudDeltaCheckedAt=now();
         meta.cloudNeedsFullRescan=false;
       }
