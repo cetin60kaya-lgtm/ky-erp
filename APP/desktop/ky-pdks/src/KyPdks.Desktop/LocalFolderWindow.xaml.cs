@@ -152,11 +152,13 @@ public partial class LocalFolderWindow : Window
                 return;
             }
 
-            var candidates = await Task.Run(CompanyArchiveDiscovery.FindExistingCompanyRoots);
+            var discovery = await Task.Run(CompanyArchiveDiscovery.FindExistingCompanyRootsWithDiagnostics);
+            var candidates = discovery.Candidates;
             if (candidates.Count == 0)
             {
                 CompanyRootPathInput.Focus();
-                ShowStatus("Bu cihazda mevcut firma arşivi otomatik bulunamadı. Mevcut tam yolu üstteki alana girin; Windows klasör seçicisi açılmaz.", true);
+                ShowStatus($"Bu cihazda mevcut firma arşivi otomatik bulunamadı (incelenen bulut bağlantısı: {discovery.RootsChecked}). " +
+                    "Var olan klasörün tam yolunu üstteki alandan doğrulayabilirsiniz; Windows klasör seçicisi açılmaz.", true);
                 return;
             }
             if (candidates.Count > 1)
