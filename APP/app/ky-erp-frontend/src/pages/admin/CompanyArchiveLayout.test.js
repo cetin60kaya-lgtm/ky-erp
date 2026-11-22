@@ -53,3 +53,15 @@ test("Yönetim içindeki klasör taslağı gerçek File Hub seçicisine bağlıd
  assert.match(page,/Masaüstü kurulumu zorunlu değildir/);
  assert.doesNotMatch(page,/archiveLayoutForSection\(section\).*apiPost\(.*upload/s);
 });
+
+test("pasif sağlayıcı veya başka firma bağlantısı yanlışlıkla hazır sayılmaz",()=>{
+ const template=archiveBindingFor("IK","PERSONNEL_DOCUMENT");
+ const bindings=[{module_code:"IK",purpose_code:"PERSONNEL_DOCUMENT",
+   storage_connection_id:"passive-drive",root_path:"İK/Personel Evrakları",
+   readEnabled:true,writeEnabled:false,syncEnabled:false}];
+ const disabled=[{id:"passive-drive",isActive:false}];
+ const enabled=[{id:"passive-drive",isActive:true}];
+ assert.equal(archiveAssignmentStatus(template,bindings,disabled).state,"NOT_CONNECTED");
+ assert.equal(archiveAssignmentStatus(template,bindings,enabled).state,"CONNECTED");
+ assert.equal(archiveAssignmentStatus(template,[],enabled).state,"NOT_CONNECTED");
+});
