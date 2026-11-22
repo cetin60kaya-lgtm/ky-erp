@@ -104,14 +104,14 @@ try {
   const action = input?.action;
   if (action === "discover") {
     process.stdout.write(JSON.stringify(discover()));
-  } else if (action === "inspect" || action === "create") {
+  } else if (action === "inspect") {
     const root = validate(input.root);
     const standardPaths = Array.isArray(input.standardPaths) ? input.standardPaths : [];
     if (standardPaths.length > 128) throw Error("Çok fazla standart klasör.");
     const missingPaths = [];
     let created = 0;
     for (const relative of standardPaths) {
-      const result = checkPath(root, relative, action === "create");
+      const result = checkPath(root, relative, false);
       if (result.missing) missingPaths.push(relative);
       created += result.created;
     }
