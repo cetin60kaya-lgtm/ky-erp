@@ -940,11 +940,16 @@ async function runGoogleDeltaBatch(
     return {delta:true,changedFiles:changed,unavailableFiles:unlinked,
       pages:1,hasMore:!!nextPage,requiresFullReconciliation:folderChanges};
   }catch(error:any){
-    const message=text(error?.code||"GOOGLE_DELTA_FAILED").slice(0,80);
+    const expired=Number(error?.status)===410;
+    const message=expired?"GOOGLE_DELTA_TOKEN_EXPIRED":text(error?.code||"GOOGLE_DELTA_FAILED").slice(0,80);
+    const recovered={...metadata,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,cloudDeltaError:message,
+      ...(expired?{cloudNeedsFullRescan:true,cloudDeltaToken:null,cloudDeltaPageToken:null}:{})};
+    // Provider 410 invalidates the token; only then request one reconciliation.
+    // Transient failures preserve the last successful change cursor unchanged.
     await c.env.DB.prepare(
-      "UPDATE file_hub_connections SET metadata=json_set(metadata,'$.cloudSyncLeaseId',NULL,'$.cloudSyncLeaseUntil',NULL,'$.cloudDeltaError',?),updated_at=? " +
+      "UPDATE file_hub_connections SET metadata=?,updated_at=? " +
       "WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
-    ).bind(message,now(),connectionId,slug,leaseId).run().catch(()=>{});
+    ).bind(JSON.stringify(recovered),now(),connectionId,slug,leaseId).run().catch(()=>{});
     throw error;
   }
 }
