@@ -8,7 +8,7 @@ const screen = readFileSync(new URL("../../../app/ky-erp-frontend/src/pages/admi
 
 test("Google Drive büyük klasör taraması sayfalı ve D1 checkpoint'li", () => {
   assert.match(cloud, /async function googleChildrenPage/);
-  assert.match(cloud, /pageSize: "15"/);
+  assert.match(cloud, /pageSize: "30"/);
   assert.match(cloud, /nextPageToken/);
   assert.match(cloud, /cloudSyncCursor/);
   assert.match(cloud, /cloudSyncProgress/);

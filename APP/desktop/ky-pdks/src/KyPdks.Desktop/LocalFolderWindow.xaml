@@ -47,7 +47,15 @@
                 <CheckBox x:Name="IsnetArchivistCheck" Content="Bu bilgisayar İşNet faturalarını indirip arşivleyecek (muhasebe bilgisayarı)"
                           IsChecked="False" Margin="0,2,0,8" Foreground="{StaticResource Text}"/>
                 <Button x:Name="ChooseCompanyRootButton" Content="Firma Ana Klasörünü Seç ve Eksikleri Kur" Click="ChooseCompanyRoot_Click"
-                        Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,0,0,14"/>
+                        Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,0,0,9"/>
+                <TextBlock Text="Google Drive / OneDrive bağlama noktası Windows klasör seçicisinde açılmıyorsa mevcut firma klasörünün tam yolunu aşağıya yazın. Aynı izin ve güvenlik denetimi uygulanır."
+                           Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
+                <DockPanel Margin="0,0,0,14">
+                    <Button x:Name="ApproveCompanyRootPathButton" DockPanel.Dock="Right" Content="Yolu Doğrula ve Önizle"
+                            Click="ApproveCompanyRootPath_Click" Margin="9,0,0,0" Padding="12,6"/>
+                    <TextBox x:Name="CompanyRootPathInput" Height="34" VerticalContentAlignment="Center"
+                             ToolTip="Mevcut Hakan Emp gibi firma ana klasörünün mutlak Windows yolu; yeni arşiv oluşturulmaz."/>
+                </DockPanel>
                 <Separator Margin="0,0,0,13"/>
                 <TextBlock Text="1 · Klasöre izin ver" FontSize="17" FontWeight="SemiBold" Foreground="{StaticResource Text}"/>
                 <TextBlock Text="İşlem amacı seçin, firmanızı ve klasör adını yazın. Windows klasör seçicisi yalnız siz onaylayınca açılır."
@@ -84,6 +92,12 @@
                     <Button Grid.Column="3" VerticalAlignment="Bottom" Style="{StaticResource AccentButton}"
                             Content="+  Klasör Seç ve Onayla" Click="AddFolder_Click"/>
                 </Grid>
+                <DockPanel Margin="0,9,0,0">
+                    <Button Content="Yol ile İzin Ver" DockPanel.Dock="Right" Click="ApproveFolderPath_Click"
+                            Padding="12,6" Margin="9,0,0,0"/>
+                    <TextBox x:Name="ExtraFolderPathInput" Height="32" VerticalContentAlignment="Center"
+                             ToolTip="Windows klasör seçicisi bağlama noktası hatası verirse yalnız seçtiğiniz gerçek alt klasör yolunu yazın."/>
+                </DockPanel>
             </StackPanel>
         </Border>
 

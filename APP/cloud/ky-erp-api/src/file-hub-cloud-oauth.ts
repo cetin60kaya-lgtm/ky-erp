@@ -655,7 +655,7 @@ async function googleChildrenPage(token: string, parentId: string, pageToken = "
   const params = new URLSearchParams({
     q: "'" + String(parentId || "root").replace(/'/g, "\\'") + "' in parents and trashed=false",
     fields: "nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink,md5Checksum)",
-    pageSize: "15", spaces: "drive",
+    pageSize: "30", spaces: "drive",
   });
   if (pageToken) params.set("pageToken", pageToken);
   const response = await providerJson("https://www.googleapis.com/drive/v3/files?" + params, token);
@@ -837,6 +837,252 @@ async function backfillIndexedCloudDesignFiles(c:Context<AppEnv>,slug:string,con
   return {matched,lastPath:rows.length?text(rows[rows.length-1].relative_path):""};
 }
 
+/** One company/one D1 index: after the initial tree walk, Google changes are
+ * queried once centrally. Desktop clients never walk the Drive provider tree.
+ * Changes only update D1 metadata; original provider files are never moved. */
+async function googleChangeStartToken(token: string): Promise<string> {
+  const result = await providerJson("https://www.googleapis.com/drive/v3/changes/startPageToken?fields=startPageToken", token);
+  return text(result.startPageToken);
+}
+async function googleRelativeFolderPath(
+  token: string, parentId: string, rootId: string, cache: Map<string, Row | null>,
+): Promise<string | null> {
+  const segments: string[] = [];
+  let id = parentId;
+  const visited = new Set<string>();
+  for (let depth = 0; depth < 40; depth++) {
+    if (id === rootId) return segments.reverse().join("/");
+    if (!id || visited.has(id) || id === "root") return null;
+    visited.add(id);
+    if (!cache.has(id)) {
+      const meta = await providerJson("https://www.googleapis.com/drive/v3/files/" + encodeURIComponent(id) +
+        "?fields=id,name,mimeType,parents,trashed", token);
+      cache.set(id, meta && !meta.trashed ? meta : null);
+    }
+    const folder = cache.get(id);
+    if (!folder || text(folder.mimeType) !== "application/vnd.google-apps.folder") return null;
+    segments.push(text(folder.name));
+    id = text(Array.isArray(folder.parents) ? folder.parents[0] : "");
+  }
+  return null;
+}
+async function runGoogleDeltaBatch(
+  c: Context<AppEnv>, slug: string, connectionId: string, link: Row, accessToken: string,
+  raw: string, metadata: Row,
+) {
+  const rootId = text(link.remote_root_id) || "root";
+  const firstToken = text(metadata.cloudDeltaPageToken || metadata.cloudDeltaToken);
+  if (!firstToken) return {skipped:true,reason:"GOOGLE_DELTA_TOKEN_NOT_READY"};
+  if ((Date.parse(text(metadata.cloudSyncLeaseUntil)) || 0) > Date.now())
+    return {inProgress:true,busy:true};
+  const leaseId = crypto.randomUUID(), stamp = now();
+  const claim = await c.env.DB.prepare(
+    "UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? " +
+    "AND COALESCE(metadata,'')=? AND is_active=1"
+  ).bind(JSON.stringify({...metadata,cloudSyncLeaseId:leaseId,
+    cloudSyncLeaseUntil:new Date(Date.now()+180000).toISOString()}),connectionId,slug,raw).run();
+  if(Number(claim.meta?.changes||0)!==1)return {inProgress:true,busy:true};
+
+  let changed=0, unlinked=0, folderChanges=false;
+  try {
+    const scopedRootId=rootId==="root"
+      ? text((await providerJson("https://www.googleapis.com/drive/v3/files/root?fields=id",accessToken)).id)||rootId
+      : rootId;
+    const params=new URLSearchParams({
+      pageToken:firstToken,pageSize:"25",spaces:"drive",
+      fields:"nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,modifiedTime,size,webViewLink,md5Checksum,parents,trashed))"
+    });
+    const response=await providerJson("https://www.googleapis.com/drive/v3/changes?"+params,accessToken);
+    const folderCache=new Map<string,Row|null>();
+    for(const change of (Array.isArray(response.changes)?response.changes:[]) as Row[]){
+      const fileId=text(change.fileId || change.file?.id),file=change.file as Row|undefined;
+      if(!fileId)continue;
+      const remove=async()=>{
+        const updated=await c.env.DB.prepare(
+          "UPDATE file_hub_locations SET is_available=0,updated_at=? " +
+          "WHERE main_company_slug=? AND storage_connection_id=? AND provider_file_id=? AND is_available=1"
+        ).bind(now(),slug,connectionId,fileId).run();
+        unlinked+=Number(updated.meta?.changes||0);
+      };
+      if(change.removed || file?.trashed || !file){
+        await remove();
+        // A deleted folder can contain indexed descendants; reconcile safely.
+        folderChanges=true;
+        continue;
+      }
+      const parents=Array.isArray(file.parents)?file.parents:[];
+      const parentId=text(parents[0]);
+      if(!parentId){folderChanges=true;continue;}
+      const base=await googleRelativeFolderPath(accessToken,parentId,scopedRootId,folderCache);
+      if(base===null){await remove();continue;}
+      if(text(file.mimeType)==="application/vnd.google-apps.folder"){
+        // A changed folder can rename descendants. Schedule a safe full
+        // reconciliation rather than silently treating their old paths as new.
+        folderChanges=true;continue;
+      }
+      const relativePath=base?base+"/"+text(file.name):text(file.name);
+      const item={id:fileId,name:text(file.name),mimeType:text(file.mimeType),
+        size:Number(file.size||0),modifiedAt:text(file.modifiedTime),
+        webUrl:text(file.webViewLink),checksum:text(file.md5Checksum)};
+      const indexed=await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",item,relativePath,now());
+      if(indexed.changed)changed++;
+      if(indexed.needsModelSync)await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,item,relativePath,"GOOGLE_DRIVE");
+    }
+    const nextPage=text(response.nextPageToken),newToken=text(response.newStartPageToken);
+    if(!nextPage&&!newToken)throw Object.assign(new Error("Google delta sayfasında sonraki token alınamadı."),{code:"GOOGLE_DELTA_CURSOR_MISSING"});
+    const finished=now();
+    const update={
+      ...metadata,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,
+      cloudDeltaPageToken:nextPage||null,
+      cloudDeltaToken:nextPage?text(metadata.cloudDeltaToken):newToken,
+      cloudDeltaCheckedAt:finished,cloudDeltaChanges:Number(metadata.cloudDeltaChanges||0)+changed,
+      cloudDeltaUnavailable:Number(metadata.cloudDeltaUnavailable||0)+unlinked,
+      cloudNeedsFullRescan:Boolean(metadata.cloudNeedsFullRescan||folderChanges),
+      cloudDeltaError:null
+    };
+    const saved=await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=?,connection_status='CONNECTED',last_error=NULL,last_sync_at=?,updated_at=? " +
+      "WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
+    ).bind(JSON.stringify(update),finished,finished,connectionId,slug,leaseId).run();
+    if(Number(saved.meta?.changes||0)!==1)throw Object.assign(new Error("Google delta kilidi değişti."),{code:"GOOGLE_DELTA_LEASE_CONFLICT"});
+    return {delta:true,changedFiles:changed,unavailableFiles:unlinked,
+      pages:1,hasMore:!!nextPage,requiresFullReconciliation:folderChanges};
+  }catch(error:any){
+    const expired=Number(error?.status)===410;
+    const message=expired?"GOOGLE_DELTA_TOKEN_EXPIRED":text(error?.code||"GOOGLE_DELTA_FAILED").slice(0,80);
+    const recovered={...metadata,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,cloudDeltaError:message,
+      ...(expired?{cloudNeedsFullRescan:true,cloudDeltaToken:null,cloudDeltaPageToken:null}:{})};
+    // Provider 410 invalidates the token; only then request one reconciliation.
+    // Transient failures preserve the last successful change cursor unchanged.
+    await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=?,updated_at=? " +
+      "WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
+    ).bind(JSON.stringify(recovered),now(),connectionId,slug,leaseId).run().catch(()=>{});
+    throw error;
+  }
+}
+
+/** OneDrive/SharePoint use the same tenant-scoped D1 index and Graph delta.
+ * Graph does not reliably provide parentReference.path in delta responses,
+ * so the provider folder ID hierarchy is checked before changing D1 paths.
+ */
+function graphDeltaBaseUrl(driveId: string, rootId: string): string {
+  const base=driveId
+    ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/"
+    : "https://graph.microsoft.com/v1.0/me/drive/";
+  return base+(rootId&&rootId!=="root"?"items/"+encodeURIComponent(rootId):"root")+"/delta";
+}
+function validateGraphDeltaUrl(value: string): string {
+  const parsed=new URL(value);
+  if(parsed.origin!=="https://graph.microsoft.com"||!parsed.pathname.startsWith("/v1.0/"))
+    throw Object.assign(new Error("Microsoft Graph değişiklik adresi geçersiz."),{code:"INVALID_GRAPH_DELTA_URL"});
+  return parsed.toString();
+}
+async function graphLatestDeltaUrl(token: string, driveId: string, rootId: string) {
+  const url=graphDeltaBaseUrl(driveId,rootId)+"?token=latest";
+  const response=await providerJson(url,token);
+  const delta=text(response["@odata.deltaLink"]);
+  return delta?validateGraphDeltaUrl(delta):"";
+}
+async function graphRelativeFolderPath(
+  token:string,parentId:string,rootId:string,driveId:string,cache:Map<string,Row|null>,
+):Promise<string|null> {
+  const segments:string[]=[];
+  const visited=new Set<string>();
+  let id=parentId;
+  for(let depth=0;depth<40;depth++){
+    if(id===rootId)return segments.reverse().join("/");
+    if(!id||id==="root"||visited.has(id))return null;
+    visited.add(id);
+    if(!cache.has(id)){
+      const base=driveId
+        ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/items/"
+        : "https://graph.microsoft.com/v1.0/me/drive/items/";
+      const info=await providerJson(base+encodeURIComponent(id)+"?$select=id,name,parentReference,folder,deleted",token);
+      cache.set(id,info?.folder&&!info?.deleted?info:null);
+    }
+    const folder=cache.get(id);
+    if(!folder)return null;
+    segments.push(text(folder.name));
+    id=text(folder.parentReference?.id);
+  }
+  return null;
+}
+async function runMicrosoftDeltaBatch(
+  c:Context<AppEnv>,slug:string,connectionId:string,link:Row,accessToken:string,raw:string,meta:Row,
+) {
+  const driveId=text(link.provider_drive_id),rootId=text(link.remote_root_id)||"root";
+  const target=text(meta.cloudGraphDeltaNextLink||meta.cloudGraphDeltaLink);
+  if(!target)return {skipped:true,reason:"GRAPH_DELTA_NOT_READY"};
+  if((Date.parse(text(meta.cloudSyncLeaseUntil))||0)>Date.now())return{busy:true,inProgress:true};
+  const leaseId=crypto.randomUUID(),leaseUntil=new Date(Date.now()+180000).toISOString();
+  const claim=await c.env.DB.prepare(
+    "UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? AND COALESCE(metadata,'')=? AND is_active=1"
+  ).bind(JSON.stringify({...meta,cloudSyncLeaseId:leaseId,cloudSyncLeaseUntil:leaseUntil}),connectionId,slug,raw).run();
+  if(Number(claim.meta?.changes||0)!==1)return{busy:true,inProgress:true};
+  let changed=0,unlinked=0,folderChanges=false;
+  try{
+    const scopedRootId=rootId==="root"
+      ? text((await providerJson(driveId
+          ? "https://graph.microsoft.com/v1.0/drives/"+encodeURIComponent(driveId)+"/root?$select=id"
+          : "https://graph.microsoft.com/v1.0/me/drive/root?$select=id",accessToken)).id)||rootId
+      : rootId;
+    const page=await providerJson(validateGraphDeltaUrl(target),accessToken,
+      {headers:{"Prefer":"odata.maxpagesize=25"}});
+    const folders=new Map<string,Row|null>();
+    for(const item of (Array.isArray(page.value)?page.value:[]) as Row[]){
+      const fileId=text(item.id);
+      if(!fileId)continue;
+      const remove=async()=>{
+        const update=await c.env.DB.prepare(
+          "UPDATE file_hub_locations SET is_available=0,updated_at=? WHERE main_company_slug=? " +
+          "AND storage_connection_id=? AND provider_file_id=? AND is_available=1"
+        ).bind(now(),slug,connectionId,fileId).run();
+        unlinked+=Number(update.meta?.changes||0);
+      };
+      if(item.deleted){await remove();folderChanges=true;continue;}
+      const parentId=text(item.parentReference?.id);
+      if(!parentId){folderChanges=true;continue;}
+      const base=await graphRelativeFolderPath(accessToken,parentId,scopedRootId,driveId,folders);
+      if(base===null){await remove();continue;}
+      if(item.folder){folderChanges=true;continue;}
+      if(!item.file)continue;
+      const relativePath=base?base+"/"+text(item.name):text(item.name);
+      const file={id:fileId,name:text(item.name),mimeType:text(item.file.mimeType),
+        size:Number(item.size||0),modifiedAt:text(item.lastModifiedDateTime),
+        webUrl:text(item.webUrl),checksum:text(item.eTag||item.cTag)};
+      const indexed=await upsertCloudFile(c,slug,connectionId,upper(link.provider_type),file,relativePath,now());
+      if(indexed.changed)changed++;
+      if(indexed.needsModelSync)await syncCloudDesignBinding(c,slug,connectionId,indexed.assetId,file,relativePath,upper(link.provider_type));
+    }
+    const next=text(page["@odata.nextLink"]),last=text(page["@odata.deltaLink"]);
+    if(!next&&!last)throw Object.assign(new Error("Graph delta sayfası imleç döndürmedi."),{code:"GRAPH_DELTA_CURSOR_MISSING"});
+    const updated=now(),data={...meta,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,
+      cloudGraphDeltaNextLink:next?validateGraphDeltaUrl(next):null,
+      cloudGraphDeltaLink:last?validateGraphDeltaUrl(last):text(meta.cloudGraphDeltaLink),
+      cloudDeltaCheckedAt:updated,cloudDeltaChanges:Number(meta.cloudDeltaChanges||0)+changed,
+      cloudDeltaUnavailable:Number(meta.cloudDeltaUnavailable||0)+unlinked,
+      cloudNeedsFullRescan:Boolean(meta.cloudNeedsFullRescan||folderChanges),cloudDeltaError:null};
+    const saved=await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=?,connection_status='CONNECTED',last_error=NULL,last_sync_at=?,updated_at=? " +
+      "WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
+    ).bind(JSON.stringify(data),updated,updated,connectionId,slug,leaseId).run();
+    if(Number(saved.meta?.changes||0)!==1)throw Object.assign(new Error("Graph delta kilidi değişti."),{code:"GRAPH_DELTA_LEASE_CONFLICT"});
+    return {delta:true,changedFiles:changed,unavailableFiles:unlinked,
+      pages:1,hasMore:!!next,requiresFullReconciliation:folderChanges};
+  }catch(error:any){
+    const expired=Number(error?.status)===410;
+    const reset={...meta,cloudSyncLeaseId:null,cloudSyncLeaseUntil:null,
+      cloudDeltaError:expired?"GRAPH_DELTA_TOKEN_EXPIRED":text(error?.code||"GRAPH_DELTA_FAILED").slice(0,80),
+      ...(expired?{cloudNeedsFullRescan:true,cloudGraphDeltaLink:null,cloudGraphDeltaNextLink:null}:{})};
+    await c.env.DB.prepare(
+      "UPDATE file_hub_connections SET metadata=?,updated_at=? WHERE id=? AND main_company_slug=? " +
+      "AND json_extract(metadata,'$.cloudSyncLeaseId')=?"
+    ).bind(JSON.stringify(reset),now(),connectionId,slug,leaseId).run().catch(()=>{});
+    throw error;
+  }
+}
+
 async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   const providerType=upper(link.provider_type);
@@ -844,9 +1090,32 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   if (Number(link.is_active) === 0) throw Object.assign(new Error("Depolama servisi pasif."), { code: "CONNECTION_DISABLED", status: 409 });
   const rootId = text(link.remote_root_id) || "root";
   const raw = text(link.connection_metadata), meta = json(raw);
+  // Tenant-owned D1 binding drives priority; never use a computer-specific path.
+  const selected = await c.env.DB.prepare(
+    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? " +
+    "AND module_code='E_BELGE' AND purpose_code='E_DOCUMENT' AND read_enabled=1 AND sync_enabled=1"
+  ).bind(slug, connectionId).all<Row>();
+  const preferredPaths = (selected.results || []).map((r:Row)=>text(r.root_path)).filter(Boolean);
+  const designBound = await c.env.DB.prepare(
+    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? " +
+    "AND module_code IN ('DESEN','DTF','IMALAT') AND read_enabled=1 AND sync_enabled=1"
+  ).bind(slug,connectionId).all<Row>();
+  const designRoots=(designBound.results||[]).map((r:Row)=>text(r.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"").toLocaleLowerCase("en-US"));
+  const isDesignCandidate=(relativePath:string)=>{
+    const path=relativePath.toLocaleLowerCase("en-US");
+    return designRoots.some((root:string)=>!root||path.startsWith(root+"/"));
+  };
   const resumed = meta.cloudSyncCursor && meta.cloudSyncCursor.rootId === rootId && Array.isArray(meta.cloudSyncCursor.queue);
   const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
-  if (scheduled && !resumed && previousComplete && Date.now() - previousComplete < 6 * 3600000) return { skipped: true };
+  // The initial tree walk is shared in D1. All subsequent routine Google
+  // checks use provider change tokens, not another 22,000-file tree walk.
+  if (scheduled && !resumed && previousComplete && !meta.cloudNeedsFullRescan) {
+    if(providerType==="GOOGLE_DRIVE" && text(meta.cloudDeltaToken))
+      return await runGoogleDeltaBatch(c,slug,connectionId,link,accessToken,raw,meta);
+    if(["ONEDRIVE","SHAREPOINT"].includes(providerType) && text(meta.cloudGraphDeltaLink))
+      return await runMicrosoftDeltaBatch(c,slug,connectionId,link,accessToken,raw,meta);
+  }
+  if (scheduled && !resumed && !meta.cloudNeedsFullRescan && previousComplete && Date.now() - previousComplete < 24 * 3600000) return { skipped: true };
   if ((Date.parse(text(meta.cloudSyncLeaseUntil)) || 0) > Date.now()) return { inProgress: true, busy: true, ...json(meta.cloudSyncProgress) };
   const leaseId = crypto.randomUUID();
   const leaseUntil = new Date(Date.now() + 180000).toISOString();
@@ -854,11 +1123,23 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     .bind(JSON.stringify({ ...meta, cloudSyncLeaseId: leaseId, cloudSyncLeaseUntil: leaseUntil }), connectionId, slug, raw).run();
   if (Number(acquired.meta?.changes || 0) !== 1) return { inProgress: true, busy: true };
 
-  let cursor = resumed
+  let cursor: Row = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
+  // Capture a provider changes token BEFORE the full traversal so updates
+  // made during the initial scan cannot be lost at its completion.
+  if (providerType==="GOOGLE_DRIVE" && !text(cursor.deltaBaselineToken)) {
+    // A failed changes-token fetch must not block the first metadata scan;
+    // the completed scan will retry the token before marking success.
+    try { cursor.deltaBaselineToken=await googleChangeStartToken(accessToken); }
+    catch { cursor.deltaBaselineToken=""; }
+  }
+  if(["ONEDRIVE","SHAREPOINT"].includes(providerType) && !text(cursor.graphDeltaBaselineUrl)){
+    try { cursor.graphDeltaBaselineUrl=await graphLatestDeltaUrl(accessToken,text(link.provider_drive_id),rootId); }
+    catch { cursor.graphDeltaBaselineUrl=""; }
+  }
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
-  prioritizeGoogleScanQueue(cursor.queue);
+  prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
@@ -898,7 +1179,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           const indexed = await upsertCloudFile(c, slug, connectionId, providerType, child, relativePath, now());
           files += 1; cursor.files += 1;
           if (indexed.changed) cursor.changedFiles += 1;
-          if (indexed.needsModelSync) {
+          if (indexed.needsModelSync && isDesignCandidate(relativePath)) {
             const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, providerType);
             if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
           }
@@ -908,7 +1189,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       else cursor.queue.shift();
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
       cursor.queue.unshift(...discoveredFolders);
-      prioritizeGoogleScanQueue(cursor.queue);
+      prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
       cursor.pages = Number(cursor.pages || 0) + 1;
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
       await persist(cursor);
@@ -922,6 +1203,28 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     modelSyncs += priorDesignFiles.matched;
     cursor.modelSyncs += priorDesignFiles.matched;
     const complete = cursor.queue.length === 0;
+    // Snapshot the provider's change cursor when the one-time full index ends.
+    // Any later additions/renames are fetched by runGoogleDeltaBatch.
+    if (complete && providerType==="GOOGLE_DRIVE") {
+      let deltaToken=text(cursor.deltaBaselineToken);
+      if(!deltaToken){try{deltaToken=await googleChangeStartToken(accessToken)}catch{deltaToken=""}}
+      if (deltaToken) {
+        meta.cloudDeltaToken=deltaToken;
+        meta.cloudDeltaPageToken=null;
+        meta.cloudDeltaCheckedAt=now();
+        meta.cloudNeedsFullRescan=false;
+      }
+    }
+    if(complete&&["ONEDRIVE","SHAREPOINT"].includes(providerType)){
+      let graphUrl=text(cursor.graphDeltaBaselineUrl);
+      if(!graphUrl){try{graphUrl=await graphLatestDeltaUrl(accessToken,text(link.provider_drive_id),rootId)}catch{graphUrl=""}}
+      if(graphUrl){
+        meta.cloudGraphDeltaLink=graphUrl;
+        meta.cloudGraphDeltaNextLink=null;
+        meta.cloudDeltaCheckedAt=now();
+        meta.cloudNeedsFullRescan=false;
+      }
+    }
     if (complete) {
       const result = await c.env.DB.prepare("SELECT COUNT(DISTINCT l.file_asset_id) linked_images,COUNT(DISTINCT r.entity_id) linked_models FROM file_hub_locations l JOIN file_hub_relations r ON r.file_asset_id=l.file_asset_id AND r.main_company_slug=l.main_company_slug AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE' JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1")
         .bind(slug, connectionId).first<Row>();
@@ -965,11 +1268,15 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       const { link, accessToken } = await connectionAccount(c, slug, connectionId);
       const provider=upper(link.provider_type), driveId=text(link.provider_drive_id);
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
-        if (provider === "GOOGLE_DRIVE") {
-          const priority=await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken);
-          if (priority.ran) continue;
-        }
+        // Central metadata index ALWAYS gets the first turn. Even a very
+        // large design image archive must not block fresh e-Belge metadata.
         await runGoogleSyncBatch(c, slug, connectionId, 3, true);
+        if (provider === "GOOGLE_DRIVE") {
+          // Existing model image workflow remains an independent small page.
+          // Its failure never rolls back the shared File Hub index cursor.
+          try { await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken); }
+          catch { console.warn("FILE_HUB_MODEL_FAST_SCAN_WARNING"); }
+        }
         continue;
       }
       const rootId=text(link.remote_root_id)||"root", rootName=text(link.remote_root_name)||"Ana Klasör", seenAt=now();
@@ -1187,6 +1494,16 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
     if (!account) return c.json(err("ACCOUNT_NOT_FOUND", "Bulut hesabı bulunamadı."), 404);
     const provider = upper(account.provider_type); if (!["GOOGLE_DRIVE", "ONEDRIVE", "SHAREPOINT", "DROPBOX"].includes(provider)) return c.json(err("INVALID_PROVIDER", "Bulut hesabı sağlayıcısı geçersiz."), 422);
     if (provider === "SHAREPOINT" && !driveId) return c.json(err("DRIVE_REQUIRED", "SharePoint belge kitaplığı seçimi zorunludur."), 422);
+    // Same company + provider account + remote root = ONE D1 index. A second
+    // Windows machine or repeated wizard cannot create another scan queue.
+    const existing = await c.env.DB.prepare(
+      "SELECT c.id,c.is_primary FROM file_hub_connections c JOIN file_hub_cloud_connection_accounts a " +
+      "ON a.connection_id=c.id AND a.main_company_slug=c.main_company_slug " +
+      "WHERE c.main_company_slug=? AND c.provider_type=? AND c.sync_mode='CLOUD_API' AND c.is_active=1 " +
+      "AND a.oauth_account_id=? AND c.remote_root_id=? AND COALESCE(a.provider_drive_id,'')=? LIMIT 1"
+    ).bind(gate.slug, provider, accountId, rootFolderId, driveId).first<Row>();
+    if (existing?.id) return c.json({ok:true,data:{id:existing.id,reused:true,
+      message:"Bu firmaya ait aynı Drive/OneDrive kökü zaten bağlı; mevcut ortak indeks kullanılıyor."}});
     const id = crypto.randomUUID(), ts = now(), name = text(body.name) || `${text(account.display_name || account.account_email) || provider} · ${rootFolderName}`;
     if (isPrimary) await c.env.DB.prepare(`UPDATE file_hub_connections SET is_primary=0,updated_at=? WHERE main_company_slug=?`).bind(ts, gate.slug).run();
     await c.env.DB.prepare(`INSERT INTO file_hub_connections(id,main_company_slug,provider_type,name,is_active,is_primary,local_root_path,remote_root_id,remote_root_name,sync_mode,connection_status,last_sync_at,last_error,metadata,created_at,updated_at) VALUES(?,?,?,?,1,?,NULL,?,?,'CLOUD_API','CONNECTED',NULL,NULL,?,?,?)`)
