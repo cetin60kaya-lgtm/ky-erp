@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — Masaüstü tek revizyon 1.5.6 Setup QA (PR #640)
+
+- **Sorun:** Windows'un Google Drive junction ata klasörünü OpenFolderDialog ile açamaması; `Drive'im` / `Drive'ım` Türkçe karakteri farklı olduğu için manuel `Directory.Exists` doğrulama reddi. Bu, bulut dosya kaybı/İşNet hatası değil. Kullanıcı 1.5.5 ekranında aynı hatayı birden fazla kez gördü; yol tekrar elle yazdırılarak kabul yapılmadı.
+- **Kalıcı kod:** feature `feature/kyerp-desktop-tek-revize-path-20261122`, taslak **PR #640**. Son işlevsel commit `ffa456a6fcf9dec766312d56bf0d546a19228b19`: yalnız var olan tekil Türkçe I varyantı alt klasörü çöz; sonuç kullanıcıya gösterilir ve ayrıca onay gerekir; olmayan/çakışmalı/yabancı firma kökü ve disk/junction kökü korunur. Dolu manuel yol doğrudan önizlemeye gider, kırılan Windows klasör seçicisi zorunlu değildir. İsteğe bağlı ikinci klasör yetkisi UI'da kapalı alt bölümde tutulur.
+- **Yeni tek kaynak sürüm:** `1.5.6` sürüm dosyaları Desktop/Agent/BUILD_SETUP/Inno ile eşitlendi, commit `3e37312fc46c9e1a40ba233b3a2af16ba775262f`. X QA .NET testleri **21/21 PASS**, WPF Masaüstü derleme **0 hata/0 uyarı**. Ardından 1.5.6 tam `BUILD_SETUP.ps1` restore/build/test(21/21)/publish/Inno **BUILD_156_SUCCESS**. Setup `D:\KYERP-TEST-20261121\kyerp-desktop-archive-build-qa\APP\desktop\ky-pdks\dist\setup\KY-ERP-Masaustu-Setup-1.5.6.exe`; 93.273.006 byte; SHA256 `AB8166E4E9441B3AE05E8F7C20C1FBEAE649D6ECA6B1CD45F1AAFC45588B3C56`, ProductVersion 1.5.6. Eski 1.5.5 Setup, eski hash ile ayrıca QA arşivine kopyalanarak korundu.
+- **Gerçek kurulum ayrı:** 1.5.6 Setup X üzerinde PID 25008 olarak kullanıcının görebileceği şekilde başlatıldı; **son Windows kontrolünde hâlâ kurulu EXE 1.5.5**, Setup süreci açık, kullanıcı Windows/UAC ve kurulum sihirbazı kabulü bekleniyor. İsteğe bağlı PDKS Agent servisi `ABSENT`; otomatik servis kurulmadı. Kaynak PR taslak; diğer bilgisayarlara kurulmuş veya uçtan uca File Hub kabulü tamamlanmış ilan edilmeyecek.
+- **Tek revizyon kabul listesi:** `DOCS/KY_ERP_DESKTOP_156_TEK_REVIZE_KABUL_20261122.md` feature dalında. Kalan: Windows 1.5.6 kurulu EXE/ekran, gerçek kullanıcı onaylı ana firma salt-okunur FILE_HUB grant, İşNet 8791 korunumu, canlı Google/Graph D1 delta, tek XML/PDF muhasebe havuzu, diğer cihazda aynı yol düzeltmesinin kabulü. D1 migration, eski klasör taşıma/yeniden adlandırma, İşNet resmî gönderim, PDKS/Firebird müdahalesi yapılmadı.
+
+
+
 ## 22.11.2026 — File Hub delta silme koruması canlı Worker PASS (PR #639)
 
 - Kod ve regresyon testi: PR #639 merge `adc12e1bf29125a154397f7061896c357e90b255`, canonical CI `44990548576` **success**. Google Drive Changes ve Microsoft Graph delta, D1'de aynı firma+bağlantı+provider dosya ID ile mevcut indekslenmiş **dosya** silindiğinde yalnız ilgili dosya konumunu `is_available=0` yapar; salt bu nedenle tüm arşivi yeniden taramaz. Bilinmeyen ID/klasör silinmesi ihtiyatlı tam uzlaştırmayı korur.
