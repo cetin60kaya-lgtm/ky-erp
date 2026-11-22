@@ -3,16 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "fba4f3bfd131121816ea945f02ade1d804076500",
+  "sourceCommit": "8f4d6b9384b89cba69e703782f7209021aa353ab",
   "requestedAt": "2026-11-22",
-  "attempt": 59,
+  "attempt": 60,
   "scope": [
-    "PR641-MERGED-fba4f3bfd131121816ea945f02ade1d804076500",
-    "MANUAL_FILE_HUB_SYNC_SHARED_D1_INDEX_FIRST",
-    "KEEP_GOOGLE_DRIVE_DELTA_AND_SCHEDULED_SCAN",
-    "NO_D1_MIGRATIONS_NO_SQL_EXPORT_NO_FILE_MOVE_NO_OFFICIAL_SEND"
+    "PR641_SHARED_INDEX_PRIORITY",
+    "PR642_CODE_ONLY_RELEASE_GATE_0060",
+    "WORKER_ONLY_NO_MIGRATION",
+    "D1_TIME_TRAVEL_AND_GENERAL_SCHEMA_PROOF_REQUIRED"
   ],
-  "note": "22.11.2026: PR #641 manual Taramaya Devam Et uses the existing per-tenant D1 cloudSyncCursor; independent DESEN model image quick scan cannot block it. PR CI 45029138092 worker typecheck/test/build SUCCESS. X archive originals preserved. Code-only Worker release; live D1 561/43 and accounting intake require separate confirmation.",
+  "note": "22.11.2026 previous attempt 59 blocked by unconditional 0060 personnel prerequisite although applyMigrations=false. PR #642 guards it behind approval; generic D1 schema gate remains mandatory. Manual File Hub shared index PR #641 pending live release. No D1 migration, deletion, reset, document posting or personal data export.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
