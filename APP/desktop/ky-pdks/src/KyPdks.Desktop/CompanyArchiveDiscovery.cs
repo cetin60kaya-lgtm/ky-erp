@@ -42,6 +42,7 @@ public static class CompanyArchiveDiscovery
         catch (IOException) { }
         catch (UnauthorizedAccessException) { }
         catch (ArgumentException) { }
+        catch (InvalidOperationException) { }
         return null;
     }
 
