@@ -88,6 +88,12 @@ public static class LocalFolderService
         if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException("Klasör seçilmedi.");
         if (!Path.IsPathFullyQualified(input)) throw new InvalidOperationException("Klasör mutlak yol olmalıdır.");
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(input));
+        // WebView2 enables Windows RedirectionTrust: the WPF host cannot
+        // inspect a trusted Google Drive volume junction. The isolated local
+        // File Hub probe may inspect its child folder without changing
+        // any Windows security mitigation. No grant is issued here.
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
+            return CloudArchiveProbe.Inspect(root).Root;
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException("Seçili klasör mevcut değil.");
         if (root.Equals(Path.TrimEndingDirectorySeparator(Path.GetPathRoot(root) ?? ""), PathComparison))
             throw new InvalidOperationException("Disk veya paylaşım köküne sınırsız erişim verilemez. Alt klasör seçin.");
@@ -112,6 +118,11 @@ public static class LocalFolderService
         if (!Path.IsPathFullyQualified(input)) throw new InvalidOperationException("Klasör mutlak yol olmalıdır.");
 
         var requested = Path.TrimEndingDirectorySeparator(Path.GetFullPath(input));
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(requested))
+        {
+            var actual = CloudArchiveProbe.Inspect(requested).Root;
+            return (actual, !string.Equals(requested, actual, StringComparison.OrdinalIgnoreCase));
+        }
         if (Directory.Exists(requested)) return (ValidateRoot(requested), false);
 
         var drive = Path.GetPathRoot(requested)
