@@ -19,6 +19,7 @@ import {
   getEBelgeDashboard,
   getEBelgeDetail,
   getEBelgeFilePreview,
+  getEBelgeOriginalDocumentFile,
   getEBelgeVisualProfiles,
   getEBelgeAccountingPrintStatuses,
   getEBelgeIntegrations,
@@ -325,7 +326,18 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   };
   const preview = async (file) => {
     const reservedWindow = reserveEBelgePreviewTab();
-    return action(`file-${file.id}`, async () => openEBelgeBlob(await getEBelgeFilePreview(file.id), reservedWindow));
+    return action(`file-${file.id}`, async () => {
+      try {
+        const ext=String(file.extension||file.file_name?.split(".").pop()||"").toUpperCase();
+        const blob=["PDF","XML"].includes(ext)
+          ? await getEBelgeOriginalDocumentFile(id,file.id)
+          : await getEBelgeFilePreview(file.id);
+        openEBelgeBlob(blob,reservedWindow);
+      } catch(error) {
+        if(reservedWindow&&!reservedWindow.closed)reservedWindow.close();
+        throw error;
+      }
+    });
   };
   const openSupplierAccountingPdf=async()=>{
     const reservedWindow=reserveEBelgePreviewTab();
@@ -333,10 +345,10 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
     try{
       const files=Array.isArray(detail?.files)?detail.files:[];
       const pdfFile=files.find(file=>/\.pdf$/i.test(String(file.file_name||"")));
-      if(pdfFile){openEBelgeBlob(await getEBelgeFilePreview(pdfFile.id),reservedWindow);return;}
+      if(pdfFile){openEBelgeBlob(await getEBelgeOriginalDocumentFile(id,pdfFile.id),reservedWindow);return;}
       const xmlFile=files.find(file=>/\.xml$/i.test(String(file.file_name||"")));
       if(!xmlFile)throw Error("Bu faturaya bağlı orijinal XML/PDF yok. Belge kaynağını kontrol edin.");
-      const xml=await (await getEBelgeFilePreview(xmlFile.id)).text();
+      const xml=await (await getEBelgeOriginalDocumentFile(id,xmlFile.id)).text();
       const document=parseUblForVisualOutput(xml);
       if(document.kind!=="INVOICE"||String(detail.document_no)!==document.number)
         throw Error("Belge numarası veya türü orijinal XML ile uyuşmuyor.");
