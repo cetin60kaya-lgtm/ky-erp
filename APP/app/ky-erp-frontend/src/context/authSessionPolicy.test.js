@@ -12,10 +12,12 @@ test("business endpoint 401 does not clear the whole application session without
   assert.equal(shouldClearStoredAuthForStatus(401, "OTP_INVALID", "/api/admin/security/step-up"), false);
   assert.equal(shouldClearStoredAuthForStatus(401, "STEP_UP_FAILED", "/api/admin/security/owner-recovery/contact/start"), false);
   assert.equal(shouldClearStoredAuthForStatus(401, "", "/api/ik/daily"), false);
+  assert.equal(shouldClearStoredAuthForStatus(401, "UNAUTHORIZED", "/api/file-hub/files/123/preview"), false);
+  assert.equal(shouldClearStoredAuthForStatus(401, "UNAUTHORIZED", "/api/e-belge/documents/123"), false);
 });
 
 test("explicit invalid-session codes clear stored auth", () => {
-  for (const code of ["UNAUTHORIZED", "SESSION_EXPIRED", "SESSION_REVOKED", "TOKEN_INVALID", "TOKEN_EXPIRED"]) {
+  for (const code of ["SESSION_EXPIRED", "SESSION_REVOKED", "TOKEN_INVALID", "TOKEN_EXPIRED"]) {
     assert.equal(shouldClearStoredAuthForStatus(401, code, "/api/ik/daily"), true);
   }
 });
@@ -23,5 +25,6 @@ test("explicit invalid-session codes clear stored auth", () => {
 test("auth me and legacy status-only restore 401 clear stored auth", () => {
   assert.equal(shouldClearStoredAuthForStatus(401), true);
   assert.equal(shouldClearStoredAuthForStatus(401, "", "/api/auth/me"), true);
+  assert.equal(shouldClearStoredAuthForStatus(401, "UNAUTHORIZED", "/api/auth/me"), true);
   assert.equal(shouldClearStoredAuthForStatus(401, "", "https://api.kyerp.net/api/auth/me"), true);
 });
