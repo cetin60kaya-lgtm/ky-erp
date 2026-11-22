@@ -3,15 +3,17 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-11-13",
+  "releaseDate": "2026-11-22",
   "scope": [
-    "PR558-verified-XML-legacy-company-link-UI",
-    "PR557-payroll-presentation-in-canonical",
-    "PR558-frontend-worker-CI-success",
-    "Pages-live-smoke-required"
+    "PR635-merged-70941e1ec20be36029f0acedfa991177717b64d1",
+    "ONE_COMPANY_ARCHIVE_TEN_SECTIONS",
+    "MANAGEMENT_FOLDER_LAYOUT_AND_FILE_HUB_BINDINGS",
+    "ISNET_4_DIRECTIONS_LOCAL_DESKTOP_OPTIONAL",
+    "WORKER_PRODUCTION_DEPLOY_CONFIRMED_PREVIOUS_STEP",
+    "NO_D1_MIGRATION_NO_MASS_FILE_MOVE_NO_OFFICIAL_SEND"
   ],
-  "note": "13 Kasım e-Belge eski XML firma kartı kurtarma ekranı ve canonical İK gösterimi. Gerçek İşNet/Outlook/Drive kabulü ayrıca gerekli.",
-  "sourceCommit": "438ef47704c84d2369c4770333638caa35302fa3",
-  "requestedAt": "2026-11-13",
-  "attempt": 5
+  "note": "22 Kasım 2026 açık kullanıcı talebi: KY ERP web üretim frontend. Web arayüzünde tek firma arşivi Klasör Düzeni, İşNet dört yön ve File Hub. Worker ayrı başarılı yayınlandı. Dosya fiziksel taşıma veya gerçek fatura gönderimi yok; canlı firma OAuth kullanıcı kabulü ayrıca.",
+  "sourceCommit": "dbcd23381325e09592d6b59cb6c0cdd42fe043ac",
+  "requestedAt": "2026-11-22",
+  "attempt": 6
 }
