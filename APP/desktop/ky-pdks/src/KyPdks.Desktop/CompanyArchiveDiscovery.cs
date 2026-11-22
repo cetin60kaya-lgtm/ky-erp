@@ -143,7 +143,16 @@ public static class CompanyArchiveDiscovery
             {
                 var probed = CloudArchiveProbe.Discover();
                 if (probed.Candidates.Count != 0)
-                    return (probed.Candidates, probed.RootsChecked);
+                {
+                    // The user's existing verified Windows archive hint is a
+                    // preference, never an access grant. Avoid prompting with
+                    // unrelated indexed company roots when it matches exactly.
+                    var hint = Environment.GetEnvironmentVariable(ExistingArchiveHintVariable,
+                        EnvironmentVariableTarget.User);
+                    var validHint = ValidateArchiveHint(hint);
+                    return (PreferExactVerifiedHint(probed.Candidates, validHint),
+                        probed.RootsChecked);
+                }
             }
             catch (IOException) { /* retain normal-drive discovery below */ }
             catch (TimeoutException) { /* retain normal-drive discovery below */ }
@@ -209,6 +218,15 @@ public static class CompanyArchiveDiscovery
             if (attempt == 0) Thread.Sleep(300);
         }
         return (Array.Empty<string>(), finalRootsChecked);
+    }
+
+    public static IReadOnlyList<string> PreferExactVerifiedHint(
+        IReadOnlyList<string> candidates, string? validatedHint)
+    {
+        if (string.IsNullOrWhiteSpace(validatedHint)) return candidates;
+        var exact = candidates.FirstOrDefault(candidate =>
+            candidate.Equals(validatedHint, StringComparison.OrdinalIgnoreCase));
+        return exact is null ? candidates : new[] { exact };
     }
 
     public static IReadOnlyList<string> FindExistingCompanyRoots() =>
