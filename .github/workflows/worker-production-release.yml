@@ -77,13 +77,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          info="$(npx wrangler d1 info "$DB_NAME" --config wrangler.jsonc --json)"
-          printf '%s' "$info" | jq -e '(.version // .result.version // "") == "production"' >/dev/null || {
-            echo "D1 production Time Travel dogrulanamadi; SQL verisi GitHub runnerina cekilmeyecek." >&2
-            exit 1
-          }
+          # Cloudflare CLI metadata version varies by Wrangler release.
+          # The actual read-only Time Travel info call is the real capability gate.
+          # Do not export the database to inspect capabilities.
           travel="$(npx wrangler d1 time-travel info "$DB_NAME" --config wrangler.jsonc --json)"
-          bookmark="$(printf '%s' "$travel" | jq -r '.bookmark // .result.bookmark // empty')"
+          bookmark="$(printf '%s' "$travel" | jq -r '[.. | objects | .bookmark? // empty][0] // empty')"
           test -n "$bookmark" || {
             echo "D1 Time Travel bookmark okunamadi; Worker deploy durduruldu." >&2
             exit 1
