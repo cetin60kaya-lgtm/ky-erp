@@ -28,6 +28,7 @@ import {
   reconcileAllEBelge,
   reconcileEBelge,
   recoverEBelgeCompanyFromXml,
+  recoverVerifiedEBelgeCompaniesBatch,
   resolveEBelgeIssue,
   updateEBelge,
   uploadEBelge,
@@ -553,6 +554,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
   const [matching, setMatching] = useState(false);
+  const [companyBatchBusy, setCompanyBatchBusy] = useState(false);
+  const companyBatchLock = useRef(false);
   const matchingLock = useRef(false);
   const [matchingConfirmOpen, setMatchingConfirmOpen] = useState(false);
   const [matchingApproved, setMatchingApproved] = useState(false);
@@ -660,6 +663,33 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setSelectedId(String(moduleActionContext.documentId));
   }, [moduleActionContext?.nonce, moduleActionContext?.documentId, moduleActionContext?.targetModule]);
 
+  // The click is the user's explicit approval. The backend still requires
+  // authenticated tenant-scoped MUHASEBE create rights and validated UBL XML.
+  const runVerifiedCompanyRecovery = async () => {
+    if(companyBatchLock.current || busy || companyBatchBusy)return;
+    companyBatchLock.current=true;setCompanyBatchBusy(true);setError("");setNotice("");
+    let cursor=null,hasMore=true,processed=0,created=0,linked=0,review=0,routing=0,failed=0;
+    try{
+      for(let batch=0;batch<8 && hasMore;batch+=1){
+        const result=await recoverVerifiedEBelgeCompaniesBatch(cursor);
+        processed+=Number(result?.scanned||0);
+        created+=Number(result?.created||0);
+        linked+=Number(result?.linked||0);
+        review+=Number(result?.reviewRequired||0);
+        routing+=Number(result?.routingReview||0);
+        failed+=Number(result?.errors||0);
+        hasMore=Boolean(result?.hasMore && result?.nextCursor);
+        cursor=result?.nextCursor||null;
+        if(!Number(result?.scanned))break;
+      }
+      setNotice(`XML firma kontrolü: ${processed} belge tarandı; ${created} yeni cari kartı açıldı, ${linked} belge eşleşti. ${review} belge kimlik kontrolü, ${routing} ürün/LOT kontrolü bekliyor.${failed?` ${failed} kaynak okunamadı; belge havuzunda kaldı.`:""}${hasMore?" Kalan kayıtlar için işlemi tekrar çalıştırın.":""} Kesin muhasebe kaydı veya ödeme yapılmadı.`);
+      if(view==="overview")await loadDashboard();else if(poolViews.includes(view))await loadPool();
+      window.dispatchEvent(new CustomEvent("kyerp:accounting-refresh",{detail:{source:"e-belge",action:"xml-company-recovery"}}));
+    }catch(e){
+      setError(`XML cari eşleştirmesi kısmen tamamlanmış olabilir (${linked} belge). Mükerrer açmadan güncel listeyi kontrol edin: ${e?.message||"İşlem tamamlanamadı."}`);
+    }finally{companyBatchLock.current=false;setCompanyBatchBusy(false)}
+  };
+
   const runMatching = async () => {
     if (!matchingConfirmOpen || !matchingApproved || matching || matchingLock.current) return;
     matchingLock.current = true;
@@ -735,6 +765,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("entegrasyonlar")}><RefreshCw size={17}/> İşNet XML + PDF Al</button>}
         {view === "overview" && <>
           <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
+          <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
+            {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
+          </button>
+
           <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Sorunları Aç</button>
         </>}
         {showPool && <>
@@ -745,6 +779,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       </nav>
           {view!=="pool"&&<button type="button" onClick={()=>openEBelgeTab("belge-havuzu")}><Upload size={17}/> Belge Yükle</button>}
           <button type="button" onClick={loadPool} disabled={busy}><RefreshCw size={17} /> Güncelle</button>
+          <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
+            {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
+          </button>
+
           {(view === "matching" || view === "pool") && <button type="button" className="eb-primary" onClick={() => { setMatchingApproved(false); setMatchingConfirmOpen(true); }} disabled={matching || busy}>{matching ? <LoaderCircle className="eb-spin" size={17} /> : <Link2 size={17} />} Eşleşmeleri Kontrol Et</button>}
         </>}
         {view === "integrations" && <button type="button" onClick={loadIntegrations} disabled={busy}><RefreshCw size={17} /> Durumu Yenile</button>}
