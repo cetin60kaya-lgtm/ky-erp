@@ -966,10 +966,10 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
   // The initial tree walk is shared in D1. All subsequent routine Google
   // checks use provider change tokens, not another 22,000-file tree walk.
-  if (scheduled && !resumed && previousComplete && providerType==="GOOGLE_DRIVE" && text(meta.cloudDeltaToken)) {
+  if (scheduled && !resumed && previousComplete && !meta.cloudNeedsFullRescan && providerType==="GOOGLE_DRIVE" && text(meta.cloudDeltaToken)) {
     return await runGoogleDeltaBatch(c,slug,connectionId,link,accessToken,raw,meta);
   }
-  if (scheduled && !resumed && previousComplete && Date.now() - previousComplete < 24 * 3600000) return { skipped: true };
+  if (scheduled && !resumed && !meta.cloudNeedsFullRescan && previousComplete && Date.now() - previousComplete < 24 * 3600000) return { skipped: true };
   if ((Date.parse(text(meta.cloudSyncLeaseUntil)) || 0) > Date.now()) return { inProgress: true, busy: true, ...json(meta.cloudSyncProgress) };
   const leaseId = crypto.randomUUID();
   const leaseUntil = new Date(Date.now() + 180000).toISOString();
@@ -980,6 +980,11 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   let cursor = resumed
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
+  // Capture a provider changes token BEFORE the full traversal so updates
+  // made during the initial scan cannot be lost at its completion.
+  if (!resumed && providerType==="GOOGLE_DRIVE") {
+    cursor.deltaBaselineToken=await googleChangeStartToken(accessToken);
+  }
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
   prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
@@ -1048,11 +1053,12 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     // Snapshot the provider's change cursor when the one-time full index ends.
     // Any later additions/renames are fetched by runGoogleDeltaBatch.
     if (complete && providerType==="GOOGLE_DRIVE") {
-      const freshDelta = await googleChangeStartToken(accessToken);
-      if (freshDelta) {
-        meta.cloudDeltaToken=freshDelta;
+      const deltaToken=text(cursor.deltaBaselineToken)||await googleChangeStartToken(accessToken);
+      if (deltaToken) {
+        meta.cloudDeltaToken=deltaToken;
         meta.cloudDeltaPageToken=null;
         meta.cloudDeltaCheckedAt=now();
+        meta.cloudNeedsFullRescan=false;
       }
     }
     if (complete) {
