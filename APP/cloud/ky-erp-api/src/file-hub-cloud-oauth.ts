@@ -982,8 +982,11 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
   // Capture a provider changes token BEFORE the full traversal so updates
   // made during the initial scan cannot be lost at its completion.
-  if (!resumed && providerType==="GOOGLE_DRIVE") {
-    cursor.deltaBaselineToken=await googleChangeStartToken(accessToken);
+  if (providerType==="GOOGLE_DRIVE" && !text(cursor.deltaBaselineToken)) {
+    // A failed changes-token fetch must not block the first metadata scan;
+    // the completed scan will retry the token before marking success.
+    try { cursor.deltaBaselineToken=await googleChangeStartToken(accessToken); }
+    catch { cursor.deltaBaselineToken=""; }
   }
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
   prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
