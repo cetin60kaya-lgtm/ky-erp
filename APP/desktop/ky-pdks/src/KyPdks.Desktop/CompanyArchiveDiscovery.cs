@@ -70,6 +70,8 @@ public static class CompanyArchiveDiscovery
     {
         try
         {
+            if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(candidate))
+                return CloudArchiveProbe.Inspect(candidate).EvidenceCount >= 2;
             // Do not approve a mount/junction itself as a company root.
             var info = new DirectoryInfo(candidate);
             if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0) return false;
@@ -133,6 +135,19 @@ public static class CompanyArchiveDiscovery
     public static (IReadOnlyList<string> Candidates, int RootsChecked)
         FindExistingCompanyRootsWithDiagnostics()
     {
+        // The local isolated probe can traverse Google Drive mounts even
+        // when the WebView2-hosting WPF process has RedirectionTrust enabled.
+        if (CloudArchiveProbe.Available)
+        {
+            try
+            {
+                var probed = CloudArchiveProbe.Discover();
+                if (probed.Candidates.Count != 0)
+                    return (probed.Candidates, probed.RootsChecked);
+            }
+            catch (IOException) { /* retain normal-drive discovery below */ }
+            catch (TimeoutException) { /* retain normal-drive discovery below */ }
+        }
         var finalRootsChecked = 0;
         for (var attempt = 0; attempt < 2; attempt++)
         {
