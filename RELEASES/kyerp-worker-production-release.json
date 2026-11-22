@@ -3,16 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "8f4d6b9384b89cba69e703782f7209021aa353ab",
+  "sourceCommit": "032ea230c2ddcbb382a3b60aae8524bf05d058bb",
   "requestedAt": "2026-11-22",
-  "attempt": 60,
+  "attempt": 61,
   "scope": [
-    "PR641_SHARED_INDEX_PRIORITY",
-    "PR642_CODE_ONLY_RELEASE_GATE_0060",
-    "WORKER_ONLY_NO_MIGRATION",
-    "D1_TIME_TRAVEL_AND_GENERAL_SCHEMA_PROOF_REQUIRED"
+    "PR643_VERIFIED_XML_COMPANY_CARD_REPAIR",
+    "EXPENSE_ONLY_INVOICE_NO_UNNECESSARY_DISPATCH",
+    "TENANT_SCOPED_UBL_RECOVERY_NO_POSTING",
+    "NO_D1_MIGRATION_NO_DATA_RESET_NO_OFFICIAL_SEND"
   ],
-  "note": "22.11.2026 previous attempt 59 blocked by unconditional 0060 personnel prerequisite although applyMigrations=false. PR #642 guards it behind approval; generic D1 schema gate remains mandatory. Manual File Hub shared index PR #641 pending live release. No D1 migration, deletion, reset, document posting or personal data export.",
+  "note": "2026-11-22 user requested existing accounting matches and vendor cards become operational. PR #643 verified XML repair and expense-only dispatch policy passed canonical Worker+Frontend CI. Only code; no D1 migrations, financial posting, stock, import duplication, file move/delete or invoice official send.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
