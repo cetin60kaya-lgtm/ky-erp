@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.5.8'
+$Version = '1.5.9'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
