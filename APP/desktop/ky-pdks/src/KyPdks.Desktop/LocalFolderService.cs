@@ -88,6 +88,12 @@ public static class LocalFolderService
         if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException("Klasör seçilmedi.");
         if (!Path.IsPathFullyQualified(input)) throw new InvalidOperationException("Klasör mutlak yol olmalıdır.");
         var root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(input));
+        // WebView2 enables Windows RedirectionTrust: the WPF host cannot
+        // inspect a trusted Google Drive volume junction. The isolated local
+        // File Hub probe may inspect its child folder without changing
+        // any Windows security mitigation. No grant is issued here.
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
+            return CloudArchiveProbe.Inspect(root).Root;
         if (!Directory.Exists(root)) throw new DirectoryNotFoundException("Seçili klasör mevcut değil.");
         if (root.Equals(Path.TrimEndingDirectorySeparator(Path.GetPathRoot(root) ?? ""), PathComparison))
             throw new InvalidOperationException("Disk veya paylaşım köküne sınırsız erişim verilemez. Alt klasör seçin.");
@@ -98,6 +104,63 @@ public static class LocalFolderService
         return root;
     }
 
+
+    /// <summary>
+    /// User-facing path resolution for Windows cloud mounts. Some Windows folder pickers
+    /// reject junction ancestors and manual input may contain i instead of Turkish ı.
+    /// Resolve ONLY an existing, uniquely matched filesystem segment; never create a
+    /// directory, broaden a grant, or silently select a different company.
+    /// ValidateRoot remains the same final security gate.
+    /// </summary>
+    public static (string FullPath, bool Corrected) ResolveUserEnteredRoot(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) throw new InvalidOperationException("Klasör seçilmedi.");
+        if (!Path.IsPathFullyQualified(input)) throw new InvalidOperationException("Klasör mutlak yol olmalıdır.");
+
+        var requested = Path.TrimEndingDirectorySeparator(Path.GetFullPath(input));
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(requested))
+        {
+            var actual = CloudArchiveProbe.Inspect(requested).Root;
+            return (actual, !string.Equals(requested, actual, StringComparison.OrdinalIgnoreCase));
+        }
+        if (Directory.Exists(requested)) return (ValidateRoot(requested), false);
+
+        var drive = Path.GetPathRoot(requested)
+            ?? throw new DirectoryNotFoundException("Disk veya ağ sürücüsü bulunamadı.");
+        if (!Directory.Exists(drive))
+            throw new DirectoryNotFoundException("Seçilen disk veya ağ sürücüsü erişilebilir değil.");
+
+        var relative = Path.GetRelativePath(drive, requested);
+        var parts = relative.Split(new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+            StringSplitOptions.RemoveEmptyEntries);
+        var current = drive;
+
+        // Only immediate descendants are examined, never a recursive disk scan.
+        foreach (var part in parts)
+        {
+            var direct = Path.Combine(current, part);
+            if (Directory.Exists(direct)) { current = direct; continue; }
+
+            var target = TurkishIKey(part);
+            var matches = Directory.EnumerateDirectories(current)
+                .Where(candidate => TurkishIKey(Path.GetFileName(candidate)) == target)
+                .Take(2).ToArray();
+            if (matches.Length == 0)
+                throw new DirectoryNotFoundException(
+                    "Seçili klasör mevcut değil. Bulut eşitleme klasörünün gerçek adını kontrol edin.");
+            if (matches.Length > 1)
+                throw new InvalidOperationException(
+                    "Benzer isimli birden fazla klasör var. Güvenlik için otomatik seçim yapılamaz.");
+            current = matches[0];
+        }
+
+        var resolved = ValidateRoot(current);
+        return (resolved, !string.Equals(requested, resolved, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static string TurkishIKey(string segment) =>
+        segment.Normalize(System.Text.NormalizationForm.FormC)
+            .Replace('ı', 'i').Replace('İ', 'i').ToUpperInvariant();
 
     private static bool Inside(string root, string target) =>
         target.Equals(root, PathComparison) ||

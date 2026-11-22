@@ -104,6 +104,8 @@ public static class CompanyArchiveLayout
     public static IReadOnlyList<string> MissingPaths(string approvedRoot)
     {
         var root = LocalFolderService.ValidateRoot(approvedRoot);
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
+            return CloudArchiveProbe.Inspect(root, StandardPaths).MissingPaths;
         var missing = new List<string>();
         foreach (var relative in StandardPaths)
         {
@@ -124,6 +126,9 @@ public static class CompanyArchiveLayout
     public static (int Existing, int Created) EnsureMissingPaths(string approvedRoot)
     {
         var root = LocalFolderService.ValidateRoot(approvedRoot);
+        if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
+            throw new UnauthorizedAccessException(
+                "Google Drive/OneDrive arşivine bu ekrandan yeni klasör yazılamaz. Salt okunur erişim seçin.");
         var missing = MissingPaths(root);
         foreach (var relative in missing)
         {

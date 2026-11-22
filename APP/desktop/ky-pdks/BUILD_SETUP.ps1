@@ -5,7 +5,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
-$Version = '1.5.5'
+$Version = '1.5.10'
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Dist = Join-Path $Root 'dist'
 $DesktopProject = Join-Path $Root 'src\KyPdks.Desktop\KyPdks.Desktop.csproj'
@@ -101,6 +101,7 @@ if (Test-Path -LiteralPath $NodeLicense) {
     if ((Get-Item $EmbeddedLicense).Length -lt 1500) { throw 'Node lisans dosyası eksik veya geçersiz.' }
 }
 $HubSources = @('file-hub-agent.mjs','local-folder-authorization.mjs',
+    'archive-root-probe.mjs','archive-root-task.mjs',
     'accounting-archive-worker.mjs','psd-preview-worker.mjs','psd-composite-preview.mjs')
 foreach ($file in $HubSources) {
     $source = Join-Path $RepoRoot "tools\file-hub-agent\$file"
