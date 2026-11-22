@@ -21,3 +21,12 @@
 - **Tamamlanan X Windows kabulü:** 1.5.9 tam BUILD_SETUP.ps1 ve Inno Setup 6.7.3 PASS; 30/30 test PASS. `KY-ERP-Masaustu-Setup-1.5.9.exe` 93.280.198 byte, SHA256 `4E91B21DF63891F62AB68E7820F26E7B31C04B9F14970E569A3307363ACF2E28`. Gerçek `Program Files` EXE ProductVersion `1.5.9+8ee17a599fdac11bab4ab6866a1499df21d65370`; Setup alt süreçleri kapanmış, uygulama PID 25008 çalışıyor, yeni `archive-root-probe.mjs` kurulu ve isteğe bağlı PDKS Agent yok. Eski 1.5.8 Setup QA yedeğinde korundu.
 - **Henüz açık:** 1.5.9 gerçek WPF arşiv önizleme kabulü, kullanıcı `FILE_HUB/READ_ONLY` izin onayı, mükerrer kayıt kontrolü, D1/OAuth/İşNet XML+PDF belge zinciri; kurulum PASS bunları otomatik olarak tamamlanmış yapmaz.
 - 1.5.8 Setup ve önceki arşiv korunur, PDKS servisi işaretlenmez, D1 migration/İşNet oturum restart/resmî gönderim yapılmaz.
+
+## 22.11.2026 — 1.5.9 gerçek kullanıcı ekranı kabulü
+
+- Test 1 PASS: X Windows kurulu sürümü 1.5.9, çalışan KY ERP masaüstü penceresi doğrulandı.
+- Test 2 FAIL: Otomatik firma arşivi butonu 3 bağlantı kontrol edip mevcut arşivi bulamadı. Gerçek ve Windows'ta mevcut firma klasörü, uygulama yolu üzerinden önizlenince Node alt işleminde UNKNOWN / lstat hatası görüldü. Türkçe noktasız harf hata mesajının stdout aktarımında yanlış çözümleniyor; tek başına giriş yolunun yanlış olduğunu kanıtlamaz.
+- FILE_HUB/READ_ONLY izni: folder-grants.json yok. Kullanıcı onayı/klasör oluşturma yapılmadı. Windows koruması kapatılmadı.
+- Bağımsız sağlık: İşNet 8791 ana sayfa HTTP 200, 8791 /health HTTP 404; 8788 /health HTTP 403 (yetki gerektiren uç nokta; hata servis kapalı anlamına gelmez). İsteğe bağlı KYERP.PDKS.Agent kurulu değil.
+- Açık kabul: WPF -> Node çocuk işlem erişim engeli, gerçek arşiv önizleme, kullanıcı onaylı tek grant, delta/ortak D1 indeks, gerçek XML/PDF Belge Havuzu, diğer cihaz.
+- Yeni kurulum veya güvenlik gevşetmesi yapılmadan önce Node çocuk işlem erişim hatası açıklığa kavuşturulmalı.
