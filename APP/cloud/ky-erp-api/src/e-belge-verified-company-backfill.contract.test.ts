@@ -1,0 +1,30 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {readFileSync} from "node:fs";
+const src=readFileSync(new URL("./e-belge-center-cloud.ts",import.meta.url),"utf8");
+test("bulk XML company recovery requires authenticated tenant-scoped create permission and explicit approval",()=>{
+  const a=src.indexOf('app.post("/api/e-belge/recover-companies-batch"');
+  const b=src.indexOf('app.post("/api/e-belge/documents/:id/recover-company-from-xml"',a);
+  assert.ok(a>=0&&b>a);
+  const route=src.slice(a,b);
+  assert.match(route,/getAuthenticatedUser\(c\)/);
+  assert.match(route,/accountingTenantReadAllowed\(user,slug\)/);
+  assert.match(route,/accountingAccess\(user,"POST",c\.req\.path\)/);
+  assert.match(route,/b\.confirmed!==true/);
+  assert.match(route,/verifiedXmlPartyRecoveryDecision\(doc,parsed\)/);
+  assert.match(route,/ensureOfficialXmlCompany\(c,slug,parsed\)/);
+  assert.match(route,/matchCompany\(c,slug/);
+  assert.match(route,/d\.xml_file_asset_id IS NOT NULL/);
+  assert.match(route,/d\.posted_at IS NULL/);
+  assert.match(route,/LIMIT 21/);
+  assert.doesNotMatch(route,/postAccountingDocumentAtomic|finalizeEBelge|postPhysicalReceipt/);
+});
+test("expense-only invoice bypasses only dispatch warnings and keeps the official document",()=>{
+ const a=src.indexOf('const requirement=dispatchRequirement(refs,invoiceLines)');
+ assert.ok(a>0);
+ const part=src.slice(a,a+1200);
+ assert.match(part,/if\(!requirement\.required\)/);
+ assert.match(part,/resolveIssues\(c,slug,id,\["DISPATCH_UNMATCHED","DISPATCH_QUANTITY_MISMATCH","DISPATCH_REFERENCE_MISSING"\]\)/);
+ assert.match(part,/status:"NOT_REQUIRED"/);
+ assert.doesNotMatch(part,/UPDATE accounting_documents SET status='POSTED'/);
+});
