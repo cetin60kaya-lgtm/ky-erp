@@ -2,6 +2,7 @@ import { useCallback, createContext, useContext, useEffect, useMemo, useRef, use
 import { API_BASE, clearApiGetCache, setApiAuthHandlers } from "../utils/api";
 import { clearResilientDataCache } from "../utils/resilientDataLoader";
 import { shouldClearStoredAuthForStatus } from "./authSessionPolicy";
+import { createUnauthorizedSessionVerifier } from "./authUnauthorizedVerifier";
 
 const AUTH_TOKEN_KEY = "kyerp_auth_token";
 const AUTH_USER_KEY = "kyerp_auth_user";
@@ -386,6 +387,13 @@ export function AuthProvider({ children }) {
     cleanLegacyAuthStorage();
   }, []);
 
+  const verifyUnauthorized = useMemo(() => createUnauthorizedSessionVerifier({
+    readToken: () => tokenRef.current,
+    verify: (candidate) => directAuthRequest("/auth/me", { method: "GET", token: candidate, timeoutMs: 9000 }),
+    invalidate: clearAuth,
+    pause: () => wait(400),
+  }), [clearAuth]);
+
   const saveAuth = useCallback((nextToken, nextUser, nextPermissions) => {
     const normalizedPermissions = normalizePermissionRows(nextPermissions);
     const payload = { token: String(nextToken || ""), user: nextUser || null, permissions: normalizedPermissions };
@@ -395,7 +403,7 @@ export function AuthProvider({ children }) {
       clearResilientDataCache();
     }
     tokenRef.current = payload.token;
-    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: verifyUnauthorized });
     const storedUser = JSON.stringify({ ...payload.user, permissions: payload.permissions });
     const ownerSession = isOwnerAuthPair(payload.token, payload.user);
     try {
@@ -417,7 +425,7 @@ export function AuthProvider({ children }) {
     } catch { /* noop */ }
     setAuthState(payload);
     return true;
-  }, [clearAuth]);
+  }, [verifyUnauthorized]);
 
   const finalizeResponse = useCallback((response) => {
     if (!response?.token || !response?.user) return response;
@@ -512,8 +520,8 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     tokenRef.current = token;
-    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
-  }, [clearAuth, token]);
+    setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: verifyUnauthorized });
+  }, [verifyUnauthorized, token]);
 
   useEffect(() => {
     if (!token) return undefined;
@@ -654,7 +662,7 @@ export function AuthProvider({ children }) {
       const stored = readStoredAuth();
       tokenRef.current = stored.token;
       setAuthState(stored);
-      if (stored.token) setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: clearAuth });
+      if (stored.token) setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: verifyUnauthorized });
       else setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
     };
     window.addEventListener("storage", syncFromStorage);
