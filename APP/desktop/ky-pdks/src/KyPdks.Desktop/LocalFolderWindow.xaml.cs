@@ -143,6 +143,14 @@ public partial class LocalFolderWindow : Window
         ApproveCompanyRootPathButton.IsEnabled = false;
         try
         {
+            // A typed cloud path takes priority over the Windows shell picker, which
+            // may reject junction mounts even if the selected child folder exists.
+            var entered = CompanyRootPathInput.Text.Trim().Trim('"');
+            if (!string.IsNullOrEmpty(entered))
+            {
+                await ApproveCompanyRootAsync(entered);
+                return;
+            }
             var picker = new Microsoft.Win32.OpenFolderDialog
             {
                 Title = "Seçili firmaya ait mevcut Google Drive / OneDrive ana klasörünü seçin",
@@ -151,7 +159,11 @@ public partial class LocalFolderWindow : Window
             CompanyRootPathInput.Text = picker.FolderName;
             await ApproveCompanyRootAsync(picker.FolderName);
         }
-        catch (Exception error) { ShowStatus("Firma ana klasörü kurulamadı: " + error.Message, true); }
+        catch (Exception error)
+        {
+            CompanyRootPathInput.Focus();
+            ShowStatus("Windows klasör seçicisi bu bulut yolunu açamıyorsa üstteki firma ana arşiv yolu alanına yazıp 'Yolu Doğrula ve Önizle'yi kullanın: " + error.Message, true);
+        }
         finally { ChooseCompanyRootButton.IsEnabled = true; ApproveCompanyRootPathButton.IsEnabled = true; }
     }
 
