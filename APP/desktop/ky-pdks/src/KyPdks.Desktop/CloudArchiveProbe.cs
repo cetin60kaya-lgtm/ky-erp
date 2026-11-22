@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.Json;
 
 namespace KyPdks.Desktop;
@@ -19,7 +18,8 @@ public static class CloudArchiveProbe
     private static string Script => Path.Combine(AppContext.BaseDirectory,
         "Integrations", "file-hub-agent", "archive-root-probe.mjs");
 
-    public static bool Available => File.Exists(NodeExe) && File.Exists(Script);
+    public static bool Available => File.Exists(NodeExe) && File.Exists(Script) &&
+        CloudArchiveTaskBridge.Available;
 
     public static bool IsCloudPath(string input)
     {
@@ -44,23 +44,10 @@ public static class CloudArchiveProbe
     {
         if (!Available) throw new InvalidOperationException(
             "KY ERP yerel bulut doğrulama bileşeni kurulu değil.");
-        var start = new ProcessStartInfo(NodeExe) {
-            UseShellExecute = false, CreateNoWindow = true,
-            RedirectStandardInput = true, RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            WorkingDirectory = Path.GetDirectoryName(Script)!,
-        };
-        start.ArgumentList.Add(Script);
-        using var process = Process.Start(start) ??
-            throw new InvalidOperationException("Yerel arşiv doğrulama başlatılamadı.");
-        process.StandardInput.Write(JsonSerializer.Serialize(input));
-        process.StandardInput.Close();
-        if (!process.WaitForExit(25000))
-        {
-            process.Kill(entireProcessTree: true);
-            throw new TimeoutException("Bulut klasörü kontrolü zaman aşımına uğradı.");
-        }
-        var output = process.StandardOutput.ReadToEnd();
+        // The Task Scheduler service starts the trusted packaged helper under
+        // this same interactive Windows user with LUA permissions. We never
+        // weaken the WPF process' RedirectionGuard mitigation.
+        var output = CloudArchiveTaskBridge.CallReadOnly(JsonSerializer.Serialize(input));
         using var parsed = JsonDocument.Parse(output);
         var json = parsed.RootElement;
         if (!json.TryGetProperty("ok", out var ok) || !ok.GetBoolean())
@@ -82,6 +69,7 @@ public static class CloudArchiveProbe
     public static Result Inspect(string root, IReadOnlyList<string>? standardPaths = null) =>
         Call(new { action = "inspect", root, standardPaths = standardPaths ?? Array.Empty<string>() });
     public static Result Ensure(string root, IReadOnlyList<string> standardPaths) =>
-        Call(new { action = "create", root, standardPaths });
+        throw new UnauthorizedAccessException(
+            "Bulut arşivine bu ekrandan dosya veya klasör yazılmaz.");
     public static Result Discover() => Call(new { action = "discover" });
 }
