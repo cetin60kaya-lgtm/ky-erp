@@ -23,6 +23,28 @@ public static class CompanyArchiveDiscovery
             name.Equals(known, StringComparison.OrdinalIgnoreCase)) ||
         name.StartsWith("OneDrive - ", StringComparison.OrdinalIgnoreCase);
 
+    public const string ExistingArchiveHintVariable = "KYERP_COMPANY_ARCHIVE_HINT";
+
+    // A locally verified root may be offered as a discovery HINT. It never
+    // grants access: the user must still see and approve the normal preview.
+    public static string? ValidateArchiveHint(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        try
+        {
+            var root = LocalFolderService.ValidateRoot(raw.Trim().Trim('"'));
+            if (!IsExistingCompanyArchive(root)) return null;
+
+            var ancestor = new DirectoryInfo(root).Parent;
+            for (var depth = 0; ancestor is not null && depth < 5; depth++, ancestor = ancestor.Parent)
+                if (IsCloudFolder(ancestor.Name)) return root;
+        }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        catch (ArgumentException) { }
+        return null;
+    }
+
     private static bool IsCloudAccountContainer(string name) =>
         name.Equals("My Drive", StringComparison.OrdinalIgnoreCase) ||
         name.Equals("MyDrive", StringComparison.OrdinalIgnoreCase) ||
@@ -148,6 +170,17 @@ public static class CompanyArchiveDiscovery
 
             finalRootsChecked = roots.Count;
             var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            // Machine-local, read-only discovery hint. Not an access grant.
+            // Useful if a virtual Google Drive mount is visible to Windows but
+            // transiently omitted by a particular .NET drive enumeration.
+            var hint = Environment.GetEnvironmentVariable(ExistingArchiveHintVariable);
+            if (string.IsNullOrWhiteSpace(hint))
+                hint = Environment.GetEnvironmentVariable(ExistingArchiveHintVariable,
+                    EnvironmentVariableTarget.User);
+            var validatedHint = ValidateArchiveHint(hint);
+            if (validatedHint is not null) candidates.Add(validatedHint);
+
             foreach (var root in roots)
             {
                 foreach (var path in FindWithinCloudRoot(root)) candidates.Add(path);
