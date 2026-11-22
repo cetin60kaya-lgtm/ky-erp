@@ -171,7 +171,11 @@ public partial class LocalFolderWindow : Window
         // Manual entry is a Windows junction dialog fallback, not a bypass.
         if (string.IsNullOrWhiteSpace(_company))
             throw new InvalidOperationException("Önce KY ERP'de ana firmayı seçin. Firma kimliği boşsa klasör kurulmaz.");
-        var root = LocalFolderService.ValidateRoot(selectedPath);
+        var resolution = LocalFolderService.ResolveUserEnteredRoot(selectedPath);
+        var root = resolution.FullPath;
+        // Corrected filesystem spelling is shown before the user's explicit approval.
+        // This does NOT create a folder or bypass the existing tenant/grant checks.
+        if (resolution.Corrected) CompanyRootPathInput.Text = root;
         var grants = LocalFolderService.Load();
         if (grants.Any(g => g.FullPath.Equals(root, StringComparison.OrdinalIgnoreCase) &&
                             !g.Company.Equals(_company, StringComparison.OrdinalIgnoreCase)))
@@ -183,7 +187,10 @@ public partial class LocalFolderWindow : Window
                 "Eski yetkiyi kullanıcı onayıyla kaldırmadan aynı firmaya ikinci kök açılamaz.");
 
         var missing = CompanyArchiveLayout.MissingPaths(root);
-        var preview = $"{_company} firması\n\nAna klasör: {root}\n" +
+        var correctedNotice = resolution.Corrected
+            ? $"Windows klasör adı otomatik düzeltildi.\nGirilen: {selectedPath}\nGerçek: {root}\n\n"
+            : "";
+        var preview = correctedNotice + $"{_company} firması\n\nAna klasör: {root}\n" +
             $"Mevcut klasörler korunacak. Oluşturulacak eksik standart klasör: {missing.Count}.\n\n" +
             "Mevcut hiçbir dosya silinmez, taşınmaz veya üzerine yazılmaz.\n" +
             "Seçili köke yalnız File Hub okuma izni verilir. Windows kullanıcı ortamında " +
@@ -249,7 +256,9 @@ public partial class LocalFolderWindow : Window
         if (string.IsNullOrWhiteSpace(_company))
             throw new InvalidOperationException("Önce KY ERP ana firmasını seçin.");
         var purpose = (PurposeInput.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "";
-        var validPath = LocalFolderService.ValidateRoot(selectedPath);
+        var resolution = LocalFolderService.ResolveUserEnteredRoot(selectedPath);
+        var validPath = resolution.FullPath;
+        if (resolution.Corrected) ExtraFolderPathInput.Text = validPath;
         var permission = purpose is "BACKUP_DESTINATION" or "FILE_HUB_WRITE" ? "yazma" : "salt okunur";
         var approval = MessageBox.Show(this,
             $"Firma: {_company}\nKlasör: {validPath}\nİzin: {permission}\nAmaç: {purpose}\n\n" +
