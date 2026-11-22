@@ -53,6 +53,24 @@ public sealed class CompanyArchiveDiscoveryTests
     }
 
     [Fact]
+    public void OptionalRealUserHintReachesExactlyAnExistingArchive()
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(
+                "KYERP_TEST_CLOUD_DISCOVERY_ROOT"))) return;
+
+        // A local per-user hint is never a grant. It is read from the Windows
+        // profile and must resolve to an already existing bounded cloud archive.
+        var hint = Environment.GetEnvironmentVariable(
+            CompanyArchiveDiscovery.ExistingArchiveHintVariable,
+            EnvironmentVariableTarget.User);
+        Assert.False(string.IsNullOrWhiteSpace(hint));
+        var validated = CompanyArchiveDiscovery.ValidateArchiveHint(hint);
+        Assert.NotNull(validated);
+        Assert.Contains(validated!, CompanyArchiveDiscovery.FindExistingCompanyRoots(),
+            StringComparer.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void DirectCloudFolderProbeWorksWithoutVolumeLabelOrShellPicker()
     {
         var fakeDrive = Path.Combine(Path.GetTempPath(), "ky-drive-probe-" + Guid.NewGuid().ToString("N"));
