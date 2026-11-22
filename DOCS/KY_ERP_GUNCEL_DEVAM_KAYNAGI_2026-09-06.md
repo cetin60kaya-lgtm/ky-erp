@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 22.11.2026 — İşNet kayıt ve arşiv açıklaması düzeltmesi
+
+- Seçili gelen fatura X'in gerçek Drive-eşitleme klasöründe XML+PDF+manifest olarak **önceden bulunuyor**; iki orijinal SHA256 manifestle eşleşiyor, hata yok. Kaydet düğmesi İndirilenler'e dosya indirmez; kullanıcının iki ayrı `elle indir` tıklaması tarayıcıya dosya indirmiştir.
+- PR #637 `c09099b5cffa1350d6badbc6a90c27466355d41a` ile her satırda kayıt/mevcut/hata geri bildirimi ve etiket açıklaması düzeltildi. X Node/HTML güvenlik testleri 5/5. Yeni 8791 JS kaynak dosyası canlı X dosya sistemine yedekli/kesintisiz güncellendi; çalışan portal PID 24368 yeniden başlatılmadı, yeni UI sonraki servis açılışında yüklenir.
+- **Açık:** Google Drive'a gerçek cloud senkron ve File Hub/D1 tek kayıt aktarımı. Browser Downloads ZIP/XML/PDF arşivin birincil kaynağı değildir.
+
+
 ## 22.11.2026 — Windows 1.5.4 düzeltme paketi
 - Gerçek X: kurulu uygulama 1.5.3, sol başlığın 1.5.2 yazması sabit XAML metninden. Yeni dinamik sürüm etiketi PR #636 SHA 740a75c95a6bc811afaad653ee5f64784498ad1c ile canonical kod dalına birleştirildi.
 - Windows QA 1.5.4 Setup tam derleme başarılı; dosya 93.278.796 byte ve SHA256 0133C5685C2FBAF8023496C24825EE1E7FB710162F38F74BEFD64131862642D8. Mevcut kurulum kaldırılmadı.
