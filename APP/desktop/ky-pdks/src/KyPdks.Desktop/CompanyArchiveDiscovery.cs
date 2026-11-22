@@ -144,8 +144,10 @@ public static class CompanyArchiveDiscovery
             // mount fails. Surface the real failure to the user instead.
             var hint = Environment.GetEnvironmentVariable(ExistingArchiveHintVariable,
                 EnvironmentVariableTarget.User);
-            var validHint = ValidateArchiveHint(hint);
-            return (PreferExactVerifiedHint(probed.Candidates, validHint),
+            // The on-demand local broker has already verified each candidate.
+            // Exact membership is enough here; re-inspecting the same mount
+            // twice would introduce unnecessary Task Scheduler round-trips.
+            return (PreferExactVerifiedHint(probed.Candidates, hint),
                 probed.RootsChecked);
         }
         var finalRootsChecked = 0;
