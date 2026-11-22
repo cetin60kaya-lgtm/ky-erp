@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   release-worker:
-    name: Worker test, D1 yedek, schema, deploy ve canli dogrulama
+    name: Worker test, D1 Time Travel kontrol, schema, deploy ve canli dogrulama
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -68,25 +68,28 @@ jobs:
           set -euo pipefail
           npx wrangler whoami
 
-      - name: Canli D1 tam yedegini al
+      # Code-only release: the live D1 database stays inside Cloudflare.
+      # Do NOT export customer/payroll/accounting records into GitHub-hosted
+      # runners or upload SQL artifacts. Time Travel is a bounded rollback
+      # window, not an independent long-term backup.
+      - name: Cloudflare D1 Time Travel geri donus noktasini dogrula
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p database-backup
-          stamp="$(date -u +%Y%m%d-%H%M%S)"
-          output="database-backup/ky-erp-db-before-worker-${stamp}.sql"
-          npx wrangler d1 export "$DB_NAME" --remote --config wrangler.jsonc --skip-confirmation --output "$output"
-          test -s "$output"
-          echo "D1_BACKUP=$output" >> "$GITHUB_ENV"
-
-      - name: D1 yedegini artifact olarak sakla
-        uses: actions/upload-artifact@v4
-        with:
-          name: ky-erp-worker-production-backup-${{ github.run_id }}
-          path: APP/cloud/ky-erp-api/database-backup/*.sql
-          if-no-files-found: error
-          retention-days: 30
+          info="$(npx wrangler d1 info "$DB_NAME" --config wrangler.jsonc --json)"
+          printf '%s' "$info" | jq -e '(.version // .result.version // "") == "production"' >/dev/null || {
+            echo "D1 production Time Travel dogrulanamadi; SQL verisi GitHub runnerina cekilmeyecek." >&2
+            exit 1
+          }
+          travel="$(npx wrangler d1 time-travel info "$DB_NAME" --config wrangler.jsonc --json)"
+          bookmark="$(printf '%s' "$travel" | jq -r '.bookmark // .result.bookmark // empty')"
+          test -n "$bookmark" || {
+            echo "D1 Time Travel bookmark okunamadi; Worker deploy durduruldu." >&2
+            exit 1
+          }
+          echo "D1_TIME_TRAVEL_READY=true" >> "$GITHUB_ENV"
+          echo "Canli D1 verisi GitHub'a indirilmedi. Time Travel rollback hazir."
 
       # 0062, diger production migrationlardan tamamen ayridir.
       # Onayli 0062 release bayragi disinda migration calistirilamaz.
@@ -115,8 +118,8 @@ jobs:
           set -euo pipefail
           migration=migrations/0062_accounting_physical_receipt_journal.sql
           test -f "$migration"
-          test -n "${D1_BACKUP:-}" && test -s "$D1_BACKUP" || {
-            echo "Canli D1 export yedegi bulunamadi; 0062 kesinlikle uygulanmayacak." >&2; exit 1;
+          test "${D1_TIME_TRAVEL_READY:-}" = "true" && test -n "${KYERP_EXTERNAL_BACKUP_VERIFIED:-}" || {
+            echo "0062 migration icin bagimsiz firma yedegi ayri kabul edilmedi; D1 mutasyonu yapilmayacak." >&2; exit 1;
           }
           # Yalniz CREATE TABLE/INDEX/TRIGGER; mevcut tablo veya satirlar degistirilemez.
           ! grep -Eiq '^[[:space:]]*(DROP|DELETE|UPDATE|INSERT|ALTER|REPLACE|TRUNCATE)[[:space:]]' "$migration"
@@ -127,7 +130,7 @@ jobs:
           existing="$(jq -r '.[0].results[0].journal_tables' <<<"$before")"
           case "$existing" in
             0)
-              echo "0062 uygulanacak; yedek artifact kaydedildi, onceki journal tablosu yok."
+              echo "0062 icin ayri yedek ve onay dogrulandi; tablo yok."
               npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --file "$migration" --yes
               ;;
             2)
@@ -185,7 +188,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Bu adimdan once tam D1 yedegi Actions artifact olarak saklanmis olmalidir.
+          # Tam D1 SQL dump GitHub Actions icine alinmaz. Ayrica yetkilendirilmis gizli yedek gerekir.
           npx wrangler d1 execute "$DB_NAME" --remote --config wrangler.jsonc --command \
             "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('auth_users','auth_user_security','auth_sessions','auth_security_audit','main_companies','hr_monthly_employees','ik_person_card_settings','ik_time_clock_events','hr_leave_records_v2','ik_leave_plans','json_store','machine_shift_defaults','model_records','production_records','model_production_links') ORDER BY name;" \
             --json > /tmp/kyerp-0060-prerequisite.json
