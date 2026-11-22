@@ -4,7 +4,7 @@ import {readFileSync} from "node:fs";
 const cloud=readFileSync(new URL("./file-hub-cloud-oauth.ts",import.meta.url),"utf8");
 const screen=readFileSync(new URL("../../../app/ky-erp-frontend/src/pages/admin/AdminStorageCenter.jsx",import.meta.url),"utf8");
 test("mevcut kismi Drive kuyrugu korunur ve 2026 giris klasoru once gelir",()=>{
- assert.match(cloud,/prioritizeGoogleScanQueue\(cursor\.queue\)/);
+ assert.match(cloud,/prioritizeGoogleScanQueue\(cursor\.queue, preferredPaths\)/);
  assert.match(cloud,/await persist\(cursor\)/);
  assert.match(cloud,/cloudSyncCursor/);
 });
