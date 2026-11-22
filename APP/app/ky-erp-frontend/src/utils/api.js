@@ -174,7 +174,14 @@ function createTimeoutSignal(timeoutMs, existingSignal) {
 }
 
 async function parseResponsePayload(response, responseType = "auto") {
-  if (responseType === "blob") return response.blob();
+  if (responseType === "blob") {
+    // Error responses are JSON even when a successful response is PDF/XML.
+    // Parsing them as Blob hides ORIGINAL_NOT_PDF/UNAUTHORIZED and leaves a
+    // "belge hazırlanıyor" popup with no actionable error.
+    if (response.ok) return response.blob();
+    const raw = await response.text();
+    try { return raw ? JSON.parse(raw) : null; } catch { return raw; }
+  }
   const text = await response.text();
   try {
     return text ? JSON.parse(text) : null;
