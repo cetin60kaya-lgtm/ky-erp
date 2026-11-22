@@ -18,7 +18,7 @@
 - X cihazında feature dalındaki xUnit ve WPF derlemesi: 24/24 PASS, WPF 0 hata/uyarı.
 - X üzerindeki gerçek `D:\Googledrive` bağlama noktasında opt-in test: **25/25 PASS**.
 - `CompanyArchiveDiscovery.FindExistingCompanyRoots()` hiçbir yol verilmeden X'teki aynı firma arşivini buldu: **25/25 PASS**, test X'in gerçek Windows yanıtıyla doğrulandı.
-- Son 1.5.7 Inno Setup paket SHA256 ve Program Files/UAC kabulü *ayrı*, paketin üretilmesinden sonra kaydedilecek.
+- **1.5.7 X full Setup PASS:** source `642853e2a27bfb96467b4a727f5617d1b3d84b37`; full `BUILD_SETUP.ps1` restore, desktop+agent build, 25/25 xUnit tests, win-x64 publish, Inno Setup 6.7.3 PASS; `KY-ERP-Masaustu-Setup-1.5.7.exe` 93.273.249 byte, SHA256 `D6B0B42787DD062588A09FDFF665039D744DBCEB195DDF380C4FF929D77CCC0E`, ProductVersion `1.5.7`. Eski 1.5.6 Setup SHA doğrulanıp QA arşivine kopyalandı. Kurulum X'te PID 20180 olarak başlatıldı, **o andaki Windows kurulu EXE 1.5.6**. Gerçek UAC/Setup bitiş ve önizleme onayı ayrı açık.
 
 ## Kalan kullanıcı kabulü
 1. X 1.5.7 Setup checksum ve sürüm; kurulum öncesi 1.5.6 korunur.
