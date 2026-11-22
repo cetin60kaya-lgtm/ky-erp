@@ -18,6 +18,7 @@ import { explicitEBelgeDirection, resolveManualEBelgeDirection } from "./e-belge
 import { eBelgeProductRouting, getEBelgeProduct, getEBelgeSupplierProfile, matchEBelgeProduct, resolveEBelgeExpenseCategory, validateEBelgeChemicalReceipt } from "./e-belge-product-store";
 import { chooseExactCompanyByTax, verifiedContactEmail, verifiedContactPhone } from "./e-belge-company-identity.ts";
 import { verifiedXmlPartyRecoveryDecision } from "./e-belge-xml-party-recovery";
+import { dispatchRequirement } from "./e-belge-dispatch-policy";
 import { accountingAccess,accountingTenantReadAllowed } from "./accounting-access-policy";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -467,6 +468,17 @@ async function reconcileOne(c:Context<AppEnv>,slug:string,id:string,internalFina
   if(!["INCOMING","OUTGOING"].includes(upper(invoice.direction))){await addIssue(c,slug,id,"DIRECTION_UNRESOLVED","Fatura/irsaliye eşleştirmesi için belge yönü netleşmelidir.","ERROR","direction");return{documentId:id,status:"DIRECTION_UNRESOLVED",confidence:0,notes:["Belge yönü otomatik doğrulanamadı."]}}
   const invoiceLines=(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>()).results||[];
   const meta=safeJson(invoice.raw_metadata),refs=safeArray(meta.dispatchReferences).map(text).filter(Boolean);
+  const requirement=dispatchRequirement(refs,invoiceLines);
+  if(!requirement.required){
+    // Utility/service expenses are valid payable invoices without an irsaliye.
+    // Do not erase original XML/PDF, stock evidence, or financial postings.
+    await resolveIssues(c,slug,id,["DISPATCH_UNMATCHED","DISPATCH_QUANTITY_MISMATCH","DISPATCH_REFERENCE_MISSING"]);
+    const result={documentId:id,status:"NOT_REQUIRED",reason:requirement.reason,confidence:100,
+      notes:["Gider/hizmet faturası: irsaliye eşleştirmesi zorunlu değil."]};
+    await c.env.DB.prepare("UPDATE accounting_documents SET raw_metadata=?,updated_at=? WHERE id=? AND main_company_slug=? AND posted_at IS NULL")
+      .bind(JSON.stringify({...meta,reconciliation:{...result,updatedAt:now()}}),now(),id,slug).run();
+    return result;
+  }
   const start=text(invoice.issue_date)?new Date(new Date(invoice.issue_date).getTime()-90*86400000).toISOString().slice(0,10):"1900-01-01",end=text(invoice.issue_date)?new Date(new Date(invoice.issue_date).getTime()+90*86400000).toISOString().slice(0,10):"2999-12-31";
   const candidateRows=(await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE main_company_slug=? AND direction=? AND document_type LIKE '%IRSALIYE%' AND deleted_at IS NULL AND COALESCE(issue_date,created_at)>=? AND COALESCE(issue_date,created_at)<=? ORDER BY COALESCE(issue_date,created_at) DESC LIMIT 500`).bind(slug,invoice.direction,start,end).all<Row>()).results||[];
   const candidates=[];for(const row of candidateRows){const lines=(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,row.id).all<Row>()).results||[];candidates.push(rowDocument(row,lines))}
@@ -800,6 +812,70 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     if(companyId)await rerouteDocumentLines(c,slug,id,companyId);
     await resolveIssues(c,slug,id,["DIRECTION_UNRESOLVED"]);
     return c.json({ok:true,data:{id,direction:targetDirection,documentType:targetType}});
+  });
+
+  /** Bounded tenant-scoped, user-approved backfill for old XML documents.
+   * Never auto-post, invent missing identities, or approve an invoice.
+   * Keyset cursor makes repeated calls resumable and avoids duplicate cards.
+   */
+  app.post("/api/e-belge/recover-companies-batch",async c=>{
+    const user=await getAuthenticatedUser(c);
+    if(!user?.id)return c.json(error("UNAUTHORIZED","Muhasebe için oturum gerekli."),401);
+    const b=await c.req.json<Row>().catch(()=>({}));
+    const slug=slugOf(c,b);
+    if(!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))
+      return c.json(error("ACCOUNTING_FORBIDDEN","Firma/cari eşleştirme yetkisi gerekli."),403);
+    if(b.confirmed!==true)return c.json(error("COMPANY_BATCH_APPROVAL_REQUIRED","XML'den toplu cari eşleştirmeyi açıkça onaylayın."),400);
+    const cursor=safeJson(b.cursor),afterTime=text(cursor.createdAt),afterId=text(cursor.id);
+    if(afterTime&&(!/^\\d{4}-\\d{2}-\\d{2}T/.test(afterTime)||!afterId||afterId.length>128))
+      return c.json(error("INVALID_CURSOR","Eşleştirme devam konumu geçersiz."),400);
+    const rows=(await c.env.DB.prepare(`SELECT d.*
+      FROM accounting_documents d
+      WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND d.posted_at IS NULL
+        AND COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL'
+        AND d.xml_file_asset_id IS NOT NULL
+        AND COALESCE(TRIM(d.party_company_id),'')=''
+        AND d.status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED')
+        AND (d.created_at>? OR (d.created_at=? AND d.id>?))
+      ORDER BY d.created_at ASC,d.id ASC LIMIT 21`)
+      .bind(slug,afterTime,afterTime,afterId).all<Row>()).results||[];
+    const batch=rows.slice(0,20),out={scanned:0,created:0,linked:0,reviewRequired:0,routingReview:0,errors:0};
+    for(const doc of batch){
+      out.scanned+=1;
+      try{
+        const source=await readFileHubAssetForMail(c,slug,text(doc.xml_file_asset_id),20*1024*1024);
+        if(!/\\.xml$/i.test(text(source.fileName))&&!/xml/i.test(text(source.mimeType))){out.reviewRequired++;continue}
+        const xml=parseCanonicalEBelgeUbl(new TextDecoder("utf-8",{fatal:false}).decode(source.bytes),"INCOMING");
+        const parsed=await resolveManualDirection(c,slug,"AUTO",xml,isDispatch(xml.documentType)?"IRSALIYE":"FATURA");
+        const decision=verifiedXmlPartyRecoveryDecision(doc,parsed);
+        if(!decision.ok){out.reviewRequired++;continue}
+        const card=await ensureOfficialXmlCompany(c,slug,parsed);
+        if(!card?.id){out.reviewRequired++;continue}
+        const match=await matchCompany(c,slug,text(parsed.partyName),cleanTax(parsed.partyTaxNo));
+        if(!match.companyId||match.companyId!==card.id){out.reviewRequired++;continue}
+        const result=await c.env.DB.prepare(`UPDATE accounting_documents SET party_company_id=?,updated_at=?
+          WHERE id=? AND main_company_slug=? AND COALESCE(TRIM(party_company_id),'')=''
+            AND posted_at IS NULL AND status NOT IN ('POSTED','FINALIZING','FINALIZE_RETRY','APPROVED')`)
+          .bind(match.companyId,now(),doc.id,slug).run();
+        if(Number(result.meta?.changes)!==1){out.reviewRequired++;continue}
+        await resolveIssues(c,slug,text(doc.id),["PARTY_UNMATCHED"]);
+        out.linked+=1;if(card.created===true)out.created+=1;
+        try{await rerouteDocumentLines(c,slug,text(doc.id),match.companyId)}
+        catch{
+          out.routingReview+=1;
+          await addIssue(c,slug,text(doc.id),"PRODUCT_ROUTING_REVIEW",
+            "Cari doğrulandı; ürün, gider ve LOT yönlendirmesi ayrıca incelenmeli.","WARNING","lines").catch(()=>undefined);
+        }
+        // Existing or new utility expense lines must not inherit spurious
+        // dispatch warnings. Physical stock and explicit XML references stay gated.
+        if(isInvoice(doc.document_type))
+          await reconcileOne(c,slug,text(doc.id)).catch(()=>undefined);
+      }catch{out.errors+=1}
+    }
+    const last=batch[batch.length-1],hasMore=rows.length>20;
+    return c.json({ok:true,data:{...out,hasMore,
+      nextCursor:hasMore&&last?{createdAt:text(last.created_at),id:text(last.id)}:null,
+      completed:!hasMore,financialPosting:false}});
   });
 
   app.post("/api/e-belge/documents/:id/recover-company-from-xml",async c=>{
