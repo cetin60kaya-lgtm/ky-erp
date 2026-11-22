@@ -3,24 +3,25 @@ using System.IO;
 namespace KyPdks.Desktop;
 
 /// <summary>
-/// Discover existing company archive candidates without Windows shell dialogs.
-/// Scanning is bounded to cloud sync roots and immediate company directories.
-/// No grants, file content reads, directory creation, or cross-tenant mutation.
+/// Bounded, read-only enumeration of existing cloud company archive roots.
+/// The shell folder picker is NEVER needed for the company archive.
+/// No machine-specific absolute paths, file mutation or permission grant.
 /// </summary>
 public static class CompanyArchiveDiscovery
 {
     private static readonly string[] EvidenceFolders =
         { "KY-ISNET-BELGELER", "MUHASEBE", "DESEN", "BOYAHANE", "İMALAT", "YÖNETİM" };
 
+    private static readonly string[] KnownCloudDirectoryNames =
+        { "Googledrive", "Google Drive", "DriveFS", "OneDrive" };
+
     private static readonly string[] CloudRootEnvironment =
         { "OneDrive", "OneDriveCommercial", "OneDriveConsumer" };
 
     private static bool IsCloudFolder(string name) =>
-        name.Equals("GoogleDrive", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("Google Drive", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("OneDrive", StringComparison.OrdinalIgnoreCase) ||
-        name.StartsWith("OneDrive - ", StringComparison.OrdinalIgnoreCase) ||
-        name.Equals("DriveFS", StringComparison.OrdinalIgnoreCase);
+        KnownCloudDirectoryNames.Any(known =>
+            name.Equals(known, StringComparison.OrdinalIgnoreCase)) ||
+        name.StartsWith("OneDrive - ", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsCloudAccountContainer(string name) =>
         name.Equals("My Drive", StringComparison.OrdinalIgnoreCase) ||
@@ -30,12 +31,13 @@ public static class CompanyArchiveDiscovery
         name.StartsWith("Drive'", StringComparison.OrdinalIgnoreCase) ||
         name.Equals("Google Drive", StringComparison.OrdinalIgnoreCase);
 
-    private static IEnumerable<string> SafeChildren(string parent)
+    private static IReadOnlyList<string> SafeChildren(string parent)
     {
         try
         {
-            if (!Directory.Exists(parent)) return Array.Empty<string>();
-            return Directory.EnumerateDirectories(parent).Take(256).ToArray();
+            return Directory.Exists(parent)
+                ? Directory.EnumerateDirectories(parent).Take(512).ToArray()
+                : Array.Empty<string>();
         }
         catch (IOException) { return Array.Empty<string>(); }
         catch (UnauthorizedAccessException) { return Array.Empty<string>(); }
@@ -45,18 +47,19 @@ public static class CompanyArchiveDiscovery
     {
         try
         {
-            // A shortcut/junction itself must never become a company grant root.
+            // Do not approve a mount/junction itself as a company root.
             var info = new DirectoryInfo(candidate);
             if (!info.Exists || (info.Attributes & FileAttributes.ReparsePoint) != 0) return false;
-            var evidence = EvidenceFolders.Count(name => Directory.Exists(Path.Combine(candidate, name)));
-            return evidence >= 2;
+            return EvidenceFolders.Count(folder => Directory.Exists(Path.Combine(candidate, folder))) >= 2;
         }
         catch (IOException) { return false; }
         catch (UnauthorizedAccessException) { return false; }
     }
 
-    /// <summary>Find only existing candidates immediately under a cloud root
-    /// or its My Drive/Drive'ım account container. No arbitrary disk walk.</summary>
+    /// <summary>
+    /// Two-tier enumeration only: cloud mount and optional account container.
+    /// No recursive disk search, no reads of document bodies.
+    /// </summary>
     public static IReadOnlyList<string> FindWithinCloudRoot(string cloudRoot)
     {
         var found = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -73,36 +76,92 @@ public static class CompanyArchiveDiscovery
         return found.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
-    public static IReadOnlyList<string> FindExistingCompanyRoots()
+    /// <summary>
+    /// Probe well-known cloud mount DIRECTORY NAMES directly on each drive.
+    /// Older logic only enumerated the drive root and could return no roots when
+    /// a shell mount was temporarily unavailable during enumeration. This
+    /// fallback is generic: no X/DESEN/company-specific absolute path.
+    /// </summary>
+    public static IReadOnlyList<string> FindCloudRootsOnDrive(string driveRoot)
     {
         var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var env in CloudRootEnvironment)
+        if (!Directory.Exists(driveRoot)) return Array.Empty<string>();
+
+        // Direct existence probes do not rely on shell enumeration, index order,
+        // volume label, or Google Drive junction being selectable in Explorer.
+        foreach (var name in KnownCloudDirectoryNames)
         {
-            var value = Environment.GetEnvironmentVariable(env);
-            if (!string.IsNullOrWhiteSpace(value) && Directory.Exists(value)) roots.Add(value);
+            var path = Path.Combine(driveRoot, name);
+            if (Directory.Exists(path)) roots.Add(path);
         }
 
-        foreach (var drive in DriveInfo.GetDrives())
+        // Company-specific OneDrive directories may be dynamically named.
+        foreach (var folder in SafeChildren(driveRoot))
         {
-            try
-            {
-                if (!drive.IsReady) continue;
-                if (drive.VolumeLabel.Contains("Google Drive", StringComparison.OrdinalIgnoreCase))
-                    roots.Add(drive.RootDirectory.FullName);
-                foreach (var child in SafeChildren(drive.RootDirectory.FullName))
-                {
-                    if (IsCloudFolder(Path.GetFileName(child))) roots.Add(child);
-                }
-            }
-            catch (IOException) { }
-            catch (UnauthorizedAccessException) { }
+            if (IsCloudFolder(Path.GetFileName(folder))) roots.Add(folder);
         }
-
-        var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var root in roots)
-        {
-            foreach (var candidate in FindWithinCloudRoot(root)) candidates.Add(candidate);
-        }
-        return candidates.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
+        return roots.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
     }
+
+    /// <summary>
+    /// Returns only candidate paths and number of roots examined. Numbers are
+    /// suitable for on-screen diagnostics without exposing private filenames.
+    /// </summary>
+    public static (IReadOnlyList<string> Candidates, int RootsChecked)
+        FindExistingCompanyRootsWithDiagnostics()
+    {
+        var finalRootsChecked = 0;
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var roots = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var env in CloudRootEnvironment)
+            {
+                var value = Environment.GetEnvironmentVariable(env);
+                if (!string.IsNullOrWhiteSpace(value) && Directory.Exists(value)) roots.Add(value);
+            }
+
+            var profile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            if (!string.IsNullOrEmpty(profile))
+                foreach (var path in FindCloudRootsOnDrive(profile)) roots.Add(path);
+
+            foreach (var drive in DriveInfo.GetDrives())
+            {
+                try
+                {
+                    var driveRoot = drive.RootDirectory.FullName;
+                    if (!Directory.Exists(driveRoot)) continue;
+                    foreach (var path in FindCloudRootsOnDrive(driveRoot)) roots.Add(path);
+
+                    // A Google Drive virtual volume may be mounted as a drive.
+                    try
+                    {
+                        if (drive.IsReady &&
+                            drive.VolumeLabel.Contains("Google Drive", StringComparison.OrdinalIgnoreCase))
+                            roots.Add(driveRoot);
+                    }
+                    catch (IOException) { }
+                    catch (UnauthorizedAccessException) { }
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+
+            finalRootsChecked = roots.Count;
+            var candidates = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var root in roots)
+            {
+                foreach (var path in FindWithinCloudRoot(root)) candidates.Add(path);
+            }
+            if (candidates.Count != 0)
+                return (candidates.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray(),
+                    finalRootsChecked);
+
+            // Cloud mount may still be initializing after Desktop starts.
+            if (attempt == 0) Thread.Sleep(300);
+        }
+        return (Array.Empty<string>(), finalRootsChecked);
+    }
+
+    public static IReadOnlyList<string> FindExistingCompanyRoots() =>
+        FindExistingCompanyRootsWithDiagnostics().Candidates;
 }
