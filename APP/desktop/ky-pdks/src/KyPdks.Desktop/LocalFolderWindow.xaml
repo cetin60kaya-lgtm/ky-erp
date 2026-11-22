@@ -46,9 +46,12 @@
                            TextWrapping="Wrap" Foreground="{StaticResource Muted}" Margin="0,3,0,9"/>
                 <CheckBox x:Name="IsnetArchivistCheck" Content="Bu bilgisayar İşNet faturalarını indirip arşivleyecek (muhasebe bilgisayarı)"
                           IsChecked="False" Margin="0,2,0,8" Foreground="{StaticResource Text}"/>
-                <Button x:Name="ChooseCompanyRootButton" Content="Firma Ana Klasörünü Seç ve Eksikleri Kur" Click="ChooseCompanyRoot_Click"
+                <Button x:Name="ChooseCompanyRootButton" Content="Mevcut Firma Arşivini Otomatik Bul ve Önizle" Click="ChooseCompanyRoot_Click"
                         Style="{StaticResource AccentButton}" HorizontalAlignment="Left" Margin="0,0,0,9"/>
-                <TextBlock Text="Google Drive / OneDrive bağlama noktası Windows klasör seçicisinde açılmıyorsa mevcut firma klasörünün tam yolunu aşağıya yazın. Aynı izin ve güvenlik denetimi uygulanır."
+                <ComboBox x:Name="ArchiveCandidates" Visibility="Collapsed" Margin="0,0,0,8" Height="34"
+                          SelectionChanged="ArchiveCandidates_SelectionChanged"
+                          ToolTip="Bulunan arşivlerden doğru firmayı seçin; yalnızca seçiminizden sonra onay gösterilir."/>
+                <TextBlock Text="Windows klasör seçicisi açılmaz. Uygulama mevcut Google Drive/OneDrive arşivini bulup onayınıza sunar. Bulamazsa mevcut klasör yolunu aşağıya yazabilirsiniz."
                            Foreground="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,6"/>
                 <DockPanel Margin="0,0,0,14">
                     <Button x:Name="ApproveCompanyRootPathButton" DockPanel.Dock="Right" Content="Yolu Doğrula ve Önizle"
@@ -56,6 +59,9 @@
                     <TextBox x:Name="CompanyRootPathInput" Height="34" VerticalContentAlignment="Center"
                              ToolTip="Mevcut Hakan Emp gibi firma ana klasörünün mutlak Windows yolu; yeni arşiv oluşturulmaz."/>
                 </DockPanel>
+                <CheckBox x:Name="CreateMissingFoldersCheck" IsChecked="False"
+                          Content="Eksik standart klasörleri de oluştur (isteğe bağlı; varsayılan kapalı)"
+                          Foreground="{StaticResource Muted}" Margin="0,0,0,12"/>
                 <Separator Margin="0,0,0,13"/>
                 <Expander Header="1 · Ek bir klasöre izin ver (isteğe bağlı)" IsExpanded="False" Foreground="{StaticResource Text}" Margin="0,0,0,4">
                     <StackPanel Margin="0,9,0,0">
