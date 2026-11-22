@@ -3,16 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "032ea230c2ddcbb382a3b60aae8524bf05d058bb",
+  "sourceCommit": "99e8ab671e9ed797fdb2c998a073238849e07898",
   "requestedAt": "2026-11-22",
-  "attempt": 61,
+  "attempt": 62,
   "scope": [
-    "PR643_VERIFIED_XML_COMPANY_CARD_REPAIR",
-    "EXPENSE_ONLY_INVOICE_NO_UNNECESSARY_DISPATCH",
-    "TENANT_SCOPED_UBL_RECOVERY_NO_POSTING",
-    "NO_D1_MIGRATION_NO_DATA_RESET_NO_OFFICIAL_SEND"
+    "PR644_FILE_HUB_EBELGE_ORIGINAL_PDF_XML_NOT_THUMBNAIL",
+    "DIRECT_AUTHORIZED_R2_OR_CLOUD_DOCUMENT_PREVIEW",
+    "ACCOUNTING_PDF_PRINT_NO_ARCHIVE_CHANGE",
+    "NO_D1_MIGRATION_NO_PAYMENT_NO_OFFICIAL_SEND"
   ],
-  "note": "2026-11-22 user requested existing accounting matches and vendor cards become operational. PR #643 verified XML repair and expense-only dispatch policy passed canonical Worker+Frontend CI. Only code; no D1 migrations, financial posting, stock, import duplication, file move/delete or invoice official send.",
+  "note": "2026-11-22 PR #644: original accounting PDF/XML preview from tenant-authorized R2/Google/Graph source instead of cloud thumbnail. FileHub original document storage unchanged. Release code only, Worker typecheck/test/build PASS run 45044729835, no migration.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
