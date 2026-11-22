@@ -5,6 +5,7 @@ import { canManageOwnCompanyStorage, canReadOwnCompanyStorage } from "./file-hub
 import { syncFileHubDesignModel } from "./file-hub-design-sync";
 import { selectCloudModelBinding, canUseModelImageFolder, classifyDesignSourcePath, matchExistingDesignModelNames, normalizeDesignModelKey, findUniqueMissingDesignImageModel } from "./file-hub-cloud-model-binding";
 import { prioritizeGoogleScanQueue } from "./file-hub-google-priority";
+import { cloudRemovalRequiresFullReconciliation } from "./file-hub-delta-removal";
 
 type Bindings = Cloudflare.Env & {
   GOOGLE_DRIVE_CLIENT_ID?: string;
@@ -905,9 +906,16 @@ async function runGoogleDeltaBatch(
         unlinked+=Number(updated.meta?.changes||0);
       };
       if(change.removed || file?.trashed || !file){
+        // Deleting an already indexed FILE is handled by marking its location
+        // unavailable. Only a folder/unknown ID needs a tree reconciliation.
+        const wasIndexedFile=Boolean(await c.env.DB.prepare(
+          "SELECT 1 AS known FROM file_hub_locations WHERE main_company_slug=? " +
+          "AND storage_connection_id=? AND provider_file_id=? LIMIT 1"
+        ).bind(slug,connectionId,fileId).first<Row>());
         await remove();
-        // A deleted folder can contain indexed descendants; reconcile safely.
-        folderChanges=true;
+        if(cloudRemovalRequiresFullReconciliation(
+          wasIndexedFile,text(file?.mimeType)==="application/vnd.google-apps.folder"
+        ))folderChanges=true;
         continue;
       }
       const parents=Array.isArray(file.parents)?file.parents:[];
@@ -1040,7 +1048,15 @@ async function runMicrosoftDeltaBatch(
         ).bind(now(),slug,connectionId,fileId).run();
         unlinked+=Number(update.meta?.changes||0);
       };
-      if(item.deleted){await remove();folderChanges=true;continue;}
+      if(item.deleted){
+        const wasIndexedFile=Boolean(await c.env.DB.prepare(
+          "SELECT 1 AS known FROM file_hub_locations WHERE main_company_slug=? " +
+          "AND storage_connection_id=? AND provider_file_id=? LIMIT 1"
+        ).bind(slug,connectionId,fileId).first<Row>());
+        await remove();
+        if(cloudRemovalRequiresFullReconciliation(wasIndexedFile,Boolean(item.folder)))folderChanges=true;
+        continue;
+      }
       const parentId=text(item.parentReference?.id);
       if(!parentId){folderChanges=true;continue;}
       const base=await graphRelativeFolderPath(accessToken,parentId,scopedRootId,driveId,folders);
