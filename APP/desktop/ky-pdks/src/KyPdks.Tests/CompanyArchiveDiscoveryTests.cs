@@ -119,6 +119,18 @@ public sealed class CompanyArchiveDiscoveryTests
     }
 
     [Fact]
+    public void VerifiedArchiveHintPrioritizesExactExistingRootOnly()
+    {
+        var values = new[] { @"D:\Googledrive\Diğer bilgisayarlar",
+            @"D:\Googledrive\Drive'ım\Hakan Emp" };
+        var chosen = CompanyArchiveDiscovery.PreferExactVerifiedHint(values, values[1]);
+        Assert.Single(chosen);
+        Assert.Equal(values[1], chosen[0]);
+        Assert.Equal(2, CompanyArchiveDiscovery.PreferExactVerifiedHint(values,
+            @"D:\Googledrive\Unrelated").Count);
+    }
+
+    [Fact]
     public void MultipleExistingArchivesRequireExplicitSelection()
     {
         var root = Path.Combine(Path.GetTempPath(), "ky-cloud-discovery-" + Guid.NewGuid().ToString("N"));
