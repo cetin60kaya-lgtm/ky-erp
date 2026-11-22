@@ -127,12 +127,8 @@ public static class CompanyArchiveLayout
     {
         var root = LocalFolderService.ValidateRoot(approvedRoot);
         if (CloudArchiveProbe.Available && CloudArchiveProbe.IsCloudPath(root))
-        {
-            // Called only after the explicit user-facing Yes and optional
-            // Create Missing Folders checkbox.
-            var result = CloudArchiveProbe.Ensure(root, StandardPaths);
-            return (StandardPaths.Count - result.MissingPaths.Count, result.MissingPaths.Count);
-        }
+            throw new UnauthorizedAccessException(
+                "Google Drive/OneDrive arşivine bu ekrandan yeni klasör yazılamaz. Salt okunur erişim seçin.");
         var missing = MissingPaths(root);
         foreach (var relative in missing)
         {
