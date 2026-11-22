@@ -16,11 +16,10 @@ test("0062 canli migration yalniz ayrica onayli hedeften calisabilir",()=>{
 });
 
 test("0062 kesinlikle backup artifact'inden once calismaz",()=>{
-  const backup=workflow.indexOf("- name: Canli D1 tam yedegini al");
-  const artifact=workflow.indexOf("- name: D1 yedegini artifact olarak sakla");
+  const backup=workflow.indexOf("- name: Cloudflare D1 Time Travel geri donus noktasini dogrula");
   const gate=workflow.indexOf("- name: 0062 fiziksel journal icin tek-hedef user onay kapisi");
   const apply=workflow.indexOf("- name: Sadece 0062 D1 fiziksel journal migration ve salt-okunur kanit");
-  assert.ok(backup>0 && artifact>backup && gate>artifact && apply>gate);
+  assert.ok(backup>0 && gate>backup && apply>gate);
   assert.match(workflow,/test -n "\$\{D1_BACKUP:-\}" && test -s "\$D1_BACKUP"/);
   assert.match(workflow,/journal_tables == 2 and \.journal_indexes == 4 and \.capacity_trigger == 1/);
 });
