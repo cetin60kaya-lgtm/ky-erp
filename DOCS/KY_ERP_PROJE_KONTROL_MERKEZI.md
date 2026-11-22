@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — File Hub delta silme koruması canlı Worker PASS (PR #639)
+
+- Kod ve regresyon testi: PR #639 merge `adc12e1bf29125a154397f7061896c357e90b255`, canonical CI `44990548576` **success**. Google Drive Changes ve Microsoft Graph delta, D1'de aynı firma+bağlantı+provider dosya ID ile mevcut indekslenmiş **dosya** silindiğinde yalnız ilgili dosya konumunu `is_available=0` yapar; salt bu nedenle tüm arşivi yeniden taramaz. Bilinmeyen ID/klasör silinmesi ihtiyatlı tam uzlaştırmayı korur.
+- **Worker production PASS:** release marker attempt 58, sourceCommit `adc12e1...`, marker commit `78cbb5fb885e66cbc2a14672ea2bfeb733f51264`, run `44990713758` **success**: Worker typecheck/test/build, D1 Time Travel + salt-okunur schema, Cloudflare Worker deploy ve canlı API health adımları başarılı. D1 migration işleri `skipped`. Frontend bu PR'da değişmedi; yeni frontend release başlatılmadı.
+- **X gerçek Windows Setup kontrolü:** mevcut `KY-ERP-Masaustu-Setup-1.5.5.exe` dosyası X'te 93.276.722 byte, SHA256 `ABFD7E6A45703A5CE872E45F45A9DAEC872107EE8900132DE8CC4A40E666A53C`, ProductVersion `1.5.5`. Bu **dosya/derleme kabulüdür**, kalıcı Program Files kurulum/UAC kabulü değildir. 1.5.4 ve İşNet 8791 oturumuna dokunulmadı; PDKS/DESEN değiştirilmedi.
+- **Açık kalan canlı iş kabulü:** Hakan Emp için Windows 1.5.5 kullanıcının UAC onayıyla kurulum, izinli yerel ana klasör yolunun 1.5.5'te doğrulanması, gerçek Google/Graph delta ilk çevrimi, `E_BELGE/E_DOCUMENT` tenant binding üzerinden bir gerçek XML+PDF'nin D1 File Hub ve Muhasebe Belge Havuzu tekil taslak belge bağlantısının denetlenmesi. Tüm eski indeks ve dosyalar korunur; bunlar yapılmadan kullanıcı ekranı ve muhasebe uçtan uca PASS ilan edilmez.
+
+
+
 ## 22.11.2026 — Masaüstü 1.5.5 gerçek Windows Setup derleme PASS
 
 - X Windows QA: `BUILD_SETUP.ps1` 1.5.5 restore/build/xUnit/self-contained publish/integrations/InnoSetup tam PASS. Kurulum dosyası `D:\KYERP-TEST-20261121\kyerp-desktop-archive-build-qa\APP\desktop\ky-pdks\dist\setup\KY-ERP-Masaustu-Setup-1.5.5.exe`. Uzunluk **93.276.722 byte**; SHA256 **ABFD7E6A45703A5CE872E45F45A9DAEC872107EE8900132DE8CC4A40E666A53C**, ProductVersion **1.5.5**. Gerçek derleyici çıkışı `SETUP_155_QA_PASS` / exit 0.
