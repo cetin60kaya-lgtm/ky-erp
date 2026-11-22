@@ -1542,15 +1542,10 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
       const { link, accessToken } = await connectionAccount(c, gate.slug, connectionId); if (Number(link.is_active) === 0) return c.json(err("CONNECTION_DISABLED", "Bu depolama servisi pasif."), 409);
       const provider = upper(link.provider_type), driveId = text(link.provider_drive_id), rootId = text(link.remote_root_id) || "root", rootName = text(link.remote_root_name) || "Ana Klasör", seenAt = now();
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
-        if (provider === "GOOGLE_DRIVE") {
-          const priority=await syncRecentBoundGoogleImages(c,gate.slug,connectionId,link,accessToken,true);
-          if (priority.ran) return c.json({ok:true,data:{
-            files:priority.scanned,folders:0,modelSyncs:priority.linked,
-            designImagePriority:true,truncated:priority.hasMore,inProgress:priority.hasMore,
-            scannedTotal:priority.scannedTotal,linkedTotal:priority.linkedTotal,
-            message:priority.hasMore ? "Drive görsel taraması sonraki sayfadan devam edecek." : "Drive görsel taraması tamamlandı.",
-          }});
-        }
+        // Manual "Taramaya Devam Et" must advance the same tenant-scoped D1
+        // checkpoint as the scheduled shared index. A large DESEN image
+        // archive must never consume this click and delay E_BELGE/E_DOCUMENT.
+        // The independent image fast scan remains in the 5-minute cron.
         const progress = await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
         return c.json({ ok: true, data: progress });
       }
