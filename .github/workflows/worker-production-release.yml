@@ -182,6 +182,10 @@ jobs:
           done
 
       - name: Personel 0060 icin canli D1 on kosul dogrulamasi
+        # Code-only Worker releases cannot be blocked by an unrelated
+        # personnel migration precondition. Keep it mandatory whenever
+        # the separate production migration approval gate is enabled.
+        if: steps.migration_gate.outputs.apply == 'true'
         working-directory: APP/cloud/ky-erp-api
         shell: bash
         run: |
