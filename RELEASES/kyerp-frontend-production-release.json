@@ -5,13 +5,14 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-22",
   "scope": [
-    "PR643_XML_VERIFIED_VENDOR_CARD_RECOVERY_UI",
-    "ACCOUNTING_CANONICAL_HAVUZ_CARI_ACTION",
-    "KEEP_EXISTING_E_BELGE_AND_ACCOUNTING_VIEWS",
-    "NO_DB_MIGRATION_NO_FILE_MOVE_NO_OFFICIAL_SEND"
+    "PR644_PDF_POPUP_CLOSE_ON_ERROR",
+    "ORIGINAL_PDF_VIEW_AND_PRINT",
+    "AUTH_401_GENERIC_FILE_ERROR_NO_UNEXPECTED_LOGOUT",
+    "PREVENT_OLD_401_INVALIDATING_NEW_SESSION",
+    "NO_FINANCIAL_WRITE_NO_MIGRATION"
   ],
-  "note": "2026-11-22 user requested to finish accounting firm matching. One-button XML verified company card recovery for unposted existing documents, tenant scoped with no posting. PR #643 frontend lint/test/build green; no migrations or source deletions.",
-  "sourceCommit": "b9b61f7e21d735a70875751d00e631052258df71",
+  "note": "2026-11-22 PR #644: e-Belge popup & printing never navigates authenticated main ERP page to blob; 10 minute blob lifetime, structured error rather than indefinite preparing page. Generic business 401 cannot log out user, /auth/me security unchanged. Canonical acceptance run 45044729835 SUCCESS. Frontend-only release, no D1 writes.",
+  "sourceCommit": "55192dd0b589b68fb8904ccf5bc7cc753291d4cd",
   "requestedAt": "2026-11-22",
-  "attempt": 8
+  "attempt": 9
 }
