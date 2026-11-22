@@ -44,7 +44,12 @@ public sealed class CompanyArchiveDiscoveryTests
         var cloudRoot = Environment.GetEnvironmentVariable("KYERP_TEST_CLOUD_DISCOVERY_ROOT");
         if (string.IsNullOrWhiteSpace(cloudRoot)) return;
         Assert.True(Directory.Exists(cloudRoot), "The requested existing cloud mount is unavailable.");
-        Assert.NotEmpty(CompanyArchiveDiscovery.FindWithinCloudRoot(cloudRoot));
+        var direct = CompanyArchiveDiscovery.FindWithinCloudRoot(cloudRoot);
+        Assert.NotEmpty(direct);
+        var discoveredFromWindows = CompanyArchiveDiscovery.FindExistingCompanyRoots();
+        Assert.True(direct.Any(candidate =>
+            discoveredFromWindows.Contains(candidate, StringComparer.OrdinalIgnoreCase)),
+            "Global auto-discovery must locate the same real cloud archive.");
     }
 
     [Fact]
