@@ -655,7 +655,7 @@ async function googleChildrenPage(token: string, parentId: string, pageToken = "
   const params = new URLSearchParams({
     q: "'" + String(parentId || "root").replace(/'/g, "\\'") + "' in parents and trashed=false",
     fields: "nextPageToken,files(id,name,mimeType,modifiedTime,size,webViewLink,md5Checksum)",
-    pageSize: "15", spaces: "drive",
+    pageSize: "30", spaces: "drive",
   });
   if (pageToken) params.set("pageToken", pageToken);
   const response = await providerJson("https://www.googleapis.com/drive/v3/files?" + params, token);
@@ -844,6 +844,12 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   if (Number(link.is_active) === 0) throw Object.assign(new Error("Depolama servisi pasif."), { code: "CONNECTION_DISABLED", status: 409 });
   const rootId = text(link.remote_root_id) || "root";
   const raw = text(link.connection_metadata), meta = json(raw);
+  // Tenant-owned D1 binding drives priority; never use a computer-specific path.
+  const selected = await c.env.DB.prepare(
+    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? " +
+    "AND module_code='E_BELGE' AND purpose_code='E_DOCUMENT' AND read_enabled=1 AND sync_enabled=1"
+  ).bind(slug, connectionId).all<Row>();
+  const preferredPaths = (selected.results || []).map((r:Row)=>text(r.root_path)).filter(Boolean);
   const resumed = meta.cloudSyncCursor && meta.cloudSyncCursor.rootId === rootId && Array.isArray(meta.cloudSyncCursor.queue);
   const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
   if (scheduled && !resumed && previousComplete && Date.now() - previousComplete < 6 * 3600000) return { skipped: true };
@@ -858,7 +864,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     ? { ...meta.cloudSyncCursor, queue: meta.cloudSyncCursor.queue.map((f: Row) => ({ id: text(f.id), path: text(f.path), pageToken: text(f.pageToken) })) }
     : { rootId, startedAt: now(), queue: [{ id: rootId, path: "", pageToken: "" }], pages: 0, files: 0, folders: 0, changedFiles: 0, modelSyncs: 0, designBackfillPath:text(meta.designBackfillPath) };
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
-  prioritizeGoogleScanQueue(cursor.queue);
+  prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
@@ -908,7 +914,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       else cursor.queue.shift();
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
       cursor.queue.unshift(...discoveredFolders);
-      prioritizeGoogleScanQueue(cursor.queue);
+      prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
       cursor.pages = Number(cursor.pages || 0) + 1;
       if (cursor.queue.length > 4000) throw Object.assign(new Error("Klasör kuyruğu sınırı aşıldı."), { code: "SYNC_QUEUE_TOO_LARGE" });
       await persist(cursor);
@@ -967,7 +973,9 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         if (provider === "GOOGLE_DRIVE") {
           const priority=await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken);
-          if (priority.ran) continue;
+          // MODEL_IMAGE background scan must not starve e-Belge and all-file
+          // indexing. The shared D1 lease is released before the next batch.
+          // Both operations are idempotent and use one cloud connection.
         }
         await runGoogleSyncBatch(c, slug, connectionId, 3, true);
         continue;
