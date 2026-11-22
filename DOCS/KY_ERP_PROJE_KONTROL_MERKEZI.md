@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 22.11.2026 — İşNet XML+PDF Kaydet / manuel indir kullanım farkı canlı kabul
+
+- **X gerçek klasör doğrulaması:** İşNet 8791 üzerindeki seçili gelen faturanın mevcut `KY-ISNET-BELGELER/GELEN-FATURA` klasöründe XML, PDF ve `belge-kayit.json` bulundu. İki dosyanın SHA-256 değerleri manifestle eşleşti, hata sayısı 0. Belge zaten daha önce arşivli; kayıt başka bir Windows İndirilenler dosyası oluşturmamalı.
+- **İş davranışı:** `XML/PDF elle indir` tarayıcı İndirilenler'e gönderir; `XML + PDF Kaydet` `/archive-item` ile mevcut yerel Google Drive eşitleme klasöründe aynı orijinali koruyarak arşivler. Yerel arşiv PASS, Google Drive bulut eşitlemesi ve ERP D1 muhasebe indeks kabulü **ayrı**.
+- **Arayüz düzeltmesi:** PR #637 merge SHA `c09099b5cffa1350d6badbc6a90c27466355d41a`; buton `Drive'a XML + PDF Kaydet`, her faturada başarı/önceden mevcut/eksik/hata sonucu, işlem sırasında tekrar tıklama koruması, açık indir-arşiv açıklaması. X izole Node HTML/güvenlik/firma testleri **5/5 PASS**.
+- **Canlı X dağıtım sınırı:** Yeni 8791 JS kodu X'te gerçek çalışan kaynak dosyasına yedekli + hash doğrulamalı yerleştirildi; **çalışan PID 24368 yeniden başlatılmadı ve yetkili portal oturumu korundu**. Yeni UI yalnız sonraki kontrollü 8791 açılışında görüntülenir. Worker/Pages/D1/PDKS değişmedi.
+
+
 ## 22.11.2026 — Masaüstü sürüm başlığı düzeltildi (1.5.4)
 - Kullanıcının kurduğu 1.5.3 Windows Program Files EXE, Uninstall kaydı ve iki kısayolda doğrulandı. Yanlış MASAÜSTÜ • 1.5.2 etiketi KyErpShellWindow.xaml içinde sabit kalmıştı; kurulum hatası değildi.
 - Düzeltme: gerçek assembly sürümünü okuyarak dinamik sürüm gösterimi. Desktop, Agent, VERSION, BUILD_SETUP ve Inno Setup 1.5.4. PR #636 merge SHA: 740a75c95a6bc811afaad653ee5f64784498ad1c.
