@@ -1083,6 +1083,15 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     "AND module_code='E_BELGE' AND purpose_code='E_DOCUMENT' AND read_enabled=1 AND sync_enabled=1"
   ).bind(slug, connectionId).all<Row>();
   const preferredPaths = (selected.results || []).map((r:Row)=>text(r.root_path)).filter(Boolean);
+  const designBound = await c.env.DB.prepare(
+    "SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? " +
+    "AND module_code IN ('DESEN','DTF','IMALAT') AND read_enabled=1 AND sync_enabled=1"
+  ).bind(slug,connectionId).all<Row>();
+  const designRoots=(designBound.results||[]).map((r:Row)=>text(r.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"").toLocaleLowerCase("en-US"));
+  const isDesignCandidate=(relativePath:string)=>{
+    const path=relativePath.toLocaleLowerCase("en-US");
+    return designRoots.some((root:string)=>!root||path.startsWith(root+"/"));
+  };
   const resumed = meta.cloudSyncCursor && meta.cloudSyncCursor.rootId === rootId && Array.isArray(meta.cloudSyncCursor.queue);
   const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
   // The initial tree walk is shared in D1. All subsequent routine Google
@@ -1157,7 +1166,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           const indexed = await upsertCloudFile(c, slug, connectionId, providerType, child, relativePath, now());
           files += 1; cursor.files += 1;
           if (indexed.changed) cursor.changedFiles += 1;
-          if (indexed.needsModelSync) {
+          if (indexed.needsModelSync && isDesignCandidate(relativePath)) {
             const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, providerType);
             if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
           }
