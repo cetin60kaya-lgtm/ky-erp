@@ -617,7 +617,7 @@ export async function readFileHubAssetForMail(c:any,slug:string,assetId:string,m
   const fileName=text(asset.file_name)||"ek";
   const mimeType=text(asset.mime_type)||"application/octet-stream";
 
-  if(upper(asset.source_type)==="ACCOUNTING_STAGING"&&text(asset.preview_storage_key)){
+  if(["ACCOUNTING_STAGING","E_DOCUMENT_PROVIDER"].includes(upper(asset.source_type))&&text(asset.preview_storage_key)){
     const object=await c.env.FILES.get(text(asset.preview_storage_key));
     if(!object)throw Object.assign(new Error("Muhasebe belge eki R2 intake alanında bulunamadı."),{code:"MAIL_ATTACHMENT_R2_MISSING",status:404});
     const buffer=await object.arrayBuffer();
