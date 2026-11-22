@@ -11,8 +11,8 @@ Aynı Google Drive / OneDrive firma kökünü farklı Windows bilgisayarlarda, d
 - [x] WPF ekran: dolu ana kök alanı doğrudan önizlenir; ayrı isteğe bağlı klasör yetkisi kapalı bölüme alındı; otomatik düzeltme kullanıcının önüne yazılı gelir.
 
 ## Sürüm öncesi kabul sırası
-- [ ] `KyPdks.Tests` gerçek X .NET testi (Unicode + kötü/missing yol + disk kökü).
-- [ ] WPF Desktop test derlemesi.
+- [x] `KyPdks.Tests` gerçek X .NET testi: **21/21 PASS**, sıfır başarısız, sıfır atlanan (feature commit `ffa456a6fcf9dec766312d56bf0d546a19228b19`).
+- [x] WPF Desktop test derlemesi: **0 hata, 0 uyarı** (X QA; kurulu 1.5.5 değiştirilmedi).
 - [ ] Yeni tek revizyon numarası Desktop, Agent, VERSION, setup, build scripti ve manifestte tutarlı.
 - [ ] Mevcut QA test kopyasında tam Setup derleme ve SHA256 doğrulama.
 - [ ] Windows onay penceresinde varsa düzeltilen tam yol ve seçili firma görülür; yanlış şirket klasörü bağlanmaz.
