@@ -26,3 +26,11 @@
 3. Kullanıcı onayından sonra tam **tek FILE_HUB READ_ONLY** izni; tekrar tıklandığında yeni duplicate kaydı oluşmaması.
 4. İşNet 8791, PDKS ve Cloudflare D1 korunumu; gerçek delta/Belge Havuzu kabulü ayrı.
 5. Diğer Windows cihazı kabulü; mevcut firma OAuth/D1 ortak indeks kullanılacak, yeni bulut indeksi oluşturulmayacak.
+
+## X Windows gerçek 1.5.7 kurulum kabulü
+
+- [x] Kurulu `Program Files` EXE `ProductVersion=1.5.7+642853e2a27bfb96467b4a727f5617d1b3d84b37`.
+- [x] Setup PID 20180 tamamlandı ve kapandı, masaüstü uygulaması çalışıyor.
+- [x] Eski isteğe bağlı PDKS Agent servisi eklenmedi, firma kökü fiziksel olarak mevcut.
+- [ ] Windows kullanıcı onaylı `FILE_HUB/READ_ONLY` izni, tekil kök ve tekrarlı onay güvenliği.
+- [ ] 8791, OAuth/delta, XML/PDF muhasebe havuzu ve diğer cihazlar gerçek kabulü.
