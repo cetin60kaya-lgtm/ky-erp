@@ -5,15 +5,13 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-22",
   "scope": [
-    "PR638-merged-3851f3801588fe41dd98298e6e3436f8f96e176f",
-    "SINGLE_TENANT_CLOUD_D1_INDEX_AND_PROVIDER_DELTA_DISPLAY",
-    "PREVENT_DUPLICATE_CONNECTED_ROOT",
-    "CONFIRM_BEFORE_EXPENSIVE_FULL_RESCAN",
-    "WORKER_PRODUCTION_RELEASE_44978436011_SUCCESS",
-    "NO_SQL_MIGRATION_NO_FILE_MOVE_NO_INVOICE_SEND"
+    "PR643_XML_VERIFIED_VENDOR_CARD_RECOVERY_UI",
+    "ACCOUNTING_CANONICAL_HAVUZ_CARI_ACTION",
+    "KEEP_EXISTING_E_BELGE_AND_ACCOUNTING_VIEWS",
+    "NO_DB_MIGRATION_NO_FILE_MOVE_NO_OFFICIAL_SEND"
   ],
-  "note": "22.11.2026 kullanıcı onaylı firma bazlı tek ortak Drive/OneDrive/SharePoint indeksi ve manuel yeniden tam tarama uyarısı. Worker önceki kontrollü yayında canlı sağlık PASS; frontend arayüzü firma başına ortak D1 indeksi ve değişiklik kontrol sonuçlarını gösterir. D1/Drive dosyaları taşınmaz; gerçek firma delta ve muhasebe belgesi kabulü ayrıca kontrol edilir.",
-  "sourceCommit": "3851f3801588fe41dd98298e6e3436f8f96e176f",
+  "note": "2026-11-22 user requested to finish accounting firm matching. One-button XML verified company card recovery for unposted existing documents, tenant scoped with no posting. PR #643 frontend lint/test/build green; no migrations or source deletions.",
+  "sourceCommit": "b9b61f7e21d735a70875751d00e631052258df71",
   "requestedAt": "2026-11-22",
-  "attempt": 7
+  "attempt": 8
 }
