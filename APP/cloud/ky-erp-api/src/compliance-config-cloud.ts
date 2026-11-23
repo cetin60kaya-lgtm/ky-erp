@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { storeComplianceEvidence, complianceStoragePurpose } from "./compliance-storage";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -52,15 +53,19 @@ async function linkRequirements(c:Context<AppEnv>,slug:string,documentId:string,
   return list.length;
 }
 async function stageVersion(c:Context<AppEnv>,slug:string,documentId:string,file:File,userId:string){
-  const doc=await c.env.DB.prepare(`SELECT * FROM compliance_documents WHERE id=? AND main_company_slug=? AND archived_at IS NULL`).bind(documentId,slug).first<Row>();if(!doc)throw Object.assign(new Error("Evrak bulunamadı."),{code:"NOT_FOUND"});const ext=validateComplianceFile(file);
-  const assetId=crypto.randomUUID(),ts=now(),version=Math.max(1,Number(doc.version_no||1))+1,name=safeName(file.name),key=`compliance/${slug}/${documentId}/v${version}/${assetId}-${name}`;
-  await c.env.FILES.put(key,await file.arrayBuffer(),{httpMetadata:{contentType:file.type||"application/octet-stream"},customMetadata:{purpose:"COMPLIANCE_DOCUMENT",documentId,version:String(version),originalName:file.name,mainCompanySlug:slug}});
-  await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','COMPLIANCE_UPLOAD','READY',?,?,?, ?,?,?)`).bind(assetId,slug,`compliance:${documentId}:v${version}`,file.name,ext,file.type||null,file.size,key,JSON.stringify({storageKey:key,documentId,version}),ts,ts,ts,ts).run();
-  await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,'COMPLIANCE_DOCUMENT',1,1,'COMPLIANCE_CENTER','{}',?,?)`).bind(crypto.randomUUID(),slug,assetId,"COMPLIANCE_DOCUMENT",documentId,ts,ts).run();
-  const snapshot={title:doc.title,category:doc.category,documentNo:doc.document_no,issueDate:doc.issue_date,expiresAt:doc.expires_at,tags:json(doc.tags,[]),customFields:json(doc.custom_fields,{})};
-  await c.env.DB.prepare(`INSERT INTO compliance_document_versions(id,main_company_slug,document_id,version_no,file_asset_id,file_name,storage_key,mime_type,file_size,metadata_snapshot,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(crypto.randomUUID(),slug,documentId,version,assetId,file.name,key,file.type||null,file.size,JSON.stringify(snapshot),userId||null,ts).run();
-  await c.env.DB.prepare(`UPDATE compliance_documents SET file_asset_id=?,file_name=?,storage_key=?,mime_type=?,file_size=?,version_no=?,ai_status='PENDING',updated_at=? WHERE id=? AND main_company_slug=?`).bind(assetId,file.name,key,file.type||null,file.size,version,ts,documentId,slug).run();
-  return{assetId,key,fileName:file.name,mimeType:file.type||"application/octet-stream",size:file.size,versionNo:version};
+ const doc=await c.env.DB.prepare("SELECT * FROM compliance_documents WHERE id=? AND main_company_slug=? AND archived_at IS NULL").bind(documentId,slug).first<Row>();
+ if(!doc)throw Object.assign(new Error("Evrak bulunamadı."),{code:"NOT_FOUND"});
+ validateComplianceFile(file);
+ const oldCustom=json(doc.custom_fields,{});
+ const version=doc.file_asset_id?Math.max(1,Number(doc.version_no||1))+1:Math.max(1,Number(doc.version_no||1));
+ const a=await storeComplianceEvidence(c,slug,file,{entityType:"COMPLIANCE_DOCUMENT",entityId:documentId,version,purpose:complianceStoragePurpose(oldCustom.documentKind)});
+ const ts=now(),snapshot={title:doc.title,category:doc.category,documentNo:doc.document_no,issueDate:doc.issue_date,
+ expiresAt:doc.expires_at,tags:json(doc.tags,[]),customFields:oldCustom,archiveStatus:a.archiveStatus};
+ await c.env.DB.prepare("INSERT OR IGNORE INTO compliance_document_versions(id,main_company_slug,document_id,version_no,file_asset_id,file_name,storage_key,mime_type,file_size,metadata_snapshot,created_by,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)")
+ .bind(crypto.randomUUID(),slug,documentId,version,a.assetId,a.fileName,a.key,a.mimeType,a.size,JSON.stringify(snapshot),userId||null,ts).run();
+ await c.env.DB.prepare("UPDATE compliance_documents SET file_asset_id=?,file_name=?,storage_key=?,mime_type=?,file_size=?,version_no=?,custom_fields=?,ai_status='PENDING',updated_at=? WHERE id=? AND main_company_slug=?")
+ .bind(a.assetId,a.fileName,a.key,a.mimeType,a.size,version,JSON.stringify({...oldCustom,archiveStatus:a.archiveStatus}),ts,documentId,slug).run();
+ return a;
 }
 function normalizeProfile(row:Row){return{...row,metadata:json(row.metadata,{})}}
 function normalizeRequirement(row:Row){return{...row,evidence_types:json(row.evidence_types,[]),custom_fields:json(row.custom_fields,{}),metadata:json(row.metadata,{})}}
