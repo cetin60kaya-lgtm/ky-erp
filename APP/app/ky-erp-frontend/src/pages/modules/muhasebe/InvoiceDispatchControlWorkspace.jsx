@@ -75,7 +75,7 @@ function exportCsv(rows) {
   URL.revokeObjectURL(url);
 }
 
-export default function InvoiceDispatchControlWorkspace({ activeMainCompany, openModule, onInvoiceMail }) {
+export default function InvoiceDispatchControlWorkspace({ activeMainCompany, openModule, onInvoiceMail, onOpenDocument }) {
   const [state, setState] = useState({ loading: true, error: "", rows: [], summary: {} });
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("OPEN");
@@ -138,6 +138,15 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany, ope
   }, [query, state.rows, status]);
 
   const summary = state.summary || {};
+  const openLinkedDocument = (documentId, tabKey) => {
+    if (!documentId) return;
+    if (onOpenDocument) {
+      setSelected(null);
+      onOpenDocument(documentId);
+      return;
+    }
+    openModule?.("e-belge", { tabKey, actionContext: { documentId } });
+  };
 
   return (
     <section className="idc-root">
@@ -234,8 +243,8 @@ export default function InvoiceDispatchControlWorkspace({ activeMainCompany, ope
             <div className="idc-drawer-body">
               <div className="accounting-inline-actions">
                 {selected.modelId?<button type="button" onClick={()=>{openModel360Card({modelId:selected.modelId,tab:"documents",source:"muhasebe"});setSelected(null);}}>Model 360° · İmalat / Belgeler</button>:null}
-                {selected.id && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-irsaliyeler", actionContext: { documentId: selected.id } })}>Müşteri İrsaliyesini Aç</button>}
-                {selected.invoiceId && <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-faturalar", actionContext: { documentId: selected.invoiceId } })}>İlişkili Faturayı Aç</button>}
+                {selected.id && <button type="button" onClick={() => openLinkedDocument(selected.id, "giden-irsaliyeler")}>Müşteri İrsaliyesini Aç</button>}
+                {selected.invoiceId && <button type="button" onClick={() => openLinkedDocument(selected.invoiceId, "giden-faturalar")}>İlişkili Faturayı Aç</button>}
                 {String(selected.invoiceNo || "").toUpperCase().startsWith("HKN") && <button type="button" onClick={() => onInvoiceMail?.({ id: selected.invoiceId || selected.id, document_no: selected.invoiceNo, delivery_no: selected.dispatchNo, model_id: selected.modelId, model_name: selected.modelName, party_name: selected.companyName })}>HKN Faturasını Maille Gönder</button>}
               </div>
               <section className="idc-detail-grid">
