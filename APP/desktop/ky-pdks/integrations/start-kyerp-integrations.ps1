@@ -18,8 +18,13 @@ function Start-Agent {
   # No automatic process kill, remote shell, or Windows firewall changes.
   Start-Process -FilePath $node -ArgumentList ('"' + $Script + '"') -WorkingDirectory $WorkDir -WindowStyle Hidden | Out-Null
 }
-# Fixed loopback İşNet portal adapter; user enters credentials only through KY ERP.
-Start-Agent -Script $portal -WorkDir (Split-Path -Parent $portal)
+# Fixed loopback 8788 adapter is optional for legacy caller compatibility.
+# Never spawn a duplicate over an already open port (not even when Setup
+# launches and Windows startup run at the same time).
+$portalListener = Get-NetTCPConnection -LocalAddress '127.0.0.1' -LocalPort 8788 -State Listen -ErrorAction SilentlyContinue
+if (-not $portalListener) {
+  Start-Agent -Script $portal -WorkDir (Split-Path -Parent $portal)
+}
 # Optional 8791 archive starts only when the Windows user already configured
 # an absolute, existing approved Drive/local root; it never stores credentials.
 $archiveScript = Join-Path $root 'isnet-archive\isnet-drive-yerel.mjs'
