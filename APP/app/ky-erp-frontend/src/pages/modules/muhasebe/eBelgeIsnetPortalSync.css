@@ -57,3 +57,14 @@ button.eis-local-open:disabled{opacity:.55;cursor:not-allowed}
 .eis-single-frame header strong{display:flex;gap:7px;align-items:center}
 .eis-single-frame iframe{min-height:580px;height:min(74vh,920px)}
 @media(max-width:700px){.eis-status{flex-wrap:wrap}.eis-retry{width:100%;justify-content:center}}
+
+/* Cloud-first: no localhost probe or desktop agent required on page load. */
+.eis-cloud-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:11px}
+.eis-cloud-steps>div{min-width:0;display:flex;flex-direction:column;align-items:flex-start;gap:10px;padding:15px;border:1px solid var(--border,#d9e4ef);border-radius:11px;background:var(--surface-alt,#f7f9fc)}
+.eis-cloud-steps strong{display:flex;align-items:center;gap:8px;font-size:13px;line-height:1.5}
+.eis-cloud-steps strong span{display:grid;place-items:center;border-radius:50%;background:#225b93;color:#fff;width:24px;height:24px;flex-shrink:0}
+.eis-cloud-steps p{font-size:12px;line-height:1.5;margin:0;min-height:37px}
+.eis-cloud-steps small{color:var(--text-secondary,#667789);font-size:11px;line-height:1.45}
+.eis-cloud-steps button,.eis-cloud-steps a{margin-top:auto;display:inline-flex;align-items:center;gap:5px;padding:9px 11px;background:var(--surface,#fff);color:var(--text-primary,#203d5e);border:1px solid #aebfd0;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}
+.eis-cloud-steps button:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:930px){.eis-cloud-steps{grid-template-columns:1fr}.eis-cloud-steps p{min-height:0}}
