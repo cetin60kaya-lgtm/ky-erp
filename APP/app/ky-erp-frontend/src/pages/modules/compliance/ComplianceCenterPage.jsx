@@ -170,6 +170,17 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
   await loadChemicalEvidence(selectedChemicalId)}
   catch(e){setMessage("Hata: "+(e?.message||"Ürün kanıtı doğrulanamadı."))}finally{setBusy(false)}
  }
+ async function finalizeDocumentArchive(){
+  const assetId=docDetail?.document?.file_asset_id;
+  if(!assetId)return setMessage("Hata: Bu evrakın arşivlenecek dosyası bulunamadı.");
+  setBusy(true);
+  try{
+   const r=await apiPost(`/compliance/files/${assetId}/finalize-archive`,{});
+   setMessage("Orijinal dosyanın firma File Hub kaydı: "+(r?.data?.archiveStatus||"Kontrol edildi")+". Eski sürümler korundu.");
+   await loadAll();await openDocument(selectedDocId);
+  }catch(e){setMessage("Hata: "+(e?.message||"File Hub arşiv kaydı tamamlanamadı."))}
+  finally{setBusy(false)}
+ }
  async function saveSettings(e){e.preventDefault();setBusy(true);try{await apiPut("/compliance/settings",settings);setMessage("Denetim ayarları kaydedildi.")}catch(e2){setMessage("Hata: "+(e2?.message||"Ayarlar kaydedilemedi."))}finally{setBusy(false)}}
 
  const s=dash.summary||{};
@@ -226,6 +237,7 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  <label><input type="checkbox" checked={Boolean(editDoc?.signedOriginal)} onChange={e=>setEditDoc(v=>({...v,signedOriginal:e.target.checked}))}/> İmzalı asıl</label>
  <label><input type="checkbox" checked={Boolean(editDoc?.auditorShareApproved)} onChange={e=>setEditDoc(v=>({...v,auditorShareApproved:e.target.checked}))}/> Denetçi dış paylaşım izni (kişisel veri içermeyen belge)</label>
  </div><p><strong>Not:</strong> Bu bilgiler imza ve onay sürecini kaydeder; yetkili imzası yerine geçmez.</p></section>
+     {["STAGED_ONLY","BINDING_REQUIRED","PENDING_FILE_AGENT"].includes(docDetail.document?.custom_fields?.archiveStatus)&&<div className="detail-section"><h4>Dosya Arşivi — Tamamlama</h4><p>Orijinal dosya henüz firma File Hub sağlayıcısında doğrulanmadı. Bağlantı hazırsa arşive kopyalanır, eski sürümler korunur.</p><button type="button" disabled={busy||!docDetail.document?.file_asset_id} onClick={finalizeDocumentArchive}>Orijinali Firma Arşivine Kaydet</button></div>}
      <div className="detail-section"><h4>Standart ve Kriter Bağlantıları</h4><div className="requirement-scroll">{(docDetail.links||[]).map(r=><div key={r.id} className="requirement-row"><b>{r.profile_name} · {r.requirement_code}</b><span>{r.requirement_title}</span></div>)}</div><div className="inline-upload"><select value={linkRequirementId} onChange={e=>setLinkRequirementId(e.target.value)}><option value="">Kriter seçin</option>{profiles.filter(p=>p.readinessEnabled!==false).flatMap(p=>(p.requirements||[]).map(r=><option value={r.id} key={r.id}>{p.name} · {r.code} · {r.title}</option>))}</select><button type="button" disabled={!linkRequirementId||busy} onClick={linkDocumentRequirement}>Kritere Bağla</button></div></div>
      <section className="detail-section"><h4>Boyahane Ürün Uygunluğu — Tek Kanıt</h4>
      <p>MSDS/TDS ürün bazlıdır. Ortak ZDHC ve GOTS listesi dosya kopyalanmadan birden fazla ürüne bağlanır. Deklarasyon ve liste satırı yetkili tarafından doğrulanır.</p>
