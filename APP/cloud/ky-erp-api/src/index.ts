@@ -1,4 +1,5 @@
 import { writeCurrentAccount } from "./accounting-current-write.ts";
+import { auditCompanyBalance, summarizeCompanyBalanceAudit } from "./accounting-balance-audit";
 import { registerAccountingObligationsRoutes } from "./accounting-obligations";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
@@ -1320,6 +1321,39 @@ app.get("/api/muhasebe/dashboard", accountingSummary);
 app.get("/api/muhasebe/preview", accountingSummary);
 app.get("/api/muhasebe/yonetim-ozeti", accountingSummary);
 app.get("/api/muhasebe/reports/management-summary", accountingSummary);
+
+// Owner-only, read-only reconciliation. No mutation or auto-posting occurs here.
+app.get("/api/muhasebe/cari-bakiye-denetimi", async (c) => {
+  const current = await getAuthenticatedUser(c);
+  if (!current) return c.json(jsonError("UNAUTHORIZED", "Geçerli oturum zorunludur."), 401);
+  if (!["SUPER_ADMIN", "ADMIN"].includes(String(current.role || "").toUpperCase()))
+    return c.json(jsonError("FORBIDDEN", "Cari denetimi için yönetici yetkisi gerekir."), 403);
+  const slug = slugOf(c);
+  if (!slug) return c.json(jsonError("MAIN_COMPANY_REQUIRED", "Ana firma seçimi zorunludur."), 400);
+  const result = await c.env.DB.prepare(`
+    SELECT c.id, c.name, c.opening_balance, c.current_balance,
+           COALESCE(m.movement_count, 0) AS movement_count,
+           COALESCE(m.movement_net, 0) AS movement_net,
+           COALESCE(m.debit_credit_net, 0) AS debit_credit_net
+    FROM companies c
+    LEFT JOIN (
+      SELECT main_company_slug, company_id,
+             COUNT(*) AS movement_count,
+             SUM(COALESCE(effect, 0)) AS movement_net,
+             SUM(COALESCE(debit, 0) - COALESCE(credit, 0)) AS debit_credit_net
+        FROM current_account_movements
+       WHERE main_company_slug=?
+       GROUP BY main_company_slug, company_id
+    ) m ON m.main_company_slug=c.main_company_slug AND m.company_id=c.id
+    WHERE c.main_company_slug=? AND c.deleted_at IS NULL
+    ORDER BY c.name COLLATE NOCASE ASC
+  `).bind(slug, slug).all<DatabaseRow>();
+  const rows = (result.results || []).map(auditCompanyBalance);
+  return c.json({ ok: true, data: {
+    rows, totals: summarizeCompanyBalanceAudit(rows), generatedAt: new Date().toISOString(),
+    readOnly: true, balanceFormula: "OPENING_PLUS_NET_EFFECT",
+  } });
+});
 
 app.get("/api/muhasebe/firmalar", async (c) => {
   const search = c.req.query("search")?.trim() || "";

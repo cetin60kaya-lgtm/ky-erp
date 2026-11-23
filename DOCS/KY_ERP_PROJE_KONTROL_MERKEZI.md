@@ -1,4 +1,12 @@
 # KY ERP — PROJE KONTROL MERKEZİ
+
+## 22.11.2026 — Muhasebe 50.000 TL kökeni + oturum 401 güvenli düzeltme, PR #646
+
+- **Kod/test:** `fix/muhasebe-cari-acilis-bakiye-20261122` feature dalı, taslak [PR #646](https://github.com/cetin60kaya-lgtm/ky-erp/pull/646). `accounting-current-write.ts` açılış + hareket toplamını koruyor. Yöneticiye yalnız salt-okunur `/api/muhasebe/cari-bakiye-denetimi` ve Firmalar & Cari **Bakiye Kaynağını İncele** arayüzü eklendi. Oturum istemcisi artık iş API'sindeki 401'i gerçek `/auth/me` ile doğrulamadan bütün girişi silmiyor; gerçek 401 ile iptal edilmiş oturumu korumaya çalışmıyor.
+- **GitHub QA:** İlk test fixture eski `opening_balance` şemasında kaldığından Worker testleri 4 FAIL idi. Test şeması ve bir yeni açılış bakiyesi regresyonu düzeltildi. Nihai **run 45057384621 SUCCESS**: Frontend lint/test/build + Worker typecheck/test/build PASS. CI başarılı olması canlı kullanıcı oturumunun kabulü değildir.
+- **Dürüst sınır:** 50.000 TL'nin canlı firma/hareket kaynağı henüz D1'den okunmadı (X Wrangler yerel yetkisi yok); canlı mali kayıt, geçmiş bakiye ve irsaliye/LOT değişmedi. 63/16 e-Belge sayacı için gerçek `issue_code` denetimi ve ispatlanmış cari mutabakat gerekli. Kullanıcı ekranlarında PDF `blob:` yeni sekmede ve A4 yazdırma önizlemesi PASS; fiziksel baskı değil. Oturumun gerçekten korunması canlı Chrome kabulü bekliyor.
+- **Yayın durumu:** Yalnız feature dalında, PR taslak. **Merge/deploy ve D1 düzeltmesi yapılmadı.** İş ayrıntısı: `DOCS/KY_MUHASEBE_CARI_BAKIYE_OTURUM_KABUL_20261122.md`.
+
 ## 22.11.2026 — Masaüstü 1.5.7 kurulu, gerçek Windows Test 1 PASS
 
 - **PR #640 feature dalı:** Otomatik cloud arşiv bulma ile eski `OpenFolderDialog` firma-kök akışından çıkarıldı. Test: 25/25 PASS, gerçek X Google Drive mount otomatik keşif PASS, WPF build PASS.

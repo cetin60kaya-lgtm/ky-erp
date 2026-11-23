@@ -89,7 +89,7 @@ export async function writeCurrentAccount(c: Context<AppEnv>, slug: string, inpu
   }, ["id", "main_company_slug", "debit", "credit"]);
   await db.batch([
     movement,
-    db.prepare("UPDATE companies SET current_balance=(SELECT COALESCE(SUM(effect),0) FROM current_account_movements WHERE company_id=? AND main_company_slug=?), updated_at=? WHERE id=? AND main_company_slug=?").bind(companyId, slug, timestamp, companyId, slug),
+    db.prepare("UPDATE companies SET current_balance=ROUND(COALESCE(opening_balance,0)+(SELECT COALESCE(SUM(effect),0) FROM current_account_movements WHERE company_id=? AND main_company_slug=?),2), updated_at=? WHERE id=? AND main_company_slug=?").bind(companyId, slug, timestamp, companyId, slug),
     db.prepare("UPDATE current_account_movements SET balance_after=(SELECT current_balance FROM companies WHERE id=? AND main_company_slug=?) WHERE id=? AND main_company_slug=?").bind(companyId, slug, id, slug),
     ledger,
     db.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?)").bind(id, "MUHASEBE_PAYMENT", slug, requestId, JSON.stringify(payload), timestamp, timestamp),
