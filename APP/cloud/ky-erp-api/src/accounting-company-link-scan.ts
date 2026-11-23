@@ -71,7 +71,7 @@ export async function scanCompanyRelations(db: D1Database, slug: string, id: str
       throw new Error("COMPANY_SCAN_INCOMPLETE_COUNT");
     for(let n=0;n<group.length;n++) {
       if (!results[n]?.success) throw new Error("COMPANY_SCAN_COUNT_FAILED_"+group[n].table);
-      const count=Number(results[n].results?.[0]?.n);
+      const count=Number((results[n].results?.[0] as Row | undefined)?.n);
       if (!Number.isSafeInteger(count)||count<1)throw new Error("COMPANY_SCAN_INVALID_COUNT");
       if (group[n].table==="company_aliases") aliasCount+=count;
       else blockedRelations.push({table:group[n].table,count});
