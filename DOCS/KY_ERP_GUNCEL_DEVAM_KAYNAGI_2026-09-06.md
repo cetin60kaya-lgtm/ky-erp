@@ -1,5 +1,15 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
+
+- **Kaynak kullanıcı kabulü:** TAHA mükerrer güvenli birleştirme kullanıcı tarafından başarılı bildirildi; 13 aktif firma kartı görüntülendi. Gelir/gider faturaları firma bazında görünüyordu ancak henüz POSTED olmayan belgeler cari hareket olmadığı için cari hareket listesi boştu. Arşiv & Çıktı `HISTORY` yalnız `POSTED` kayıtları gösterdiği için 107 canonical belgenin hiçbirini görüntülemiyordu.
+- **Kod:** [PR #656](https://github.com/cetin60kaya-lgtm/ky-erp/pull/656), merge **`963120536d3a9af820a947bbc5a75808f20c9b26`**: salt-okunur, tenant/yetki sınırlı firma fatura+irsaliye API'si; cari hareketlerden ayrı belge listesi; geniş firma master listesi ve firma/bakiye/son işlem tarihine göre artan/azalan; alış irsaliye, alış fatura ve satış faturasında ortak sunucu tarafı belge/tarih/tutar sıralaması; Arşiv & Çıktı'da tüm gelen/giden belge türleri ve kullanıcı seçimli **orijinal PDF sıra önizlemesi**. Tek fiziksel batch spool, PDF birleştirme veya otomatik `Çıktı Alındı` kaydı yapılmaz.
+- **CI:** [#45270566375](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45270566375) Frontend lint/test/build **SUCCESS**, Worker typecheck/test/build **SUCCESS** (ilk test koşusundaki sentetik fixture tarih sütunu düzeltildi).
+- **Production:** Worker release attempt **67** [#45270866755](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45270866755) **SUCCESS**, canlı version `030e6f8f-15d5-4706-ace2-6473a75dec66`, Cloudflare deploy ve API health PASS; **D1 migration adımları SKIPPED**. Pages attempt **12** [#45270880056](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45270880056) **SUCCESS**, deploy ve canlı bundle kontrolü PASS.
+- **Açık canlı kullanıcı kabulü:** Firma kartında Can Yemek gibi müşteri/tedarikçilerin faturaları ve irsaliyeleri cari defterden ayrı açılmalı; artan/azalan sıralama gerçekten değişmeli; Arşiv & Çıktı'da tüm havuz görünmeli ve her orijinal PDF sırayla görüntülenip manuel yazdırılmalı. Gerçek kullanıcı oturumunda bu son ekran kabulü henüz doğrulanmadı.
+- **Güvenlik:** Cari bakiye, muhasebe POSTED, firma kimlikleri, KDV/LOT, İşNet resmi gönderim, D1 veri veya şema değişimi yok. Kaynak detayları: `DOCS/KY_MUHASEBE_CARI_BELGELER_SIRALAMA_ARSIV_CIKTI_20261124.md`.
+
+
 ## 23.11.2026 — Muhasebe tek TAHA ilişkiler denetimi ve firma fatura/cari görünümü, PR #653
 
 - **Kök neden:** Kullanıcı canlıda art arda `COMPANY_SCAN_METADATA_FAILED` ve `COMPANY_SCAN_SCHEMA_BATCH_FAILED` gördü. Eski D1 metadata kodu korelasyonlu veya toplu `PRAGMA` sorgularını kullanıyordu; önceki PR yayınları tek başına gerçek birleştirme kabulünü sağlamadı. `accounting-company-link-scan.ts` tek kanonik `sqlite_master(name,sql)` tabanlı, PRAGMA içermeyen, fail-closed tarayıcıyla baştan yazıldı. Hard Sil ve güvenli birleştirme aynı tarayıcıyı kullanır; ayrı tehlikeli silme yolu eklenmedi.
