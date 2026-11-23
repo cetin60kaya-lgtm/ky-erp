@@ -16,10 +16,64 @@ import {
 } from "../../services/applicationUiSettings";
 import "../../styles/global-left-click-menu.css";
 
-const INTERACTIVE_SELECTOR = [
-  "[data-ky-no-right-menu]",
-  "[data-ky-right-click-menu]",
+// Metin düzenleyicileri, bağlantılar ve gömülü PDF görüntüleyicisi tarayıcının
+// kendi sağ tık menüsünü kullanır. KY menüsü yalnız tanımlı iş nesnelerinde açılır.
+const NATIVE_CONTEXT_SELECTOR = [
+  "[data-ky-no-right-menu]", "[data-ky-right-click-menu]",
+  "input", "textarea", "select", "[contenteditable]", "[role='textbox']",
+  "a[href]", "iframe", "embed", "object", "canvas", "video", "audio",
 ].join(",");
+const EMPTY_CANVAS_SELECTOR = ".shell-v3-workspace, .muhasebe-workbench, .muhasebe-module-page";
+
+function contextualMenuFor(target) {
+  const marked = target.closest("[data-ky-context-kind]");
+  if (!marked) return null;
+  const kind = marked.dataset.kyContextKind;
+  const label = marked.dataset.kyContextLabel || "Seçili kayıt";
+
+  if (kind === "pdf") {
+    if (marked.disabled) return null;
+    return {
+      title: "PDF İşlemleri", label,
+      items: [{ id: "context:pdf-open", label: "PDF'yi Görüntüle / Yazdır", icon: "belge", type: "context", target: marked }],
+    };
+  }
+
+  if (kind === "company-row" || kind === "company-detail") {
+    const panel = kind === "company-detail" ? marked : marked.closest(".ccw-root")?.querySelector('[data-ky-context-kind="company-detail"]');
+    const matching = panel && String(panel.dataset.kyContextId || "") === String(marked.dataset.kyContextId || "");
+    if (!matching && kind === "company-row") {
+      return {
+        title: "Firma İşlemleri", label,
+        items: [{ id: "context:company-open", label: "Firma Kartını Aç", icon: "home", type: "context", target: marked }],
+      };
+    }
+    if (!matching) return null;
+    const items = [...panel.querySelectorAll("[data-ky-context-action]")]
+      .filter((button) => button instanceof HTMLButtonElement && !button.disabled)
+      .map((button) => ({
+        id: `context:${button.dataset.kyContextAction}`,
+        label: button.dataset.kyContextLabel || button.textContent.trim(),
+        icon: button.dataset.kyContextIcon || "hizli",
+        type: "context",
+        target: button,
+        danger: button.dataset.kyContextAction === "hard-delete",
+      }));
+    return items.length ? { title: "Firma İşlemleri", label: kind === "company-row" ? label : panel.dataset.kyContextLabel || label, items } : null;
+  }
+
+  if (kind === "pdf-preview") {
+    const items = [...marked.querySelectorAll("[data-ky-context-action]")]
+      .filter((button) => button instanceof HTMLButtonElement && !button.disabled)
+      .map((button) => ({
+        id: `context:${button.dataset.kyContextAction}`,
+        label: button.dataset.kyContextLabel || button.textContent.trim(),
+        icon: "belge", type: "context", target: button,
+      }));
+    return items.length ? { title: "PDF İşlemleri", label, items } : null;
+  }
+  return null;
+}
 
 function canonicalRole(value) {
   return String(value || "").trim().toUpperCase().replace(/İ/g, "I");
@@ -119,16 +173,22 @@ export default function GlobalLeftClickMenu() {
     const onContextMenu = (event) => {
       if (event.shiftKey) return;
       const target = event.target instanceof Element ? event.target : null;
-      if (!target || target.closest(INTERACTIVE_SELECTOR)) return;
-      const shell = target.closest(".shell-v3");
-      if (!shell) return;
-      if (settings.blankAreaOnly && !target.closest(".shell-v3-workspace")) return;
+      if (!target || target.closest(NATIVE_CONTEXT_SELECTOR)) return;
+      if (!target.closest(".shell-v3")) return;
       const selectedText = String(window.getSelection?.()?.toString?.() || "").trim();
       if (selectedText) return;
+      const context = contextualMenuFor(target);
+      // İçerik üzerinde rasgele sağ tık uygulamanın genel gezinme menüsünü açmaz.
+      // Özel nesne yoksa yalnız gerçekten boş çalışma alanında kısayollar sunulur.
+      if (!context && (
+        !target.matches(EMPTY_CANVAS_SELECTOR) ||
+        target.closest("button, [role='button'], [role='dialog'], [aria-modal='true']")
+      )) return;
       event.preventDefault();
-      const position = clampPosition(event.clientX, event.clientY, actions.length);
+      const itemCount = context ? context.items.length + 2 : actions.length;
+      const position = clampPosition(event.clientX, event.clientY, itemCount);
       setNotice("");
-      setMenu({ open: true, ...position });
+      setMenu({ open: true, ...position, context });
     };
 
     const onPrimaryPointerDown = (event) => {
@@ -161,6 +221,11 @@ export default function GlobalLeftClickMenu() {
 
   async function runAction(action) {
     setNotice("");
+    if (action.type === "context") {
+      if (action.target?.isConnected && !action.target.disabled) action.target.click();
+      setMenu((current) => ({ ...current, open: false }));
+      return;
+    }
     const route = parseRouteActionId(action.id);
     if (route) {
       navigate(route.moduleKey, route.tabKey);
@@ -208,6 +273,8 @@ export default function GlobalLeftClickMenu() {
   const route = currentRoute();
   const activeModule = visibleModules.find((module) => module.key === route.moduleKey);
   const builtinIds = new Set(LEFT_CLICK_BUILTINS.map((item) => item.id));
+  const shortcuts = actions.filter((action) => ["shell:copy-link", "shell:refresh"].includes(action.id)).slice(0, 2);
+  const menuItems = menu.context ? [...menu.context.items, ...shortcuts] : actions;
 
   return (
     <section
@@ -220,17 +287,17 @@ export default function GlobalLeftClickMenu() {
     >
       <header>
         <span><ErpIcon name={activeModule?.icon || "hizli"} size={16} /></span>
-        <div><strong>Sağ Tık Menüsü</strong><small>{activeModule?.label || "KY ERP"}</small></div>
+        <div><strong>{menu.context?.title || "Kısayollar"}</strong><small>{menu.context?.label || activeModule?.label || "KY ERP"}</small></div>
       </header>
       <div className="ky-left-click-menu-list">
-        {actions.map((action) => (
-          <button type="button" role="menuitem" key={action.id} onClick={() => runAction(action)}>
+        {menuItems.map((action) => (
+          <button type="button" role="menuitem" key={action.id} className={action.danger ? "danger" : undefined} onClick={() => runAction(action)}>
             {settings.showIcons ? <i><ErpIcon name={action.icon || "hizli"} size={16} /></i> : null}
-            <span><strong>{action.label}</strong><small>{action.contextual ? "Bu modül" : action.moduleLabel || action.description}</small></span>
+            <span><strong>{action.label}</strong><small>{action.type === "context" ? "Seçili kayıt işlemi" : action.contextual ? "Bu modül" : action.moduleLabel || action.description}</small></span>
             {builtinIds.has(action.id) ? <em>İşlem</em> : null}
           </button>
         ))}
-        {!actions.length ? <div className="ky-left-click-menu-empty">Bu menü için aktif işlem seçilmemiş.</div> : null}
+        {!menuItems.length ? <div className="ky-left-click-menu-empty">Bu alan için kullanılabilir işlem yok.</div> : null}
       </div>
       {notice ? <footer>{notice}</footer> : null}
     </section>

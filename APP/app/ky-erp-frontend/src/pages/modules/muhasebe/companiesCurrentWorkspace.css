@@ -751,3 +751,56 @@
 .ccw-invoice-detail span, .ccw-invoice-detail small { color: var(--text-secondary,#64748b); font-size: 12px; }
 .ccw-invoice-detail > p { grid-column: 1/-1; color: var(--text-secondary,#64748b); font-size: 12px; margin: 0; }
 @media (max-width: 850px) { .ccw-invoice-detail { grid-template-columns: 1fr; } }
+
+
+/* Firma kartındaki seyrek yönetim işlemleri tek açılır menüde kalır.
+   Aynı düğmeleri kayıt üzerindeki sağ tık menüsü de kullanır. */
+.ccw-context-more {
+  position: relative;
+  flex: 0 0 auto;
+}
+.ccw-context-more > summary {
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-color, #dfe4ea);
+  border-radius: 8px;
+  background: var(--surface-card, #fff);
+  color: var(--text-primary, #172033);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.ccw-context-more > summary::-webkit-details-marker { display: none; }
+.ccw-context-more > summary::after { content: " ▾"; margin-left: 5px; }
+.ccw-context-more > summary:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+.ccw-context-more-list {
+  position: absolute;
+  z-index: 45;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  gap: 3px;
+  width: max-content;
+  min-width: 172px;
+  max-width: min(280px, calc(100vw - 32px));
+  padding: 6px;
+  border: 1px solid var(--border-color, #dfe4ea);
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(15, 23, 42, .15);
+  background: var(--surface-card, #fff);
+}
+.ccw-context-more-list button {
+  width: 100%;
+  padding: 7px 10px;
+  justify-content: flex-start;
+  text-align: left;
+  white-space: nowrap;
+}
+.ccw-detail-panel:has(.ccw-context-more[open]) { overflow: visible; }
+@media (max-width: 720px) {
+  .ccw-context-more-list { right: auto; left: 0; }
+}

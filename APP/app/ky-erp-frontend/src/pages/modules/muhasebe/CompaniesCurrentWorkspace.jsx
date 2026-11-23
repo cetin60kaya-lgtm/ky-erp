@@ -710,7 +710,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               <table>
                 <thead><tr><th>Firma</th><th>Bakiye</th><th>Son işlem</th></tr></thead>
                 <tbody>{visibleFirms.map((firm) => (
-                  <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => { if (!saving) loadMovements(firm); }} onKeyDown={(event) => { if (!saving && ["Enter", " "].includes(event.key)) { event.preventDefault(); loadMovements(firm); } }} tabIndex={0} aria-selected={String(selected?.id) === String(firm.id)}>
+                  <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} data-ky-context-kind="company-row" data-ky-context-id={firm.id} data-ky-context-label={firm.firmaAdi || firm.companyName || firm.name || "Firma"} onClick={() => { if (!saving) loadMovements(firm); }} onKeyDown={(event) => { if (!saving && ["Enter", " "].includes(event.key)) { event.preventDefault(); loadMovements(firm); } }} tabIndex={0} aria-selected={String(selected?.id) === String(firm.id)}>
                     <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{firm.isActive === false ? "PASİF · " : "AKTİF · "}{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong>
                        <small>Cari · {firm.invoiceSummaryAvailable === false ? "Fatura özeti yüklenemedi" : `Gelen fatura: ${money(firm.invoiceTotals?.incomingInvoiceTotal)} · Giden fatura: ${money(firm.invoiceTotals?.outgoingInvoiceTotal)}`}</small></td>
@@ -722,19 +722,24 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           ) : <div className="ccw-empty"><strong>Henüz firma kartı yok.</strong><span>Yeni Firma ile müşteri veya tedarikçi kartını oluşturun.</span></div>}
         </section>
 
-        <section className="ccw-detail-panel" aria-label="Seçili firma cari hesabı">
+        <section className="ccw-detail-panel" aria-label="Seçili firma cari hesabı" data-ky-context-kind={selected ? "company-detail" : undefined} data-ky-context-id={selected?.id} data-ky-context-label={selected?.firmaAdi || selected?.companyName || selected?.name}>
           {!selected ? <div className="ccw-empty"><Building2 size={28} /><strong>Firma seçin</strong><span>Cari özet ve hareketler burada açılır.</span></div> : (
             <>
               <header>
                 <div><h2>{selected.firmaAdi || selected.companyName || selected.name}</h2><p>{selected.isActive === false ? "PASİF" : "AKTİF"} · {roleLabel(selected)} · {recordLabel(selected)} · {cariLabel(selected)} · {selected.taxNo || "Vergi no yok"}</p><p className="ccw-company-id">Firma ID: <code>{selected.id}</code></p></div>
                 <div className="ccw-actions">
-                  {canUseCari ? <button type="button" className="primary" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari Hareket</button> : null}
-                  <button type="button" onClick={() => openFinance(selected.id)}><Landmark size={16} /> Finans</button>
-                  <button type="button" onClick={openReminders}><CircleAlert size={16} /> Ödeme Hatırlat</button>
-                  <button type="button" onClick={() => setEditOpen(true)}><Pencil size={16} /> Düzenle</button>
-                   <button type="button" disabled={statusSaving} onClick={changeActiveStatus}>{selected.isActive === false ? "Aktifleştir" : "Pasifleştir"}</button>
-                   <button type="button" onClick={() => { setMergeOpen(true); setMergeTargetId(""); setMergePreview(null); setMergePhrase(""); setMergeError(""); }}>Birleştir</button>
-                   <button type="button" className="ccw-danger-button" onClick={inspectHardDelete} disabled={deleteBusy}><Trash2 size={16} /> Hard Sil</button>
+                  {canUseCari ? <button type="button" className="primary" data-ky-context-action="cari-hareket" data-ky-context-label="Cari Hareket" data-ky-context-icon="hizli" onClick={() => setTransactionOpen((value) => !value)}><CirclePlus size={16} /> Cari Hareket</button> : null}
+                  <button type="button" data-ky-context-action="finans" data-ky-context-label="Finans" data-ky-context-icon="belge" onClick={() => openFinance(selected.id)}><Landmark size={16} /> Finans</button>
+                  <details className="ccw-context-more" data-ky-no-right-menu>
+                    <summary>İşlemler</summary>
+                    <div className="ccw-context-more-list">
+                      <button type="button" data-ky-context-action="reminder" data-ky-context-label="Ödeme Hatırlat" onClick={openReminders}><CircleAlert size={16} /> Ödeme Hatırlat</button>
+                      <button type="button" data-ky-context-action="edit" data-ky-context-label="Düzenle" onClick={() => setEditOpen(true)}><Pencil size={16} /> Düzenle</button>
+                      <button type="button" data-ky-context-action="status" data-ky-context-label={selected.isActive === false ? "Aktifleştir" : "Pasifleştir"} disabled={statusSaving} onClick={changeActiveStatus}>{selected.isActive === false ? "Aktifleştir" : "Pasifleştir"}</button>
+                      <button type="button" data-ky-context-action="merge" data-ky-context-label="Birleştir" onClick={() => { setMergeOpen(true); setMergeTargetId(""); setMergePreview(null); setMergePhrase(""); setMergeError(""); }}>Birleştir</button>
+                      <button type="button" data-ky-context-action="hard-delete" data-ky-context-label="Hard Sil" className="ccw-danger-button" onClick={inspectHardDelete} disabled={deleteBusy}><Trash2 size={16} /> Hard Sil</button>
+                    </div>
+                  </details>
                 </div>
               </header>
               <div className="ccw-detail-body">
