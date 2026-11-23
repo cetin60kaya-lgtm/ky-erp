@@ -23,9 +23,24 @@ jobs:
         with:
           dotnet-version: 8.0.x
 
+      - name: Node 22 (İşNet yerel test)
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
       - name: Inno Setup 6
         shell: pwsh
         run: choco install innosetup -y --no-progress
+
+      - name: İşNet 8791 izole Node güvenlik ve arşiv testleri
+        shell: pwsh
+        run: |
+          $tests = @(Get-ChildItem TOOLS/isnet-drive-archive -Filter '*.test.mjs' -File | Sort-Object Name)
+          if ($tests.Count -eq 0) { throw 'İşNet testleri bulunamadı' }
+          foreach ($test in $tests) {
+            & node --test $test.FullName
+            if ($LASTEXITCODE -ne 0) { throw "İşNet yerel testi başarısız: $($test.Name)" }
+          }
 
       - name: KY ERP Masaüstü test ve paket
         shell: pwsh
@@ -48,4 +63,4 @@ jobs:
             APP/desktop/ky-pdks/dist/setup/*.sha256.txt
             APP/desktop/ky-pdks/dist/setup/build-info.json
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 3
