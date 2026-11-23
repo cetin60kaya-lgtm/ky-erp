@@ -335,7 +335,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
     finally { setBusy(""); }
   };
   const preview = async (file) => {
-    const isPdf = /\\.pdf$/i.test(String(file.file_name || "")) || /pdf/i.test(String(file.mime_type || ""));
+    const isPdf = /[.]pdf$/i.test(String(file.file_name || "")) || /pdf/i.test(String(file.mime_type || ""));
     const reservedWindow = isPdf ? null : reserveEBelgePreviewTab();
     setBusy(`file-${file.id}`); setError("");
     try {
@@ -351,12 +351,12 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
     setError("");
     try {
       const files = Array.isArray(detail?.files) ? detail.files : [];
-      const pdfFile = files.find(file => /\\.pdf$/i.test(String(file.file_name || "")));
+      const pdfFile = files.find(file => /[.]pdf$/i.test(String(file.file_name || "")));
       if (pdfFile) {
         await showPdfInPlace(await getEBelgeFilePreview(pdfFile.id), pdfFile.file_name);
         return;
       }
-      const xmlFile = files.find(file => /\\.xml$/i.test(String(file.file_name || "")));
+      const xmlFile = files.find(file => /[.]xml$/i.test(String(file.file_name || "")));
       if (!xmlFile) throw Error("Bu faturaya bağlı orijinal XML/PDF yok. Belge kaynağını kontrol edin.");
       const xml = await (await getEBelgeFilePreview(xmlFile.id)).text();
       const document = parseUblForVisualOutput(xml);
