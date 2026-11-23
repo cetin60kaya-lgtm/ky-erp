@@ -2,7 +2,7 @@
   "$schema": "https://unpkg.com/wrangler/config-schema.json",
   "name": "kyerp-isnet-cloud-qa",
   "main": "worker.mjs",
-  "compatibility_date": "2026-11-24",
+  "compatibility_date": "2026-11-20",
   "workers_dev": true,
   "observability": {"enabled": false},
   "triggers": {"crons": []},
