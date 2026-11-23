@@ -5,6 +5,8 @@ import { normalizeIsnetConnectionMode, checkedIsnetCompanySave } from "./isnet-c
 import { probeIsnetPublicLogin } from "./isnet-portal-public-health";
 import { probeIsnetPortalAccount } from "./isnet-live-sync";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
+import { getAuthenticatedUser } from "./auth-cloud";
+import { accountingTenantReadAllowed } from "./accounting-access-policy";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -718,6 +720,28 @@ function intakeCapacity(row: Row) {
 export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
   // Tenant/auth middleware still applies. No provider cookie or password is
   // read or returned. This checks only the public form over Worker egress.
+  // Provider-backed, read-only verification used by the cloud-first screen.
+  // A cached token alone is never represented as a connected provider session.
+  app.get("/api/isnet/cloud-readiness", async (c) => {
+    const slug=text(c.req.query("mainCompanySlug")||c.req.header("X-KYERP-Tenant-Slug"));
+    const user=await getAuthenticatedUser(c);
+    if(!user)return c.json(errorBody("UNAUTHORIZED","Oturum gerekli."),401);
+    if(!slug||!accountingTenantReadAllowed(user,slug))
+      return c.json(errorBody("ISNET_TENANT_FORBIDDEN","Yetkili ana firma seçimi gerekli."),403);
+    const settings=await settingsRaw(c,slug);
+    const configured=Boolean(text(settings.companyId)&&text(settings.username));
+    const mode=text(settings.connectionMode||"");
+    const session=mode==="api"&&configured
+      ?await verifyIsnetReadOnlySession(c,slug)
+      :{status:configured?"OFFICIAL_API_NOT_SELECTED":"NOT_CONFIGURED",connected:false,lastVerifiedAt:null,source:"ISNET_RECIPIENT_READ_ONLY"};
+    return c.json({ok:true,success:true,data:{
+      source:"ISNET_OFFICIAL_API_READ_ONLY",requiresLocalSetup:false,
+      companySelected:configured,mode,apiAuthorized:session.connected===true,
+      providerStatus:session.status,verifiedAt:session.lastVerifiedAt||null,
+      hasStoredApiToken:mode==="api"&&Boolean(text(settings.accessToken)),
+      note:"Çalışan NetteFatura portal oturumu ve resmî API oturumu ayrı değerlendirilir. Bağlı görünmesi belge arşivinin tamamlandığı anlamına gelmez."
+    }});
+  });
   app.get("/api/isnet/provider-login-health", async (c) => {
     const result = await probeIsnetPublicLogin(fetch, `${PORTAL_BASE}/Account/Login`);
     // Separate public GET diagnostics only; never send passwords to a second
