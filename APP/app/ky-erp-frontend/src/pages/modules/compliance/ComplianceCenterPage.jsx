@@ -6,9 +6,9 @@ const EMPTY_DASH={summary:{},profiles:[],missingRequirements:[],documents:[],exp
 const STATUS_LABELS={ACTIVE:"Geçerli",EXPIRING:"Yaklaşıyor",CRITICAL:"Kritik",EXPIRED:"Süresi Geçti",ARCHIVED:"Arşiv"};
 const SEVERITY_LABELS={CRITICAL:"Kritik",HIGH:"Yüksek",MEDIUM:"Orta",LOW:"Düşük"};
 const TABS={"denetim-genel":"OVERVIEW","denetim-evraklar":"DOCUMENTS","denetim-dosyalari":"AUDITS","denetim-capa":"CAPA","denetim-takvim":"CALENDAR","denetim-denetci-odasi":"AUDITOR_ROOM","denetim-standartlar":"STANDARDS","denetim-ayarlar":"SETTINGS"};
-const CATEGORIES=["Şirket ve İşyeri","İnsan Kaynakları","İSG","Yangın & Acil Durum","Periyodik Kontrol","Çevre","Kimyasal","Kalite","Tedarik Zinciri","Sosyal Uygunluk","Denetim","Marka / Müşteri","Genel"];
-const DOCUMENT_TYPES=["DOCUMENT","CERTIFICATE","REPORT","FORM","POLICY","CONTRACT","LIST","LICENSE"];
-const TYPE_LABELS={DOCUMENT:"Belge",CERTIFICATE:"Sertifika",REPORT:"Rapor",FORM:"Form / Tutanak",POLICY:"Politika / Prosedür",CONTRACT:"Sözleşme",LIST:"Liste / Kayıt",LICENSE:"Ruhsat / İzin"};
+const CATEGORIES=["Şirket ve İşyeri","İnsan Kaynakları","İSG","Yangın & Acil Durum","Periyodik Kontrol","Çevre","Hava Emisyonu","Su ve Atık Su","Kimyasal","Kalite","Tedarik Zinciri","Sosyal Uygunluk","Denetim","Prosedür","Marka / Müşteri","LCW Ekolojik Uygunluk","Genel"];
+const DOCUMENT_TYPES=["DOCUMENT","CERTIFICATE","REPORT","FORM","POLICY","CONTRACT","LIST","LICENSE","PROCEDURE","DECLARATION","INVENTORY","TRAINING"];
+const TYPE_LABELS={DOCUMENT:"Belge",CERTIFICATE:"Sertifika",REPORT:"Rapor",FORM:"Form / Tutanak",POLICY:"Politika / Prosedür",CONTRACT:"Sözleşme",LIST:"Liste / Kayıt",LICENSE:"Ruhsat / İzin",PROCEDURE:"Prosedür",DECLARATION:"Deklarasyon",INVENTORY:"Kimyasal Envanter",TRAINING:"Eğitim"};
 const VALIDITY_LABELS={DATED:"Tarihli",INDEFINITE:"Süresiz",PERIODIC:"Periyodik",ONE_TIME:"Tek Sefer"};
 const today=()=>new Date().toISOString().slice(0,10);
 const dateText=v=>{if(!v)return"-";const d=new Date(String(v).slice(0,10)+"T00:00:00");return Number.isNaN(d.getTime())?String(v):d.toLocaleDateString("tr-TR")};
@@ -16,8 +16,10 @@ const cls=v=>String(v||"").toLowerCase().replace(/_/g,"-");
 const data=(v,f)=>v?.data??f;
 const fileKind=name=>String(name||"").split(".").pop()?.toUpperCase()||"DOSYA";
 const sizeText=n=>{const x=Number(n||0);if(!x)return"-";if(x<1024*1024)return Math.max(1,Math.round(x/1024))+" KB";return(x/1024/1024).toFixed(1)+" MB"};
+const addCalendarMonths=(date,months)=>{if(!date||!months)return"";const d=new Date(date+"T12:00:00");if(Number.isNaN(d.getTime()))return"";const day=d.getDate();d.setDate(1);d.setMonth(d.getMonth()+Number(months));d.setDate(Math.min(day,new Date(d.getFullYear(),d.getMonth()+1,0).getDate()));return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const KINDS=[["AUDIT_EVIDENCE","Genel denetim evrakı"],["AUDIT_REPORT","Denetim raporu"],["MSDS","SDS / MSDS"],["TDS","TDS"],["DECLARATION","Ürün / tedarikçi deklarasyonu"],["INVENTORY","Kimyasal envanter / ortak liste"],["PROCEDURE","Prosedür / talimat"],["PERIODIC_MAINTENANCE","Periyodik kontrol"],["OHS_DOCUMENT","İSG / yangın"],["QUALITY","Kalite / test raporu"]];
 const remainingText=row=>row?.days_remaining==null?(row?.expires_at?"-":"Süresiz"):row.days_remaining<0?Math.abs(row.days_remaining)+" gün geçti":row.days_remaining===0?"Bugün":row.days_remaining+" gün";
-const emptyDocForm=()=>({title:"",category:"Genel",documentType:"DOCUMENT",issuer:"",documentNo:"",issueDate:today(),validFrom:today(),expiresAt:"",validityMode:"DATED",renewalCycleDays:0,nextReviewAt:"",reminderDays:10,ownerDepartment:"",notes:""});
+const emptyDocForm=()=>({title:"",category:"Genel",documentType:"DOCUMENT",documentKind:"AUDIT_EVIDENCE",issuer:"",documentNo:"",issueDate:today(),validFrom:today(),expiresAt:"",validityMode:"DATED",renewalCycleDays:0,renewalCycleMonths:0,nextReviewAt:"",reminderDays:10,ownerDepartment:"",preparedBy:"",reviewedBy:"",approvedBy:"",approvalStatus:"DRAFT",signedOriginal:false,auditorShareApproved:false,requirementId:"",notes:""});
 const emptyAuditForm=()=>({name:"",profileId:"",auditType:"CUSTOMER",plannedDate:"",auditorName:"",notes:""});
 const emptyFindingForm=()=>({title:"",severity:"MEDIUM",auditId:"",description:"",correctiveAction:"",dueDate:""});
 
@@ -39,12 +41,12 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
   try{
    const requests=[apiGet("/compliance/dashboard",{}, {timeoutMs:15000,forceFresh:true})];
    if(section==="OVERVIEW")requests.push(apiGet("/compliance/tasks",{}, {timeoutMs:10000,forceFresh:true}),apiGet("/compliance/system-evidence-candidates",{}, {timeoutMs:12000,forceFresh:true}));
-   if(section==="STANDARDS")requests.push(apiGet("/compliance/profiles",{}, {timeoutMs:15000,forceFresh:true}));
+   if(["STANDARDS","DOCUMENTS"].includes(section))requests.push(apiGet("/compliance/profiles",{}, {timeoutMs:15000,forceFresh:true}));
    if(section==="CALENDAR")requests.push(apiGet("/compliance/calendar",{}, {timeoutMs:10000,forceFresh:true}));
    if(section==="SETTINGS")requests.push(apiGet("/compliance/settings",{}, {timeoutMs:10000,forceFresh:true}));
    const res=await Promise.all(requests),d=data(res[0],EMPTY_DASH);setDash(d);
    if(section==="OVERVIEW"){setTasks(data(res[1],[]));setSystemCandidates(data(res[2],[]))}
-   if(section==="STANDARDS"){const rows=data(res[1],[]);setProfiles(rows);setSelectedProfile(p=>p||rows[0]?.id||"")}
+   if(["STANDARDS","DOCUMENTS"].includes(section)){const rows=data(res[1],[]);setProfiles(rows);setSelectedProfile(p=>p||rows[0]?.id||"")}
    if(section==="CALENDAR")setCalendar(data(res[1],[]));
    if(section==="SETTINGS")setSettings(v=>({...v,...data(res[1],{})}));
    if(["AUDITS","AUDITOR_ROOM"].includes(section)&&!selectedAuditId&&d.audits?.[0]?.id)setSelectedAuditId(d.audits[0].id);
