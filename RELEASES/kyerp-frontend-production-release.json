@@ -3,16 +3,15 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-11-22",
+  "releaseDate": "2026-11-23",
   "scope": [
-    "PR644_PDF_POPUP_CLOSE_ON_ERROR",
-    "ORIGINAL_PDF_VIEW_AND_PRINT",
-    "AUTH_401_GENERIC_FILE_ERROR_NO_UNEXPECTED_LOGOUT",
-    "PREVENT_OLD_401_INVALIDATING_NEW_SESSION",
-    "NO_FINANCIAL_WRITE_NO_MIGRATION"
+    "PR648_ORIGINAL_EBELGE_PDF_SAME_ERP_SCREEN",
+    "PR648_EBELGE_SERVER_SORT_LIST_PAGINATION",
+    "PR648_WORKFLOW_DOCUMENT_OPEN_IN_CONTEXT",
+    "NO_FINANCIAL_MUTATION_NO_D1_MIGRATION"
   ],
-  "note": "2026-11-22 PR #644: e-Belge popup & printing never navigates authenticated main ERP page to blob; 10 minute blob lifetime, structured error rather than indefinite preparing page. Generic business 401 cannot log out user, /auth/me security unchanged. Canonical acceptance run 45044729835 SUCCESS. Frontend-only release, no D1 writes.",
-  "sourceCommit": "55192dd0b589b68fb8904ccf5bc7cc753291d4cd",
-  "requestedAt": "2026-11-22",
-  "attempt": 9
+  "note": "23.11.2026 PR #648 merged (aefb86b): canonical CI 45246805016 success (Frontend lint/test/build + Worker typecheck/test/build). Publish existing frontend Pages production workflow to activate embedded original PDF preview, e-Belge server-side column ordering and workflow document opening. Backend sort was included in Worker attempt 64, GitHub Actions 45249367014 success. No invoice/cari changes, company hard delete, migration or official e-Belge send.",
+  "sourceCommit": "aefb86b316f8bc9e62700dfd300c17a859de7295",
+  "requestedAt": "2026-11-23",
+  "attempt": 10
 }
