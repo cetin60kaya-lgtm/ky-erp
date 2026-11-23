@@ -177,7 +177,7 @@ function CompanyFormFields({ value, onChange }) {
   );
 }
 
-export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKey = 0, reloadAll, goTab }) {
+export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKey = 0, reloadAll, goTab, openModule }) {
   const [firms, setFirms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -190,6 +190,9 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [selected, setSelected] = useState(null);
   const [movementFilter, setMovementFilter] = useState("ALL");
   const [movements, setMovements] = useState([]);
+  const [companyDocuments, setCompanyDocuments] = useState([]);
+  const [companyDocumentsError, setCompanyDocumentsError] = useState("");
+  const [companyDocumentsTotal, setCompanyDocumentsTotal] = useState(0);
   const [detailLoading, setDetailLoading] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [transaction, setTransaction] = useState(emptyTransaction);
@@ -309,10 +312,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       const bv = Number(b.currentBalance || 0);
       if (balanceSort === "BALANCE_DESC") return bv - av;
       if (balanceSort === "BALANCE_ASC") return av - bv;
-      if (balanceSort === "LAST_MOVEMENT_DESC") {
+      if (balanceSort === "LAST_MOVEMENT_DESC" || balanceSort === "LAST_MOVEMENT_ASC") {
         const at = Date.parse(a.lastMovementAt || "") || 0;
         const bt = Date.parse(b.lastMovementAt || "") || 0;
-        if (at !== bt) return bt - at;
+        if (at !== bt) return balanceSort === "LAST_MOVEMENT_ASC" ? at - bt : bt - at;
       }
       return String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
     });
@@ -355,6 +358,9 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     setMovementFilter("ALL");
     setDetailLoading(true);
     setMovements([]);
+    setCompanyDocuments([]);
+    setCompanyDocumentsTotal(0);
+    setCompanyDocumentsError("");
     setAliases([]);
     setNotice("");
     setTransactionOpen(false);
@@ -370,6 +376,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             fallback: {},
             load: () => apiGet(`/muhasebe/firma-profilleri/${firm.id}`, { ...params, _ts: Date.now() }),
           },
+          documents: {
+            fallback: { items: [], total: 0 },
+            load: () => apiGet(`/muhasebe/firmalar/${encodeURIComponent(firm.id)}/belgeler`, { ...params, page: 1, pageSize: 100, _ts: Date.now() }),
+          },
         },
       });
       if (request !== detailRequest.current) return;
@@ -379,6 +389,9 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       setProfileDraft(profileDraftOf(merged));
       setAliases(Array.isArray(profile.aliases) ? profile.aliases : []);
       if (result.states.movements.status !== "error") setMovements(listOf(result.data.movements));
+      const docs = objectOf(result.data.documents);
+      if (result.states.documents?.status === "error") setCompanyDocumentsError("Fatura ve irsaliye bağlantıları okunamadı. Cari hareketler ayrı tutuluyor.");
+      else { setCompanyDocuments(Array.isArray(docs.items) ? docs.items : []); setCompanyDocumentsTotal(Number(docs.total || 0)); }
       setNotice(moduleLoadMessage(
         result,
         "Cari hareketler alınamadı; varsa son başarılı detay korunuyor.",
@@ -653,7 +666,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <select value={role} onChange={(event) => setRole(event.target.value)} aria-label="Firma türü"><option value="ALL">Tüm firmalar</option><option value="CUSTOMER">Müşteriler</option><option value="SUPPLIER">Tedarikçiler</option><option value="CHEMICAL">Boya / kimyasal</option></select>
         <select value={balanceFilter} onChange={(event) => setBalanceFilter(event.target.value)} aria-label="Bakiye"><option value="ALL">Tüm bakiyeler</option><option value="RECEIVABLE">Alacak bakiyesi</option><option value="PAYABLE">Borç bakiyesi</option><option value="NONZERO">Bakiyesi olanlar</option><option value="ZERO">Sıfır bakiye</option></select>
         <select value={recordFilter} onChange={(event) => setRecordFilter(event.target.value)} aria-label="Kayıt türü"><option value="ALL">Resmî + Gayri resmî</option><option value="OFFICIAL">Yalnız resmî</option><option value="UNOFFICIAL">Yalnız gayri resmî</option></select>
-        <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)} aria-label="Sıralama"><option value="NAME">Ada göre</option><option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option><option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option><option value="LAST_MOVEMENT_DESC">Son işleme göre</option></select>
+        <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)} aria-label="Sıralama"><option value="NAME">Ada göre</option><option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option><option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option><option value="LAST_MOVEMENT_DESC">Son işlem: yeniden eskiye</option><option value="LAST_MOVEMENT_ASC">Son işlem: eskiden yeniye</option></select>
         <button type="button" className="primary" onClick={() => setCompanyFormOpen(true)}><CirclePlus size={16} /> Yeni Firma</button>
         <button type="button" onClick={() => openFinance()}><Landmark size={16} /> Finans</button>
         <button type="button" onClick={() => balanceAudit.open ? setBalanceAudit((current) => ({ ...current, open: false })) : void inspectBalances()} disabled={balanceAudit.loading}><Search size={16} /> {balanceAudit.open ? "Bakiye Denetimini Kapat" : "Bakiye Kaynağını İncele"}</button>
@@ -708,7 +721,11 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
           {loading ? <div className="ccw-empty">Firmalar yükleniyor…</div> : visibleFirms.length ? (
             <div className="ccw-table-wrap">
               <table>
-                <thead><tr><th>Firma</th><th>Bakiye</th><th>Son işlem</th></tr></thead>
+                <thead><tr>
+                  <th><button type="button" className="ccw-sort-button" aria-label="Firmaları ada göre sırala" onClick={() => setBalanceSort("NAME")}>Firma {balanceSort === "NAME" ? "↑" : "↕"}</button></th>
+                  <th><button type="button" className="ccw-sort-button" aria-label="Cari bakiyeyi artan veya azalan sırala" onClick={() => setBalanceSort((v) => v === "BALANCE_DESC" ? "BALANCE_ASC" : "BALANCE_DESC")}>Cari Bakiye {balanceSort === "BALANCE_ASC" ? "↑" : balanceSort === "BALANCE_DESC" ? "↓" : "↕"}</button></th>
+                  <th><button type="button" className="ccw-sort-button" aria-label="Son işlem tarihine göre artan veya azalan sırala" onClick={() => setBalanceSort((v) => v === "LAST_MOVEMENT_DESC" ? "LAST_MOVEMENT_ASC" : "LAST_MOVEMENT_DESC")}>Son İşlem {balanceSort === "LAST_MOVEMENT_ASC" ? "↑" : balanceSort === "LAST_MOVEMENT_DESC" ? "↓" : "↕"}</button></th>
+                </tr></thead>
                 <tbody>{visibleFirms.map((firm) => (
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => { if (!saving) loadMovements(firm); }} onKeyDown={(event) => { if (!saving && ["Enter", " "].includes(event.key)) { event.preventDefault(); loadMovements(firm); } }} tabIndex={0} aria-selected={String(selected?.id) === String(firm.id)}>
                     <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{firm.isActive === false ? "PASİF · " : "AKTİF · "}{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></td>
@@ -779,7 +796,31 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   <header><div><h3>Cari hareketler</h3><span>{filteredMovements.length} / {movements.length} kayıt</span></div><select className="ccw-movement-filter" value={movementFilter} onChange={(event) => setMovementFilter(event.target.value)}><option value="ALL">Tüm hareketler</option><option value="ODEME">Ödemeler</option><option value="TAHSILAT">Tahsilatlar</option><option value="BORC">Borç</option><option value="ALACAK">Alacak</option></select></header>
                   {!canUseCari ? <div className="ccw-mini-empty">Bu firma peşin/cari takipsiz. Gider ve KDV kayıtları raporlardan izlenir; cari borç oluşmaz.</div> : detailLoading ? <div className="ccw-empty">Hareketler yükleniyor…</div> : filteredMovements.length ? (
                     <div className="ccw-table-wrap compact"><table><thead><tr><th>Tarih</th><th>İşlem</th><th>Belge No</th><th>Açıklama</th><th>Borç</th><th>Alacak</th><th>Bakiye</th><th>Kayıt</th></tr></thead><tbody>{filteredMovements.map((movement) => <tr key={movement.id}><td>{dateText(movement.movement_date || movement.date)}</td><td>{movementTypeLabel(movement.movement_type || movement.type)}</td><td>{movement.document_no || "-"}</td><td>{movement.description || "-"}</td><td>{money(movement.debit)}</td><td>{money(movement.credit)}</td><td><strong>{money(movement.balance_after)}</strong></td><td>{normalize(movement.record_type).includes("GAYRI") ? "Gayri resmî" : "Resmî"}</td></tr>)}</tbody></table></div>
-                  ) : <div className="ccw-mini-empty">Bu firma için cari hareket bulunamadı.</div>}
+                  ) : <div className="ccw-mini-empty">Bu firma için cari hareket bulunamadı. Belgeler aşağıda ayrıca listelenir.</div>}
+                </section>
+                <section className="ccw-section" aria-label="Firma faturaları ve irsaliyeleri">
+                  <header><div><h3>Faturalar &amp; İrsaliyeler</h3><span>Canonical e-Belge arşivi · {companyDocuments.length} / {companyDocumentsTotal} kayıt</span></div></header>
+                  <div className="ccw-mini-empty">Buradaki belgeler cari hareket değildir. Yalnız onaylanarak muhasebeleşen belgeler gerçek cari hesabı etkileyebilir.</div>
+                  {companyDocumentsError ? <div className="ccw-error" role="alert">{companyDocumentsError}</div> : detailLoading ? <div className="ccw-mini-empty">Faturalar ve irsaliyeler yükleniyor…</div> : companyDocuments.length ? (
+                    <div className="ccw-table-wrap compact"><table>
+                      <thead><tr><th>Tarih</th><th>Belge</th><th>Yön</th><th>Tür</th><th>Tutar</th><th>Durum</th><th>İşlem</th></tr></thead>
+                      <tbody>{companyDocuments.map((doc) => {
+                        const dispatch = /IRSALIYE|DISPATCH/i.test(String(doc.document_type || ""));
+                        const outgoing = String(doc.direction).toUpperCase() === "OUTGOING";
+                        const tabKey = dispatch ? (outgoing ? "giden-irsaliyeler" : "gelen-irsaliyeler") : (outgoing ? "giden-faturalar" : "gelen-faturalar");
+                        return <tr key={doc.id}>
+                          <td>{dateText(doc.issue_date || doc.created_at)}</td>
+                          <td><strong>{doc.document_no || "-"}</strong></td>
+                          <td>{outgoing ? "Giden" : "Gelen"}</td>
+                          <td>{dispatch ? "İrsaliye" : "Fatura"}</td>
+                          <td>{doc.currency && !["TRY","TL"].includes(String(doc.currency).toUpperCase()) ? `${Number(doc.payable_total || 0).toLocaleString("tr-TR")} ${doc.currency}` : money(doc.payable_total)}</td>
+                          <td>{doc.posted_at || String(doc.status || "").toUpperCase() === "POSTED" ? "Muhasebeleşti" : "Kontrol / onay bekliyor"}</td>
+                          <td><button type="button" onClick={() => openModule?.("e-belge", { tabKey, actionContext: { documentId: doc.id } })}>Belgeyi Aç</button></td>
+                        </tr>;
+                      })}</tbody>
+                    </table></div>
+                  ) : <div className="ccw-mini-empty">Bu firmaya doğrulanmış kimlikle bağlı fatura veya irsaliye bulunamadı.</div>}
+                  {companyDocumentsTotal > companyDocuments.length ? <small>Son 100 belge görüntüleniyor. Tüm geçmiş için e-Belge Merkezi'ni açın.</small> : null}
                 </section>
               </div>
             </>
