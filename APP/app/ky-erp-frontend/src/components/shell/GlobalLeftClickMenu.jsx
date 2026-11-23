@@ -63,12 +63,14 @@ function contextualMenuFor(target) {
   }
 
   if (kind === "pdf-preview") {
-    const button = marked.querySelector('[data-ky-context-action="pdf-open"]');
-    if (!button) return null;
-    return {
-      title: "PDF İşlemleri", label,
-      items: [{ id: "context:pdf-preview-open", label: "PDF'yi Yeni Sekmede Aç / Yazdır", icon: "belge", type: "context", target: button }],
-    };
+    const items = [...marked.querySelectorAll("[data-ky-context-action]")]
+      .filter((button) => button instanceof HTMLButtonElement && !button.disabled)
+      .map((button) => ({
+        id: `context:${button.dataset.kyContextAction}`,
+        label: button.dataset.kyContextLabel || button.textContent.trim(),
+        icon: "belge", type: "context", target: button,
+      }));
+    return items.length ? { title: "PDF İşlemleri", label, items } : null;
   }
   return null;
 }
