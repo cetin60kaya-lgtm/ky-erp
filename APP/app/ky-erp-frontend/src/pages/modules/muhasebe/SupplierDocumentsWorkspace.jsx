@@ -3,6 +3,8 @@ import { FileText, RefreshCcw, Truck } from "lucide-react";
 import { getEBelgePool } from "../../../services/eBelgeApi";
 import CanonicalSupplierInventoryWorkspace from "./CanonicalSupplierInventoryWorkspace";
 import { DOCUMENT_PAGE_SIZE, documentPageMeta } from "./documentPageMeta";
+import DocumentSortHeader from "./DocumentSortHeader";
+import { DEFAULT_DOCUMENT_SORT } from "./documentListSort";
 import "./supplierDocumentsWorkspace.css";
 import "./documentPagination.css";
 
@@ -32,6 +34,7 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
   const [error, setError] = useState("");
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState(DEFAULT_DOCUMENT_SORT);
   const [pageMeta, setPageMeta] = useState(() => documentPageMeta());
   const requestSeq = useRef(0);
 
@@ -42,7 +45,9 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
     q: query,
     page,
     pageSize: DOCUMENT_PAGE_SIZE,
-  }), [activeMainCompany?.id, activeMainCompany?.slug, page, query]);
+    sortBy: sort.sortBy,
+    sortDirection: sort.sortDirection,
+  }), [activeMainCompany?.id, activeMainCompany?.slug, page, query, sort.sortBy, sort.sortDirection]);
 
   const loadDispatches = useCallback(async () => {
     const requestId = ++requestSeq.current;
@@ -98,13 +103,21 @@ export default function SupplierDocumentsWorkspace({ activeMainCompany, refreshK
           </label>
           {error ? <div className="sdw-message error">{error}</div> : null}
           {error ? null : loading ? <div className="sdw-empty">Tedarikçi irsaliyeleri yükleniyor…</div> : dispatches.length ? (
-            <div className="sdw-table-wrap"><table><thead><tr><th>Tarih</th><th>Tedarikçi</th><th>İrsaliye No</th><th>Kaynak</th><th>Kalem</th><th>Kontrol</th><th>İşlem</th></tr></thead><tbody>
+            <div className="sdw-table-wrap"><table><thead><tr>
+              <th><DocumentSortHeader label="Tarih" column="DATE" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+              <th><DocumentSortHeader label="Tedarikçi" column="PARTY" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+              <th><DocumentSortHeader label="İrsaliye No" column="DOCUMENT_NO" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+              <th><DocumentSortHeader label="Kaynak" column="SOURCE" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+              <th><DocumentSortHeader label="Tutar" column="TOTAL" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th><th>Kalem</th>
+              <th><DocumentSortHeader label="Kontrol" column="STATUS" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th><th>İşlem</th>
+            </tr></thead><tbody>
               {dispatches.map((row) => (
                 <tr key={row.id}>
                   <td>{dateText(row.issue_date || row.created_at)}</td>
                   <td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td>
                   <td>{row.document_no || "-"}</td>
                   <td>{sourceText(row)}</td>
+                  <td>{row.payable_total == null ? "-" : Number(row.payable_total).toLocaleString("tr-TR", { style: "currency", currency: /^[A-Z]{3}$/.test(String(row.currency || "TRY")) ? row.currency || "TRY" : "TRY" })}</td>
                   <td>{Number(row.line_count || 0)}</td>
                   <td>{Number(row.issue_count || 0) ? `${row.issue_count} sorun` : (row.status || "Kontrol bekliyor")}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "gelen-irsaliyeler", actionContext: { documentId: row.id } })}>Belgeyi Aç</button></td>
                 </tr>
