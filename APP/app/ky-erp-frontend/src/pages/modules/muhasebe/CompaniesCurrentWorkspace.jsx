@@ -313,11 +313,12 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
       if (balanceSort === "BALANCE_DESC") return bv - av;
       if (balanceSort === "BALANCE_ASC") return av - bv;
       if (balanceSort === "LAST_MOVEMENT_DESC" || balanceSort === "LAST_MOVEMENT_ASC") {
-        const at = Date.parse(a.lastMovementAt || "") || 0;
-        const bt = Date.parse(b.lastMovementAt || "") || 0;
+        const at = Math.max(Date.parse(a.lastMovementAt || "") || 0, Date.parse(a.lastDocumentAt || "") || 0);
+        const bt = Math.max(Date.parse(b.lastMovementAt || "") || 0, Date.parse(b.lastDocumentAt || "") || 0);
         if (at !== bt) return balanceSort === "LAST_MOVEMENT_ASC" ? at - bt : bt - at;
       }
-      return String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
+      const nameOrder = String(a.firmaAdi || a.companyName || a.name || "").localeCompare(String(b.firmaAdi || b.companyName || b.name || ""), "tr");
+      return balanceSort === "NAME_DESC" ? -nameOrder : nameOrder;
     });
   }, [activityFilter, balanceFilter, balanceSort, firms, recordFilter, role]);
 
@@ -666,7 +667,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <select value={role} onChange={(event) => setRole(event.target.value)} aria-label="Firma türü"><option value="ALL">Tüm firmalar</option><option value="CUSTOMER">Müşteriler</option><option value="SUPPLIER">Tedarikçiler</option><option value="CHEMICAL">Boya / kimyasal</option></select>
         <select value={balanceFilter} onChange={(event) => setBalanceFilter(event.target.value)} aria-label="Bakiye"><option value="ALL">Tüm bakiyeler</option><option value="RECEIVABLE">Alacak bakiyesi</option><option value="PAYABLE">Borç bakiyesi</option><option value="NONZERO">Bakiyesi olanlar</option><option value="ZERO">Sıfır bakiye</option></select>
         <select value={recordFilter} onChange={(event) => setRecordFilter(event.target.value)} aria-label="Kayıt türü"><option value="ALL">Resmî + Gayri resmî</option><option value="OFFICIAL">Yalnız resmî</option><option value="UNOFFICIAL">Yalnız gayri resmî</option></select>
-        <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)} aria-label="Sıralama"><option value="NAME">Ada göre</option><option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option><option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option><option value="LAST_MOVEMENT_DESC">Son işlem: yeniden eskiye</option><option value="LAST_MOVEMENT_ASC">Son işlem: eskiden yeniye</option></select>
+        <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)} aria-label="Sıralama"><option value="NAME">Firma: A → Z</option><option value="NAME_DESC">Firma: Z → A</option><option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option><option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option><option value="LAST_MOVEMENT_DESC">Son işlem: yeniden eskiye</option><option value="LAST_MOVEMENT_ASC">Son işlem: eskiden yeniye</option></select>
         <button type="button" className="primary" onClick={() => setCompanyFormOpen(true)}><CirclePlus size={16} /> Yeni Firma</button>
         <button type="button" onClick={() => openFinance()}><Landmark size={16} /> Finans</button>
         <button type="button" onClick={() => balanceAudit.open ? setBalanceAudit((current) => ({ ...current, open: false })) : void inspectBalances()} disabled={balanceAudit.loading}><Search size={16} /> {balanceAudit.open ? "Bakiye Denetimini Kapat" : "Bakiye Kaynağını İncele"}</button>
@@ -722,7 +723,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
             <div className="ccw-table-wrap">
               <table>
                 <thead><tr>
-                  <th><button type="button" className="ccw-sort-button" aria-label="Firmaları ada göre sırala" onClick={() => setBalanceSort("NAME")}>Firma {balanceSort === "NAME" ? "↑" : "↕"}</button></th>
+                  <th><button type="button" className="ccw-sort-button" aria-label="Firmaları ada göre sırala"  onClick={() => setBalanceSort((value) => value === "NAME" ? "NAME_DESC" : "NAME")}>Firma {balanceSort === "NAME" ? "↑" : balanceSort === "NAME_DESC" ? "↓" : "↕"}</button></th>
                   <th><button type="button" className="ccw-sort-button" aria-label="Cari bakiyeyi artan veya azalan sırala" onClick={() => setBalanceSort((v) => v === "BALANCE_DESC" ? "BALANCE_ASC" : "BALANCE_DESC")}>Cari Bakiye {balanceSort === "BALANCE_ASC" ? "↑" : balanceSort === "BALANCE_DESC" ? "↓" : "↕"}</button></th>
                   <th><button type="button" className="ccw-sort-button" aria-label="Son işlem tarihine göre artan veya azalan sırala" onClick={() => setBalanceSort((v) => v === "LAST_MOVEMENT_DESC" ? "LAST_MOVEMENT_ASC" : "LAST_MOVEMENT_DESC")}>Son İşlem {balanceSort === "LAST_MOVEMENT_ASC" ? "↑" : balanceSort === "LAST_MOVEMENT_DESC" ? "↓" : "↕"}</button></th>
                 </tr></thead>
@@ -731,7 +732,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                     <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{firm.isActive === false ? "PASİF · " : "AKTİF · "}{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></td>
                     <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong>
                        <small>Cari · {firm.invoiceSummaryAvailable === false ? "Fatura özeti yüklenemedi" : `Gelen fatura: ${money(firm.invoiceTotals?.incomingInvoiceTotal)} · Giden fatura: ${money(firm.invoiceTotals?.outgoingInvoiceTotal)}`}</small></td>
-                    <td>{firm.lastMovementAt ? dateText(firm.lastMovementAt) : "-"}<small>{Number(firm.movementCount || 0) ? `${Number(firm.movementCount)} hareket` : ""}</small></td>
+                    <td>{firm.lastMovementAt || firm.lastDocumentAt ? dateText((Date.parse(firm.lastMovementAt||"")||0) > (Date.parse(firm.lastDocumentAt||"")||0) ? firm.lastMovementAt : firm.lastDocumentAt) : "-"}
+                      <small>{Number(firm.movementCount || 0) ? `${Number(firm.movementCount)} cari hareket` : "Cari hareket yok"} · {firm.lastDocumentAt ? "Fatura var" : "Fatura yok"}</small></td>
                   </tr>
                 ))}</tbody>
               </table>
