@@ -1,0 +1,25 @@
+.idb-root{display:grid;gap:12px;padding:14px;border:1px solid var(--border,#d9e2ed);border-radius:13px;background:var(--surface,#fff);min-width:0}
+.idb-header{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}
+.idb-header h3{font-size:16px;margin:0 0 5px;color:var(--text-primary,#22334b)}
+.idb-header p{font-size:12px;color:var(--text-secondary,#62718b);margin:0;line-height:1.5}
+.idb-header button,.idb-scroll button{display:inline-flex;align-items:center;gap:6px;border:1px solid #b8cee1;background:var(--surface,#fff);border-radius:8px;padding:8px 10px;white-space:nowrap;cursor:pointer}
+.idb-filters{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.idb-filters button{display:inline-flex;align-items:center;gap:8px;padding:9px 11px;border-radius:8px;border:1px solid #cddae8;background:var(--surface,#fff);cursor:pointer;color:var(--text-primary,#24354b);font-size:12px}
+.idb-filters button.active{background:#174b83;border-color:#174b83;color:#fff}
+.idb-filters button b{font-size:12px}
+.idb-search{font-size:12px;display:grid;gap:5px;max-width:360px}
+.idb-search input{font-size:13px;border:1px solid #bccbdc;border-radius:8px;padding:10px;background:var(--surface,#fff);color:var(--text-primary,#24354b)}
+.idb-scroll{max-height:500px;overflow:auto;border:1px solid #e2e9f1;border-radius:9px}
+.idb-scroll table{width:100%;border-collapse:collapse;text-align:left;font-size:12px;min-width:760px}
+.idb-scroll th{background:var(--surface-alt,#f4f7fa);position:sticky;top:0;font-weight:700;padding:10px;color:var(--text-secondary,#62718b);z-index:1}
+.idb-scroll td{padding:10px;border-top:1px solid #e4eaf2;vertical-align:middle}
+.idb-scroll td:first-child{white-space:nowrap}
+.idb-scroll td small{display:block;color:var(--text-secondary,#64748b);font-size:11px;margin-top:3px}
+.idb-linked{color:#167448;display:inline-flex;gap:6px;align-items:center}
+.idb-note{color:#8a5c16;display:inline-flex;gap:6px;align-items:center}
+.idb-pending{font-weight:600;color:#955d18}
+.idb-caveat,.idb-warning{font-size:12px;line-height:1.55;color:var(--text-secondary,#5d6f87);margin:0}
+.idb-warning,.idb-error{padding:9px 11px;border-radius:8px;background:#fff8e8;border:1px solid #efd5a4}
+.idb-error{display:flex;align-items:center;gap:7px;color:#a33129}
+.idb-empty,.idb-loading{text-align:center;padding:20px;font-size:13px}
+@media(max-width:650px){.idb-header{flex-wrap:wrap}.idb-header button{width:100%;justify-content:center}.idb-root{padding:10px}}
