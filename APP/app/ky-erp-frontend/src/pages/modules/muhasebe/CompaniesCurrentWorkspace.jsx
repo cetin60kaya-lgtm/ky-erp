@@ -205,6 +205,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companySaving, setCompanySaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [balanceAudit, setBalanceAudit] = useState({ open: false, loading: false, rows: [], totals: null, error: "" });
+  const [unmatchedInvoices, setUnmatchedInvoices] = useState(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergePreview, setMergePreview] = useState(null);
@@ -259,6 +260,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ? []
         : listOf(result.data.firms).map((firm) => ({ ...firm, ...(profiles.get(String(firm.id)) || {}) }));
       setFirms(rows);
+      const invoiceMeta = result.data.firms?.invoiceSummary ||
+        result.data.firms?.data?.invoiceSummary ||
+        result.data.firms?.data?.data?.invoiceSummary;
+      setUnmatchedInvoices(invoiceMeta?.available ? invoiceMeta.unmatched : null);
       setError(moduleLoadMessage(
         result,
         "Firma ve cari ana listesi alınamadı; ekrandaki son başarılı veri korunuyor.",
@@ -268,6 +273,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     } catch (requestError) {
       if (request !== listRequest.current) return [];
       setFirms([]);
+      setUnmatchedInvoices(null);
       setError(requestError?.message || "Firma ve cari listesi alınamadı.");
       return [];
     } finally {
@@ -664,6 +670,12 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <div><span>Henüz muhasebeleşmeyen fatura</span><strong>{totals.unpostedInvoices} belge</strong></div>
       </section>
 
+      {unmatchedInvoices && Number(unmatchedInvoices.incomingInvoiceCount || 0) + Number(unmatchedInvoices.outgoingInvoiceCount || 0) > 0 ? (
+        <div className="ccw-notice" role="status">
+          <CircleAlert size={16} /> Firma kimliği tekil doğrulanamayan {Number(unmatchedInvoices.incomingInvoiceCount || 0) + Number(unmatchedInvoices.outgoingInvoiceCount || 0)} fatura bu firma toplamlarına dağıtılmadı.
+          Eşleştirmeler bölümünde kontrol edilmeli.
+        </div>
+      ) : null}
       <p className="ccw-invoice-note">Fatura tutarları bilgi amaçlıdır; cari borç/alacak değildir. Yalnız firma kimliği veya tekil vergi numarasıyla eşleşen faturalar gösterilir. {totals.foreignCurrencyInvoices ? `${totals.foreignCurrencyInvoices} yabancı para faturası TL toplamına eklenmedi.` : ""} {firms.some((firm) => firm.invoiceSummaryAvailable === false) ? "Fatura özeti alınamadı; sıfır tutarlar gerçek fatura yokluğu anlamına gelmez." : ""}</p>
 
       {balanceAudit.open ? <section className="ccw-audit-result" aria-label="Salt okunur cari bakiye denetimi">
