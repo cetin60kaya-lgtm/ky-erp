@@ -95,7 +95,7 @@ export function registerComplianceChemicalRoutes(app:Hono<AppEnv>){
    const linked=await c.env.DB.prepare("SELECT expires_at FROM compliance_documents WHERE main_company_slug=? AND file_asset_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 1").bind(a.slug,assetId).first<Row>();
    if(text(linked?.expires_at)&&text(linked.expires_at).slice(0,10)<today)return c.json(error("EVIDENCE_EXPIRED","Bu dosyanın Denetim Merkezi geçerlilik tarihi dolmuş."),409);
    if(["GOTS","ZDHC"].includes(kind)){
-    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(text(meta.validUntil)))return c.json(error("CERTIFICATE_DATE_REQUIRED","ZDHC/GOTS ortak listesi için belgede yazılı geçerlilik tarihini girin."),422);
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(text(meta.validUntil)))return c.json(error("CERTIFICATE_DATE_REQUIRED","ZDHC/GOTS ortak listesi için belgede yazılı geçerlilik tarihini girin."),422);
     if(text(meta.validUntil)<today)return c.json(error("CERTIFICATE_EXPIRED","Bu ZDHC/GOTS listesinin geçerlilik tarihi dolmuş."),409);
    }
    if(["ZDHC","GOTS","LCW_INVENTORY"].includes(kind)){
