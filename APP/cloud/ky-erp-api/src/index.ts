@@ -2475,8 +2475,13 @@ app.post("/api/muhasebe/belge-import/:id/boyahane-transfer", async (c) => {
   for (const [index, line] of lines.entries()) {
     if (!databaseText(line.lotNo).trim()) errors.push(`${index + 1}. satır: lot numarası eksik.`);
     if (databaseNumber(line.quantity) <= 0) errors.push(`${index + 1}. satır: miktar sıfır olamaz.`);
-    if (!databaseText(line.productId || line.productName).trim()) {
-      errors.push(`${index + 1}. satır: sistem ürünü seçilmedi.`);
+    if (!databaseText(line.productId).trim()) {
+      errors.push(`${index + 1}. satır: onaylı kimyasal ürün kartı seçilmedi.`);
+    } else {
+      const product = await jsonStoreGet(c,"BOYAHANE_APPROVED_PRODUCT",databaseText(line.productId),slug);
+      if (!product || databaseText(product.approvalStatus)!=="APPROVED" || product.isActive===false) {
+        errors.push(`${index + 1}. satır: ürünün Boyahane uygunluğu ve yönetici onayı bulunmuyor.`);
+      }
     }
   }
   if (errors.length) {
@@ -2508,6 +2513,10 @@ app.post("/api/muhasebe/belge-import/:id/boyahane-transfer", async (c) => {
       companyName: detail.companyName || detail.supplierName,
       productId: line.productId || null,
       productName: line.productName || line.aliasName || line.rawName,
+      modelId: line.modelId || null,
+      modelName: line.modelName || "",
+      customerOrderNo: line.customerOrderNo || "",
+      supplierLotOrigin: "MUHASEBE_SUPPLIER_INVOICE",
       rawName: line.rawName || line.description || "",
       aliasName: line.aliasName || line.productName || line.rawName,
       lotNo: databaseText(line.lotNo).trim(),
