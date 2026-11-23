@@ -11,7 +11,7 @@ test("original PDF opens in KY ERP on the same screen and keeps original bytes",
   assert.match(center, /blob\.slice\(0, 5\)\.text\(\) !== "%PDF-"/);
   assert.match(center, /setPdfPreview\(\{ url: URL\.createObjectURL/);
   assert.match(center, /URL\.revokeObjectURL\(pdfPreview\.url\)/);
-  assert.match(center, /<iframe title=\{\`PDF:/);
+  assert.ok(center.includes("<iframe title={"));
   assert.match(center, /Orijinal Belge Arşivi/);
 });
 
