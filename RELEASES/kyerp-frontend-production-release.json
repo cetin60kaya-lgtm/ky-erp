@@ -5,13 +5,13 @@
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
   "releaseDate": "2026-11-23",
   "scope": [
-    "PR648_ORIGINAL_EBELGE_PDF_SAME_ERP_SCREEN",
-    "PR648_EBELGE_SERVER_SORT_LIST_PAGINATION",
-    "PR648_WORKFLOW_DOCUMENT_OPEN_IN_CONTEXT",
-    "NO_FINANCIAL_MUTATION_NO_D1_MIGRATION"
+    "PR653_SINGLE_CANONICAL_D1_COMPANY_RELATION_SCANNER",
+    "PR653_COMPANY_INCOMING_OUTGOING_INVOICE_TOTALS_WITHOUT_LEDGER_POSTING",
+    "PR653_COMPANY_CARI_BALANCE_SEPARATE_FROM_DOCUMENT_TOTALS",
+    "NO_D1_MIGRATION_NO_FINANCIAL_MUTATION"
   ],
-  "note": "23.11.2026 PR #648 merged (aefb86b): canonical CI 45246805016 success (Frontend lint/test/build + Worker typecheck/test/build). Publish existing frontend Pages production workflow to activate embedded original PDF preview, e-Belge server-side column ordering and workflow document opening. Backend sort was included in Worker attempt 64, GitHub Actions 45249367014 success. No invoice/cari changes, company hard delete, migration or official e-Belge send.",
-  "sourceCommit": "aefb86b316f8bc9e62700dfd300c17a859de7295",
+  "note": "23.11.2026 PR #653 merge 19d8768b: source metadata PRAGMA schema batch failed in real production; replaced entirely with one sqlite_master DDL scan and fail-closed reference checks. Firm list now shows incoming/outgoing posted/unposted invoice totals separately from current_balance. Canonical UI+Worker CI #45262459159 SUCCESS. No D1 migrations, no account movement writes, no company merge/delete, no invoice approval or e-Belge sending. Live authenticated TAHA preview and invoice totals smoke required.",
+  "sourceCommit": "19d8768b3791cfbe616a41c258c6167052397271",
   "requestedAt": "2026-11-23",
-  "attempt": 10
+  "attempt": 11
 }
