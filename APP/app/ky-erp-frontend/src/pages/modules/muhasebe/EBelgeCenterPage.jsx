@@ -278,6 +278,17 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState(null);
+  useEffect(() => () => {
+    if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
+  }, [pdfPreview?.url]);
+
+  const showPdfInPlace = async (blob, fileName) => {
+    if (!(blob instanceof Blob) || blob.size < 5 || await blob.slice(0, 5).text() !== "%PDF-")
+      throw new Error("PDF imzası doğrulanamadı. Orijinal belgeyi kontrol edin.");
+    const pdf = /^application\/pdf(?:;|$)/i.test(blob.type) ? blob : new Blob([blob], { type: "application/pdf" });
+    setPdfPreview({ url: URL.createObjectURL(pdf), fileName: String(fileName || "Belge.pdf") });
+  };
   const [companyOpen, setCompanyOpen] = useState(false);
   const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
   const [finalAcknowledged, setFinalAcknowledged] = useState(false);
@@ -324,40 +335,40 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
     finally { setBusy(""); }
   };
   const preview = async (file) => {
-    const reservedWindow = reserveEBelgePreviewTab();
+    const isPdf = /\\.pdf$/i.test(String(file.file_name || "")) || /pdf/i.test(String(file.mime_type || ""));
+    const reservedWindow = isPdf ? null : reserveEBelgePreviewTab();
     setBusy(`file-${file.id}`); setError("");
     try {
-      openEBelgeBlob(await getEBelgeFilePreview(file.id), reservedWindow);
+      const blob = await getEBelgeFilePreview(file.id);
+      if (isPdf) await showPdfInPlace(blob, file.file_name || "Orijinal.pdf");
+      else openEBelgeBlob(blob, reservedWindow);
     } catch (e) {
       if (reservedWindow && !reservedWindow.closed) reservedWindow.close();
       setError(e?.message || "Orijinal belge açılamadı. PDF kaynağını kontrol edin.");
-    } finally {
-      setBusy("");
-    }
+    } finally { setBusy(""); }
   };
-  const openSupplierAccountingPdf=async()=>{
-    const reservedWindow=reserveEBelgePreviewTab();
+  const openSupplierAccountingPdf = async () => {
     setError("");
-    try{
-      const files=Array.isArray(detail?.files)?detail.files:[];
-      const pdfFile=files.find(file=>/\.pdf$/i.test(String(file.file_name||"")));
-      if(pdfFile){openEBelgeBlob(await getEBelgeFilePreview(pdfFile.id),reservedWindow);return;}
-      const xmlFile=files.find(file=>/\.xml$/i.test(String(file.file_name||"")));
-      if(!xmlFile)throw Error("Bu faturaya bağlı orijinal XML/PDF yok. Belge kaynağını kontrol edin.");
-      const xml=await (await getEBelgeFilePreview(xmlFile.id)).text();
-      const document=parseUblForVisualOutput(xml);
-      if(document.kind!=="INVOICE"||String(detail.document_no)!==document.number)
+    try {
+      const files = Array.isArray(detail?.files) ? detail.files : [];
+      const pdfFile = files.find(file => /\\.pdf$/i.test(String(file.file_name || "")));
+      if (pdfFile) {
+        await showPdfInPlace(await getEBelgeFilePreview(pdfFile.id), pdfFile.file_name);
+        return;
+      }
+      const xmlFile = files.find(file => /\\.xml$/i.test(String(file.file_name || "")));
+      if (!xmlFile) throw Error("Bu faturaya bağlı orijinal XML/PDF yok. Belge kaynağını kontrol edin.");
+      const xml = await (await getEBelgeFilePreview(xmlFile.id)).text();
+      const document = parseUblForVisualOutput(xml);
+      if (document.kind !== "INVOICE" || String(detail.document_no) !== document.number)
         throw Error("Belge numarası veya türü orijinal XML ile uyuşmuyor.");
-      const all=await getEBelgeVisualProfiles();
-      const profile=(all?.items||[]).find(p=>p.issuerTaxNo===document.supplier?.tax&&p.kind==="INVOICE"&&p.approved===true);
-      // Original İşNet PDF is always preferred. If only UBL exists, build
-      // a clearly secondary CONTROL preview without demanding any template.
-      // Never store this browser-rendered PDF as the provider's original.
-      const output=await renderUblOutput(xml,profile?.layout||{},"PDF");
-      openEBelgeBlob(output.blob,reservedWindow);
-    }catch(e){
-      if(reservedWindow&&!reservedWindow.closed)reservedWindow.close();
-      setError(e?.message||"Muhasebe PDF'si açılamadı.");
+      const all = await getEBelgeVisualProfiles();
+      const profile = (all?.items || []).find(p => p.issuerTaxNo === document.supplier?.tax && p.kind === "INVOICE" && p.approved === true);
+      // Only a secondary CONTROL PDF is created when the provider's original PDF is missing.
+      const output = await renderUblOutput(xml, profile?.layout || {}, "PDF");
+      await showPdfInPlace(output.blob, `${detail.document_no}-KONTROL.pdf`);
+    } catch (e) {
+      setError(e?.message || "Muhasebe PDF'si açılamadı.");
     }
   };
   const saveDocument = async () => action("edit", async () => { await updateEBelge(id, editForm); setEditing(false); });
@@ -493,6 +504,17 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
         </div>
       </>}
     </section>
+    {pdfPreview && <div className="eb-inline-pdf-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPdfPreview(null); }}>
+      <section className="eb-inline-pdf-panel" role="dialog" aria-modal="true" aria-label="Belge PDF önizleme">
+        <header><div><strong>{pdfPreview.fileName}</strong><small>Orijinal belge, KY ERP ekranından ayrılmadan görüntülenir.</small></div>
+          <button type="button" onClick={() => setPdfPreview(null)} aria-label="PDF önizlemeyi kapat"><X size={20}/></button></header>
+        <iframe title={`PDF: ${pdfPreview.fileName}`} src={pdfPreview.url} />
+        <footer><span>PDF görüntüleyicisinin yazdır ve indir araçlarını kullanabilirsiniz.</span>
+          <button type="button" onClick={() => window.open(pdfPreview.url, "_blank", "noopener,noreferrer")}>Yeni Sekmede Aç</button>
+          <button type="button" onClick={() => setPdfPreview(null)}>Kapat</button>
+        </footer>
+      </section>
+    </div>}
     {finalConfirmOpen && detail && <div className="eb-submodal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget && !busy) setFinalConfirmOpen(false); }}>
       <section className="eb-submodal eb-final-confirm-modal" role="dialog" aria-modal="true" aria-labelledby="eb-final-confirm-title">
         <header>
@@ -551,6 +573,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const poolViews = useMemo(() => ["incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
   const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState("DATE");
+  const [sortDirection, setSortDirection] = useState("DESC");
   const poolRequestSeq = useRef(0);
   const [dashboard, setDashboard] = useState({ summary: {}, recent: [] });
   const [integrations, setIntegrations] = useState({ providers: [], archive: [], fileHub: [] });
@@ -579,10 +603,21 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
    view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?"HISTORY":view==="pool"?filter:"ALL");
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
-    filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,
+    filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
     ...(view==="incoming-invoices"&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter]);
+  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
+  const sortPoolBy = (column) => {
+    if (sortBy === column) setSortDirection((old) => old === "ASC" ? "DESC" : "ASC");
+    else { setSortBy(column); setSortDirection(column === "DATE" ? "DESC" : "ASC"); }
+    setPage(1);
+  };
+  const renderPoolSort = (label, column) => column ? <span>
+    <button type="button" className="eb-sort-header" onClick={() => sortPoolBy(column)}
+      aria-label={`${label} sütununu sırala`} aria-pressed={sortBy === column}>
+      {label} <span aria-hidden="true">{sortBy === column ? (sortDirection === "ASC" ? "↑" : "↓") : "↕"}</span>
+    </button>
+  </span> : <span>{label}</span>;
 
   const loadPool = useCallback(async () => {
     const requestId = ++poolRequestSeq.current;
@@ -856,7 +891,14 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         </div>
         {view==="incoming-invoices"&&printStatusError&&<div className="eb-error" role="alert">{printStatusError}</div>}
         {busy && !rows.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belgeler yükleniyor</div> : rows.length ? <div className="eb-pool-table-scroll"><div className="eb-table">
-          <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>{view==="incoming-invoices"?"Muhasebe Çıktısı":"Kaynak"}</span><span>Toplam</span><span>Kontrol</span></div>
+          <div className="eb-tr eb-th">
+            {renderPoolSort("Belge", "DOCUMENT_NO")}
+            {renderPoolSort("Firma / Cari", "PARTY")}
+            {renderPoolSort("Tarih", "DATE")}
+            {renderPoolSort(view==="incoming-invoices"?"Muhasebe Çıktısı":"Kaynak", view==="incoming-invoices"?null:"SOURCE")}
+            {renderPoolSort("Toplam", "TOTAL")}
+            {renderPoolSort("Kontrol", "STATUS")}
+          </div>
           {rows.map((row) => {
             const hasIssue = Number(row.issue_count || 0) > 0;
             const posted = String(row.status || "").toUpperCase() === "POSTED";
@@ -881,7 +923,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       </section>
     </>}
 
-    {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} />}
+    {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} onOpenDocument={(documentId) => setSelectedId(String(documentId))} />}
     {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 
     {view === "integrations" && <>
