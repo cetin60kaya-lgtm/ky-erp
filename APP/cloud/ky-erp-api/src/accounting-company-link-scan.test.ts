@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { scanCompanyRelations } from "./accounting-company-link-scan.ts";
+import { scanCompanyRelations, readCompanyMergeTarget, publicCompanyScanFailure } from "./accounting-company-link-scan.ts";
 
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
@@ -114,4 +114,39 @@ test("empty company's aliases must be processed before parent deletion when FK i
   assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM companies WHERE id='short-taha'").get()!.n, 0);
   assert.equal(sqlite.prepare("SELECT current_balance FROM companies WHERE id='taha-main'").get()!.current_balance, 50000);
   sqlite.close();
+});
+
+test("merge target with a ₺50,000 financial history only reads its header, not every relation", async () => {
+  const { sqlite, db } = fixture();
+  let queryCount = 0;
+  const lightweight = {
+    prepare(query: string) {
+      queryCount += 1;
+      assert.match(query, /SELECT id,name,updated_at,current_balance,opening_balance,is_active FROM companies/);
+      return db.prepare(query);
+    },
+    async batch() { throw Error("TARGET_MUST_NOT_FULL_SCAN"); },
+  } as unknown as D1Database;
+  const result = await readCompanyMergeTarget(lightweight, "main", "taha-main");
+  assert.equal(queryCount, 1);
+  assert.equal(result?.companyName, "TAHA GİYİM AŞ");
+  assert.equal(result?.currentBalance, 50000);
+  assert.equal(result?.isActive, true);
+  assert.equal(result?.updatedAt, "2026-11-23");
+  sqlite.close();
+});
+
+test("merge target respects tenant and soft deletion", async () => {
+  const { sqlite, db } = fixture();
+  assert.equal(await readCompanyMergeTarget(db, "another", "taha-main"), null);
+  sqlite.prepare("UPDATE companies SET deleted_at='2026-11-23' WHERE id='taha-main'").run();
+  assert.equal(await readCompanyMergeTarget(db, "main", "taha-main"), null);
+  await assert.rejects(() => readCompanyMergeTarget(db, "", "taha-main"), /SCOPE_REQUIRED/);
+  sqlite.close();
+});
+
+test("read-only scan error reporting never leaks SQL, tenant or database details", () => {
+  assert.equal(publicCompanyScanFailure(new Error("COMPANY_SCAN_INCOMPLETE_BATCH")), "COMPANY_SCAN_INCOMPLETE_BATCH");
+  assert.equal(publicCompanyScanFailure(new Error("D1_ERROR: SELECT customer_id ...")), "COMPANY_SCAN_DATABASE_ERROR");
+  assert.equal(publicCompanyScanFailure(new Error("a hidden secret")), "COMPANY_SCAN_DATABASE_ERROR");
 });
