@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertTriangle, CheckCircle2, Cloud, FileText, FolderOpen, Link2, RefreshCw, ShieldCheck } from "lucide-react";
 import { apiGet } from "../../../utils/api";
+import IsnetLiveAcceptanceQA from "./IsnetLiveAcceptanceQA";
 import "./eBelgeIsnetPortalSync.css";
 
 const DIRECTIONS = ["Gelen e-Fatura", "Giden e-Fatura", "Gelen e-İrsaliye", "Giden e-İrsaliye"];
@@ -98,6 +99,9 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, o
         <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}>Belge Havuzunu Aç</button>
       </div>
     </div>
+
+    <IsnetLiveAcceptanceQA mainCompanySlug={slug} apiConnected={apiConnected}
+      onOpenSettings={() => onOpenSettings?.()} />
 
     <div className="eis-local-directions" aria-label="Dört belge yönü">
       {DIRECTIONS.map(title => <div key={title}><FileText size={16}/>
