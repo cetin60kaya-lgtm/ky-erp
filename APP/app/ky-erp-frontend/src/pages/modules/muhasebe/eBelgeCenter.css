@@ -128,3 +128,23 @@
 .eb-original-extra-list{display:flex;gap:8px;flex-wrap:wrap;padding:10px 0 0}
 .eb-original-extra-list button{padding:8px 12px;border:1px solid #cad6e6;border-radius:7px;background:var(--surface,#fff);cursor:pointer}
 @media(max-width:680px){.eb-original-archive{padding:12px}.eb-original-file-actions{grid-template-columns:1fr}.eb-original-archive-head{align-items:start}}
+
+/* Same-screen original PDF viewing and server-backed sortable document columns. */
+.eb-sort-header{display:inline-flex;align-items:center;gap:5px;width:100%;padding:4px 0;text-align:left;background:transparent;border:0;color:inherit;font:inherit;font-weight:inherit;cursor:pointer}
+.eb-sort-header:hover{text-decoration:underline;text-underline-offset:3px}
+.eb-sort-header:focus-visible{outline:2px solid #387ddd;outline-offset:2px;border-radius:3px}
+.eb-sort-header[aria-pressed="true"]{font-weight:800}
+.eb-sort-header span{font-size:14px;line-height:1;font-weight:800}
+.eb-inline-pdf-backdrop{position:fixed;inset:0;z-index:18000;background:rgba(9,23,45,.70);display:flex;align-items:center;justify-content:center;padding:clamp(6px,2vw,24px)}
+.eb-inline-pdf-panel{width:min(1180px,98vw);height:min(95vh,1000px);min-height:300px;min-width:0;background:var(--surface,#fff);border-radius:12px;display:grid;grid-template-rows:auto minmax(0,1fr) auto;box-shadow:0 25px 90px rgba(0,0,0,.3);overflow:hidden}
+.eb-inline-pdf-panel>header{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 14px;border-bottom:1px solid #d7e1eb}
+.eb-inline-pdf-panel>header>div{min-width:0;display:grid;gap:4px}
+.eb-inline-pdf-panel>header strong{font-size:14px;overflow:hidden;text-overflow:ellipsis}
+.eb-inline-pdf-panel>header small{font-size:11px;color:var(--text-secondary,#66778c)}
+.eb-inline-pdf-panel button{cursor:pointer}
+.eb-inline-pdf-panel>header button{border:0;background:transparent;display:grid;place-items:center;padding:8px}
+.eb-inline-pdf-panel>iframe{width:100%;height:100%;min-height:0;border:0;background:#f0f2f5}
+.eb-inline-pdf-panel>footer{display:flex;justify-content:flex-end;align-items:center;gap:8px;padding:10px 12px;border-top:1px solid #d7e1eb;flex-wrap:wrap}
+.eb-inline-pdf-panel>footer span{margin-right:auto;font-size:11px;color:var(--text-secondary,#66778c)}
+.eb-inline-pdf-panel>footer button{padding:7px 12px;border:1px solid #c4d1e0;border-radius:7px;background:#f5f9fd;color:#24466d}
+@media(max-width:700px){.eb-inline-pdf-backdrop{padding:0}.eb-inline-pdf-panel{height:100dvh;width:100vw;border-radius:0}.eb-inline-pdf-panel>header small,.eb-inline-pdf-panel>footer span{display:none}}
