@@ -3,16 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "90155492e2e76d0dd73e24578249831deb4ee093",
+  "sourceCommit": "3d9d05d09c9719890f936ccba11d879f73810736",
   "requestedAt": "2026-11-23",
-  "attempt": 64,
+  "attempt": 65,
   "scope": [
-    "PR649_LIGHTWEIGHT_MERGE_TARGET_PREVIEW",
-    "PR649_FAIL_CLOSED_SOURCE_RELATION_SCAN",
-    "PR649_D1_ERROR_PHASE_SAFE_DIAGNOSTICS",
-    "NO_DATABASE_MIGRATION_NO_COMPANY_MUTATION"
+    "PR651_TAHA_COMPANY_SCAN_METADATA_D1_PRAGMA_FIX",
+    "READ_ONLY_TABLE_INVENTORY_AND_BATCHED_COLUMN_INSPECTION",
+    "FAIL_CLOSED_TENANT_COMPANY_LINK_GUARD",
+    "NO_D1_MIGRATION_NO_FINANCIAL_MUTATION"
   ],
-  "note": "23.11.2026 PR #649: confirmed CI run 45249076226 success (frontend + Worker), production change only: scan source-company links exhaustively, read preserved target with one scoped SELECT, bounded safe error stage. Fix for TAHA merge-preview hanging with heavily linked target after PR #647. No D1 migration, financial balance updates, merge execution or deletions. Live user approval/preview still required.",
+  "note": "23.11.2026 PR #651 merged to canonical: user's actual screenshot COMPANY_SCAN_METADATA_FAILED from correlated sqlite_master pragma_table_info(m.name) query. Replace with D1-supported SELECT name FROM sqlite_master + PRAGMA table_info per table in small read-only batches. Canonical CI 45256852774 PASS both Frontend and Worker. No migrations, company delete, merge, balance update or e-Belge dispatch. Authenticated TAHA preview acceptance still required.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
