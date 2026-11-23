@@ -99,7 +99,7 @@ test("other tenants and soft-deleted relations do not block an empty duplicate",
 test("an invalid schema or failed batch must never be mistaken for a clean company", async () => {
   const { sqlite, db } = fixture();
   const failed = { ...db, batch: async () => { throw new Error("D1_READ_FAILED"); } };
-  await assert.rejects(() => scanCompanyRelations(failed as D1Database, "main", "short-taha"), /COMPANY_SCAN_EXISTS_BATCH_FAILED/);
+  await assert.rejects(() => scanCompanyRelations(failed as D1Database, "main", "short-taha"), /COMPANY_SCAN_SCHEMA_BATCH_FAILED/);
   await assert.rejects(() => scanCompanyRelations(db, "", "short-taha"), /SCOPE_REQUIRED/);
   sqlite.close();
 });
@@ -149,4 +149,35 @@ test("read-only scan error reporting never leaks SQL, tenant or database details
   assert.equal(publicCompanyScanFailure(new Error("COMPANY_SCAN_INCOMPLETE_BATCH")), "COMPANY_SCAN_INCOMPLETE_BATCH");
   assert.equal(publicCompanyScanFailure(new Error("D1_ERROR: SELECT customer_id ...")), "COMPANY_SCAN_DATABASE_ERROR");
   assert.equal(publicCompanyScanFailure(new Error("a hidden secret")), "COMPANY_SCAN_DATABASE_ERROR");
+});
+
+test("metadata collection uses separate table inventory and batched PRAGMA, never correlated PRAGMA", async () => {
+  const { sqlite, db } = fixture();
+  const sqlCalls: string[] = [];
+  const tracked = {
+    prepare(query: string) {
+      sqlCalls.push(query);
+      assert.doesNotMatch(query, /pragma_table_info\s*\(\s*m\.name\s*\)/i);
+      return db.prepare(query);
+    },
+    batch: (statements: any[]) => db.batch(statements),
+  } as unknown as D1Database;
+  const report = await scanCompanyRelations(tracked, "main", "short-taha");
+  assert.equal(report.blockedTotal, 0);
+  assert.ok(sqlCalls.some(x => /FROM sqlite_master WHERE type='table'/.test(x)));
+  assert.ok(sqlCalls.some(x => /^PRAGMA table_info\("companies"\)$/.test(x)));
+  sqlite.close();
+});
+
+test("a metadata schema batch failure fails closed without reading or modifying a company", async () => {
+  const { sqlite, db } = fixture();
+  let batchCalls = 0;
+  const failed = {
+    prepare: (sql: string) => db.prepare(sql),
+    batch: async () => {batchCalls++;throw Error("SQL_INTERNAL_DETAILS");},
+  } as unknown as D1Database;
+  await assert.rejects(() => scanCompanyRelations(failed, "main", "short-taha"), /COMPANY_SCAN_SCHEMA_BATCH_FAILED/);
+  assert.equal(batchCalls, 1);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM companies").get()!.n, 2);
+  sqlite.close();
 });

@@ -38,26 +38,52 @@ export async function scanCompanyRelations(db: D1Database, slug: string, id: str
   blockedRelations: Relation[]; blockedTotal: number; aliasCount: number; scannedTables: number;
 }> {
   if (!slug || !id) throw new Error("COMPANY_SCAN_SCOPE_REQUIRED");
-  let metadata: D1Result<Row>;
+  // D1 does not reliably support a correlated table-valued PRAGMA with
+  // sqlite_master as its argument. Read the table inventory first, then read
+  // each table's columns using independent statements batched in small groups.
+  // Every failure aborts the entire preview (fail closed).
+  let inventory: D1Result<Row>;
   try {
-    metadata = await db.prepare(`
-      SELECT m.name AS table_name, p.name AS column_name
-      FROM sqlite_master AS m
-      LEFT JOIN pragma_table_info(m.name) AS p
-      WHERE m.type='table' AND m.name NOT LIKE 'sqlite_%'
-      ORDER BY m.name, p.cid
-    `).all<Row>();
+    inventory = await db.prepare(
+      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    ).all<Row>();
   } catch (cause) {
-    throw new Error("COMPANY_SCAN_METADATA_FAILED", { cause });
+    throw new Error("COMPANY_SCAN_TABLE_LIST_FAILED", { cause });
   }
+  if (!inventory?.success || !Array.isArray(inventory.results) || inventory.results.length === 0)
+    throw new Error("COMPANY_SCAN_TABLE_LIST_INCOMPLETE");
+
   const columnsByTable = new Map<string, Set<string>>();
-  for (const row of metadata.results || []) {
-    const table = String(row.table_name || "");
-    if (!safeName(table)) throw new Error("COMPANY_SCAN_UNSAFE_TABLE_NAME");
-    const column = String(row.column_name || "");
-    if (!column || !safeName(column)) throw new Error("COMPANY_SCAN_UNREADABLE_TABLE_SCHEMA");
-    if (!columnsByTable.has(table)) columnsByTable.set(table,new Set());
-    columnsByTable.get(table)!.add(column);
+  const tables = inventory.results.map(row => String(row.name ?? ""));
+  if (tables.some(table => !safeName(table)) || new Set(tables).size !== tables.length)
+    throw new Error("COMPANY_SCAN_UNSAFE_TABLE_NAME");
+
+  const schemaBatchSize = 16;
+  for (let offset=0; offset<tables.length; offset+=schemaBatchSize) {
+    const group=tables.slice(offset,offset+schemaBatchSize);
+    let schema: D1Result<Row>[];
+    try {
+      schema=await db.batch(group.map(table =>
+        db.prepare("PRAGMA table_info("+quote(table)+")")
+      ));
+    } catch (cause) {
+      throw new Error("COMPANY_SCAN_SCHEMA_BATCH_FAILED", { cause });
+    }
+    if (!Array.isArray(schema) || schema.length!==group.length)
+      throw new Error("COMPANY_SCAN_SCHEMA_BATCH_INCOMPLETE");
+    for (let n=0;n<group.length;n++) {
+      const info=schema[n];
+      if (!info?.success || !Array.isArray(info.results) || info.results.length===0)
+        throw new Error("COMPANY_SCAN_UNREADABLE_TABLE_SCHEMA");
+      const columnNames=new Set<string>();
+      for (const row of info.results) {
+        const column=String(row.name??"");
+        if (!safeName(column) || columnNames.has(column))
+          throw new Error("COMPANY_SCAN_UNREADABLE_TABLE_SCHEMA");
+        columnNames.add(column);
+      }
+      columnsByTable.set(group[n],columnNames);
+    }
   }
   if (!columnsByTable.has("companies")) throw new Error("COMPANY_SCAN_SCHEMA_UNAVAILABLE");
   const plans: {table:string; where:string; binds:string[]}[] = [];
