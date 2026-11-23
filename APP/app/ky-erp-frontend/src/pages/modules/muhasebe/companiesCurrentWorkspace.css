@@ -741,3 +741,13 @@
 .ccw-audit-table th, .ccw-audit-table td { padding: 10px 9px; border-bottom: 1px solid var(--border-color, #e7ebf0); font-size: 12px; text-align: right; white-space: nowrap; }
 .ccw-audit-table th:first-child, .ccw-audit-table td:first-child { text-align: left; white-space: normal; min-width: 190px; }
 .ccw-audit-table th { background: var(--surface-muted, #f7f9fb); color: var(--text-secondary, #667085); }
+
+/* Canonical invoice visibility: separate imported document totals from posted cari. */
+.ccw-root .ccw-summary { grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); }
+.ccw-invoice-note { margin: 0; color: var(--text-secondary, #64748b); font-size: 12px; }
+.ccw-invoice-detail { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; padding: 12px; margin-bottom: 12px; border: 1px solid var(--border-color,#dfe4ea); border-radius: 12px; }
+.ccw-invoice-detail > div { display: grid; gap: 4px; min-width: 0; }
+.ccw-invoice-detail strong { font-size: 17px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ccw-invoice-detail span, .ccw-invoice-detail small { color: var(--text-secondary,#64748b); font-size: 12px; }
+.ccw-invoice-detail > p { grid-column: 1/-1; color: var(--text-secondary,#64748b); font-size: 12px; margin: 0; }
+@media (max-width: 850px) { .ccw-invoice-detail { grid-template-columns: 1fr; } }
