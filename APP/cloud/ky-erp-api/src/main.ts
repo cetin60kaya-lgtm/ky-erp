@@ -47,6 +47,7 @@ import { registerComplianceConfigRoutes } from "./compliance-config-cloud";
 import { registerComplianceSharedEvidenceRoutes } from "./compliance-shared-evidence";
 import { registerComplianceOperationsRoutes } from "./compliance-operations-cloud";
 import { registerComplianceChemicalRoutes } from "./compliance-chemical-links";
+import { registerComplianceFileHubBridgeRoutes } from "./compliance-file-hub-bridge";
 import { registerBoyahaneColorAssistantRoutes } from "./boyahane-color-assistant";
 import { registerBoyahaneColorIdentityRoutes } from "./boyahane-color-identity";
 import { registerBoyahaneColorJobRoutes } from "./boyahane-color-job";
@@ -219,6 +220,7 @@ registerComplianceConfigRoutes(app);
 registerComplianceSharedEvidenceRoutes(app);
 registerComplianceOperationsRoutes(app);
 registerComplianceChemicalRoutes(app);
+registerComplianceFileHubBridgeRoutes(app);
 // Canonical production-center routes must be registered FIRST. Hono runs the first
 // matching handler; the legacy runtime responds without poolContract/appliedPool
 // and incorrectly returns all models to all four İmalat screens.

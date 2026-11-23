@@ -26,6 +26,13 @@ export function complianceStoragePurpose(kind:unknown,purpose:unknown="AUDIT_EVI
  if(["AUDIT_REPORT","DENETIM_RAPORU"].includes(value))return"AUDIT_REPORT";
  if(["OHS_DOCUMENT","ISG"].includes(value))return"OHS_DOCUMENT";
  if(["QUALITY","KALITE"].includes(value))return"QUALITY";
+ if(["PROCEDURE","PROSEDUR","PROSEDÜR","POLICY"].includes(value))return"PROCEDURE";
+ if(["DECLARATION","DEKLARASYON","BEYAN"].includes(value))return"DECLARATION";
+ if(["INVENTORY","ENVANTER"].includes(value))return"INVENTORY";
+ if(["TRAINING","EGITIM","EĞİTİM"].includes(value))return"TRAINING";
+ if(["ENVIRONMENT","CEVRE","ÇEVRE","AIR_EMISSION"].includes(value))return"ENVIRONMENT";
+ if(["LOT_EVIDENCE","LOT_TRACKING"].includes(value))return"LOT_EVIDENCE";
+ if(["SIGNED_ORIGINAL","IMZALI_ORIJINAL"].includes(value))return"SIGNED_ORIGINAL";
  return["AUDIT_EVIDENCE","AUDIT_REPORT","MSDS","TDS","PERIODIC_MAINTENANCE","OHS_DOCUMENT","QUALITY"].includes(upper(purpose))?upper(purpose):"AUDIT_EVIDENCE";
 }
 
