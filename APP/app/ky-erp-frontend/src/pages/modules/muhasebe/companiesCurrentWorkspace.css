@@ -164,7 +164,7 @@
 
 .ccw-master-detail {
   display: grid;
-  grid-template-columns: minmax(300px, 35fr) minmax(0, 65fr);
+  grid-template-columns: minmax(380px, 43fr) minmax(0, 57fr);
   gap: 14px;
   align-items: start;
   min-width: 0;
@@ -624,7 +624,7 @@
 
 @media (max-width: 1180px) {
   .ccw-master-detail {
-    grid-template-columns: minmax(280px, 40fr) minmax(0, 60fr);
+    grid-template-columns: minmax(340px, 45fr) minmax(0, 55fr);
   }
   .ccw-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -751,3 +751,9 @@
 .ccw-invoice-detail span, .ccw-invoice-detail small { color: var(--text-secondary,#64748b); font-size: 12px; }
 .ccw-invoice-detail > p { grid-column: 1/-1; color: var(--text-secondary,#64748b); font-size: 12px; margin: 0; }
 @media (max-width: 850px) { .ccw-invoice-detail { grid-template-columns: 1fr; } }
+
+/* Corporate firm listing: clickable field sorting and slightly wider master list. */
+.ccw-sort-button { border: 0 !important; background: transparent !important; padding: 4px 2px !important; min-height: 26px !important; text-align: left; font-size: 11px !important; font-weight: 800; cursor: pointer; color: inherit !important; }
+.ccw-sort-button:hover, .ccw-sort-button:focus-visible { text-decoration: underline; }
+.ccw-section .ccw-table-wrap.compact th { white-space: nowrap; }
+.ccw-section .ccw-table-wrap.compact td { overflow-wrap: anywhere; }
