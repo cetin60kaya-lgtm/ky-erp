@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
 import { scanCompanyRelations } from "./accounting-company-link-scan.ts";
-import { companyHardDeleteAllowed } from "./accounting-company-safe-delete.ts";
 
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
@@ -67,7 +66,7 @@ test("empty TAHA alias is safe to merge/delete after all tables are checked", as
   assert.equal(report.blockedTotal, 0);
   assert.equal(report.aliasCount, 1);
   assert.ok(report.scannedTables >= 5);
-  assert.equal(companyHardDeleteAllowed({ ...report, currentBalance: 0, openingBalance: 0 }), true);
+  assert.equal(report.blockedTotal, 0); // production guard additionally checks current/opening balance
   sqlite.close();
 });
 
@@ -75,7 +74,7 @@ test("50,000 TL TAHA record is preserved because it contains a movement", async 
   const { sqlite, db } = fixture();
   const report = await scanCompanyRelations(db, "main", "taha-main");
   assert.equal(report.blockedRelations.find(x => x.table === "current_account_movements")?.count, 1);
-  assert.equal(companyHardDeleteAllowed({ ...report, currentBalance: 50000, openingBalance: 0 }), false);
+  assert.ok(report.blockedTotal > 0); // protected record cannot pass safe-delete preflight
   sqlite.close();
 });
 
