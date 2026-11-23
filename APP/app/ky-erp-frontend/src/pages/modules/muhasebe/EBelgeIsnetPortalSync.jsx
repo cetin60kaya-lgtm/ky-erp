@@ -1,115 +1,116 @@
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, CheckCircle2, FileText, FolderOpen, HardDrive, Link2, LockKeyhole, Monitor, RefreshCw, ShieldCheck } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Cloud, FileText, FolderOpen, Link2, RefreshCw, ShieldCheck } from "lucide-react";
+import { apiGet } from "../../../utils/api";
 import "./eBelgeIsnetPortalSync.css";
 
-const LOCAL_ARCHIVE_URL = "http://127.0.0.1:8791/";
-const LOCAL_HEALTH_URL = "http://127.0.0.1:8791/health";
 const DIRECTIONS = ["Gelen e-Fatura", "Giden e-Fatura", "Gelen e-İrsaliye", "Giden e-İrsaliye"];
+const unwrap = value => value?.data?.data ?? value?.data ?? value;
+const storageLabel = provider => ({
+  APP_NOT_CONFIGURED: "OAuth uygulaması tanımlı değil",
+  OAUTH_AUTHORIZATION_REQUIRED: "Google hesabı yetkisi gerekli",
+  ROOT_SELECTION_REQUIRED: "Ana Drive klasörünü seç",
+  E_DOCUMENT_BINDING_REQUIRED: "E_BELGE / E_DOCUMENT klasör ataması gerekli",
+  FIRST_INDEX_REQUIRED: "İlk bulut taraması gerekli",
+  INDEX_PRESENT: "Drive bağlantısı ve indeks kaydı mevcut",
+}[provider?.status] || "Bağlantı kurulmamış");
 
-export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, enabled = true }) {
-  const [health, setHealth] = useState({ phase: "checking", detail: null });
-  const [frameVersion, setFrameVersion] = useState(0);
-  const probe = useCallback(async () => {
-    if (!enabled) {
-      setHealth({ phase: "disabled", detail: null });
+export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, onOpenSettings, enabled = true }) {
+  const slug = activeMainCompany?.slug || activeMainCompany?.mainCompanySlug || activeMainCompany?.id || "";
+  const [cloud, setCloud] = useState({ loading: true, isnet: null, storage: null, errors: [] });
+
+  const refresh = useCallback(async () => {
+    if (!slug || !enabled) {
+      setCloud({ loading: false, isnet: null, storage: null, errors: [] });
       return;
     }
-    const controller = new AbortController();
-    const deadline = setTimeout(() => controller.abort(), 5000);
-    try {
-      const response = await fetch(LOCAL_HEALTH_URL, {
-        method: "GET", mode: "cors", credentials: "omit", cache: "no-store", signal: controller.signal,
-      });
-      if (!response.ok) throw new Error("HTTP_" + response.status);
-      const detail = await response.json();
-      if (detail?.ok !== true || detail?.adapter !== "KY_ISNET_DRIVE_ARCHIVE_V1") {
-        throw new Error("BEKLENMEYEN_YEREL_SERVIS");
-      }
-      setHealth({ phase: "ready", detail });
-    } catch {
-      // Transitional 1.5.10 local agent has no /health route. A no-cors
-      // probe may establish transport reachability, but NOT service identity.
-      // The legacy panel is visibly labelled unverified until Setup 1.5.11.
-      try {
-        const legacy = await fetch(LOCAL_ARCHIVE_URL, {
-          method: "GET", mode: "no-cors", credentials: "omit", cache: "no-store",
-          signal: controller.signal,
-        });
-        setHealth({ phase: legacy.type === "opaque" ? "legacy" : "unreachable", detail: null });
-      } catch {
-        setHealth({ phase: "unreachable", detail: null });
-      }
-    } finally {
-      clearTimeout(deadline);
-    }
-  }, [enabled]);
+    setCloud(old => ({ ...old, loading: true, errors: [] }));
+    const [isnet, storage] = await Promise.allSettled([
+      apiGet("/isnet/cloud-readiness", { mainCompanySlug: slug, _ts: Date.now() }),
+      apiGet("/file-hub/cloud/tenant-readiness", { mainCompanySlug: slug, _ts: Date.now() }),
+    ]);
+    setCloud({
+      loading: false,
+      isnet: isnet.status === "fulfilled" ? unwrap(isnet.value) : null,
+      storage: storage.status === "fulfilled" ? unwrap(storage.value) : null,
+      errors: [
+        ...(isnet.status === "rejected" ? ["İşNet: " + (isnet.reason?.message || "durum okunamadı")] : []),
+        ...(storage.status === "rejected" ? ["File Hub: " + (storage.reason?.message || "durum okunamadı")] : []),
+      ],
+    });
+  }, [slug, enabled]);
 
-  useEffect(() => {
-    void probe();
-    const interval = window.setInterval(() => { if (!document.hidden) void probe(); }, 30000);
-    return () => window.clearInterval(interval);
-  }, [probe]);
+  useEffect(() => { void refresh(); }, [refresh]);
 
-  const connected = health.phase === "ready";
-  const legacyReachable = health.phase === "legacy";
-  const canShowFrame = connected || legacyReachable;
-  const portalReady = connected && health.detail?.connected === true;
-  const syncRunning = connected && health.detail?.running === true;
-  const statusText = !enabled ? "Firma entegrasyonu pasif"
-    : legacyReachable ? "Eski 8791 sürümü yanıt verdi · kimlik doğrulaması eksik"
-    : !connected ? health.phase === "checking" ? "Yerel servis kontrol ediliyor" : "Yerel bağlantı kontrolü gerekli"
-    : !portalReady ? "Yerel servis hazır · İşNet oturumu bekleniyor"
-    : syncRunning ? "Belgeler aktarılıyor" : "İşNet oturumu hazır";
+  const provider = cloud.storage?.providers?.find(p => p.providerType === "GOOGLE_DRIVE") || null;
+  const hasIndex = provider?.status === "INDEX_PRESENT";
+  const apiConnected = cloud.isnet?.apiAuthorized === true;
+  const apiConfigured = cloud.isnet?.companySelected === true;
+  const mode = cloud.isnet?.mode || "";
+  const statusMessage = !enabled ? "Bu firma için İşNet adaptörü pasif"
+    : cloud.loading ? "Bulut bağlantıları denetleniyor"
+    : !apiConfigured ? "İşNet API firma bağlantısı kurulmalı"
+    : !apiConnected ? "İşNet API oturumu doğrulanmalı"
+    : !hasIndex ? "İşNet API doğrulandı · Drive bağlantısı tamamlanmalı"
+    : "İşNet API ve Google Drive bağlantısı hazır · belge kabul testi gerekli";
 
-  return <section className="eis-local eis-single" aria-label="İşNet tek ekran senkronizasyon merkezi">
+  return <section className="eis-local eis-single eis-cloud" aria-label="İşNet bulut üzerinden tek ekran">
     <header className="eis-local-head">
       <div>
-        <span className="eis-local-kicker"><ShieldCheck size={15}/> İŞNET · TEK EKRAN</span>
-        <h3>İşNet Belge ve Senkronizasyon Merkezi</h3>
-        <p>Tek yerel servisle dört yöndeki XML/PDF arşivi. Portal şifresi yalnız yetkili Windows oturumunda kalır.</p>
+        <span className="eis-local-kicker"><Cloud size={15}/> KY ERP · BULUT ÖNCELİKLİ</span>
+        <h3>İşNet · Tek Ekran Belge Merkezi</h3>
+        <p>İşNet resmî API, Google Drive ve KY ERP Belge Havuzu. Bilgisayar IP'si, 8791 servisi veya yerel EXE bağlantı ön koşulu değildir.</p>
       </div>
-      <span className="eis-local-tag"><HardDrive size={15}/> Tek Drive / yerel arşiv</span>
+      <span className="eis-local-tag"><ShieldCheck size={15}/> Firma bazlı ortak bağlantı</span>
     </header>
 
     <div className="eis-status" role="status" aria-live="polite">
-      {connected ? <CheckCircle2 size={19}/> : <AlertTriangle size={19}/>}
-      <div><strong>{statusText}</strong>
-        <small>{connected ? (syncRunning ? "İşlem yerel serviste sürüyor; ekran kapansa da job tamamlanabilir." : "8791 doğrulandı; firma oturumu ve arşiv kontrolü aşağıdadır.")
-          : legacyReachable ? "Eski servis HTTP yanıtı veriyor; servis kimliği ve oturumu 1.5.11 sağlık protokolüyle doğrulanmalı."
-          : "Servis kapalı, arşiv yolu henüz yetkilendirilmemiş veya Chrome yerel ağ izni verilmemiş olabilir."}</small>
+      {apiConnected && hasIndex ? <CheckCircle2 size={19}/> : <AlertTriangle size={19}/>}
+      <div><strong>{statusMessage}</strong>
+        <small>İşNet oturumu salt-okunur sağlayıcı sorgusuyla; Drive ise D1 bağlantı metaverisiyle kontrol edilir. Dosyanın gerçekten aktarıldığı ayrıca test edilir.</small>
       </div>
-      <button type="button" className="eis-retry" onClick={() => { void probe(); if (canShowFrame) setFrameVersion(x => x + 1); }} disabled={!enabled}>
-        <RefreshCw size={15}/> Kontrol Et
+      <button type="button" className="eis-retry" onClick={() => void refresh()} disabled={!enabled || cloud.loading}>
+        <RefreshCw size={15}/> Durumu Yenile
       </button>
     </div>
 
-    {!canShowFrame && enabled && <div className="eis-connection-guide" role="alert">
-      <strong>8791 yerel servisi yanıt vermiyor veya Chrome erişimine izin vermiyor.</strong>
-      <p>KY ERP Masaüstü Setup ile bir kez verilen arşiv ve Windows başlangıç izinlerini koruyun. Bu bilgisayarda yerel 8791 servisi çalışmalı; Chrome site ayarlarında yalnız <b>kyerp.net</b> için cihaz/yerel ağ erişimine izin verilmeli. Güvenlik korumalarını kapatmayın.</p>
-      <small>İşNet şifresi hatası değildir. Fatura ve dosyalar silinmez; bağlantı dönünce kaldığınız yerden devam edebilirsiniz.</small>
+    {cloud.errors.length > 0 && <div className="eis-connection-guide" role="alert">
+      <strong>Bulut durum denetimi tamamlanamadı.</strong>
+      <p>{cloud.errors.join(" · ")}</p>
     </div>}
+
+    <div className="eis-cloud-steps">
+      <div>
+        <strong><span>1</span> İşNet resmî API</strong>
+        <p>{apiConnected ? "Sağlayıcı oturumu doğrulandı." : apiConfigured ? "Firma seçili; resmî API oturumu doğrulanmadı." : "Önce kullanıcı yetkisi ve firmayı bağla."}</p>
+        {mode && <small>Seçili yöntem: {mode === "api" ? "Resmî API" : "API dışı · " + mode}</small>}
+        {cloud.isnet?.providerStatus && <small>Sağlayıcı durumu: {cloud.isnet.providerStatus}</small>}
+        <button type="button" onClick={() => onOpenSettings?.()} disabled={!enabled}>API Bağlantısını Kur / Kontrol Et</button>
+      </div>
+      <div>
+        <strong><span>2</span> Google Drive · File Hub</strong>
+        <p>{storageLabel(provider)}</p>
+        <small>Ana firma tek Drive kökü ve E_BELGE / E_DOCUMENT klasör ataması kullanır.</small>
+        <a href="/depolama/depolama-kaynaklar">Google Drive Bağlantısını Aç</a>
+      </div>
+      <div>
+        <strong><span>3</span> Belge Havuzu</strong>
+        <p>XML/PDF indirme ve D1 kayıt eşleşmesi ayrı ayrı doğrulanacak.</p>
+        <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}>Belge Havuzunu Aç</button>
+      </div>
+    </div>
 
     <div className="eis-local-directions" aria-label="Dört belge yönü">
-      {DIRECTIONS.map(title => <div key={title}><FileText size={16}/><span><strong>{title}</strong><small>Orijinal XML + PDF</small></span></div>)}
+      {DIRECTIONS.map(title => <div key={title}><FileText size={16}/>
+        <span><strong>{title}</strong><small>Resmî API ile XML/PDF kabulü doğrulanacak</small></span>
+      </div>)}
     </div>
-
-    {canShowFrame && <div className="eis-local-embedded eis-single-frame">
-      <header>
-        <strong><Monitor size={16}/> İşNet arşiv kontrol paneli</strong>
-        <small>Firma seçimi · Tarih aralığı · Dört yönü al · Arşiv durumu</small>
-      </header>
-      <iframe key={frameVersion} title="İşNet Yerel Senkronizasyon"
-        src={LOCAL_ARCHIVE_URL}
-        allow="local-network-access; local-network; loopback-network"
-        sandbox="allow-same-origin allow-scripts allow-forms allow-downloads"
-        referrerPolicy="no-referrer"/>
-    </div>}
-
     <div className="eis-local-actions">
-      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}><FolderOpen size={16}/> Belge Havuzunu Gör</button>
-      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "eslestirmeler" })}><Link2 size={16}/> Fatura–İrsaliye Eşleşmeleri</button>
+      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}><FolderOpen size={16}/> Belge Havuzu</button>
+      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "eslestirmeler" })}><Link2 size={16}/> Fatura–İrsaliye Takibi</button>
     </div>
-    <div className="eis-local-warning"><LockKeyhole size={17}/><span>Yerel arşiv kaydı, Google Drive bulut eşitlemesi ve KY ERP D1 belge kabulü ayrı doğrulanır. Dosyanın indirilmesi otomatik kesin mali kayıt veya resmî gönderim değildir.</span></div>
+    <div className="eis-local-warning"><ShieldCheck size={17}/><span>
+      Resmî İşNet API erişimi, orijinal XML/PDF indirme, Google Drive bulut indeksleme ve muhasebe D1 kaydı ayrı kabul adımlarıdır. İlk doğrulamadan önce otomatik fatura kesme/gönderme yapılmaz. Yerel bağlayıcı yalnız isteğe bağlı yedek yöntemdir.
+    </span></div>
     {activeMainCompany?.name && <small className="eis-local-footer">Seçili ana firma: {activeMainCompany.name}</small>}
   </section>;
 }
