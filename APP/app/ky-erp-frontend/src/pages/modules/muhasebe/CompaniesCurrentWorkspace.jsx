@@ -656,10 +656,6 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <div className={totals.balance >= 0 ? "success" : "negative"}><span>Net bakiye</span><strong>{money(totals.balance)}</strong></div>
       </section>
 
-      {balanceAudit.open ? "Denetimi Kapat" : "Bakiye Kaynağını İncele"}
-        </button>
-      </section>
-
       {balanceAudit.open ? <section className="ccw-audit-result" aria-label="Salt okunur cari bakiye denetimi">
         {balanceAudit.loading ? <p>Gerçek cari bakiyeler karşılaştırılıyor…</p> : null}
         {balanceAudit.error ? <div className="ccw-error" role="alert">{balanceAudit.error}</div> : null}
