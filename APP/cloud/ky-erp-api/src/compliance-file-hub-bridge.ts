@@ -21,7 +21,14 @@ const purposes=[
  ["TDS","TDS"],
  ["PERIODIC_MAINTENANCE","Periyodik Bakımlar"],
  ["OHS_DOCUMENT","İSG / Acil Durum"],
- ["QUALITY","Kalite / Testler"]
+ ["QUALITY","Kalite / Testler"],
+ ["PROCEDURE","Prosedürler ve Talimatlar"],
+ ["DECLARATION","Kimyasal Envanter ve Deklarasyonlar / Tedarikçi Deklarasyonları"],
+ ["INVENTORY","Kimyasal Envanter ve Deklarasyonlar / Kimyasal Envanterler"],
+ ["TRAINING","Eğitimler ve Katılım Kayıtları"],
+ ["ENVIRONMENT","Çevre ve Emisyon"],
+ ["LOT_EVIDENCE","LOT ve Reçete Kanıtları"],
+ ["SIGNED_ORIGINAL","İmzalı Orijinaller ve Revizyonlar"]
 ] as const;
 const validExt=new Set(["PDF","JPG","JPEG","PNG","WEBP","DOC","DOCX","XLS","XLSX","CSV"]);
 function permission(u:Row){return(Array.isArray(u?.permissions)?u.permissions:[]).find((p:Row)=>upper(p.moduleKey||p.module_key)==="COMPLIANCE")||null}
