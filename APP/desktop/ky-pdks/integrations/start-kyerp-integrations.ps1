@@ -12,11 +12,21 @@ if (-not (Test-Path -LiteralPath $portal -PathType Leaf)) { throw 'İşNet adapt
 $env:KYERP_API_URL = 'https://api.kyerp.net'
 $env:KYERP_FOLDER_GRANTS = $grants
 $env:KYERP_REQUIRE_LOCAL_FOLDER_GRANTS = '1'
+# Snapshot running scripts once to avoid duplicate File Hub or archive workers
+# when Windows startup and KY ERP Desktop open concurrently.
+$nodeCommands = @()
+try {
+  $nodeCommands = @(Get-CimInstance Win32_Process -Filter "Name = 'node.exe'" -ErrorAction Stop |
+    ForEach-Object { [string]$_.CommandLine })
+} catch { $nodeCommands = @() }
 function Start-Agent {
   param([string]$Script, [string]$WorkDir)
   if (-not (Test-Path -LiteralPath $Script -PathType Leaf)) { return }
+  $scriptLiteral = [Regex]::Escape([IO.Path]::GetFullPath($Script))
+  if (@($nodeCommands | Where-Object { $_ -match $scriptLiteral }).Count -gt 0) { return }
   # No automatic process kill, remote shell, or Windows firewall changes.
   Start-Process -FilePath $node -ArgumentList ('"' + $Script + '"') -WorkingDirectory $WorkDir -WindowStyle Hidden | Out-Null
+  $nodeCommands += '"' + $Script + '"'
 }
 # Fixed loopback 8788 adapter is optional for legacy caller compatibility.
 # Never spawn a duplicate over an already open port (not even when Setup
