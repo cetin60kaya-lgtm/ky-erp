@@ -10,3 +10,6 @@
 /security/sw.js
   Cache-Control: no-store, no-cache, must-revalidate
   Service-Worker-Allowed: /security/
+
+/*
+  Permissions-Policy: loopback-network=(self "http://127.0.0.1:8791"), local-network=(self "http://127.0.0.1:8791")

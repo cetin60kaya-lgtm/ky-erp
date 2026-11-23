@@ -17,6 +17,11 @@ public partial class KyErpShellWindow : Window
     private static readonly Uri AppUri = new("https://kyerp.net/");
     private static readonly Uri HealthUri = new("https://api.kyerp.net/api/health");
     private static readonly Uri LocalIsnetUri = new("http://127.0.0.1:8791/");
+    private const string IntegrationRunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+    private const string IntegrationPrefsKey = @"Software\KY ERP\Desktop";
+    private const string IntegrationRunName = "KY ERP Integrations";
+    private static string IntegrationStarter => Path.Combine(AppContext.BaseDirectory,
+        "Integrations", "start-kyerp-integrations-hidden.vbs");
 
     private readonly DesktopOfflineStore _offlineStore = new();
     private readonly PdksPaths _pdksPaths = new();
@@ -57,6 +62,11 @@ public partial class KyErpShellWindow : Window
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
     {
+        // The installed Windows user gets one-time default autostart. Afterwards
+        // the explicit local StartWithWindows toggle always wins, including OFF.
+        // A silent/administrator Setup must not write a different user's HKCU.
+        try { ConfigureAndStartLocalIntegrations(); }
+        catch (Exception error) { Debug.WriteLine("KY ERP local startup: " + error.GetType().Name); }
         try
         {
             await _offlineStore.InitializeAsync(_lifetime.Token);
@@ -71,6 +81,31 @@ public partial class KyErpShellWindow : Window
             FooterStatusText.Text = error.Message;
             ShowOfflineCenter(true);
         }
+    }
+
+    private static void ConfigureAndStartLocalIntegrations()
+    {
+        if (!File.Exists(IntegrationStarter)) return;
+        using var preferences = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(IntegrationPrefsKey, true);
+        if (preferences is not null && preferences.GetValue("IntegrationStartupChoice") is null)
+        {
+            using var run = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(IntegrationRunKey, true);
+            if (run is not null)
+            {
+                var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wscript.exe");
+                // Do not overwrite a previous explicit/manual startup entry.
+                if (run.GetValue(IntegrationRunName) is null)
+                    run.SetValue(IntegrationRunName, $"\"{wscript}\" \"{IntegrationStarter}\"");
+                preferences.SetValue("IntegrationStartupChoice", 1, Microsoft.Win32.RegistryValueKind.DWord);
+            }
+        }
+        // Only the packaged, known launcher is invoked. Its port guards avoid
+        // duplicate 8788/8791 sessions; no firewall or service config changes.
+        var executable = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wscript.exe");
+        Process.Start(new ProcessStartInfo {
+            FileName = executable, Arguments = $"\"{IntegrationStarter}\"",
+            UseShellExecute = false, CreateNoWindow = true,
+        })?.Dispose();
     }
 
     private void Window_Closing(object? sender, CancelEventArgs e)

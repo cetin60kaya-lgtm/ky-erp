@@ -36,3 +36,24 @@
 button.eis-local-open{cursor:pointer;border:0}
 button.eis-local-open:disabled{opacity:.55;cursor:not-allowed}
 @media(max-width:650px){.eis-local-embedded iframe{min-height:650px;height:75vh}}
+
+/* Single-screen 8791 control: diagnostic states remain visible above the embedded job UI. */
+.eis-single{gap:12px;padding:14px}
+.eis-single .eis-local-head h3{font-size:18px;margin:5px 0}
+.eis-single .eis-local-head p{line-height:1.4}
+.eis-single .eis-local-directions>div{padding:9px}
+.eis-status{display:flex;gap:12px;align-items:center;padding:11px 13px;background:var(--surface-alt,#f5f8fb);border:1px solid var(--border,#d6e1ed);border-radius:10px}
+.eis-status>svg{flex-shrink:0;color:#257451}
+.eis-status:has(+ .eis-connection-guide)>svg{color:#9e681d}
+.eis-status>div{display:grid;gap:4px;flex:1;min-width:0}
+.eis-status strong{font-size:13px}
+.eis-status small{font-size:11px;color:var(--text-secondary,#64738b)}
+.eis-retry{border:1px solid #b9ccdf;border-radius:8px;background:var(--surface,#fff);padding:9px 12px;cursor:pointer;display:flex;align-items:center;gap:7px;font-weight:600;white-space:nowrap}
+.eis-retry:disabled{opacity:.5}
+.eis-connection-guide{border:1px solid #e3c88a;background:#fff9ed;padding:14px;border-radius:10px;font-size:12px;line-height:1.6}
+.eis-connection-guide p{margin:7px 0}
+.eis-connection-guide small{font-size:11px;color:#785522}
+.eis-single-frame{padding:9px}
+.eis-single-frame header strong{display:flex;gap:7px;align-items:center}
+.eis-single-frame iframe{min-height:580px;height:min(74vh,920px)}
+@media(max-width:700px){.eis-status{flex-wrap:wrap}.eis-retry{width:100%;justify-content:center}}

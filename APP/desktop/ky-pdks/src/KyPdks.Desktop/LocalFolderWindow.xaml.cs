@@ -19,6 +19,7 @@ public partial class LocalFolderWindow : Window
     private bool _archiveOperationActive;
     private const string RunPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string RunName = "KY ERP Integrations";
+    private const string PrefPath = @"Software\KY ERP\Desktop";
     private static string IntegrationStarter => Path.Combine(AppContext.BaseDirectory,
         "Integrations", "start-kyerp-integrations-hidden.vbs");
 
@@ -62,11 +63,15 @@ public partial class LocalFolderWindow : Window
             {
                 var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wscript.exe");
                 key.SetValue(RunName, $"\"{wscript}\" \"{IntegrationStarter}\"");
+                using var pref = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(PrefPath, true);
+                pref?.SetValue("IntegrationStartupChoice", 1, Microsoft.Win32.RegistryValueKind.DWord);
                 ShowStatus("KY ERP entegrasyonları bu Windows kullanıcısı oturum açınca otomatik başlayacak. Klasör izinleri değişmedi.");
             }
             else
             {
                 key.DeleteValue(RunName, false);
+                using var pref = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(PrefPath, true);
+                pref?.SetValue("IntegrationStartupChoice", 0, Microsoft.Win32.RegistryValueKind.DWord);
                 ShowStatus("KY ERP entegrasyonları için Windows otomatik başlatma kapatıldı. Dosyalar ve izinler korunuyor.");
             }
         }
@@ -357,7 +362,28 @@ public partial class LocalFolderWindow : Window
                 ? legacyRoot : Path.Combine(root, "MUHASEBE", "e-Belgeler");
             Environment.SetEnvironmentVariable("KY_ISNET_ARCHIVE_ROOT", isnetRoot,
                 EnvironmentVariableTarget.User);
-            isnetNotice = "İşNet arşiv hedefi sonraki kontrollü başlatma için ayarlandı.";
+            // 8791 starts automatically after the one-time authorized choice.
+            // The packaged launcher checks for an existing listener; never kill
+            // the current portal session or create a second instance.
+            if (Directory.Exists(isnetRoot) && File.Exists(IntegrationStarter))
+            {
+                try
+                {
+                    var wscript = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "wscript.exe");
+                    using var launcher = Process.Start(new ProcessStartInfo {
+                        FileName = wscript, Arguments = $"\"{IntegrationStarter}\"",
+                        UseShellExecute = false, CreateNoWindow = true,
+                    });
+                    isnetNotice = launcher is null
+                        ? "İşNet arşivi onaylandı; yerel servis başlangıcı doğrulanamadı."
+                        : "İşNet arşivi onaylandı; yerel servis başlatma isteği gönderildi (8791 canlı kontrolü gereklidir).";
+                }
+                catch (Exception ex)
+                {
+                    isnetNotice = "İşNet arşivi onaylandı; yerel servis başlatılamadı: " + ex.GetType().Name;
+                }
+            }
+            else isnetNotice = "Arşiv klasörü henüz kullanılabilir değil; servis başlatılmadı.";
         }
         Environment.SetEnvironmentVariable("KYERP_ARCHIVE_ACTIVE_TENANT", _company,
             EnvironmentVariableTarget.User);

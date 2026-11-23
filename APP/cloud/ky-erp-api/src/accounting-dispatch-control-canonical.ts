@@ -60,5 +60,89 @@ async function build(c:Context<AppEnv>){
   return{rows:resultRows,total:resultRows.length,summary:{dispatchWithoutInvoice:resultRows.filter(row=>row.status==="INVOICE_WAITING").length,invoiceWithoutDispatch:invoices.filter(invoice=>!usedInvoiceIds.has(invoice.id)).length,quantityDifference:resultRows.filter(row=>["PARTIAL","REVIEW_REQUIRED"].includes(row.status)).length,modelPending:resultRows.filter(row=>!row.modelName).length,completed:resultRows.filter(row=>row.status==="COMPLETED").length},readModel:"CANONICAL_LINE_ALLOCATED_DOCUMENTS",matchingPolicy:"EXPLICIT_RELATION_OR_STRICT_CONTEXT_PLUS_EXACT_LINE_IDENTITY"};
 }
 
+
+/** Read-only incoming dispatch monitor.
+ * Incoming customer processing goods must never be confused with a supplier
+ * purchase dispatch. Only an explicit, tenant-scoped invoice relation verifies
+ * invoicing; the absence of a relation is NOT proof of no official invoice.
+ */
+export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
+  const slug=await assertAccountingScope(c);
+  const records=(await c.env.DB.prepare(`
+    SELECT d.id,d.document_no,d.issue_date,d.party_name,d.party_tax_no,
+      d.party_company_id,d.created_at,c.company_type,c.type AS company_legacy_type
+    FROM accounting_documents d
+    LEFT JOIN companies c ON c.id=d.party_company_id AND c.main_company_slug=d.main_company_slug
+      AND c.deleted_at IS NULL
+    WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND d.direction='INCOMING'
+      AND (d.document_type LIKE '%IRSALIYE%' OR d.document_type LIKE '%DISPATCH%'
+        OR d.document_type LIKE '%DESPATCH%')
+    ORDER BY COALESCE(d.issue_date,d.created_at) DESC,d.created_at DESC LIMIT 2001
+  `).bind(slug).all<Row>()).results||[];
+  const truncated=records.length>2000,selected=records.slice(0,2000),ids=selected.map(row=>text(row.id));
+  const relations:Row[]=[];
+  for(let offset=0;offset<ids.length;offset+=150){
+    const part=ids.slice(offset,offset+150),placeholders=part.map(()=>"?").join(",");
+    const result=await c.env.DB.prepare(`
+      SELECT r.document_id,r.related_document_id,r.relation_type,
+        a.id AS a_id,a.document_no AS a_no,a.document_type AS a_type,
+        a.direction AS a_direction,a.party_company_id AS a_party,a.party_tax_no AS a_tax,
+        b.id AS b_id,b.document_no AS b_no,b.document_type AS b_type,
+        b.direction AS b_direction,b.party_company_id AS b_party,b.party_tax_no AS b_tax
+      FROM accounting_document_relations r
+      JOIN accounting_documents a ON a.id=r.document_id AND a.main_company_slug=r.main_company_slug
+        AND a.deleted_at IS NULL
+      JOIN accounting_documents b ON b.id=r.related_document_id AND b.main_company_slug=r.main_company_slug
+        AND b.deleted_at IS NULL
+      WHERE r.main_company_slug=? AND r.relation_type IN ('INVOICE_OF','DESPATCH_OF','DISPATCH_OF')
+      AND (r.document_id IN (${placeholders}) OR r.related_document_id IN (${placeholders}))
+    `).bind(slug,...part,...part).all<Row>();
+    relations.push(...(result.results||[]));
+  }
+  const byDocument=new Map<string,Row[]>();
+  for(const relation of relations){
+    for(const id of [text(relation.a_id),text(relation.b_id)]){
+      if(!ids.includes(id))continue;
+      if(!byDocument.has(id))byDocument.set(id,[]);
+      byDocument.get(id)!.push(relation);
+    }
+  }
+  const result=selected.map(doc=>{
+    const role=upper(doc.company_type||doc.company_legacy_type);
+    const group=role==="CUSTOMER"?"CUSTOMER":role==="SUPPLIER"?"SUPPLIER":
+      role==="BOTH"?"BOTH":"UNCLASSIFIED";
+    const expectedDirection=group==="CUSTOMER"?"OUTGOING":group==="SUPPLIER"?"INCOMING":"";
+    const matches=(byDocument.get(text(doc.id))||[]).flatMap(r=>{
+      const candidate=text(r.a_id)===text(doc.id)?
+        {id:text(r.b_id),no:text(r.b_no),type:r.b_type,direction:r.b_direction,
+          party:text(r.b_party),tax:text(r.b_tax)}:
+        {id:text(r.a_id),no:text(r.a_no),type:r.a_type,direction:r.a_direction,
+          party:text(r.a_party),tax:text(r.a_tax)};
+      if(!isInvoice(candidate.type)||upper(candidate.direction)!==expectedDirection)return[];
+      const sameCompany=text(doc.party_company_id)&&candidate.party===text(doc.party_company_id);
+      const sameTax=text(doc.party_tax_no)&&candidate.tax===text(doc.party_tax_no);
+      return sameCompany||sameTax?[{id:candidate.id,documentNo:candidate.no}]:[];
+    });
+    const unique=[...new Map(matches.map(invoice=>[invoice.id,invoice])).values()];
+    const status=group==="UNCLASSIFIED"||group==="BOTH"?"ROLE_REVIEW":
+      unique.length?"INVOICE_LINKED":"INVOICE_LINK_MISSING";
+    return{id:text(doc.id),dispatchNo:text(doc.document_no),issueDate:text(doc.issue_date),
+      companyName:text(doc.party_name),companyId:text(doc.party_company_id),
+      companyType:group,status,invoiceIds:unique.map(v=>v.id),
+      invoiceNumbers:unique.map(v=>v.documentNo).filter(Boolean)};
+  });
+  const totals={customerLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINK_MISSING").length,
+    customerLinked:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINKED").length,
+    supplier:result.filter(x=>x.companyType==="SUPPLIER").length,
+    roleReview:result.filter(x=>x.status==="ROLE_REVIEW").length};
+  return {rows:result,summary:totals,total:result.length,truncated,
+    readModel:"READ_ONLY_EXPLICIT_RELATIONS",note:"Fatura bağı bulunmaması resmî faturanın kesilmediğini kanıtlamaz."};
+}
+
 function errorResponse(c:Context<AppEnv>,error:any){return c.json({ok:false,error:{code:text(error?.code)||"DISPATCH_CONTROL_FAILED",message:text(error?.message)||"İrsaliye/fatura kontrolü hazırlanamadı."}},Number(error?.status||500))}
-export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){app.get("/api/muhasebe/customer-dispatches/summary",async c=>{try{const data=await build(c);return c.json({ok:true,success:true,data:data.summary,readModel:data.readModel,matchingPolicy:data.matchingPolicy})}catch(error:any){return errorResponse(c,error)}});app.get("/api/muhasebe/customer-dispatches",async c=>{try{const data=await build(c);return c.json({ok:true,success:true,data})}catch(error:any){return errorResponse(c,error)}});}
+export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+  app.get("/api/muhasebe/incoming-dispatches/billing",async c=>{
+    try{const data=await buildIncomingDispatchBilling(c);return c.json({ok:true,success:true,data});}
+    catch(error:any){return errorResponse(c,error);}
+  });
+  app.get("/api/muhasebe/customer-dispatches/summary",async c=>{try{const data=await build(c);return c.json({ok:true,success:true,data:data.summary,readModel:data.readModel,matchingPolicy:data.matchingPolicy})}catch(error:any){return errorResponse(c,error)}});app.get("/api/muhasebe/customer-dispatches",async c=>{try{const data=await build(c);return c.json({ok:true,success:true,data})}catch(error:any){return errorResponse(c,error)}});}
