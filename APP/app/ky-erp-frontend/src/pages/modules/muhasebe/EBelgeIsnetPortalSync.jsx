@@ -87,7 +87,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
       </header>
       <iframe key={frameVersion} title="İşNet Yerel Senkronizasyon"
         src={LOCAL_ARCHIVE_URL}
-        allow="local-network; loopback-network"
+        allow="local-network-access; local-network; loopback-network"
         sandbox="allow-same-origin allow-scripts allow-forms allow-downloads"
         referrerPolicy="no-referrer"/>
     </div>}
