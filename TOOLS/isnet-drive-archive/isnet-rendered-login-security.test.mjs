@@ -38,6 +38,24 @@ test("8791 gerçek HTML tarayıcı kodu çalışır; giriş hiçbir koşulda GET
   try{
     const page=await waitReady(base+"/",proc);
     assert.equal(page.status,200);
+    // The ERP receives a bounded, read-only status; never credentials/cookies.
+    const ready=await fetch(base+"/health",{headers:{Origin:"https://kyerp.net"}});
+    assert.equal(ready.status,200);
+    assert.equal(ready.headers.get("access-control-allow-origin"),"https://kyerp.net");
+    assert.equal(ready.headers.get("access-control-allow-private-network"),"true");
+    const snapshot=await ready.json();
+    assert.deepEqual(Object.keys(snapshot).sort(),["adapter","connected","lastSyncAt",
+      "lastSyncStatus","monitoring","ok","running"].sort());
+    assert.equal(snapshot.adapter,"KY_ISNET_DRIVE_ARCHIVE_V1");
+    assert.equal(snapshot.connected,false);
+    assert.equal(JSON.stringify(snapshot).includes("password"),false);
+    const preflight=await fetch(base+"/health",{method:"OPTIONS",
+      headers:{Origin:"https://kyerp.net","Access-Control-Request-Private-Network":"true"}});
+    assert.equal(preflight.status,204);
+    assert.equal(preflight.headers.get("access-control-allow-private-network"),"true");
+    const untrusted=await fetch(base+"/health",{headers:{Origin:"https://untrusted.example"}});
+    assert.equal(untrusted.status,200);
+    assert.equal(untrusted.headers.get("access-control-allow-origin"),null);
     assert.match(page.headers.get("content-security-policy")||"",/frame-ancestors https:\/\/kyerp\.net/);
     assert.equal(page.headers.get("referrer-policy"),"no-referrer");
     const html=await page.text();
