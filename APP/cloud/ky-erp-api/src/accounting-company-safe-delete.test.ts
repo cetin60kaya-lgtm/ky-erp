@@ -23,7 +23,8 @@ test("linked companies and nonzero balances are fail closed", () => {
   assert.match(source, /openingBalance/);
   assert.match(source, /COMPANY_LINKED/);
   assert.match(linkScan, /sqlite_master/);
-  assert.match(linkScan, /pragma_table_info/);
+  assert.match(linkScan, /PRAGMA table_info/);
+  assert.doesNotMatch(linkScan, /LEFT JOIN pragma_table_info/);
   assert.match(linkScan, /refs\.has\(n\)/);
   assert.match(linkScan, /model_records/);
   assert.match(linkScan, /json_store/);
