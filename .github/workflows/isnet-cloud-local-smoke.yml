@@ -1,4 +1,4 @@
-name: İşNet Cloud Yerel Uçtan Uca Test
+name: KY ERP Bulut Test Makinesi · İşNet Drive File Hub
 
 on:
   # GitHub Actions is disabled for automatic production/PR execution.
@@ -13,7 +13,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  isnet-local:
+  isnet-cloud-isolated:
+    name: Bulut çalıştırıcı / izole D1 / read-only production
     runs-on: ubuntu-latest
     steps:
       - name: Kaynak kodu al
@@ -65,6 +66,13 @@ jobs:
               --file "$migration"
           done
 
+          # Isolated fake provider root and OAuth metadata only, never real tokens.
+          npx wrangler d1 execute ky-erp-production-local \
+            --local \
+            --config wrangler.production-local.jsonc \
+            --persist-to .local-isnet-ci \
+            --file test-fixtures/isnet-cloud-test-machine.sql
+
           PASSWORD_HASH="$(node --input-type=module -e 'import { hash } from "bcryptjs"; console.log(await hash("Isnet-Smoke-2026!", 10));')"
           npx wrangler d1 execute ky-erp-production-local \
             --local \
@@ -79,6 +87,9 @@ jobs:
             --local \
             --config wrangler.production-local.jsonc \
             --persist-to .local-isnet-ci \
+            --var GOOGLE_DRIVE_CLIENT_ID:synthetic-only-test-client \
+            --var GOOGLE_DRIVE_CLIENT_SECRET:synthetic-only-test-secret \
+            --var FILE_HUB_OAUTH_KEY:synthetic-only-test-key \
             --port 8789 > /tmp/kyerp-isnet-worker.log 2>&1 &
           ready=0
           for attempt in $(seq 1 60); do
@@ -106,6 +117,56 @@ jobs:
           curl --config /tmp/isnet-curl.conf --fail --silent \
             "http://127.0.0.1:8789/api/isnet/configuration?mainCompanySlug=mecit-hakan" \
             > /tmp/isnet-configuration.json
+
+      - name: İşNet ve Google Drive tek ekran bulut hazırlık kabulü
+        run: |
+          set -euo pipefail
+          curl --config /tmp/isnet-curl.conf --fail --silent \
+            "http://127.0.0.1:8789/api/isnet/cloud-readiness?mainCompanySlug=mecit-hakan" \
+            > /tmp/isnet-cloud-readiness.json
+          jq -e '.ok == true and .data.source == "ISNET_OFFICIAL_API_READ_ONLY"
+            and .data.requiresLocalSetup == false
+            and .data.apiAuthorized == false and .data.companySelected == false' \
+            /tmp/isnet-cloud-readiness.json
+          ! grep -Eqi 'accessToken|password|cookie|refresh_token|Bearer' /tmp/isnet-cloud-readiness.json
+
+          curl --config /tmp/isnet-curl.conf --fail --silent \
+            "http://127.0.0.1:8789/api/file-hub/cloud/tenant-readiness?mainCompanySlug=mecit-hakan" \
+            > /tmp/drive-cloud-readiness.json
+          jq -e '.ok == true and .data.source == "TENANT_D1_METADATA_ONLY"
+            and .data.requiresComputerIp == false and .data.storageAdapter == "FILE_HUB_CLOUD_API"
+            and (.data.providers | map(select(.providerType == "GOOGLE_DRIVE")) |
+                 .[0].configured == true and .[0].accountCount == 1 and
+                 .[0].activeConnectionCount == 1 and .[0].eDocumentBindingCount == 1 and
+                 .[0].indexedConnectionCount == 1 and .[0].status == "INDEX_PRESENT")' \
+            /tmp/drive-cloud-readiness.json
+          ! grep -Eqi 'access_token|refresh_token|account_email|secret|Bearer' /tmp/drive-cloud-readiness.json
+
+          # A signed tenant must not switch to another company by changing URL.
+          cross_code="$(curl --config /tmp/isnet-curl.conf --silent \
+            --output /tmp/isnet-cross-tenant.json --write-out '%{http_code}' \
+            'http://127.0.0.1:8789/api/isnet/cloud-readiness?mainCompanySlug=another-tenant')"
+          test "$cross_code" = "403"
+          cross_drive="$(curl --config /tmp/isnet-curl.conf --silent \
+            --output /tmp/drive-cross-tenant.json --write-out '%{http_code}' \
+            'http://127.0.0.1:8789/api/file-hub/cloud/tenant-readiness?mainCompanySlug=another-tenant')"
+          test "$cross_drive" = "403"
+          unauth="$(curl --silent --output /tmp/drive-unauthorized.json --write-out '%{http_code}' \
+            'http://127.0.0.1:8789/api/file-hub/cloud/tenant-readiness?mainCompanySlug=mecit-hakan')"
+          test "$unauth" = "401"
+          echo 'ISNET_CLOUD_TEST_MACHINE: TENANT_ISOLATED && MOCK_DRIVE_BOUND && NO_LOCAL_PC_REQUIRED'
+
+      - name: Canlı KY ERP yalnız salt-okunur HTTP sağlık kontrolü
+        run: |
+          set -euo pipefail
+          api_code="$(curl --silent --show-error --output /tmp/cloud-production-api.json \
+            --write-out '%{http_code}' --max-time 15 'https://api.kyerp.net/api/health')"
+          web_code="$(curl --silent --show-error --output /tmp/cloud-production-web.html \
+            --write-out '%{http_code}' --max-time 15 'https://kyerp.net/e-belge/entegrasyonlar')"
+          test "$api_code" = "200"
+          test "$web_code" = "200"
+          jq -e '.ok == true and .database == "d1"' /tmp/cloud-production-api.json
+          echo 'PRODUCTION_READONLY_HEALTH_PASS (no login, no D1 writes, no deployment)'
 
       - name: İşNet yerel yapılandırmasını doğrula
         run: |
