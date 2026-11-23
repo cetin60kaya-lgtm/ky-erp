@@ -1,18 +1,34 @@
-// One complete, fail-closed read-only schema/relationship inspection.
-// D1 batches reduce the per-table network round-trips that timed out on large databases.
+// Canonical, fail-closed company relationship inspection shared by merge and Hard Sil.
+// No PRAGMA is executed: Cloudflare D1 rejects PRAGMA metadata batches in production.
+// The authoritative sqlite_master CREATE TABLE SQL includes ALTER TABLE additions.
 type Row = Record<string, any>;
 type Relation = { table: string; count: number };
-const safeName = (v: string) => /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(v);
-const refs = new Set(["company_id","firm_id","customer_id","supplier_company_id","party_company_id","counterparty_id","supplier_id","customer_company_id","source_company_id","target_company_id"]);
-const jsonRef = new Map([["model_records","raw"],["models","raw"],["production_records","raw"],["json_store","data"]]);
-const quote = (name: string) => '"' + name + '"';
 
-/** The preserved target is never deleted or re-parented. Only its identity,
- * current balance and revision are needed for an empty-source merge. */
+const refNames = new Set([
+  "company_id", "firm_id", "customer_id", "supplier_company_id",
+  "party_company_id", "counterparty_id", "supplier_id", "customer_company_id",
+  "source_company_id", "target_company_id",
+]);
+const jsonRef = new Map([
+  ["model_records", "raw"],
+  ["models", "raw"],
+  ["production_records", "raw"],
+  ["json_store", "data"],
+]);
+const safeName = (name: string) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(name);
+const quote = (name: string) => '"' + name.replace(/"/g, '""') + '"';
+
+export function publicCompanyScanFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  return /^COMPANY_SCAN_[A-Z0-9_]{1,64}$/.test(message)
+    ? message
+    : "COMPANY_SCAN_DATABASE_ERROR";
+}
+
 export async function readCompanyMergeTarget(db: D1Database, slug: string, id: string) {
   if (!slug || !id) throw new Error("COMPANY_SCAN_SCOPE_REQUIRED");
   const record = await db.prepare(
-    "SELECT id,name,updated_at,current_balance,opening_balance,is_active FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1"
+    "SELECT id,name,updated_at,current_balance,opening_balance,is_active FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1",
   ).bind(id, slug).first<Row>();
   if (!record) return null;
   return {
@@ -25,126 +41,142 @@ export async function readCompanyMergeTarget(db: D1Database, slug: string, id: s
   };
 }
 
-/** Only bounded error codes are returned to managers; raw SQL and identifiers
- * remain in protected server logs and never enter the UI. */
-export function publicCompanyScanFailure(error: unknown): string {
-  const message = error instanceof Error ? error.message : "";
-  if (/^COMPANY_SCAN_[A-Z0-9_]{1,64}$/.test(message)) return message;
-  return "COMPANY_SCAN_DATABASE_ERROR";
+// Parse the top-level CREATE TABLE column definitions, respecting quoted text,
+// comments and nested constraints. This parses metadata ONLY, never executes DDL.
+export function columnNamesFromCreateSql(ddl: string): Set<string> {
+  if (!/^\s*CREATE\s+(?:VIRTUAL\s+)?TABLE\s+/i.test(ddl)) {
+    throw new Error("COMPANY_SCAN_SCHEMA_FORMAT_UNSUPPORTED");
+  }
+  const chunks: string[] = [];
+  let depth = 0;
+  let opening = -1;
+  let start = -1;
+  let state: "normal" | "single" | "double" | "backtick" | "bracket" | "line" | "block" = "normal";
+  for (let i = 0; i < ddl.length; i++) {
+    const c = ddl[i], n = ddl[i + 1];
+    if (state === "line") { if (c === "\n") state = "normal"; continue; }
+    if (state === "block") { if (c === "*" && n === "/") { state = "normal"; i++; } continue; }
+    if (state === "single" || state === "double" || state === "backtick") {
+      const terminal = state === "single" ? "'" : state === "double" ? '"' : "`";
+      if (c === terminal) { if (n === terminal) i++; else state = "normal"; }
+      continue;
+    }
+    if (state === "bracket") { if (c === "]") state = "normal"; continue; }
+    if (c === "-" && n === "-") { state = "line"; i++; continue; }
+    if (c === "/" && n === "*") { state = "block"; i++; continue; }
+    if (c === "'") { state = "single"; continue; }
+    if (c === '"') { state = "double"; continue; }
+    if (c === "`") { state = "backtick"; continue; }
+    if (c === "[") { state = "bracket"; continue; }
+    if (c === "(") {
+      if (opening < 0) { opening = i; start = i + 1; }
+      depth++; continue;
+    }
+    if (c === ")") {
+      depth--;
+      if (depth < 0) throw new Error("COMPANY_SCAN_SCHEMA_PARSE_FAILED");
+      if (depth === 0) {
+        chunks.push(ddl.slice(start, i).trim());
+        break;
+      }
+      continue;
+    }
+    if (c === "," && depth === 1) {
+      chunks.push(ddl.slice(start, i).trim()); start = i + 1;
+    }
+  }
+  if (opening < 0 || depth !== 0 || state !== "normal" || chunks.length === 0)
+    throw new Error("COMPANY_SCAN_SCHEMA_PARSE_FAILED");
+
+  const columns = new Set<string>();
+  for (const fragment of chunks) {
+    if (!fragment || /^(?:PRIMARY|FOREIGN|UNIQUE|CHECK|CONSTRAINT)\b/i.test(fragment)) continue;
+    const m = fragment.match(/^\s*(?:"((?:[^"]|"")*)"|`((?:[^`]|``)*)`|\[([^\]]+)\]|([^\s(),]+))/);
+    const name = (m?.[1] || m?.[2] || m?.[3] || m?.[4] || "").replace(/""/g, '"').replace(/``/g, "`");
+    if (!safeName(name) || columns.has(name)) throw new Error("COMPANY_SCAN_SCHEMA_PARSE_FAILED");
+    columns.add(name);
+  }
+  if (!columns.size) throw new Error("COMPANY_SCAN_SCHEMA_PARSE_FAILED");
+  return columns;
 }
 
+type ScanPlan = { table: string; where: string; binds: string[] };
 
 export async function scanCompanyRelations(db: D1Database, slug: string, id: string): Promise<{
   blockedRelations: Relation[]; blockedTotal: number; aliasCount: number; scannedTables: number;
 }> {
   if (!slug || !id) throw new Error("COMPANY_SCAN_SCOPE_REQUIRED");
-  // D1 does not reliably support a correlated table-valued PRAGMA with
-  // sqlite_master as its argument. Read the table inventory first, then read
-  // each table's columns using independent statements batched in small groups.
-  // Every failure aborts the entire preview (fail closed).
-  let inventory: D1Result<Row>;
+  let metadata: D1Result<Row>;
   try {
-    inventory = await db.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+    metadata = await db.prepare(
+      "SELECT name, sql FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name",
     ).all<Row>();
   } catch (cause) {
-    throw new Error("COMPANY_SCAN_TABLE_LIST_FAILED", { cause });
+    throw new Error("COMPANY_SCAN_METADATA_FAILED", { cause });
   }
-  if (!inventory?.success || !Array.isArray(inventory.results) || inventory.results.length === 0)
-    throw new Error("COMPANY_SCAN_TABLE_LIST_INCOMPLETE");
+  if (!metadata?.success || !Array.isArray(metadata.results) || !metadata.results.length)
+    throw new Error("COMPANY_SCAN_METADATA_INCOMPLETE");
 
-  const columnsByTable = new Map<string, Set<string>>();
-  const tables = inventory.results.map(row => String(row.name ?? ""));
-  if (tables.some(table => !safeName(table)) || new Set(tables).size !== tables.length)
-    throw new Error("COMPANY_SCAN_UNSAFE_TABLE_NAME");
-
-  const schemaBatchSize = 16;
-  for (let offset=0; offset<tables.length; offset+=schemaBatchSize) {
-    const group=tables.slice(offset,offset+schemaBatchSize);
-    let schema: D1Result<Row>[];
-    try {
-      schema=await db.batch(group.map(table =>
-        db.prepare("PRAGMA table_info("+quote(table)+")")
-      ));
-    } catch (cause) {
-      throw new Error("COMPANY_SCAN_SCHEMA_BATCH_FAILED", { cause });
-    }
-    if (!Array.isArray(schema) || schema.length!==group.length)
-      throw new Error("COMPANY_SCAN_SCHEMA_BATCH_INCOMPLETE");
-    for (let n=0;n<group.length;n++) {
-      const info=schema[n];
-      if (!info?.success || !Array.isArray(info.results) || info.results.length===0)
-        throw new Error("COMPANY_SCAN_UNREADABLE_TABLE_SCHEMA");
-      const columnNames=new Set<string>();
-      for (const row of info.results) {
-        const column=String(row.name??"");
-        if (!safeName(column) || columnNames.has(column))
-          throw new Error("COMPANY_SCAN_UNREADABLE_TABLE_SCHEMA");
-        columnNames.add(column);
-      }
-      columnsByTable.set(group[n],columnNames);
-    }
+  const schema = new Map<string, Set<string>>();
+  for (const row of metadata.results) {
+    const table = String(row.name ?? "");
+    if (!safeName(table) || schema.has(table))
+      throw new Error("COMPANY_SCAN_UNSAFE_TABLE_NAME");
+    const ddl = String(row.sql ?? "");
+    if (!ddl) throw new Error("COMPANY_SCAN_SCHEMA_UNAVAILABLE");
+    schema.set(table, columnNamesFromCreateSql(ddl));
   }
-  if (!columnsByTable.has("companies")) throw new Error("COMPANY_SCAN_SCHEMA_UNAVAILABLE");
-  const plans: {table:string; where:string; binds:string[]}[] = [];
-  for (const [table,cols] of columnsByTable) {
+  if (!schema.has("companies")) throw new Error("COMPANY_SCAN_SCHEMA_UNAVAILABLE");
+
+  const plans: ScanPlan[] = [];
+  for (const [table, columns] of schema) {
     if (table === "companies") continue;
-    const keys = [...cols].filter(n => refs.has(n) || (n.endsWith("_company_id") && n !== "main_company_id"));
-    const rawColumn=jsonRef.get(table);
-    const where=keys.map(key=>quote(key)+"=?");
-    const binds=keys.map(()=>id);
-    if (rawColumn && cols.has(rawColumn)) { where.push("INSTR(COALESCE("+quote(rawColumn)+",''),?)>0"); binds.push(id); }
-    if (!where.length) continue;
-    const scope=cols.has("main_company_slug") ? " AND "+quote("main_company_slug")+"=?" : "";
-    if (scope) binds.push(slug);
-    const active=cols.has("deleted_at") ? " AND "+quote("deleted_at")+" IS NULL" : "";
-    plans.push({table,where:"("+where.join(" OR ")+")"+scope+active,binds});
+    const keys = [...columns].filter((key) =>
+      refNames.has(key) || (key.endsWith("_company_id") && key !== "main_company_id"));
+    const jsonColumn = jsonRef.get(table);
+    const conditions = keys.map((key) => quote(key) + "=?");
+    const binds = keys.map(() => id);
+    if (jsonColumn && columns.has(jsonColumn)) {
+      conditions.push("INSTR(COALESCE(" + quote(jsonColumn) + ",''),?)>0");
+      binds.push(id);
+    }
+    if (!conditions.length) continue;
+    let where = "(" + conditions.join(" OR ") + ")";
+    if (columns.has("main_company_slug")) { where += ' AND "main_company_slug"=?'; binds.push(slug); }
+    if (columns.has("deleted_at")) where += ' AND "deleted_at" IS NULL';
+    plans.push({ table, where, binds });
   }
 
-  // Only existence is needed for empty duplicates. Full counts run for tables
-  // with at least one relation, avoiding expensive COUNT scans across every archive.
-  const detected: typeof plans = [];
-  const batchSize=24;
-  for (let offset=0;offset<plans.length;offset+=batchSize) {
-    const group=plans.slice(offset,offset+batchSize);
-    const statements=group.map(p=>db.prepare(
-      "SELECT 1 AS n FROM "+quote(p.table)+" WHERE "+p.where+" LIMIT 1"
-    ).bind(...p.binds));
-    let results: D1Result<Row>[];
-    try { results = await db.batch(statements); }
-    catch (cause) { throw new Error("COMPANY_SCAN_EXISTS_BATCH_FAILED", { cause }); }
-    if (!Array.isArray(results) || results.length!==group.length)
-      throw new Error("COMPANY_SCAN_INCOMPLETE_BATCH");
-    for (let n=0;n<results.length;n++) {
-      if (!results[n]?.success) throw new Error("COMPANY_SCAN_QUERY_FAILED_"+group[n].table);
-      if ((results[n].results||[]).length) detected.push(group[n]);
-    }
+  const blockedRelations: Relation[] = [];
+  let aliasCount = 0;
+  // Small concurrency protects D1 query budgets. No batch/PRAGMA/DDL and no
+  // guessed zero counts. Any query error aborts the entire destructive preview.
+  const limit = 4;
+  for (let offset = 0; offset < plans.length; offset += limit) {
+    await Promise.all(plans.slice(offset, offset + limit).map(async (p) => {
+      let exists: Row | null;
+      try {
+        exists = await db.prepare("SELECT 1 AS present FROM " + quote(p.table) +
+          " WHERE " + p.where + " LIMIT 1").bind(...p.binds).first<Row>();
+      } catch (cause) { throw new Error("COMPANY_SCAN_RELATION_READ_FAILED", { cause }); }
+      if (!exists) return;
+      let counted: Row | null;
+      try {
+        counted = await db.prepare("SELECT COUNT(*) AS n FROM " + quote(p.table) +
+          " WHERE " + p.where).bind(...p.binds).first<Row>();
+      } catch (cause) { throw new Error("COMPANY_SCAN_RELATION_COUNT_FAILED", { cause }); }
+      const count = Number(counted?.n);
+      if (!Number.isSafeInteger(count) || count < 1)
+        throw new Error("COMPANY_SCAN_RELATION_COUNT_INVALID");
+      if (p.table === "company_aliases") aliasCount += count;
+      else blockedRelations.push({ table: p.table, count });
+    }));
   }
-
-  const blockedRelations:Relation[]=[];
-  let aliasCount=0;
-  for (const group of Array.from({length:Math.ceil(detected.length/batchSize)},(_,n)=>detected.slice(n*batchSize,(n+1)*batchSize))) {
-    let results: D1Result<Row>[];
-    try {
-      results = await db.batch(group.map(p=>db.prepare(
-        "SELECT COUNT(*) AS n FROM "+quote(p.table)+" WHERE "+p.where
-      ).bind(...p.binds)));
-    } catch (cause) {
-      throw new Error("COMPANY_SCAN_COUNT_BATCH_FAILED", { cause });
-    }
-    if (!Array.isArray(results) || results.length!==group.length)
-      throw new Error("COMPANY_SCAN_INCOMPLETE_COUNT");
-    for(let n=0;n<group.length;n++) {
-      if (!results[n]?.success) throw new Error("COMPANY_SCAN_COUNT_FAILED_"+group[n].table);
-      const count=Number((results[n].results?.[0] as Row | undefined)?.n);
-      if (!Number.isSafeInteger(count)||count<1)throw new Error("COMPANY_SCAN_INVALID_COUNT");
-      if (group[n].table==="company_aliases") aliasCount+=count;
-      else blockedRelations.push({table:group[n].table,count});
-    }
-  }
+  blockedRelations.sort((a, b) => a.table.localeCompare(b.table));
   return {
     blockedRelations,
-    blockedTotal:blockedRelations.reduce((sum,x)=>sum+x.count,0),
-    aliasCount,scannedTables:columnsByTable.size,
+    blockedTotal: blockedRelations.reduce((total, item) => total + item.count, 0),
+    aliasCount,
+    scannedTables: schema.size,
   };
 }

@@ -205,6 +205,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const [companySaving, setCompanySaving] = useState(false);
   const [statusSaving, setStatusSaving] = useState(false);
   const [balanceAudit, setBalanceAudit] = useState({ open: false, loading: false, rows: [], totals: null, error: "" });
+  const [unmatchedInvoices, setUnmatchedInvoices] = useState(null);
   const [mergeOpen, setMergeOpen] = useState(false);
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergePreview, setMergePreview] = useState(null);
@@ -259,6 +260,10 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         ? []
         : listOf(result.data.firms).map((firm) => ({ ...firm, ...(profiles.get(String(firm.id)) || {}) }));
       setFirms(rows);
+      const invoiceMeta = result.data.firms?.invoiceSummary ||
+        result.data.firms?.data?.invoiceSummary ||
+        result.data.firms?.data?.data?.invoiceSummary;
+      setUnmatchedInvoices(invoiceMeta?.available ? invoiceMeta.unmatched : null);
       setError(moduleLoadMessage(
         result,
         "Firma ve cari ana listesi alınamadı; ekrandaki son başarılı veri korunuyor.",
@@ -268,6 +273,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
     } catch (requestError) {
       if (request !== listRequest.current) return [];
       setFirms([]);
+      setUnmatchedInvoices(null);
       setError(requestError?.message || "Firma ve cari listesi alınamadı.");
       return [];
     } finally {
@@ -315,7 +321,12 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
   const totals = useMemo(() => {
     const receivable = visibleFirms.filter((firm) => Number(firm.currentBalance || 0) > 0).reduce((sum, firm) => sum + Number(firm.currentBalance || 0), 0);
     const payable = visibleFirms.filter((firm) => Number(firm.currentBalance || 0) < 0).reduce((sum, firm) => sum + Math.abs(Number(firm.currentBalance || 0)), 0);
-    return { receivable, payable, balance: receivable - payable };
+    const incomingInvoices = visibleFirms.reduce((sum, firm) => sum + Number(firm.invoiceTotals?.incomingInvoiceTotal || 0), 0);
+    const outgoingInvoices = visibleFirms.reduce((sum, firm) => sum + Number(firm.invoiceTotals?.outgoingInvoiceTotal || 0), 0);
+    const unpostedInvoices = visibleFirms.reduce((sum, firm) => sum + Number(firm.invoiceTotals?.unpostedInvoiceCount || 0), 0);
+    const foreignCurrencyInvoices = visibleFirms.reduce((sum, firm) => sum + Number(firm.invoiceTotals?.foreignCurrencyInvoiceCount || 0), 0);
+    return { receivable, payable, balance: receivable - payable,
+      incomingInvoices, outgoingInvoices, unpostedInvoices, foreignCurrencyInvoices };
   }, [visibleFirms]);
 
   const inspectBalances = useCallback(async () => {
@@ -651,10 +662,21 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
 
       <section className="ccw-summary" aria-label="Cari özet">
         <div><span>Firma</span><strong>{visibleFirms.length}</strong></div>
-        <div><span>Toplam alacak</span><strong>{money(totals.receivable)}</strong></div>
-        <div><span>Toplam borç</span><strong>{money(totals.payable)}</strong></div>
-        <div className={totals.balance >= 0 ? "success" : "negative"}><span>Net bakiye</span><strong>{money(totals.balance)}</strong></div>
+        <div><span>Cari alacak (işlenmiş)</span><strong>{money(totals.receivable)}</strong></div>
+        <div><span>Cari borç (işlenmiş)</span><strong>{money(totals.payable)}</strong></div>
+        <div className={totals.balance >= 0 ? "success" : "negative"}><span>Net cari bakiye</span><strong>{money(totals.balance)}</strong></div>
+        <div><span>Gelen fatura toplamı (brüt, TL)</span><strong>{money(totals.incomingInvoices)}</strong></div>
+        <div><span>Giden fatura toplamı (brüt, TL)</span><strong>{money(totals.outgoingInvoices)}</strong></div>
+        <div><span>Henüz muhasebeleşmeyen fatura</span><strong>{totals.unpostedInvoices} belge</strong></div>
       </section>
+
+      {unmatchedInvoices && Number(unmatchedInvoices.incomingInvoiceCount || 0) + Number(unmatchedInvoices.outgoingInvoiceCount || 0) > 0 ? (
+        <div className="ccw-notice" role="status">
+          <CircleAlert size={16} /> Firma kimliği tekil doğrulanamayan {Number(unmatchedInvoices.incomingInvoiceCount || 0) + Number(unmatchedInvoices.outgoingInvoiceCount || 0)} fatura bu firma toplamlarına dağıtılmadı.
+          Eşleştirmeler bölümünde kontrol edilmeli.
+        </div>
+      ) : null}
+      <p className="ccw-invoice-note">Fatura tutarları bilgi amaçlıdır; cari borç/alacak değildir. Yalnız firma kimliği veya tekil vergi numarasıyla eşleşen faturalar gösterilir. {totals.foreignCurrencyInvoices ? `${totals.foreignCurrencyInvoices} yabancı para faturası TL toplamına eklenmedi.` : ""} {firms.some((firm) => firm.invoiceSummaryAvailable === false) ? "Fatura özeti alınamadı; sıfır tutarlar gerçek fatura yokluğu anlamına gelmez." : ""}</p>
 
       {balanceAudit.open ? <section className="ccw-audit-result" aria-label="Salt okunur cari bakiye denetimi">
         {balanceAudit.loading ? <p>Gerçek cari bakiyeler karşılaştırılıyor…</p> : null}
@@ -690,7 +712,8 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                 <tbody>{visibleFirms.map((firm) => (
                   <tr key={firm.id} className={String(selected?.id) === String(firm.id) ? "selected" : ""} onClick={() => { if (!saving) loadMovements(firm); }} onKeyDown={(event) => { if (!saving && ["Enter", " "].includes(event.key)) { event.preventDefault(); loadMovements(firm); } }} tabIndex={0} aria-selected={String(selected?.id) === String(firm.id)}>
                     <td><strong>{firm.firmaAdi || firm.companyName || firm.name || "-"}</strong><small>{firm.isActive === false ? "PASİF · " : "AKTİF · "}{roleLabel(firm)} · {recordLabel(firm)}{firm.isChemicalSupplier ? " · Boya/kimyasal" : ""}</small></td>
-                    <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong></td>
+                    <td><strong className={Number(firm.currentBalance || 0) >= 0 ? "positive" : "negative"}>{money(firm.currentBalance)}</strong>
+                       <small>Cari · {firm.invoiceSummaryAvailable === false ? "Fatura özeti yüklenemedi" : `Gelen fatura: ${money(firm.invoiceTotals?.incomingInvoiceTotal)} · Giden fatura: ${money(firm.invoiceTotals?.outgoingInvoiceTotal)}`}</small></td>
                     <td>{firm.lastMovementAt ? dateText(firm.lastMovementAt) : "-"}<small>{Number(firm.movementCount || 0) ? `${Number(firm.movementCount)} hareket` : ""}</small></td>
                   </tr>
                 ))}</tbody>
@@ -730,6 +753,13 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
                   <div><span>Takip düzeni</span><strong>{cariLabel(selected)}</strong><small>{recordLabel(selected)}</small></div>
                   <div><span>Son hareket</span><strong>{dateText(selected.lastMovementAt)}</strong><small>{movements.length} hareket</small></div>
                 </div>
+
+                <section className="ccw-invoice-detail" aria-label="Seçili firmanın bağlı fatura toplamları">
+                  <div><span>Gelen faturalar · brüt TL</span><strong>{selected.invoiceSummaryAvailable === false ? "Alınamadı" : money(selected.invoiceTotals?.incomingInvoiceTotal)}</strong><small>{selected.invoiceTotals?.incomingInvoiceCount || 0} belge</small></div>
+                  <div><span>Giden faturalar · brüt TL</span><strong>{selected.invoiceSummaryAvailable === false ? "Alınamadı" : money(selected.invoiceTotals?.outgoingInvoiceTotal)}</strong><small>{selected.invoiceTotals?.outgoingInvoiceCount || 0} belge</small></div>
+                  <div><span>Henüz muhasebeleşmemiş</span><strong>{selected.invoiceSummaryAvailable === false ? "Alınamadı" : `${selected.invoiceTotals?.unpostedInvoiceCount || 0} belge`}</strong><small>Onay ve cari hareket kontrolü gerekir</small></div>
+                  <p>Faturalar firma ID'si veya tekil tam vergi numarası üzerinden eşleşir. Bu bilgi cari bakiye değildir; ödeme ve borç hareketi oluşturulmadı.</p>
+                </section>
 
                 {transactionOpen && canUseCari ? (
                   <section className="ccw-transaction">

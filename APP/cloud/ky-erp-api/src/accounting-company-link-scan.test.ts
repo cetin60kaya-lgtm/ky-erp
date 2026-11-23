@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DatabaseSync } from "node:sqlite";
-import { scanCompanyRelations, readCompanyMergeTarget, publicCompanyScanFailure } from "./accounting-company-link-scan.ts";
+import { scanCompanyRelations, readCompanyMergeTarget, publicCompanyScanFailure, columnNamesFromCreateSql } from "./accounting-company-link-scan.ts";
 
 function fixture() {
   const sqlite = new DatabaseSync(":memory:");
@@ -96,11 +96,17 @@ test("other tenants and soft-deleted relations do not block an empty duplicate",
   sqlite.close();
 });
 
-test("an invalid schema or failed batch must never be mistaken for a clean company", async () => {
+test("failure to read schema inventory blocks a destructive operation", async () => {
   const { sqlite, db } = fixture();
-  const failed = { ...db, batch: async () => { throw new Error("D1_READ_FAILED"); } };
-  await assert.rejects(() => scanCompanyRelations(failed as D1Database, "main", "short-taha"), /COMPANY_SCAN_SCHEMA_BATCH_FAILED/);
+  const failed = {
+    prepare(sql: string) {
+      if (sql.includes("sqlite_master")) throw Error("D1_SCHEMA_DENIED");
+      return db.prepare(sql);
+    },
+  } as unknown as D1Database;
+  await assert.rejects(() => scanCompanyRelations(failed, "main", "short-taha"), /COMPANY_SCAN_METADATA_FAILED/);
   await assert.rejects(() => scanCompanyRelations(db, "", "short-taha"), /SCOPE_REQUIRED/);
+  assert.equal(sqlite.prepare("SELECT COUNT(*) n FROM companies").get()!.n, 2);
   sqlite.close();
 });
 
@@ -151,33 +157,46 @@ test("read-only scan error reporting never leaks SQL, tenant or database details
   assert.equal(publicCompanyScanFailure(new Error("a hidden secret")), "COMPANY_SCAN_DATABASE_ERROR");
 });
 
-test("metadata collection uses separate table inventory and batched PRAGMA, never correlated PRAGMA", async () => {
+test("one sqlite_master read supplies ALL table metadata with no PRAGMA or D1 batch", async () => {
   const { sqlite, db } = fixture();
-  const sqlCalls: string[] = [];
+  const statements: string[] = [];
   const tracked = {
     prepare(query: string) {
-      sqlCalls.push(query);
-      assert.doesNotMatch(query, /pragma_table_info\s*\(\s*m\.name\s*\)/i);
+      statements.push(query);
+      assert.doesNotMatch(query, /PRAGMA|pragma_table_info/i);
       return db.prepare(query);
     },
-    batch: (statements: any[]) => db.batch(statements),
+    batch: async () => { throw Error("SCAN_MUST_NOT_USE_BATCH"); },
   } as unknown as D1Database;
   const report = await scanCompanyRelations(tracked, "main", "short-taha");
   assert.equal(report.blockedTotal, 0);
-  assert.ok(sqlCalls.some(x => /FROM sqlite_master WHERE type='table'/.test(x)));
-  assert.ok(sqlCalls.some(x => /^PRAGMA table_info\("companies"\)$/.test(x)));
+  assert.equal(statements.filter(x => /FROM sqlite_master/.test(x)).length, 1);
+  assert.ok(statements.some(x => /SELECT name, sql FROM sqlite_master/.test(x)));
   sqlite.close();
 });
 
-test("a metadata schema batch failure fails closed without reading or modifying a company", async () => {
+test("DDL parser supports quoted columns and nested constraints and rejects unknown schema", () => {
+  const ddl = `CREATE TABLE "test" (
+    "company_id" TEXT NOT NULL,
+    note TEXT DEFAULT ('a,b'),
+    [main_company_slug] TEXT,
+    constraint key_unique unique("company_id", [main_company_slug])
+  )`;
+  assert.deepEqual([...columnNamesFromCreateSql(ddl)].sort(), ["company_id", "main_company_slug", "note"]);
+  assert.throws(() => columnNamesFromCreateSql("CREATE TABLE x AS SELECT * FROM y"), /SCHEMA_PARSE_FAILED/);
+});
+
+test("schema with unsupported DDL fails closed instead of declaring duplicate empty", async () => {
   const { sqlite, db } = fixture();
-  let batchCalls = 0;
-  const failed = {
-    prepare: (sql: string) => db.prepare(sql),
-    batch: async () => {batchCalls++;throw Error("SQL_INTERNAL_DETAILS");},
+  const fake = {
+    prepare(sql: string) {
+      if (!sql.includes("sqlite_master")) return db.prepare(sql);
+      const stmt = {
+        async all() { return { success: true, results: [{name:"companies",sql:"CREATE TABLE companies AS SELECT * FROM legacy"}] }; },
+      };
+      return stmt;
+    },
   } as unknown as D1Database;
-  await assert.rejects(() => scanCompanyRelations(failed, "main", "short-taha"), /COMPANY_SCAN_SCHEMA_BATCH_FAILED/);
-  assert.equal(batchCalls, 1);
-  assert.equal(sqlite.prepare("SELECT COUNT(*) AS n FROM companies").get()!.n, 2);
+  await assert.rejects(() => scanCompanyRelations(fake, "main", "short-taha"), /SCHEMA_PARSE_FAILED/);
   sqlite.close();
 });
