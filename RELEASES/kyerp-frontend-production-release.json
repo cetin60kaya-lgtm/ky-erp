@@ -3,15 +3,15 @@
   "target": "production",
   "component": "frontend",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "releaseDate": "2026-11-23",
+  "releaseDate": "2026-11-24",
   "scope": [
-    "PR653_SINGLE_CANONICAL_D1_COMPANY_RELATION_SCANNER",
-    "PR653_COMPANY_INCOMING_OUTGOING_INVOICE_TOTALS_WITHOUT_LEDGER_POSTING",
-    "PR653_COMPANY_CARI_BALANCE_SEPARATE_FROM_DOCUMENT_TOTALS",
-    "NO_D1_MIGRATION_NO_FINANCIAL_MUTATION"
+    "PR656_COMPANY_CANONICAL_INVOICE_DISPATCH_READ_ONLY_DETAILS",
+    "PR656_ACCOUNTING_LIST_SERVER_SIDE_SORT_ASC_DESC",
+    "PR656_ARCHIVE_ALL_DOCUMENT_TYPES_SEQUENTIAL_ORIGINAL_PDF_PRINT_QUEUE",
+    "NO_D1_MIGRATION_NO_FINANCIAL_POSTING"
   ],
-  "note": "23.11.2026 PR #653 merge 19d8768b: source metadata PRAGMA schema batch failed in real production; replaced entirely with one sqlite_master DDL scan and fail-closed reference checks. Firm list now shows incoming/outgoing posted/unposted invoice totals separately from current_balance. Canonical UI+Worker CI #45262459159 SUCCESS. No D1 migrations, no account movement writes, no company merge/delete, no invoice approval or e-Belge sending. Live authenticated TAHA preview and invoice totals smoke required.",
-  "sourceCommit": "19d8768b3791cfbe616a41c258c6167052397271",
-  "requestedAt": "2026-11-23",
-  "attempt": 11
+  "note": "24.11.2026 PR #656 merged; CI #45270566375 successful Frontend and Worker. Read-only company invoices/dispatches, canonical server-side document sorting in Alis/Satis, Arşiv Çıktı selection + original PDF sequential in-app preview. No automatic print claim, no POSTED, no financial write, no migration. Real authenticated user acceptance still open.",
+  "sourceCommit": "963120536d3a9af820a947bbc5a75808f20c9b26",
+  "requestedAt": "2026-11-24",
+  "attempt": 12
 }
