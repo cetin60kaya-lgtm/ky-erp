@@ -66,7 +66,7 @@ export function registerComplianceChemicalRoutes(app:Hono<AppEnv>){
    const listed=text(b.listedProductName),shared=["ZDHC","GOTS","LCW_INVENTORY"].includes(kind);
    if(shared&&!listed)return c.json(error("LIST_PRODUCT_REQUIRED","Ortak ürün listesinde eşleştirilecek ürün adı zorunludur."),422);
    const ts=new Date().toISOString(),meta={verificationStatus:"PENDING_REVIEW",listProductName:listed||null,sourceRevision:text(b.sourceRevision)||null,
-    zdhcLevel:text(b.zdhcLevel)||null,evidenceKind:kind,supplierName:text(product.data.supplierName)||null,linkedBy:text(a.user.id)||null,linkedAt:ts};
+    zdhcLevel:text(b.zdhcLevel)||null,validUntil:text(b.validUntil).slice(0,10)||null,evidenceKind:kind,supplierName:text(product.data.supplierName)||null,linkedBy:text(a.user.id)||null,linkedAt:ts};
    await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_relations
    (id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at)
    VALUES(?,?,?,'BOYAHANE_PRODUCT',?,?,0,NULL,'COMPLIANCE_CENTER',?,?,?)`)
@@ -74,7 +74,7 @@ export function registerComplianceChemicalRoutes(app:Hono<AppEnv>){
    const docs=Array.isArray(product.data.documents)?product.data.documents:[];
    if(!docs.some(x=>text(x.fileHubAssetId)===assetId&&upper(x.name)===kind)){
       docs.push({name:kind,fileHubAssetId:assetId,fileName:asset.file_name,status:"AVAILABLE",verificationStatus:"PENDING_REVIEW",listProductName:listed,
-        sourceRevision:text(b.sourceRevision),zdhcLevel:text(b.zdhcLevel)});
+        sourceRevision:text(b.sourceRevision),zdhcLevel:text(b.zdhcLevel),validUntil:text(b.validUntil).slice(0,10)});
       const updated={...product.data,documents:docs,updatedAt:ts};
       await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(JSON.stringify(updated),ts,product.id,a.slug).run();
    }
@@ -91,6 +91,13 @@ export function registerComplianceChemicalRoutes(app:Hono<AppEnv>){
    const relation=await c.env.DB.prepare("SELECT * FROM file_hub_relations WHERE main_company_slug=? AND file_asset_id=? AND entity_type='BOYAHANE_PRODUCT' AND entity_id=? LIMIT 1").bind(a.slug,assetId,productId).first<Row>();
    if(!relation)return c.json(error("RELATION_NOT_FOUND","Ürün/kanıt bağlantısı bulunamadı."),404);
    const meta=parse(relation.metadata),kind=upper(relation.relation_type),b=await c.req.json().catch(()=>({})) as Row;
+   const today=new Date().toISOString().slice(0,10);
+   const linked=await c.env.DB.prepare("SELECT expires_at FROM compliance_documents WHERE main_company_slug=? AND file_asset_id=? AND archived_at IS NULL ORDER BY updated_at DESC LIMIT 1").bind(a.slug,assetId).first<Row>();
+   if(text(linked?.expires_at)&&text(linked.expires_at).slice(0,10)<today)return c.json(error("EVIDENCE_EXPIRED","Bu dosyanın Denetim Merkezi geçerlilik tarihi dolmuş."),409);
+   if(["GOTS","ZDHC"].includes(kind)){
+    if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(text(meta.validUntil)))return c.json(error("CERTIFICATE_DATE_REQUIRED","ZDHC/GOTS ortak listesi için belgede yazılı geçerlilik tarihini girin."),422);
+    if(text(meta.validUntil)<today)return c.json(error("CERTIFICATE_EXPIRED","Bu ZDHC/GOTS listesinin geçerlilik tarihi dolmuş."),409);
+   }
    if(["ZDHC","GOTS","LCW_INVENTORY"].includes(kind)){
      const listed=text(meta.listProductName),productName=text(product.data.productName||product.data.name);
      if(!listed||!productName||upper(listed)!==upper(productName)&&upper(listed)!==upper(product.data.code))
