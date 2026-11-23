@@ -99,7 +99,7 @@ test("other tenants and soft-deleted relations do not block an empty duplicate",
 test("an invalid schema or failed batch must never be mistaken for a clean company", async () => {
   const { sqlite, db } = fixture();
   const failed = { ...db, batch: async () => { throw new Error("D1_READ_FAILED"); } };
-  await assert.rejects(() => scanCompanyRelations(failed as D1Database, "main", "short-taha"), /D1_READ_FAILED/);
+  await assert.rejects(() => scanCompanyRelations(failed as D1Database, "main", "short-taha"), /COMPANY_SCAN_EXISTS_BATCH_FAILED/);
   await assert.rejects(() => scanCompanyRelations(db, "", "short-taha"), /SCOPE_REQUIRED/);
   sqlite.close();
 });
