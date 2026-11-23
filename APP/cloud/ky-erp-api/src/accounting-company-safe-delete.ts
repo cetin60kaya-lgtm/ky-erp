@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { scanCompanyRelations } from "./accounting-company-link-scan";
+import { scanCompanyRelations, readCompanyMergeTarget, publicCompanyScanFailure } from "./accounting-company-link-scan";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -39,7 +39,7 @@ export function registerAccountingCompanySafeDeleteRoutes(app: Hono<AppEnv>) {
       return c.json({ ok:true, success:true, data:result });
     } catch (cause) {
       console.error("Company deletion preflight failed",cause);
-      return c.json(err("PREVIEW_FAILED", "Tüm bağlı kayıtlar doğrulanamadı; hard silme kapatıldı."), 503);
+      return c.json(err("PREVIEW_FAILED", "Tüm bağlı kayıtlar doğrulanamadı; hard silme kapatıldı (" + publicCompanyScanFailure(cause) + ").", { stage: publicCompanyScanFailure(cause) }), 503);
     }
   });
   app.post("/api/muhasebe/firmalar/:id/hard-delete", async (c) => {
@@ -96,7 +96,7 @@ export function registerAccountingCompanySafeDeleteRoutes(app: Hono<AppEnv>) {
     const fromId = txt(c.req.param("id")), toId = txt(c.req.query("targetId"));
     if (!toId || fromId === toId) return c.json(err("TARGET_REQUIRED", "Farklı bir korunacak firma ID'si seçin."), 400);
     try {
-      const [source, target] = await Promise.all([preview(c, slug, fromId), preview(c, slug, toId)]);
+      const [source, target] = await Promise.all([preview(c, slug, fromId), readCompanyMergeTarget(c.env.DB, slug, toId)]);
       if (!source || !target) return c.json(err("NOT_FOUND", "Kaynak veya hedef firma bulunamadı."), 404);
       return c.json({ ok: true, success: true, data: {
         source, target,
@@ -108,7 +108,7 @@ export function registerAccountingCompanySafeDeleteRoutes(app: Hono<AppEnv>) {
       } });
     } catch (cause) {
       console.error("Company merge preview failed", cause);
-      return c.json(err("MERGE_PREVIEW_FAILED", "Bağlantılar tam incelenemedi. Birleştirme kapatıldı."), 503);
+      return c.json(err("MERGE_PREVIEW_FAILED", "Bağlantılar incelenemedi. İşlem güvenlik için kapalı (" + publicCompanyScanFailure(cause) + ").", { stage: publicCompanyScanFailure(cause) }), 503);
     }
   });
 
@@ -121,7 +121,7 @@ export function registerAccountingCompanySafeDeleteRoutes(app: Hono<AppEnv>) {
     const fromId = txt(c.req.param("id")), toId = txt(body.targetId);
     if (!toId || fromId === toId) return c.json(err("INVALID_TARGET", "Kaynak ve hedef firma farklı olmalıdır."), 400);
     try {
-      const [source, target] = await Promise.all([preview(c, slug, fromId), preview(c, slug, toId)]);
+      const [source, target] = await Promise.all([preview(c, slug, fromId), readCompanyMergeTarget(c.env.DB, slug, toId)]);
       if (!source || !target) return c.json(err("NOT_FOUND", "Firma kartlarından biri bulunamadı."), 404);
       if (!source.canHardDelete || !target.isActive) return c.json(err("MERGE_LINKED_BLOCKED", "Kaynak firma bağlantılı veya bakiyeli; hiçbir mali/model kaydı otomatik taşınmayacak.", { source, target }), 409);
       if (txt(body.confirmPhrase) !== "BIRLESTIR" ||
