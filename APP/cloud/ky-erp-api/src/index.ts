@@ -1416,6 +1416,7 @@ app.get("/api/muhasebe/firmalar", async (c) => {
         address: row.address,
         currentBalance: databaseNumber(row.current_balance),
         invoiceTotals: invoiceOverview?.byCompany.get(companyId) || emptyCompanyInvoiceTotals(),
+        lastDocumentAt: invoiceOverview?.byCompany.get(companyId)?.lastDocumentAt || "",
         invoiceSummaryAvailable: Boolean(invoiceOverview),
         openingBalance: databaseNumber(row.opening_balance),
         isActive: row.is_active !== 0 && row.is_active !== false,
