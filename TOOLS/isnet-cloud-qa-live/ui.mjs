@@ -4,7 +4,7 @@ export const PAGE = `<!doctype html><html lang="tr"><head><meta charset="utf-8">
 
 export const APP_JS = `(()=>{'use strict';
 const $=id=>document.getElementById(id), ui={form:$('loginForm'),loginBtn:$('loginBtn'),ready:$('loginReady'),company:$('companies'),companyBtn:$('saveCompany'),companyStatus:$('companyStatus'),logout:$('logout'),kind:$('kind'),from:$('from'),to:$('to'),listBtn:$('listBtn'),rows:$('rows'),selectedCount:$('selectCount'),results:$('results'),notice:$('notice')};
-const now=new Date(),day=d=>new Date(d).toISOString().slice(0,10);ui.to.value=day(now);ui.from.value=day(now.getTime()-7*86400000);
+const now=new Date(),day=d=>{const x=new Date(d);return new Date(x.getTime()-x.getTimezoneOffset()*60000).toISOString().slice(0,10)};ui.to.value=day(now);ui.from.value=day(now.getTime()-7*86400000);
 let selected=new Set(),rows=[],busy=false,query=null,companyId='',verified={};
 const msg=(message,type='info')=>{ui.notice.textContent=message;ui.notice.className=type+' message';};
 async function api(path,opts){const response=await fetch(path,{credentials:'same-origin',cache:'no-store',...opts});if(opts?.responseType==='blob'){
