@@ -6,7 +6,7 @@ const drive=readFileSync(new URL("./file-hub-cloud-oauth.ts",import.meta.url),"u
 test("Bulut İşNet sağlık kontrolü yalnız imzalı firmaya hizmet eder",()=>{
  assert.match(isnet,/app\.get\("\/api\/isnet\/cloud-readiness"/);
  assert.match(isnet,/getAuthenticatedUser\(c\)/);
- assert.match(isnet,/accountingTenantReadAllowed\(user,slug\)/);
+ assert.match(isnet,/canReadOwnCompanyStorage\(user,slug\)/);
  assert.match(isnet,/verifyIsnetReadOnlySession\(c,slug\)/);
  assert.match(isnet,/apiAuthorized:session\.connected===true/);
  assert.match(isnet,/requiresLocalSetup:false/);
