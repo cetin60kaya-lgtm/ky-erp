@@ -595,8 +595,29 @@ refreshSyncStatus();\n</script></html>`.replace('{{CSRF}}',csrf);
 
 function json(res,status,data){res.writeHead(status,{"content-type":"application/json; charset=utf-8","cache-control":"no-store","x-content-type-options":"nosniff"});res.end(JSON.stringify(data));}
 async function readBody(req){const chunks=[];let size=0;for await(const chunk of req){size+=chunk.length;if(size>4096)err("ISTEK_COK_BUYUK");chunks.push(chunk);}try{return JSON.parse(Buffer.concat(chunks).toString("utf8"))}catch{err("GECERSIZ_JSON")}}
+const HEALTH_ALLOWED_ORIGINS=new Set(["https://kyerp.net","https://app.kyerp.net"]);
+const LOCAL_HEALTH_ADAPTER="KY_ISNET_DRIVE_ARCHIVE_V1";
 const server=createServer(async(req,res)=>{
   if(req.socket.remoteAddress!=="127.0.0.1"&&req.socket.remoteAddress!=="::ffff:127.0.0.1")return json(res,403,{error:"YEREL_ERISIM"});
+  // Reject DNS rebinding: loopback requests must use the actual fixed loopback host.
+  if(req.headers.host!=="127.0.0.1:"+PORT)return json(res,403,{error:"YEREL_HOST_GECERSIZ"});
+  if(req.url==="/health"&&(req.method==="GET"||req.method==="OPTIONS")){
+    const origin=String(req.headers.origin||"");
+    const allowed=HEALTH_ALLOWED_ORIGINS.has(origin);
+    if(req.method==="OPTIONS"){
+      if(!allowed)return json(res,403,{error:"YEREL_HEALTH_ORIGIN_GECERSIZ"});
+      res.writeHead(204,{"access-control-allow-origin":origin,"access-control-allow-methods":"GET, OPTIONS",
+        "access-control-allow-headers":"content-type","access-control-allow-private-network":"true",
+        "vary":"Origin","cache-control":"no-store"});
+      return res.end();
+    }
+    res.writeHead(200,{"content-type":"application/json; charset=utf-8","cache-control":"no-store",
+      "x-content-type-options":"nosniff",...(allowed?{"access-control-allow-origin":origin,
+      "access-control-allow-private-network":"true","vary":"Origin"}:{})});
+    return res.end(JSON.stringify({ok:true,adapter:LOCAL_HEALTH_ADAPTER,connected:state.connected&&Boolean(state.companyId),
+      running:syncJob.running,monitoring:Boolean(monitorTimer),lastSyncStatus:syncJob.progress?.status||"",
+      lastSyncAt:syncJob.finishedAt||""}));
+  }
   if(req.method==="GET"&&req.url?.startsWith("/?")){res.writeHead(303,{"location":"/","cache-control":"no-store","referrer-policy":"no-referrer"});return res.end();}
   if(req.method==="GET"&&req.url==="/"){res.writeHead(200,{"content-type":"text/html; charset=utf-8","cache-control":"no-store","referrer-policy":"no-referrer","x-content-type-options":"nosniff","content-security-policy":"frame-ancestors https://kyerp.net https://app.kyerp.net; default-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'self' blob:; form-action 'self'; base-uri 'none'"});return res.end(html);}
   if(req.method!=="POST"||!["/login","/login-saved","/password-delete","/company","/documents","/file","/clear","/archive-item","/sync-start","/sync-status","/sync-stop","/review-list","/review-pdf","/review-resolve","/review-refresh"].includes(req.url))return json(res,404,{error:"BULUNAMADI"});
@@ -643,7 +664,15 @@ const server=createServer(async(req,res)=>{
         "cache-control":"no-store","x-content-type-options":"nosniff"});
       return res.end(bytes);
     }
-  }catch(e){return json(res,400,{error:e?.safeCode||"PORTAL_BAGLANTISI_HATASI"});}
+  }catch(e){
+    const reason=String(e?.safeCode||"PORTAL_BAGLANTISI_HATASI");
+    if(/OTURUM|NOT_AUTHORIZED|FIRMA_OTURUMU|BELGE_DOSYA_YETKISI/.test(reason)){
+      // A lost provider session must not silently keep the 15-minute monitor alive.
+      state.connected=false;state.documents=[];syncJob.monitor=false;
+      if(monitorTimer){clearTimeout(monitorTimer);monitorTimer=null;}
+    }
+    return json(res,400,{error:reason});
+  }
 });
 if(process.env.KY_ISNET_SELFTEST==="1"){
   if(!ARCHIVE_ROOT.includes("KY-ISNET-QA"))throw Error("QA_PATH_REQUIRED");
