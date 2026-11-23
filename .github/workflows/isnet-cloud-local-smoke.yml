@@ -138,9 +138,18 @@ jobs:
             /tmp/isnet-cloud-readiness.json
           ! grep -Eqi 'accessToken|password|cookie|refresh_token|Bearer' /tmp/isnet-cloud-readiness.json
 
+          # Print only synthetic tenant/role and sanitized error codes on failure.
           curl --config /tmp/isnet-curl.conf --fail --silent \
-            "http://127.0.0.1:8789/api/file-hub/cloud/tenant-readiness?mainCompanySlug=mecit-hakan" \
-            > /tmp/drive-cloud-readiness.json
+            "http://127.0.0.1:8789/api/auth/me" > /tmp/cloud-test-auth.json
+          jq -e '{tenant: .data.mainCompanySlug, role: .data.role}' /tmp/cloud-test-auth.json
+          storage_code="$(curl --config /tmp/isnet-curl.conf --silent \
+            --output /tmp/drive-cloud-readiness.json --write-out '%{http_code}' \
+            'http://127.0.0.1:8789/api/file-hub/cloud/tenant-readiness?mainCompanySlug=mecit-hakan')"
+          if [ "$storage_code" != "200" ]; then
+            echo "CLOUD_FILEHUB_STATUS=$storage_code"
+            jq '{errorCode: .error.code}' /tmp/drive-cloud-readiness.json
+            exit 1
+          fi
           jq -e '.ok == true and .data.source == "TENANT_D1_METADATA_ONLY"
             and .data.requiresComputerIp == false and .data.storageAdapter == "FILE_HUB_CLOUD_API"
             and (.data.providers | map(select(.providerType == "GOOGLE_DRIVE")) |
