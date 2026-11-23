@@ -68,3 +68,33 @@ button.eis-local-open:disabled{opacity:.55;cursor:not-allowed}
 .eis-cloud-steps button,.eis-cloud-steps a{margin-top:auto;display:inline-flex;align-items:center;gap:5px;padding:9px 11px;background:var(--surface,#fff);color:var(--text-primary,#203d5e);border:1px solid #aebfd0;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none;cursor:pointer}
 .eis-cloud-steps button:disabled{opacity:.5;cursor:not-allowed}
 @media(max-width:930px){.eis-cloud-steps{grid-template-columns:1fr}.eis-cloud-steps p{min-height:0}}
+
+/* Gerçek API kabul: kısıtlı 1-2 belge, web üzerinden XML/PDF indir. */
+.isnet-qa{display:grid;gap:13px;padding:14px;border:1px solid var(--border,#cbd7e4);border-radius:12px;background:var(--surface,#fff);color:var(--text-primary,#24374c)}
+.isnet-qa-title{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.isnet-qa-title h4{display:flex;align-items:center;gap:8px;margin:0;font-size:15px}
+.isnet-qa-title p,.isnet-qa-foot{font-size:12px;line-height:1.55;color:var(--text-secondary,#667788);margin:5px 0 0}
+.isnet-qa-readonly{font-size:10px;font-weight:800;letter-spacing:.08em;color:#1e6452;border:1px solid #94c8ad;padding:6px;border-radius:7px;white-space:nowrap}
+.isnet-qa-needed{display:flex;align-items:flex-start;gap:12px;padding:14px;border:1px solid #e6d0a5;border-radius:10px;background:#fff9ed}
+.isnet-qa-needed p{font-size:12px;margin:6px 0 10px;line-height:1.5}
+.isnet-qa-needed button,.isnet-qa-criteria button,.isnet-qa-actions button{display:inline-flex;gap:7px;align-items:center;justify-content:center;border-radius:8px;border:1px solid #a9bed6;background:var(--surface,#fff);color:var(--text-primary,#24374c);padding:9px 11px;font-size:12px;font-weight:600;cursor:pointer}
+.isnet-qa-criteria{display:flex;flex-wrap:wrap;gap:11px;align-items:flex-end}
+.isnet-qa-criteria label{font-size:11px;font-weight:600;display:grid;gap:5px;min-width:135px}
+.isnet-qa-criteria input,.isnet-qa-criteria select{font:inherit;border:1px solid #b9cadc;border-radius:8px;padding:9px;min-height:36px;background:var(--surface,#fff);color:var(--text-primary,#24374c)}
+.isnet-qa-criteria button{background:#194b83;color:#fff;min-height:36px}
+.isnet-qa-results{display:grid;gap:10px}
+.isnet-qa-results>strong{font-size:13px}
+.isnet-qa-results>p{font-size:12px;margin:0}
+.isnet-qa-scroll{overflow:auto;max-height:450px;border:1px solid #dfe7f0;border-radius:9px}
+.isnet-qa-scroll table{width:100%;border-collapse:collapse;font-size:12px;min-width:760px}
+.isnet-qa-scroll th{background:var(--surface-alt,#f5f7fb);text-align:left;position:sticky;top:0;padding:10px}
+.isnet-qa-scroll td{padding:10px;border-top:1px solid #e4eaf2;vertical-align:middle}
+.isnet-qa-scroll small{display:block;font-size:11px;color:var(--text-secondary,#63758a);margin-top:3px}
+.isnet-qa-actions{display:flex;flex-wrap:wrap;gap:7px}
+.isnet-qa-actions button:disabled,.isnet-qa-criteria button:disabled{opacity:.48;cursor:not-allowed}
+.isnet-qa-message{padding:10px 12px;border-radius:8px;font-size:12px;line-height:1.5;margin:0}
+.isnet-qa-message.success,.isnet-qa-pass{background:#ecf9ef;color:#16683d}
+.isnet-qa-message.error{background:#fff0f0;color:#a12d27}
+.isnet-qa-message.info{background:#eef5ff;color:#244a79}
+.isnet-qa-pass{display:flex;align-items:center;gap:7px;padding:10px;border-radius:8px;font-weight:600}
+@media(max-width:650px){.isnet-qa-title{flex-wrap:wrap}.isnet-qa-criteria label{width:100%}.isnet-qa-criteria button{width:100%}}
