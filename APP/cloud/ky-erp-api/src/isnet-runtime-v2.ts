@@ -6,7 +6,7 @@ import { probeIsnetPublicLogin } from "./isnet-portal-public-health";
 import { probeIsnetPortalAccount } from "./isnet-live-sync";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { accountingTenantReadAllowed } from "./accounting-access-policy";
+import { canReadOwnCompanyStorage } from "./file-hub-company-owner-access";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -726,7 +726,7 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     const slug=text(c.req.query("mainCompanySlug")||c.req.header("X-KYERP-Tenant-Slug"));
     const user=await getAuthenticatedUser(c);
     if(!user)return c.json(errorBody("UNAUTHORIZED","Oturum gerekli."),401);
-    if(!slug||!accountingTenantReadAllowed(user,slug))
+    if(!slug||!canReadOwnCompanyStorage(user,slug))
       return c.json(errorBody("ISNET_TENANT_FORBIDDEN","Yetkili ana firma seçimi gerekli."),403);
     const settings=await settingsRaw(c,slug);
     const configured=Boolean(text(settings.companyId)&&text(settings.username));
