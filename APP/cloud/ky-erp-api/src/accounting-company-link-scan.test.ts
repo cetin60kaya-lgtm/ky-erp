@@ -10,11 +10,11 @@ function fixture() {
     CREATE TABLE companies (
       id TEXT PRIMARY KEY, main_company_slug TEXT NOT NULL,
       name TEXT NOT NULL, current_balance REAL DEFAULT 0,
-      opening_balance REAL DEFAULT 0, updated_at TEXT, deleted_at TEXT
+      opening_balance REAL DEFAULT 0, is_active INTEGER NOT NULL DEFAULT 1, updated_at TEXT, deleted_at TEXT
     );
     INSERT INTO companies VALUES
-      ('short-taha','main','TAHA',0,0,'2026-11-23',NULL),
-      ('taha-main','main','TAHA GİYİM AŞ',50000,0,'2026-11-23',NULL);
+      ('short-taha','main','TAHA',0,0,1,'2026-11-23',NULL),
+      ('taha-main','main','TAHA GİYİM AŞ',50000,0,1,'2026-11-23',NULL);
     CREATE TABLE company_aliases (
       id TEXT PRIMARY KEY, main_company_slug TEXT,
       company_id TEXT REFERENCES companies(id),
