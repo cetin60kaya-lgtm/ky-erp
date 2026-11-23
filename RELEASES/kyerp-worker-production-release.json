@@ -3,16 +3,16 @@
   "target": "production",
   "component": "worker",
   "sourceBranch": "codex/model-uretim-kontrol-merkezi-final",
-  "sourceCommit": "11383fa8475f04827f11cd20cd1127cf35d1e3ff",
+  "sourceCommit": "90155492e2e76d0dd73e24578249831deb4ee093",
   "requestedAt": "2026-11-23",
-  "attempt": 63,
+  "attempt": 64,
   "scope": [
-    "PR647_COMPANY_LINK_SCAN_BATCH_PREVIEW",
-    "PR647_SAFE_ALIAS_FIRST_MERGE_HARD_DELETE",
-    "PR647_BALANCE_AUDIT_BUTTON_AND_DIFFERENCE_NOTICE",
-    "CODE_ONLY_NO_D1_MIGRATION_NO_FINANCIAL_WRITES"
+    "PR649_LIGHTWEIGHT_MERGE_TARGET_PREVIEW",
+    "PR649_FAIL_CLOSED_SOURCE_RELATION_SCAN",
+    "PR649_D1_ERROR_PHASE_SAFE_DIAGNOSTICS",
+    "NO_DATABASE_MIGRATION_NO_COMPANY_MUTATION"
   ],
-  "note": "23.11.2026 PR #647 merged (11383fa...): user-visible empty TAHA merge / Hard Sil preflight still gives 503 while frontend is live. Publish latest canonical Worker to api.kyerp.net using existing guarded workflow; Worker typecheck/test/build passed CI 45244382681. No D1 migration, no company delete, no merge, no payment, no official e-Belge send. Verify live Worker deploy and authenticated merge-preview separately.",
+  "note": "23.11.2026 PR #649: confirmed CI run 45249076226 success (frontend + Worker), production change only: scan source-company links exhaustively, read preserved target with one scoped SELECT, bounded safe error stage. Fix for TAHA merge-preview hanging with heavily linked target after PR #647. No D1 migration, financial balance updates, merge execution or deletions. Live user approval/preview still required.",
   "applyMigrations": false,
   "migrationApprovedByUser": false,
   "applyPhysical0062": false,
