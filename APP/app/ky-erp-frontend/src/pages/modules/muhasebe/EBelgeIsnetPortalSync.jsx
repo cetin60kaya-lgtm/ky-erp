@@ -101,6 +101,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, o
     </div>
 
     <IsnetLiveAcceptanceQA mainCompanySlug={slug} apiConnected={apiConnected}
+      onConnected={() => void refresh()}
       onOpenSettings={() => onOpenSettings?.()} />
 
     <div className="eis-local-directions" aria-label="Dört belge yönü">
