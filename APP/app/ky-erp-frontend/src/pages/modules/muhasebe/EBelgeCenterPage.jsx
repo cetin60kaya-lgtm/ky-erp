@@ -442,7 +442,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
             <span className="eb-original-archive-count">{Number(Boolean(originalXml))+Number(Boolean(originalPdf))}/2 ana dosya</span>
           </div>
           <div className="eb-original-file-actions">
-            {originalPdf?<button type="button" className="eb-original-file-primary" disabled={busy===`file-${originalPdf.id}`} onClick={()=>void preview(originalPdf)}>
+            {originalPdf?<button type="button" className="eb-original-file-primary" data-ky-context-kind="pdf" data-ky-context-label={originalPdf.file_name || "Orijinal PDF"} disabled={busy===`file-${originalPdf.id}`} onClick={()=>void preview(originalPdf)}>
               <FileText size={19}/><span><strong>Orijinal PDF</strong><small>Görüntüle / Yazdır</small></span><CheckCircle2 size={16}/>
             </button>:<div className="eb-original-file-missing"><FileText size={19}/><span><strong>Orijinal PDF eksik</strong><small>XML korunur, tekrar indirmede tamamlanabilir.</small></span></div>}
             {originalXml?<button type="button" className="eb-original-file-xml" disabled={busy===`file-${originalXml.id}`} onClick={()=>void preview(originalXml)}>
@@ -450,7 +450,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
             </button>:<div className="eb-original-file-missing"><FileCheck2 size={19}/><span><strong>Orijinal XML eksik</strong><small>Belge kaynağı kontrol edilmeli.</small></span></div>}
           </div>
           {otherFiles.length>0&&<details className="eb-original-extra"><summary>Diğer ek dosyalar · {otherFiles.length}</summary>
-            <div className="eb-original-extra-list">{otherFiles.map(file=><button key={file.id} type="button" onClick={()=>void preview(file)}>{file.file_name||"Ek dosya"}</button>)}</div>
+            <div className="eb-original-extra-list">{otherFiles.map(file=><button key={file.id} type="button" data-ky-context-kind={/[.]pdf$/i.test(String(file.file_name || "")) ? "pdf" : undefined} data-ky-context-label={file.file_name || "Ek PDF"} onClick={()=>void preview(file)}>{file.file_name||"Ek dosya"}</button>)}</div>
           </details>}
           {!originalPdf&&originalXml&&<small className="eb-original-archive-note">Gerekirse XML’den yalnız kontrol amaçlı PDF önizlemesi üretilebilir. Bu çıktı orijinal İşNet PDF’si değildir; şablon zorunlu değildir.</small>}
         </section>
@@ -523,12 +523,12 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
       </>}
     </section>
     {pdfPreview && <div className="eb-inline-pdf-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) setPdfPreview(null); }}>
-      <section className="eb-inline-pdf-panel" role="dialog" aria-modal="true" aria-label="Belge PDF önizleme">
+      <section className="eb-inline-pdf-panel" role="dialog" aria-modal="true" aria-label="Belge PDF önizleme" data-ky-context-kind="pdf-preview" data-ky-context-label={pdfPreview.fileName}>
         <header><div><strong>{pdfPreview.fileName}</strong><small>Orijinal belge, KY ERP ekranından ayrılmadan görüntülenir.</small></div>
           <button type="button" onClick={() => setPdfPreview(null)} aria-label="PDF önizlemeyi kapat"><X size={20}/></button></header>
         <iframe title={`PDF: ${pdfPreview.fileName}`} src={pdfPreview.url} />
         <footer><span>PDF görüntüleyicisinin yazdır ve indir araçlarını kullanabilirsiniz.</span>
-          <button type="button" onClick={() => window.open(pdfPreview.url, "_blank", "noopener,noreferrer")}>Yeni Sekmede Aç</button>
+          <button type="button" data-ky-context-action="pdf-open" onClick={() => window.open(pdfPreview.url, "_blank", "noopener,noreferrer")}>PDF Yazdır / Yeni Sekmede Aç</button>
           <button type="button" onClick={() => setPdfPreview(null)}>Kapat</button>
         </footer>
       </section>
