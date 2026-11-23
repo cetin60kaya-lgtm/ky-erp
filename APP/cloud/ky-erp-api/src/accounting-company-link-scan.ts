@@ -7,6 +7,33 @@ const refs = new Set(["company_id","firm_id","customer_id","supplier_company_id"
 const jsonRef = new Map([["model_records","raw"],["models","raw"],["production_records","raw"],["json_store","data"]]);
 const quote = (name: string) => '"' + name + '"';
 
+/** The preserved target is never deleted or re-parented. Only its identity,
+ * current balance and revision are needed for an empty-source merge. */
+export async function readCompanyMergeTarget(db: D1Database, slug: string, id: string) {
+  if (!slug || !id) throw new Error("COMPANY_SCAN_SCOPE_REQUIRED");
+  const record = await db.prepare(
+    "SELECT id,name,updated_at,current_balance,opening_balance,is_active FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1"
+  ).bind(id, slug).first<Row>();
+  if (!record) return null;
+  return {
+    companyId: String(record.id ?? ""),
+    companyName: String(record.name ?? ""),
+    updatedAt: String(record.updated_at ?? ""),
+    currentBalance: Number(record.current_balance ?? 0),
+    openingBalance: Number(record.opening_balance ?? 0),
+    isActive: Number(record.is_active ?? 1) !== 0,
+  };
+}
+
+/** Only bounded error codes are returned to managers; raw SQL and identifiers
+ * remain in protected server logs and never enter the UI. */
+export function publicCompanyScanFailure(error: unknown): string {
+  const message = error instanceof Error ? error.message : "";
+  if (/^COMPANY_SCAN_[A-Z0-9_]{1,64}$/.test(message)) return message;
+  return "COMPANY_SCAN_DATABASE_ERROR";
+}
+
+
 export async function scanCompanyRelations(db: D1Database, slug: string, id: string): Promise<{
   blockedRelations: Relation[]; blockedTotal: number; aliasCount: number; scannedTables: number;
 }> {
