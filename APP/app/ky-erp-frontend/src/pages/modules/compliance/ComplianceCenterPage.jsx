@@ -155,7 +155,7 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
   const product=chemicalProducts.find(p=>String(p.id)===String(selectedChemicalId));
   setBusy(true);
   try{
-   const r=await apiPost(`/compliance/chemicals/${selectedChemicalId}/evidence`,{
+   await apiPost(`/compliance/chemicals/${selectedChemicalId}/evidence`,{
     fileAssetId:assetId,kind:chemicalEvidenceKind,listProductName:["ZDHC","GOTS","LCW_INVENTORY"].includes(chemicalEvidenceKind)?(chemicalListName||product?.productName||""):"",
     sourceRevision:chemicalSourceRevision});
    setMessage("Ürün kanıtı incelemeye alındı; otomatik uygunluk onayı verilmez.");
