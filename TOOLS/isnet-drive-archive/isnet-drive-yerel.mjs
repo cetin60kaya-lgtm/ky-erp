@@ -35,6 +35,18 @@ async function request(path, init = {}, jar = state.jar) {
     ...(init.headers || {})
   };
   const response = await fetch(REMOTE + path, { ...init, headers, redirect: "manual", signal: AbortSignal.timeout(25000) });
+  // An ordinary NetteFatura login in another browser can invalidate this
+  // isolated session. Never silently log in again and evict the active browser.
+  const redirectPath=String(response.headers.get("location")||"");
+  if(state.connected && (response.status===401 || response.status===403 ||
+      (response.status>=300 && response.status<400 &&
+       /^\\/Account\\/Login(?:[/?#]|$)/i.test(redirectPath)))){
+    state.connected=false;
+    state.documents=[];
+    syncJob.monitor=false;
+    if(monitorTimer){clearTimeout(monitorTimer);monitorTimer=null;}
+    err("ISNET_OTURUM_SONA_ERDI");
+  }
   for (const cookie of (response.headers.getSetCookie?.() || [])) {
     const part = cookie.split(";",1)[0]; const pos = part.indexOf("=");
     if (pos > 0 && /^[A-Za-z0-9_.-]+$/.test(part.slice(0,pos))) jar.set(part.slice(0,pos),part.slice(pos+1));
