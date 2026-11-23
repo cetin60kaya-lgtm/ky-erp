@@ -98,3 +98,52 @@ export async function readComplianceEvidence(c:Context<AppEnv>,slug:string,key:u
  headers.set("X-Content-Type-Options","nosniff");
  return new Response(obj.body,{headers});
 }
+
+
+/**
+ * İlk yükleme sırasında File Hub bağlantısı bulunamayan R2 staging kaydını,
+ * bağlantı kurulunca orijinali koruyarak firma provider'ına taşır.
+ * Aynı asset kimliği/sürüm korunur; R2 yedeği otomatik silinmez.
+ */
+export async function finalizeComplianceStagedArchive(c:Context<AppEnv>,slug:string,assetId:string){
+ const asset=await c.env.DB.prepare("SELECT * FROM file_hub_assets WHERE id=? AND main_company_slug=? LIMIT 1").bind(assetId,slug).first<Row>();
+ if(!asset)throw Object.assign(new Error("Firma kanıt dosyası bulunamadı."),{code:"ASSET_NOT_FOUND",status:404});
+ const meta=typeof asset.metadata==="string"?JSON.parse(asset.metadata||"{}"):asset.metadata||{};
+ const existing=await c.env.DB.prepare("SELECT id,provider_file_id FROM file_hub_locations WHERE main_company_slug=? AND file_asset_id=? AND location_role='PRIMARY' AND is_available=1").bind(slug,assetId).first<Row>();
+ if(existing?.provider_file_id)return{assetId,archiveStatus:"PROVIDER_ACCEPTED",alreadyArchived:true};
+ const source=txt(meta.storageKey);
+ if(!source.startsWith("compliance-staging/"))throw Object.assign(new Error("Bu dosya kontrollü geçici arşivde bulunmuyor."),{code:"NOT_STAGED",status:409});
+ const purpose=complianceStoragePurpose(meta.purpose),r=await c.env.DB.prepare(`SELECT b.root_path,b.storage_connection_id,c.provider_type,c.sync_mode
+ FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id
+ AND c.main_company_slug=b.main_company_slug AND c.is_active=1
+ WHERE b.main_company_slug=? AND b.module_code='DENETIM' AND b.purpose_code=? AND b.write_enabled=1
+ ORDER BY b.is_default DESC LIMIT 1`).bind(slug,purpose).first<Row>();
+ if(!r||upper(r.sync_mode)!=="CLOUD_API")throw Object.assign(new Error("Denetim için yazılabilir doğrudan bulut File Hub ataması henüz hazır değil."),{code:"ARCHIVE_BINDING_REQUIRED",status:409});
+ const root=txt(r.root_path).replace(/\\/g,"/").split("/").map((x:string)=>x.trim()).filter((x:string)=>x&&x!=="."&&x!=="..").join("/");
+ if(!root)throw Object.assign(new Error("Denetim arşiv yolu boş."),{code:"ARCHIVE_PATH_REQUIRED",status:422});
+ const backup=await c.env.FILES.get(source);
+ if(!backup)throw Object.assign(new Error("Geçici arşivde orijinal dosya bulunamadı."),{code:"STAGED_ORIGINAL_MISSING",status:404});
+ const bytes=await backup.arrayBuffer();
+ const computed=await crypto.subtle.digest("SHA-256",bytes),checksum=[...new Uint8Array(computed)].map((x:number)=>x.toString(16).padStart(2,"0")).join("");
+ if(txt(asset.sha256)&&txt(asset.sha256)!==checksum)throw Object.assign(new Error("Geçici dosya bütünlük kontrolü başarısız."),{code:"ARCHIVE_HASH_MISMATCH",status:409});
+ const name=`${assetId.slice(0,8)}_v${Number(meta.version)||1}_${clean(asset.file_name)}`;
+ const relativePath=`${root}/${txt(meta.entityId)||assetId}/${name}`,ts=now();
+ const archived=await archiveFileToCloudConnection(c,slug,txt(r.storage_connection_id),
+   {relativePath,fileName:name,mimeType:txt(asset.mime_type)||"application/octet-stream",bytes,noOverwrite:upper(r.provider_type)==="GOOGLE_DRIVE"});
+ if(!txt(archived.id))throw Object.assign(new Error("Sağlayıcı dosya kimliği dönmedi."),{code:"ARCHIVE_ID_MISSING",status:502});
+ await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_locations
+ (id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at)
+ VALUES(?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)`).bind(crypto.randomUUID(),slug,assetId,txt(r.storage_connection_id),txt(archived.id),relativePath,ts,ts,ts,ts).run();
+ await c.env.DB.prepare("UPDATE file_hub_assets SET metadata=?,updated_at=? WHERE id=? AND main_company_slug=?")
+ .bind(JSON.stringify({...meta,archiveStatus:"PROVIDER_ACCEPTED",providerType:upper(r.provider_type),relativePath,providerFileId:txt(archived.id)}),ts,assetId,slug).run();
+ const key=`filehub:${assetId}`;
+ const doc=await c.env.DB.prepare("SELECT id,custom_fields FROM compliance_documents WHERE main_company_slug=? AND file_asset_id=? LIMIT 1").bind(slug,assetId).first<Row>();
+ if(doc){
+  let custom:Row={};try{custom=JSON.parse(txt(doc.custom_fields)||"{}")}catch{}
+  await c.env.DB.prepare("UPDATE compliance_documents SET storage_key=?,custom_fields=?,updated_at=? WHERE id=? AND main_company_slug=?")
+  .bind(key,JSON.stringify({...custom,archiveStatus:"PROVIDER_ACCEPTED"}),ts,doc.id,slug).run();
+ }
+ await c.env.DB.prepare("UPDATE compliance_document_versions SET storage_key=? WHERE file_asset_id=? AND main_company_slug=?").bind(key,assetId,slug).run();
+ await c.env.DB.prepare("UPDATE compliance_finding_evidence SET storage_key=? WHERE file_asset_id=? AND main_company_slug=?").bind(key,assetId,slug).run();
+ return{assetId,archiveStatus:"PROVIDER_ACCEPTED",relativePath,alreadyArchived:false};
+}
