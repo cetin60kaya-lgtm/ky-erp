@@ -533,6 +533,40 @@ export async function archiveFileToCloudConnection(c:Context<AppEnv>,slug:string
 }
 
 
+/**
+ * Yalnız sunucu-içi güvenli çağrılar içindir. Dış denetçi ve normal ERP izin
+ * kontrolleri çağıran route'ta yapılır. Sağlayıcıya özel dosya kimliği istemciye
+ * veya açık paylaşıma verilmez.
+ */
+export async function streamComplianceFileHubAsset(c:Context<AppEnv>,slug:string,assetId:string){
+  const row=await c.env.DB.prepare(`SELECT a.file_name,a.mime_type,l.provider_file_id,
+    x.oauth_account_id,x.provider_drive_id,c.provider_type
+    FROM file_hub_assets a
+    JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug
+       AND l.location_role='PRIMARY' AND l.is_available=1
+    JOIN file_hub_connections c ON c.id=l.storage_connection_id AND c.main_company_slug=l.main_company_slug AND c.is_active=1
+    JOIN file_hub_cloud_connection_accounts x ON x.connection_id=c.id AND x.main_company_slug=c.main_company_slug
+    WHERE a.id=? AND a.main_company_slug=? LIMIT 1`).bind(assetId,slug).first<Row>();
+  if(!row||!text(row.provider_file_id))throw Object.assign(new Error("File Hub orijinal dosya konumu bulunamadı."),{code:"ARCHIVE_FILE_MISSING",status:404});
+  const {accessToken}=await usableAccount(c,slug,text(row.oauth_account_id));
+  const provider=upper(row.provider_type),id=text(row.provider_file_id),driveId=text(row.provider_drive_id);
+  let url="",init:RequestInit={headers:{Authorization:`Bearer ${accessToken}`},redirect:"follow"};
+  if(provider==="GOOGLE_DRIVE")url=`https://www.googleapis.com/drive/v3/files/${encodeURIComponent(id)}?alt=media`;
+  else if(["ONEDRIVE","SHAREPOINT"].includes(provider))url=driveId
+    ?`https://graph.microsoft.com/v1.0/drives/${encodeURIComponent(driveId)}/items/${encodeURIComponent(id)}/content`
+    :`https://graph.microsoft.com/v1.0/me/drive/items/${encodeURIComponent(id)}/content`;
+  else if(provider==="DROPBOX"){url="https://content.dropboxapi.com/2/files/download";init={method:"POST",headers:{Authorization:`Bearer ${accessToken}`,"Dropbox-API-Arg":JSON.stringify({path:id})}};}
+  else throw Object.assign(new Error("Bağlı arşiv sağlayıcısı doğrudan okumayı desteklemiyor."),{code:"ARCHIVE_PROVIDER_UNSUPPORTED",status:422});
+  const res=await fetch(url,init);
+  if(!res.ok||!res.body)throw Object.assign(new Error(`File Hub orijinaline erişilemedi (HTTP ${res.status}).`),{code:"ARCHIVE_READ_FAILED",status:502});
+  const headers=new Headers();
+  headers.set("Content-Type",text(row.mime_type)||res.headers.get("Content-Type")||"application/octet-stream");
+  headers.set("Content-Disposition",`inline; filename*=UTF-8''${encodeURIComponent(text(row.file_name)||"evrak")}`);
+  headers.set("Cache-Control","private, no-store");
+  headers.set("X-Content-Type-Options","nosniff");
+  return new Response(res.body,{headers});
+}
+
 // Google Drive orijinalini R2'ye kopyalamadan, sağlayıcının küçük JPEG önizlemesini cache'le.
 export async function ensureCloudModelImagePreview(c: Context<AppEnv>, slug: string, assetId: string): Promise<boolean> {
   const row = await c.env.DB.prepare(
