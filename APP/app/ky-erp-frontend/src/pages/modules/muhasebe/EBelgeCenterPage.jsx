@@ -291,6 +291,19 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
     const pdf = /^application\/pdf(?:;|$)/i.test(blob.type) ? blob : new Blob([blob], { type: "application/pdf" });
     setPdfPreview({ url: URL.createObjectURL(pdf), fileName: String(fileName || "Belge.pdf") });
   }, []);
+  const printPdfPreview = () => {
+    if (!pdfPreview?.url) return;
+    try {
+      const frame = document.querySelector(".eb-inline-pdf-panel iframe");
+      if (!frame?.contentWindow?.print) throw new Error("PDF yazdırma çerçevesi erişilemiyor.");
+      frame.contentWindow.focus();
+      frame.contentWindow.print();
+    } catch {
+      // Bazı tarayıcıların yerleşik PDF görüntüleyicisi yazdırmayı doğrudan desteklemez.
+      // Orijinal PDF sekmesi açılır; yazdırma oradaki tarayıcı araç çubuğundan yapılır.
+      window.open(pdfPreview.url, "_blank", "noopener,noreferrer");
+    }
+  };
   const [companyOpen, setCompanyOpen] = useState(false);
   const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
   const [finalAcknowledged, setFinalAcknowledged] = useState(false);
@@ -527,8 +540,9 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
         <header><div><strong>{pdfPreview.fileName}</strong><small>Orijinal belge, KY ERP ekranından ayrılmadan görüntülenir.</small></div>
           <button type="button" onClick={() => setPdfPreview(null)} aria-label="PDF önizlemeyi kapat"><X size={20}/></button></header>
         <iframe title={`PDF: ${pdfPreview.fileName}`} src={pdfPreview.url} />
-        <footer><span>PDF görüntüleyicisinin yazdır ve indir araçlarını kullanabilirsiniz.</span>
-          <button type="button" data-ky-context-action="pdf-open" onClick={() => window.open(pdfPreview.url, "_blank", "noopener,noreferrer")}>PDF Yazdır / Yeni Sekmede Aç</button>
+        <footer><span>Yazdırma yalnız açık PDF dosyasını hedefler.</span>
+          <button type="button" data-ky-context-action="pdf-print" data-ky-context-label="PDF Yazdır" onClick={printPdfPreview}>PDF Yazdır</button>
+          <button type="button" data-ky-context-action="pdf-open" data-ky-context-label="PDF'yi Yeni Sekmede Aç" onClick={() => window.open(pdfPreview.url, "_blank", "noopener,noreferrer")}>Yeni Sekmede Aç</button>
           <button type="button" onClick={() => setPdfPreview(null)}>Kapat</button>
         </footer>
       </section>
