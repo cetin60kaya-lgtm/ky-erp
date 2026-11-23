@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, Download, FileText, RefreshCw, ShieldCheck } from "lucide-react";
-import { apiFetch, apiGet } from "../../../utils/api";
+import { apiFetch, apiGet, apiPost, apiPut } from "../../../utils/api";
 
 const today = new Date().toISOString().slice(0, 10);
 const week = new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10);
@@ -21,7 +21,11 @@ function saveFile(blob, name) {
   window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
-export default function IsnetLiveAcceptanceQA({ mainCompanySlug, apiConnected, onOpenSettings }) {
+export default function IsnetLiveAcceptanceQA({ mainCompanySlug, apiConnected, onConnected, onOpenSettings }) {
+  const [login, setLogin] = useState({ username: "", password: "", companyId: "",
+    companies: [], validated: false });
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginMessage, setLoginMessage] = useState(null);
   const [category, setCategory] = useState("despatch:incoming");
   const [from, setFrom] = useState(week);
   const [to, setTo] = useState(today);
@@ -42,6 +46,43 @@ export default function IsnetLiveAcceptanceQA({ mainCompanySlug, apiConnected, o
   }, []);
   const validity = Boolean(mainCompanySlug && from && to && from <= to &&
     (new Date(to).valueOf() - new Date(from).valueOf()) <= 31 * 86400000);
+
+  const testApiLogin = async () => {
+    if (loginBusy || !login.username.trim() || !login.password || !mainCompanySlug) return;
+    setLoginBusy(true); setLoginMessage(null);
+    try {
+      const result = unwrap(await apiPost("/isnet/settings/test", {
+        mainCompanySlug, username: login.username.trim(), password: login.password,
+        connectionMode: "api",
+      }, { timeoutMs: 90_000, suppressUnauthorized: true }));
+      const companies = Array.isArray(result.companies) ? result.companies :
+        Array.isArray(result.authorizedCompanies) ? result.authorizedCompanies : [];
+      if (result.connectionMode !== "api" || !companies.length)
+        throw Error("İşNet resmî API girişi veya yetkili firma listesi doğrulanamadı.");
+      setLogin(old => ({ ...old, password: "", validated: true, companies,
+        companyId: companies.length === 1 ? String(companies[0].id) : "" }));
+      setLoginMessage({ type: "success", text: "İşNet API girişin doğrulandı. Şimdi yetkili firmanı seçip kaydet." });
+    } catch (error) {
+      setLogin(old => ({ ...old, password: "", validated: false, companies: [], companyId: "" }));
+      setLoginMessage({ type: "error", text: error?.message || "İşNet API girişi doğrulanmadı." });
+    } finally { setLoginBusy(false); }
+  };
+  const saveCompany = async () => {
+    if (loginBusy || !login.validated || !login.companyId) return;
+    setLoginBusy(true); setLoginMessage(null);
+    try {
+      const data = unwrap(await apiPut("/isnet/settings", {
+        mainCompanySlug, username: login.username.trim(), companyId: login.companyId,
+        connectionMode: "api",
+      }, { timeoutMs: 90_000 }));
+      if (String(data.companyId) !== String(login.companyId))
+        throw Error("İşNet firma seçimi sunucudan doğrulanamadı.");
+      setLoginMessage({ type: "success", text: "Firma kaydedildi. İşNet API oturumu gerçek sağlayıcı sorgusuyla tekrar kontrol ediliyor." });
+      onConnected?.();
+    } catch (error) {
+      setLoginMessage({ type: "error", text: error?.message || "Firma seçimi kaydedilemedi." });
+    } finally { setLoginBusy(false); }
+  };
 
   const listRealDocuments = async () => {
     if (busy || !apiConnected || !validity) return;
@@ -102,12 +143,41 @@ export default function IsnetLiveAcceptanceQA({ mainCompanySlug, apiConnected, o
       </div>
       <span className="isnet-qa-readonly">SALT OKUNUR</span>
     </header>
-    {!apiConnected ? <div className="isnet-qa-needed">
-      <AlertTriangle size={18}/>
-      <div><strong>İşNet API girişi ve firma seçimi gerekiyor.</strong>
-        <p>API Bağlantısı bölümünde kullanıcı adı/şifreni güvenli formda gir, yetkili firmanı seçip kaydet. Şifreyi sohbete gönderme.</p>
-        <button type="button" onClick={onOpenSettings}>Giriş ve Firma Seçimine Git</button>
+    {!apiConnected ? <div className="isnet-qa-login">
+      <div className="isnet-qa-needed"><AlertTriangle size={18}/>
+        <div><strong>1. Kendi İşNet hesabınla bağlan, 2. Firmayı seç.</strong>
+          <p>Şifre yalnız HTTPS üzerinden mevcut KY ERP İşNet API girişine iletilir. GitHub'a, teste ait dosyalara veya sohbetimize gönderilmez. Portal yerine resmî API yöntemi kullanılır.</p>
+        </div>
       </div>
+      <div className="isnet-qa-login-fields">
+        <label>İşNet kullanıcı adı
+          <input type="text" autoComplete="username" value={login.username}
+            disabled={!!loginBusy || login.validated}
+            onChange={e => setLogin(old => ({ ...old, username: e.target.value }))}/>
+        </label>
+        <label>İşNet şifresi
+          <input type="password" autoComplete="off" value={login.password}
+            disabled={!!loginBusy || login.validated}
+            onChange={e => setLogin(old => ({ ...old, password: e.target.value }))}/>
+        </label>
+        <button type="button" disabled={!!loginBusy || login.validated || !login.username.trim() || !login.password}
+          onClick={() => void testApiLogin()}>Gerçek API Girişini Test Et</button>
+      </div>
+      {login.validated && <div className="isnet-qa-login-fields">
+        <label>İşNet yetkili firma
+          <select value={login.companyId} disabled={!!loginBusy}
+            onChange={e => setLogin(old => ({ ...old, companyId: e.target.value }))}>
+            <option value="">Firma seç</option>
+            {login.companies.map(company => <option key={company.id} value={String(company.id)}>
+              {company.name || company.companyName || "Firma"} ({company.id})
+            </option>)}
+          </select>
+        </label>
+        <button type="button" disabled={!!loginBusy || !login.companyId}
+          onClick={() => void saveCompany()}>Seçili Firmayı Kaydet ve Belgelere Geç</button>
+      </div>}
+      {loginMessage && <p className={"isnet-qa-message " + loginMessage.type} role="status">{loginMessage.text}</p>}
+      <button type="button" className="isnet-qa-alt-link" onClick={onOpenSettings}>Gelişmiş İşNet Bağlantı Ayarları</button>
     </div> : <div className="isnet-qa-criteria">
       <label>Belge türü
         <select value={category} onChange={e => { setCategory(e.target.value); reset(); }} disabled={!!busy}>
