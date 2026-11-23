@@ -13,7 +13,7 @@ test("gerçek İşNet kabulü: kullanıcı girişi → firma seç → belge list
  assert.match(parent,/onConnected=\{\(\) => void refresh\(\)\}/);
 });
 test("En fazla iki gerçek belge, XML ve PDF seçili indirme, D1/R2 yazımı yok",()=>{
- assert.match(screen,/selected\.length < 2/);
+ assert.match(screen,/old\.length < 2/);
  assert.match(screen,/download\(row, "xml"\)/);
  assert.match(screen,/download\(row, "pdf"\)/);
  assert.match(screen,/apiFetch\("\/isnet\/qa\/download"/);
