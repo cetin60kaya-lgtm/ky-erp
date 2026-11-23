@@ -98,3 +98,12 @@ button.eis-local-open:disabled{opacity:.55;cursor:not-allowed}
 .isnet-qa-message.info{background:#eef5ff;color:#244a79}
 .isnet-qa-pass{display:flex;align-items:center;gap:7px;padding:10px;border-radius:8px;font-weight:600}
 @media(max-width:650px){.isnet-qa-title{flex-wrap:wrap}.isnet-qa-criteria label{width:100%}.isnet-qa-criteria button{width:100%}}
+
+.isnet-qa-login{display:grid;gap:11px}
+.isnet-qa-login-fields{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.isnet-qa-login-fields label{display:grid;gap:5px;font-size:12px;font-weight:600;min-width:170px;max-width:320px;flex:1}
+.isnet-qa-login-fields input,.isnet-qa-login-fields select{min-height:38px;border:1px solid #aebfd0;border-radius:8px;padding:9px;background:var(--surface,#fff);color:var(--text-primary,#24374c);font-size:13px}
+.isnet-qa-login-fields button{border-radius:8px;background:#194b83;color:#fff;border:0;min-height:38px;padding:9px 12px;font-weight:700;cursor:pointer;font-size:12px}
+.isnet-qa-login-fields button:disabled{opacity:.5;cursor:not-allowed}
+.isnet-qa-alt-link{justify-self:start;font-size:12px;border:0;text-decoration:underline;background:transparent;padding:5px;color:var(--text-primary,#24374c);cursor:pointer}
+@media(max-width:650px){.isnet-qa-login-fields label,.isnet-qa-login-fields button{width:100%;max-width:none}}
