@@ -645,6 +645,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <select value={balanceSort} onChange={(event) => setBalanceSort(event.target.value)} aria-label="Sıralama"><option value="NAME">Ada göre</option><option value="BALANCE_DESC">Bakiye: yüksekten düşüğe</option><option value="BALANCE_ASC">Bakiye: düşükten yükseğe</option><option value="LAST_MOVEMENT_DESC">Son işleme göre</option></select>
         <button type="button" className="primary" onClick={() => setCompanyFormOpen(true)}><CirclePlus size={16} /> Yeni Firma</button>
         <button type="button" onClick={() => openFinance()}><Landmark size={16} /> Finans</button>
+        <button type="button" onClick={() => balanceAudit.open ? setBalanceAudit((current) => ({ ...current, open: false })) : void inspectBalances()} disabled={balanceAudit.loading}><Search size={16} /> {balanceAudit.open ? "Bakiye Denetimini Kapat" : "Bakiye Kaynağını İncele"}</button>
         <button type="button" onClick={loadFirms}><RefreshCcw size={16} /> Yenile</button>
       </header>
 
@@ -655,10 +656,7 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
         <div className={totals.balance >= 0 ? "success" : "negative"}><span>Net bakiye</span><strong>{money(totals.balance)}</strong></div>
       </section>
 
-      <section className="ccw-audit-controls" aria-label="Cari bakiye kaynağı kontrolü">
-        <div><strong>Cari bakiye kaynağı</strong><small>Gerçek açılış bakiyesi, hareketler ve saklanan bakiyeyi karşılaştırın. Bu işlem hiçbir finansal kayıt değiştirmez.</small></div>
-        <button type="button" onClick={() => balanceAudit.open ? setBalanceAudit((current) => ({ ...current, open: false })) : void inspectBalances()}>
-          {balanceAudit.open ? "Denetimi Kapat" : "Bakiye Kaynağını İncele"}
+      {balanceAudit.open ? "Denetimi Kapat" : "Bakiye Kaynağını İncele"}
         </button>
       </section>
 
@@ -722,6 +720,15 @@ export default function CompaniesCurrentWorkspace({ activeMainCompany, refreshKe
               </header>
               <div className="ccw-detail-body">
                 {notice ? <div className="ccw-notice" role="status">{notice}</div> : null}
+                {!detailLoading && movements.length > 0 && Number.isFinite(Number(movements[0]?.balance_after)) &&
+                  Math.abs(Number(movements[0].balance_after) - Number(selected.currentBalance || 0)) >= 0.01 ? (
+                  <div className="ccw-error" role="status">
+                    <CircleAlert size={17} /> Son hareketin kayıtlı bakiyesi {money(movements[0].balance_after)},
+                    firma kartının güncel bakiyesi {money(selected.currentBalance)}.
+                    Açılış veya sonradan yapılan düzeltme farkı açıklayabilir. 
+                    Kaydı değiştirmeden önce yukarıdaki “Bakiye Kaynağını İncele” kontrolünü açın.
+                  </div>
+                ) : null}
                 <div className="ccw-detail-summary">
                   <div><span>Güncel bakiye</span><strong>{money(selected.currentBalance)}</strong><small>{Number(selected.currentBalance || 0) < 0 ? "Firmaya borcumuz" : Number(selected.currentBalance || 0) > 0 ? "Firmadan alacağımız" : "Hesap dengede"}</small></div>
                   <div><span>Takip düzeni</span><strong>{cariLabel(selected)}</strong><small>{recordLabel(selected)}</small></div>
