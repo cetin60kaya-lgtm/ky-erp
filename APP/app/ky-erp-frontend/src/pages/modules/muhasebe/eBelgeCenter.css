@@ -148,3 +148,20 @@
 .eb-inline-pdf-panel>footer span{margin-right:auto;font-size:11px;color:var(--text-secondary,#66778c)}
 .eb-inline-pdf-panel>footer button{padding:7px 12px;border:1px solid #c4d1e0;border-radius:7px;background:#f5f9fd;color:#24466d}
 @media(max-width:700px){.eb-inline-pdf-backdrop{padding:0}.eb-inline-pdf-panel{height:100dvh;width:100vw;border-radius:0}.eb-inline-pdf-panel>header small,.eb-inline-pdf-panel>footer span{display:none}}
+
+/* Arşiv & Çıktı is a document queue, independent of POSTED accounting status. */
+.eb-archive-queue-tools { display:flex; align-items:center; flex-wrap:wrap; gap:11px; padding:12px 14px; margin:10px 0; border:1px solid var(--border-color,#dce2ec); border-radius:12px; background:var(--surface-card,#fff); }
+.eb-archive-queue-tools label { display:inline-flex; align-items:center; gap:7px; font-weight:700; font-size:12px; }
+.eb-archive-queue-tools input[type="checkbox"], .eb-archive-select-row input[type="checkbox"] { width:16px; height:16px; accent-color:var(--primary-color,#2563eb); cursor:pointer; }
+.eb-archive-queue-tools span { display:inline-flex; align-items:center; flex-wrap:wrap; gap:8px; font-weight:700; font-size:12px; }
+.eb-archive-queue-tools small { display:block; flex-basis:100%; color:var(--text-secondary,#64748b); line-height:1.4; }
+.eb-archive-select-row { display:grid; grid-template-columns:34px minmax(0,1fr); align-items:stretch; min-width:0; }
+.eb-archive-select-row > label { display:flex; justify-content:center; align-items:center; border-bottom:1px solid var(--border-color,#e2e8f0); }
+.eb-archive-select-row > .eb-tr { width:100%; min-width:0; }
+.eb-archive-heading { margin-left:34px; }
+@media (max-width:740px) {
+  .eb-archive-queue-tools { align-items:stretch; flex-direction:column; }
+  .eb-archive-queue-tools small { flex-basis:auto; }
+  .eb-archive-select-row { grid-template-columns:29px minmax(0,1fr); }
+  .eb-archive-heading { margin-left:29px; }
+}

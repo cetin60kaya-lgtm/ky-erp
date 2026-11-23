@@ -27,6 +27,9 @@ function fixture() {
       ('dispatch','main','taha','8160150864','OUTGOING','SEVK_IRSALIYE','TRY',1000,'REVIEW_REQUIRED',NULL,NULL),
       ('removed','main','taha','8160150864','OUTGOING','SATIS_FATURA','TRY',888,'REVIEW_REQUIRED',NULL,'2026-01-01'),
       ('othertenant','other','foreign','8160150864','OUTGOING','SATIS_FATURA','TRY',9000,'REVIEW_REQUIRED',NULL,NULL);
+    ALTER TABLE accounting_documents ADD COLUMN issue_date TEXT;
+    ALTER TABLE accounting_documents ADD COLUMN created_at TEXT;
+    UPDATE accounting_documents SET issue_date='2026-11-18',created_at='2026-11-18';
   `);
   const db = {
     prepare(sql: string) {

@@ -16,12 +16,14 @@ export type CompanyInvoiceTotals = {
   postedInvoiceCount: number;
   foreignCurrencyInvoiceCount: number;
   exactTaxMatchedInvoiceCount: number;
+  lastDocumentAt: string;
 };
 export const emptyCompanyInvoiceTotals = (): CompanyInvoiceTotals => ({
   incomingInvoiceTotal: 0, outgoingInvoiceTotal: 0,
   incomingInvoiceCount: 0, outgoingInvoiceCount: 0,
   unpostedInvoiceCount: 0, postedInvoiceCount: 0,
   foreignCurrencyInvoiceCount: 0, exactTaxMatchedInvoiceCount: 0,
+  lastDocumentAt: "",
 });
 export function invoiceTotalsFromRow(row: Row): CompanyInvoiceTotals {
   return {
@@ -33,6 +35,7 @@ export function invoiceTotalsFromRow(row: Row): CompanyInvoiceTotals {
     postedInvoiceCount: val(row.posted_count),
     foreignCurrencyInvoiceCount: val(row.foreign_currency_count),
     exactTaxMatchedInvoiceCount: val(row.exact_tax_match_count),
+    lastDocumentAt: String(row.last_document_at ?? ""),
   };
 }
 
@@ -51,7 +54,7 @@ export async function loadCompanyInvoiceSummaries(db: D1Database, slug: string) 
       GROUP BY tax_key HAVING COUNT(*)=1
     ),
     invoice_rows AS (
-      SELECT d.direction, d.payable_total, d.currency, d.status, d.posted_at,
+      SELECT d.direction, d.payable_total, d.currency, d.status, d.posted_at, d.issue_date, d.created_at,
         COALESCE(direct.id, unique_tax.company_id) AS company_id,
         CASE WHEN direct.id IS NULL AND unique_tax.company_id IS NOT NULL THEN 1 ELSE 0 END tax_match
       FROM accounting_documents d
@@ -76,6 +79,7 @@ export async function loadCompanyInvoiceSummaries(db: D1Database, slug: string) 
       SUM(CASE WHEN posted_at IS NOT NULL OR UPPER(COALESCE(status,''))='POSTED' THEN 1 ELSE 0 END) AS posted_count,
       SUM(CASE WHEN posted_at IS NULL AND UPPER(COALESCE(status,''))<>'POSTED' THEN 1 ELSE 0 END) AS unposted_count,
       SUM(CASE WHEN UPPER(TRIM(COALESCE(currency,'TRY'))) NOT IN ('TRY','TL','TRL','') THEN 1 ELSE 0 END) AS foreign_currency_count,
+      MAX(COALESCE(issue_date,created_at)) AS last_document_at,
       SUM(tax_match) AS exact_tax_match_count
     FROM invoice_rows GROUP BY company_id
   `).bind(slug, slug).all<Row>();

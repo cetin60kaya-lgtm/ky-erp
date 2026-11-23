@@ -1,6 +1,8 @@
 import { writeCurrentAccount } from "./accounting-current-write.ts";
 import { auditCompanyBalance, summarizeCompanyBalanceAudit } from "./accounting-balance-audit";
 import { loadCompanyInvoiceSummaries, emptyCompanyInvoiceTotals } from "./accounting-company-invoice-summary";
+import { listCompanyCanonicalDocuments } from "./accounting-company-documents";
+import { accountingAccess, accountingTenantReadAllowed } from "./accounting-access-policy";
 import { registerAccountingObligationsRoutes } from "./accounting-obligations";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
@@ -1356,6 +1358,22 @@ app.get("/api/muhasebe/cari-bakiye-denetimi", async (c) => {
   } });
 });
 
+// Canonical company files: read-only; never implies a posted debit/credit.
+app.get("/api/muhasebe/firmalar/:id/belgeler", async (c) => {
+  const user = await getAuthenticatedUser(c);
+  if (!user) return c.json(jsonError("UNAUTHORIZED", "Giriş gerekli."), 401);
+  const slug = slugOf(c);
+  if (!slug || !accountingAccess(user, "GET", c.req.path) ||
+      !accountingTenantReadAllowed(user, slug))
+    return c.json(jsonError("FORBIDDEN", "Bu firmanın belgelerini görüntüleme yetkiniz yok."), 403);
+  const id = databaseText(c.req.param("id"));
+  const page = Math.max(1, Number.parseInt(c.req.query("page") || "1", 10) || 1);
+  const pageSize = Math.min(100, Math.max(1, Number.parseInt(c.req.query("pageSize") || "50", 10) || 50));
+  const result = await listCompanyCanonicalDocuments(c.env.DB, slug, id, page, pageSize);
+  if (!result) return c.json(jsonError("COMPANY_NOT_FOUND", "Firma kartı bulunamadı."), 404);
+  return c.json({ ok: true, success: true, data: result });
+});
+
 app.get("/api/muhasebe/firmalar", async (c) => {
   const search = c.req.query("search")?.trim() || "";
   const slug = slugOf(c);
@@ -1398,6 +1416,7 @@ app.get("/api/muhasebe/firmalar", async (c) => {
         address: row.address,
         currentBalance: databaseNumber(row.current_balance),
         invoiceTotals: invoiceOverview?.byCompany.get(companyId) || emptyCompanyInvoiceTotals(),
+        lastDocumentAt: invoiceOverview?.byCompany.get(companyId)?.lastDocumentAt || "",
         invoiceSummaryAvailable: Boolean(invoiceOverview),
         openingBalance: databaseNumber(row.opening_balance),
         isActive: row.is_active !== 0 && row.is_active !== false,

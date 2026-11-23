@@ -12,6 +12,8 @@ import {
   X,
 } from "lucide-react";
 import { apiGet, apiPatch, apiPost } from "../../../utils/api";
+import DocumentSortHeader from "./DocumentSortHeader";
+import { DEFAULT_DOCUMENT_SORT } from "./documentListSort";
 import "./supplierInvoicesWorkspace.css";
 
 const unwrap = (payload) => payload?.data?.data ?? payload?.data ?? payload ?? {};
@@ -137,6 +139,7 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
   const [issues, setIssues] = useState([]);
   const [relations, setRelations] = useState([]);
   const [search, setSearch] = useState("");
+  const [sort, setSort] = useState(DEFAULT_DOCUMENT_SORT);
   const [loading, setLoading] = useState(true);
   const [detailLoading, setDetailLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -163,7 +166,7 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
     setError("");
     try {
       const [invoicePayload, productPayload] = await Promise.all([
-        apiGet("/e-belge/pool", { ...companyParams, filter: "INCOMING_INVOICE", q: search, page: 1, pageSize: 100, _ts: Date.now() }),
+        apiGet("/e-belge/pool", { ...companyParams, filter: "INCOMING_INVOICE", q: search, page: 1, pageSize: 100, sortBy: sort.sortBy, sortDirection: sort.sortDirection, _ts: Date.now() }),
         apiGet("/boyahane/products", { ...companyParams, _ts: Date.now() }),
       ]);
       const invoiceData = unwrap(invoicePayload);
@@ -174,7 +177,7 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
     } finally {
       setLoading(false);
     }
-  }, [activeMainCompany?.slug, companyParams, search]);
+  }, [activeMainCompany?.slug, companyParams, search, sort.sortBy, sort.sortDirection]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => void load(), 160);
@@ -302,7 +305,14 @@ export default function CanonicalSupplierInventoryWorkspace({ activeMainCompany,
 
       <div className="siw-table-wrap">
         <table>
-          <thead><tr><th>Tarih</th><th>Firma</th><th>Fatura No</th><th>Kaynak</th><th>Tutar</th><th>Durum</th><th>Kontrol</th></tr></thead>
+          <thead><tr>
+            <th><DocumentSortHeader label="Tarih" column="DATE" sort={sort} onChange={setSort} /></th>
+            <th><DocumentSortHeader label="Firma" column="PARTY" sort={sort} onChange={setSort} /></th>
+            <th><DocumentSortHeader label="Fatura No" column="DOCUMENT_NO" sort={sort} onChange={setSort} /></th>
+            <th><DocumentSortHeader label="Kaynak" column="SOURCE" sort={sort} onChange={setSort} /></th>
+            <th><DocumentSortHeader label="Tutar" column="TOTAL" sort={sort} onChange={setSort} /></th>
+            <th><DocumentSortHeader label="Durum" column="STATUS" sort={sort} onChange={setSort} /></th><th>Kontrol</th>
+          </tr></thead>
           <tbody>{invoices.map((row) => (
             <tr key={row.id} onClick={() => openInvoice(row)} style={{ cursor: "pointer" }}>
               <td>{dateText(row.issueDate)}</td><td><strong>{row.companyName || "Firma bekliyor"}</strong></td><td>{row.documentNo || "-"}</td><td>{sourceLabel(row)}</td><td>{money(row.payableTotal)}</td><td>{statusLabel(row.status)}</td><td><button type="button" className="siw-secondary-button" onClick={(event) => { event.stopPropagation(); openInvoice(row); }}>Aç</button></td>

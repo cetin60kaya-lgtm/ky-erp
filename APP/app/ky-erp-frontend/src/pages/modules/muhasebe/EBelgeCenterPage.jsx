@@ -34,7 +34,7 @@ import {
   uploadEBelge,
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
-import EBelgeAccountingPrint from "./EBelgeAccountingPrint";
+import EBelgeAccountingPrint, { isIncomingAccountingInvoice } from "./EBelgeAccountingPrint";
 import EBelgeManualFallback from "./EBelgeManualFallback";
 import {eBelgeFileKey,splitEBelgeUploadQueue} from "./eBelgeUploadQueue";
 import {selectOriginalEBelgeFiles} from "./eBelgeOriginalFiles";
@@ -616,15 +616,18 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [printStatuses,setPrintStatuses]=useState({});
   const [printStatusError,setPrintStatusError]=useState("");
   const [onlyPrintPending,setOnlyPrintPending]=useState(false);
+  const [archiveType, setArchiveType] = useState("ALL");
+  const [archiveSelectedIds, setArchiveSelectedIds] = useState([]);
+  const [archiveQueue, setArchiveQueue] = useState({ items: [], index: 0 });
   const mainCompanySlug=activeMainCompany?.slug||activeMainCompany?.id||"";
 
   const effectiveFilter=FOUR_DOCUMENT_FILTERS[view]||(
-   view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?"HISTORY":view==="pool"?filter:"ALL");
+   view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?archiveType:view==="pool"?filter:"ALL");
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
     filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
-    ...(view==="incoming-invoices"&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection]);
+    ...((view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&onlyPrintPending?{printStatus:"PENDING"}:{})
+  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
   const sortPoolBy = (column) => {
     if (sortBy === column) setSortDirection((old) => old === "ASC" ? "DESC" : "ASC");
@@ -648,8 +651,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       return;
     }
     setPool(data || { items: [], stats: {}, total: 0 });
-    if(view==="incoming-invoices"){
-      const ids=(data?.items||[]).map(row=>row.id).filter(Boolean);
+    if(view==="incoming-invoices"||view==="archive"){
+      const ids=(data?.items||[])
+        .filter(row=>view==="incoming-invoices"||isIncomingAccountingInvoice(row))
+        .map(row=>row.id).filter(Boolean);
       if(ids.length){
         try{
           const response=await getEBelgeAccountingPrintStatuses(ids,mainCompanySlug);
@@ -805,7 +810,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     matching: ["Eşleştirmeler", "Fatura–irsaliye, firma, ürün ve LOT eşleşmesi bekleyen kayıtları sonuçlandırın."],
     issues: ["Onay & Sorunlar", "Gerçek hata, eksik eşleşme ve son onay bekleyen belgeleri tek yerde çözün."],
     workflow: ["İş Akışları", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
-    archive: ["Arşiv & Çıktı", "Muhasebeleşen belgeleri, dosya eklerini ve arşiv durumunu tek kaynaktan inceleyin."],
+    archive: ["Arşiv & Çıktı", "Gelen/giden fatura ve irsaliyeleri seçin; orijinal PDF’leri sıra ile açın ve çıktı durumlarını izleyin."],
     integrations: ["Entegrasyonlar", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
     "visual-templates": ["Görsel Şablonlar", "Düzenleyen VKN/TCKN ve belge türüne göre XML + orijinal PDF örneğini tanıtın; şablonu düzenleyip sonraki XML'lere uygulayın."],
   }[view];
@@ -813,6 +818,30 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const poolHint = viewMeta[1];
   const showPool = poolViews.includes(view);
   const pageCount = Math.max(1, Math.ceil(Number(pool.total || 0) / Math.max(1, Number(pool.pageSize || 50))));
+  const pageSelected = rows.filter(row => archiveSelectedIds.includes(row.id));
+  const beginArchiveQueue = () => {
+    if (!pageSelected.length) return;
+    const items = pageSelected.map(row => ({ id: row.id, documentNo: row.document_no }));
+    setArchiveQueue({ items, index: 0 });
+    setSelectedId(items[0].id);
+    setAutoPdfDocumentId(items[0].id);
+  };
+  const closeArchiveDocument = () => {
+    if (archiveQueue.items.length && archiveQueue.index < archiveQueue.items.length - 1) {
+      const index = archiveQueue.index + 1;
+      setArchiveQueue(current => ({ ...current, index }));
+      const id = archiveQueue.items[index].id;
+      setSelectedId(id); setAutoPdfDocumentId(id);
+    } else {
+      setArchiveQueue({ items: [], index: 0 });
+      setSelectedId(""); setAutoPdfDocumentId("");
+    }
+  };
+  useEffect(() => {
+    setArchiveSelectedIds([]);
+    setArchiveQueue({ items: [], index: 0 });
+  }, [mainCompanySlug, view, archiveType, query, from, to, statusFilter, page, sortBy, sortDirection]);
+
 
   return <section className="eb-page">
     <div className="eb-company-context" aria-label={`Belge sahibi: ${companyName}`}><span>Belge sahibi</span><strong>{companyName}</strong></div>
@@ -898,7 +927,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint} · XML, PDF ve manuel belgeler aynı havuzda korunur.</span></div><span>{Number(pool.total || 0)} kayıt · Sayfa {page}/{pageCount}</span></div>
         <div className="eb-pool-toolbar">
           <div className="eb-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Belge no, firma veya VKN ara" /></div>
-          {view==="incoming-invoices"&&<label className="eb-print-pending-filter">
+          {(view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&<label className="eb-print-pending-filter">
             <input type="checkbox" checked={onlyPrintPending}
               onChange={e=>{setOnlyPrintPending(e.target.checked);setPage(1)}}/>
             Yalnız Çıktı Bekleyenler
@@ -908,32 +937,56 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
             <option value="REVIEW_REQUIRED">Kontrol Bekliyor</option><option value="READY_FOR_APPROVAL">Onaya Hazır</option>
             <option value="APPROVED">Onaylandı</option><option value="POSTED">Muhasebeleşti</option>
           </select></label>
+          {view === "archive" && <label>Belge türü<select value={archiveType} onChange={event=>{setArchiveType(event.target.value);setOnlyPrintPending(false);setPage(1);}}>
+            <option value="ALL">Tüm gelen/giden belgeler</option><option value="INCOMING_INVOICE">Gelen Faturalar</option>
+            <option value="OUTGOING_INVOICE">Giden Faturalar</option><option value="INCOMING_DISPATCH">Gelen İrsaliyeler</option>
+            <option value="OUTGOING_DISPATCH">Giden İrsaliyeler</option>
+          </select></label>}
           {view === "pool" && <label>Göster<select value={filter} onChange={(event) => { setFilter(event.target.value); setPage(1); }}>{FILTERS.map(([key, label]) => <option value={key} key={key}>{label}</option>)}</select></label>}
           <label>Başlangıç<input type="date" value={from} onChange={(event) => { setFrom(event.target.value); setPage(1); }} /></label>
           <label>Bitiş<input type="date" value={to} onChange={(event) => { setTo(event.target.value); setPage(1); }} /></label>
         </div>
-        {view==="incoming-invoices"&&printStatusError&&<div className="eb-error" role="alert">{printStatusError}</div>}
+        {(view==="incoming-invoices"||view==="archive")&&printStatusError&&<div className="eb-error" role="alert">{printStatusError}</div>}
+        {view==="archive"&&<div className="eb-archive-queue-tools" aria-label="Arşiv toplu çıktı sırası">
+          <label><input type="checkbox" checked={rows.length>0&&rows.every(row=>archiveSelectedIds.includes(row.id))}
+             onChange={event=>setArchiveSelectedIds(event.target.checked?rows.map(row=>row.id):[])} disabled={!rows.length}/> Bu sayfadaki belgeleri seç</label>
+          <button type="button" className="eb-primary" disabled={!pageSelected.length||busy}
+             onClick={beginArchiveQueue}>Seçili {pageSelected.length} belgeyi sıra ile aç / yazdır</button>
+          {archiveQueue.items.length>0&&<span role="status">Çıktı sırası {archiveQueue.index+1}/{archiveQueue.items.length} · {archiveQueue.items[archiveQueue.index]?.documentNo||""}
+            <button type="button" onClick={()=>{setArchiveQueue({items:[],index:0});setSelectedId("");setAutoPdfDocumentId("");}}>Sırayı Bitir</button>
+          </span>}
+          <small>Orijinal PDF’ler ayrı ayrı açılır; her belgenin yazdırılması Chrome’da onaylanır. Yazıcıdan çıktı alınmadan durum otomatik “Çıktı Alındı” olmaz.</small>
+        </div>}
         {busy && !rows.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Belgeler yükleniyor</div> : rows.length ? <div className="eb-pool-table-scroll"><div className="eb-table">
-          <div className="eb-tr eb-th">
+          <div className={`eb-tr eb-th ${view==="archive"?"eb-archive-heading":""}`}>
             {renderPoolSort("Belge", "DOCUMENT_NO")}
             {renderPoolSort("Firma / Cari", "PARTY")}
             {renderPoolSort("Tarih", "DATE")}
-            {renderPoolSort(view==="incoming-invoices"?"Muhasebe Çıktısı":"Kaynak", view==="incoming-invoices"?null:"SOURCE")}
+            {renderPoolSort(view==="incoming-invoices"?"Muhasebe Çıktısı":view==="archive"?"Kaynak / Çıktı":"Kaynak", view==="incoming-invoices"||view==="archive"?null:"SOURCE")}
             {renderPoolSort("Toplam", "TOTAL")}
             {renderPoolSort("Kontrol", "STATUS")}
           </div>
           {rows.map((row) => {
             const hasIssue = Number(row.issue_count || 0) > 0;
             const posted = String(row.status || "").toUpperCase() === "POSTED";
-            return <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span><span>{dateText(row.issue_date)}</span><span>{view==="incoming-invoices"?
+            const content = <button type="button" className="eb-tr" key={row.id} onClick={() => {setArchiveQueue({items:[],index:0});setAutoPdfDocumentId("");setSelectedId(row.id);}}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span><span>{dateText(row.issue_date)}</span><span>{view==="incoming-invoices"?
                  (printStatusError?<small>Durum okunamadı</small>:
                   printStatuses[row.id]?.status==="PRINTED"?
                    <strong className="eb-print-mark-yes">Çıktı Alındı</strong>:
                   printStatuses[row.id]?.status==="PENDING"?
                    <strong className="eb-print-mark-no">Çıktı Bekliyor</strong>:
                    <small>Durum yükleniyor</small>):
-                 <><small>{sourceLabel(row.source_type)}</small><em>{row.archive_status||"-"}</em></>}
+                 <><small>{sourceLabel(row.source_type)}</small><em>{view==="archive"&&isIncomingAccountingInvoice(row)
+                  ? (printStatusError ? "Çıktı durumu okunamadı" : printStatuses[row.id]?.status==="PRINTED" ? "Çıktı alındı" : printStatuses[row.id]?.status==="PENDING" ? "Çıktı bekliyor" : "Durum yükleniyor")
+                  : (row.archive_status || "Orijinal PDF arşivde")}</em></>}
                  </span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
+            return view==="archive" ? <div className="eb-archive-select-row" key={row.id}>
+              <label aria-label={`${row.document_no||"Belge"} seç`}>
+                <input type="checkbox" checked={archiveSelectedIds.includes(row.id)}
+                  onChange={event=>setArchiveSelectedIds(current=>event.target.checked?[...new Set([...current,row.id])]:current.filter(id=>id!==row.id))}/>
+              </label>
+              {content}
+            </div> : content;
           })}
         </div></div> : <Empty title="Bu görünümde belge yok" text="Tarih aralığını değiştirin veya yeni belge yükleyin." />}
         {Number(pool.total || 0) > 0 ? <nav className="eb-pool-pagination" aria-label="e-Belge sayfaları">
@@ -984,7 +1037,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           }
         });
       }}
-      onClose={()=>{setSelectedId("");setAutoPdfDocumentId("");}}
+      onClose={closeArchiveDocument}
       onChanged={showPool ? loadPool : loadDashboard} />
   </section>;
 }
