@@ -34,7 +34,7 @@ import {
   uploadEBelge,
 } from "../../../services/eBelgeApi";
 import EBelgeLineReview from "./EBelgeLineReview";
-import EBelgeAccountingPrint from "./EBelgeAccountingPrint";
+import EBelgeAccountingPrint, { isIncomingAccountingInvoice } from "./EBelgeAccountingPrint";
 import EBelgeManualFallback from "./EBelgeManualFallback";
 import {eBelgeFileKey,splitEBelgeUploadQueue} from "./eBelgeUploadQueue";
 import {selectOriginalEBelgeFiles} from "./eBelgeOriginalFiles";
@@ -626,7 +626,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
     filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
-    ...(view==="incoming-invoices"&&onlyPrintPending?{printStatus:"PENDING"}:{})
+    ...((view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&onlyPrintPending?{printStatus:"PENDING"}:{})
   }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
   const sortPoolBy = (column) => {
@@ -653,7 +653,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setPool(data || { items: [], stats: {}, total: 0 });
     if(view==="incoming-invoices"||view==="archive"){
       const ids=(data?.items||[])
-        .filter(row=>view==="incoming-invoices"||(String(row.direction||"").toUpperCase()==="INCOMING"&&/FATURA|ARSIV|INVOICE|IADE/i.test(String(row.document_type||""))))
+        .filter(row=>view==="incoming-invoices"||isIncomingAccountingInvoice(row))
         .map(row=>row.id).filter(Boolean);
       if(ids.length){
         try{
@@ -927,7 +927,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <div className="eb-section-title"><div><strong>{poolTitle}</strong><span>{poolHint} · XML, PDF ve manuel belgeler aynı havuzda korunur.</span></div><span>{Number(pool.total || 0)} kayıt · Sayfa {page}/{pageCount}</span></div>
         <div className="eb-pool-toolbar">
           <div className="eb-search"><Search size={17} /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Belge no, firma veya VKN ara" /></div>
-          {view==="incoming-invoices"&&<label className="eb-print-pending-filter">
+          {(view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&<label className="eb-print-pending-filter">
             <input type="checkbox" checked={onlyPrintPending}
               onChange={e=>{setOnlyPrintPending(e.target.checked);setPage(1)}}/>
             Yalnız Çıktı Bekleyenler
@@ -937,7 +937,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
             <option value="REVIEW_REQUIRED">Kontrol Bekliyor</option><option value="READY_FOR_APPROVAL">Onaya Hazır</option>
             <option value="APPROVED">Onaylandı</option><option value="POSTED">Muhasebeleşti</option>
           </select></label>
-          {view === "archive" && <label>Belge türü<select value={archiveType} onChange={event=>{setArchiveType(event.target.value);setPage(1);}}>
+          {view === "archive" && <label>Belge türü<select value={archiveType} onChange={event=>{setArchiveType(event.target.value);setOnlyPrintPending(false);setPage(1);}}>
             <option value="ALL">Tüm gelen/giden belgeler</option><option value="INCOMING_INVOICE">Gelen Faturalar</option>
             <option value="OUTGOING_INVOICE">Giden Faturalar</option><option value="INCOMING_DISPATCH">Gelen İrsaliyeler</option>
             <option value="OUTGOING_DISPATCH">Giden İrsaliyeler</option>
@@ -962,7 +962,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
             {renderPoolSort("Belge", "DOCUMENT_NO")}
             {renderPoolSort("Firma / Cari", "PARTY")}
             {renderPoolSort("Tarih", "DATE")}
-            {renderPoolSort(view==="incoming-invoices"?"Muhasebe Çıktısı":"Kaynak", view==="incoming-invoices"?null:"SOURCE")}
+            {renderPoolSort(view==="incoming-invoices"?"Muhasebe Çıktısı":view==="archive"?"Kaynak / Çıktı":"Kaynak", view==="incoming-invoices"||view==="archive"?null:"SOURCE")}
             {renderPoolSort("Toplam", "TOTAL")}
             {renderPoolSort("Kontrol", "STATUS")}
           </div>
@@ -976,7 +976,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
                   printStatuses[row.id]?.status==="PENDING"?
                    <strong className="eb-print-mark-no">Çıktı Bekliyor</strong>:
                    <small>Durum yükleniyor</small>):
-                 <><small>{sourceLabel(row.source_type)}</small><em>{row.archive_status||"-"}</em></>}
+                 <><small>{sourceLabel(row.source_type)}</small><em>{view==="archive"&&isIncomingAccountingInvoice(row)
+                  ? (printStatusError ? "Çıktı durumu okunamadı" : printStatuses[row.id]?.status==="PRINTED" ? "Çıktı alındı" : printStatuses[row.id]?.status==="PENDING" ? "Çıktı bekliyor" : "Durum yükleniyor")
+                  : (row.archive_status || "Orijinal PDF arşivde")}</em></>}
                  </span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
             return view==="archive" ? <div className="eb-archive-select-row" key={row.id}>
               <label aria-label={`${row.document_no||"Belge"} seç`}>
