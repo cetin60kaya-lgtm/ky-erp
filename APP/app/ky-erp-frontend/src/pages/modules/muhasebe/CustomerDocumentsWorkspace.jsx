@@ -4,6 +4,8 @@ import { getEBelgePool } from "../../../services/eBelgeApi";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 
 import { DOCUMENT_PAGE_SIZE, documentPageMeta } from "./documentPageMeta";
+import DocumentSortHeader from "./DocumentSortHeader";
+import { DEFAULT_DOCUMENT_SORT } from "./documentListSort";
 import "./documentPagination.css";
 
 const money = (value, currency = "TRY") => Number(value || 0).toLocaleString("tr-TR", { style: "currency", currency: currency || "TRY", maximumFractionDigits: 2 });
@@ -22,6 +24,7 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, onInvoiceMail, r
   const [state, setState] = useState({ loading: true, error: "", items: [], pagination: documentPageMeta() });
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState(DEFAULT_DOCUMENT_SORT);
   const requestSeq = useRef(0);
 
   const params = useMemo(() => ({
@@ -31,7 +34,9 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, onInvoiceMail, r
     q: query,
     page,
     pageSize: DOCUMENT_PAGE_SIZE,
-  }), [activeMainCompany?.id, activeMainCompany?.slug, page, query]);
+    sortBy: sort.sortBy,
+    sortDirection: sort.sortDirection,
+  }), [activeMainCompany?.id, activeMainCompany?.slug, page, query, sort.sortBy, sort.sortDirection]);
 
   const load = useCallback(async () => {
     const requestId = ++requestSeq.current;
@@ -65,7 +70,14 @@ function OutgoingInvoicesPanel({ activeMainCompany, openModule, onInvoiceMail, r
     {state.error ? <div className="accounting-controlled-state"><strong>Giden faturalar yüklenemedi.</strong><span>{state.error}</span></div> : null}
     <section className="accounting-table-card">
       {state.error ? null : state.loading ? <div className="accounting-list-skeleton">{Array.from({ length: 6 }, (_, index) => <span key={index} />)}</div> : state.items.length ? (
-        <div className="accounting-table-wrap"><table><thead><tr><th>Tarih</th><th>Müşteri</th><th>Fatura No</th><th>Matrah</th><th>KDV</th><th>Toplam</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>
+        <div className="accounting-table-wrap"><table><thead><tr>
+            <th><DocumentSortHeader label="Tarih" column="DATE" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+            <th><DocumentSortHeader label="Müşteri" column="PARTY" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+            <th><DocumentSortHeader label="Fatura No" column="DOCUMENT_NO" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+            <th>Matrah</th><th>KDV</th>
+            <th><DocumentSortHeader label="Toplam" column="TOTAL" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th>
+            <th><DocumentSortHeader label="Durum" column="STATUS" sort={sort} onChange={(next)=>{setSort(next);setPage(1);}} /></th><th>İşlem</th>
+          </tr></thead><tbody>
           {state.items.map((row) => <tr key={row.id}><td>{dateText(row.issue_date)}</td><td><strong>{row.party_name || "Firma eşleşmesi bekliyor"}</strong></td><td>{row.document_no || "-"}</td><td>{money(row.subtotal, row.currency)}</td><td>{money(row.tax_total, row.currency)}</td><td><strong>{money(row.payable_total, row.currency)}</strong></td><td>{statusText(row.status)}</td><td><button type="button" onClick={() => openModule?.("e-belge", { tabKey: "giden-faturalar", actionContext: { documentId: row.id } })}>Belgeyi Aç</button> {String(row.document_no || "").toUpperCase().startsWith("HKN") ? <button type="button" onClick={() => onInvoiceMail?.(row)}>Fatura Maili</button> : null}</td></tr>)}
         </tbody></table></div>
       ) : <div className="accounting-empty"><FileText size={26} /><strong>Giden fatura bulunamadı.</strong><span>Satış faturaları e-Belge canonical havuzuna ulaştığında burada otomatik görünür.</span></div>}
