@@ -1,5 +1,15 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 23.11.2026 — Muhasebe tek TAHA ilişkiler denetimi ve firma fatura/cari görünümü, PR #653
+
+- **Kök neden:** Kullanıcı canlıda art arda `COMPANY_SCAN_METADATA_FAILED` ve `COMPANY_SCAN_SCHEMA_BATCH_FAILED` gördü. Eski D1 metadata kodu korelasyonlu veya toplu `PRAGMA` sorgularını kullanıyordu; önceki PR yayınları tek başına gerçek birleştirme kabulünü sağlamadı. `accounting-company-link-scan.ts` tek kanonik `sqlite_master(name,sql)` tabanlı, PRAGMA içermeyen, fail-closed tarayıcıyla baştan yazıldı. Hard Sil ve güvenli birleştirme aynı tarayıcıyı kullanır; ayrı tehlikeli silme yolu eklenmedi.
+- **Fatura / cari ayrımı:** `companies.current_balance` onaylı cari defteridir. `accounting_documents` gelen/giden brüt fatura tutarları otomatik cari hareketi değildir. `accounting-company-invoice-summary.ts` firmaya doğrudan ID veya tekil VKN/TCKN ile eşleşen TRY faturalarının tutarını ve posted/unposted adetlerini salt-okunur hesaplar; mükerrer veya eşleşmeyen kayıtları otomatik dağıtmaz. Firmalar & Cari'de işlem görmüş cari ve belge brüt toplamı ayrı ayrı gösterilir.
+- **Kod:** [PR #653](https://github.com/cetin60kaya-lgtm/ky-erp/pull/653) merge `19d8768b3791cfbe616a41c258c6167052397271`. CI [#45262459159](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45262459159) Frontend lint/test/build ve Worker typecheck/test/build **SUCCESS**.
+- **Canlı yayın:** Worker attempt 66 [#45262797570](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45262797570) **SUCCESS**, Cloudflare deploy / read-only schema / API health PASS, migration adımları SKIPPED. Pages attempt 11 [#45262807896](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45262807896) **SUCCESS**, deploy ve canlı bundle kabulü PASS. X üzerinden kyerp.net ve api.kyerp.net erişimi HTTP 200.
+- **Kalan canlı kabul:** Gerçek yetkili tarayıcıda kısa TAHA → korunacak ana TAHA → `Bağlantıları Kontrol Et` sonucu; Firma & Cari'de bağlı gelen/giden fatura brüt toplamlarının görünmesi, eşleşmeyen belge uyarısı, saklanan cari bakiye ve hesap farkı. **Gerçek firma birleştirme, Hard Sil, bakiye düzeltme, XML/Fatura muhasebeleştirme, KDV, LOT, resmî belge gönderimi yapılmadı.** Kod / CI / deploy PASS, gerçek kullanıcı kayıt kabulü henüz PASS değil.
+- Ayrıntı: `DOCS/KY_MUHASEBE_TAHA_TEK_TARAMA_FATURA_KAYNAK_20261123.md`.
+
+
 ## 23.11.2026 — Denetim Merkezi Hakan Emp Drive/File Hub klasör kontrolü ve test kapısı
 
 - **Gerçek Drive kontrolü:** Hakan Emp → DENETİM klasöründe eski 5 üst klasör korundu; eksik 9 üst klasör ve standart/kimyasal/marka için 7 yeni alt klasör oluşturulup listeleme ile doğrulandı. Son durum 14 üst klasör; Standartlar'da LCW/ZDHC/GOTS, Kimyasal Envanter ve Deklarasyonlar'da 3 alt klasör, Denetim Evrakları'nda LCW/FAMA/Disney.
