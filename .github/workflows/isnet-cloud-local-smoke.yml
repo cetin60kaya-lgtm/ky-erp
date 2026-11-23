@@ -38,6 +38,14 @@ jobs:
           npm run build
           npx wrangler deploy --dry-run --config wrangler.production-local.jsonc
 
+      - name: Tek ekran frontend + API test/build (production deploy YOK)
+        working-directory: APP/app/ky-erp-frontend
+        run: |
+          npm ci
+          npm run lint
+          npm test
+          npm run build
+
       - name: İzole yerel D1 şemasını kur
         working-directory: APP/cloud/ky-erp-api
         run: |
