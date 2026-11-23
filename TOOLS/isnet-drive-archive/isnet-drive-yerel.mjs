@@ -40,7 +40,7 @@ async function request(path, init = {}, jar = state.jar) {
   const redirectPath=String(response.headers.get("location")||"");
   if(state.connected && (response.status===401 || response.status===403 ||
       (response.status>=300 && response.status<400 &&
-       redirectPath.toLowerCase().startsWith("/account/login"))){
+       redirectPath.toLowerCase().startsWith("/account/login")))){
     state.connected=false;
     state.documents=[];
     syncJob.monitor=false;
