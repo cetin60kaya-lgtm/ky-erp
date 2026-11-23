@@ -27,9 +27,18 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
       }
       setHealth({ phase: "ready", detail });
     } catch {
-      // Browser permission denial and a stopped local service are different
-      // causes. Neither is interpreted as an İşNet login failure.
-      setHealth({ phase: "unreachable", detail: null });
+      // Transitional 1.5.10 local agent has no /health route. A no-cors
+      // probe may establish transport reachability, but NOT service identity.
+      // The legacy panel is visibly labelled unverified until Setup 1.5.11.
+      try {
+        const legacy = await fetch(LOCAL_ARCHIVE_URL, {
+          method: "GET", mode: "no-cors", credentials: "omit", cache: "no-store",
+          signal: controller.signal,
+        });
+        setHealth({ phase: legacy.type === "opaque" ? "legacy" : "unreachable", detail: null });
+      } catch {
+        setHealth({ phase: "unreachable", detail: null });
+      }
     } finally {
       clearTimeout(deadline);
     }
@@ -42,9 +51,12 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
   }, [probe]);
 
   const connected = health.phase === "ready";
+  const legacyReachable = health.phase === "legacy";
+  const canShowFrame = connected || legacyReachable;
   const portalReady = connected && health.detail?.connected === true;
   const syncRunning = connected && health.detail?.running === true;
   const statusText = !enabled ? "Firma entegrasyonu pasif"
+    : legacyReachable ? "Eski 8791 sürümü yanıt verdi · kimlik doğrulaması eksik"
     : !connected ? health.phase === "checking" ? "Yerel servis kontrol ediliyor" : "Yerel bağlantı kontrolü gerekli"
     : !portalReady ? "Yerel servis hazır · İşNet oturumu bekleniyor"
     : syncRunning ? "Belgeler aktarılıyor" : "İşNet oturumu hazır";
@@ -63,14 +75,15 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
       {connected ? <CheckCircle2 size={19}/> : <AlertTriangle size={19}/>}
       <div><strong>{statusText}</strong>
         <small>{connected ? (syncRunning ? "İşlem yerel serviste sürüyor; ekran kapansa da job tamamlanabilir." : "8791 doğrulandı; firma oturumu ve arşiv kontrolü aşağıdadır.")
+          : legacyReachable ? "Eski servis HTTP yanıtı veriyor; servis kimliği ve oturumu 1.5.11 sağlık protokolüyle doğrulanmalı."
           : "Servis kapalı, arşiv yolu henüz yetkilendirilmemiş veya Chrome yerel ağ izni verilmemiş olabilir."}</small>
       </div>
-      <button type="button" className="eis-retry" onClick={() => { void probe(); if (connected) setFrameVersion(x => x + 1); }} disabled={!enabled}>
+      <button type="button" className="eis-retry" onClick={() => { void probe(); if (canShowFrame) setFrameVersion(x => x + 1); }} disabled={!enabled}>
         <RefreshCw size={15}/> Kontrol Et
       </button>
     </div>
 
-    {!connected && enabled && <div className="eis-connection-guide" role="alert">
+    {!canShowFrame && enabled && <div className="eis-connection-guide" role="alert">
       <strong>8791 yerel servisi yanıt vermiyor veya Chrome erişimine izin vermiyor.</strong>
       <p>KY ERP Masaüstü Setup ile bir kez verilen arşiv ve Windows başlangıç izinlerini koruyun. Bu bilgisayarda yerel 8791 servisi çalışmalı; Chrome site ayarlarında yalnız <b>kyerp.net</b> için cihaz/yerel ağ erişimine izin verilmeli. Güvenlik korumalarını kapatmayın.</p>
       <small>İşNet şifresi hatası değildir. Fatura ve dosyalar silinmez; bağlantı dönünce kaldığınız yerden devam edebilirsiniz.</small>
@@ -80,7 +93,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
       {DIRECTIONS.map(title => <div key={title}><FileText size={16}/><span><strong>{title}</strong><small>Orijinal XML + PDF</small></span></div>)}
     </div>
 
-    {connected && <div className="eis-local-embedded eis-single-frame">
+    {canShowFrame && <div className="eis-local-embedded eis-single-frame">
       <header>
         <strong><Monitor size={16}/> İşNet arşiv kontrol paneli</strong>
         <small>Firma seçimi · Tarih aralığı · Dört yönü al · Arşiv durumu</small>
