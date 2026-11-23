@@ -36,6 +36,12 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  const [showFindingForm,setShowFindingForm]=useState(false),[findingForm,setFindingForm]=useState(emptyFindingForm),[selectedFindingId,setSelectedFindingId]=useState(""),[capaDetail,setCapaDetail]=useState(null),[capaForm,setCapaForm]=useState({immediateCorrection:"",rootCause:"",correctiveAction:"",preventiveAction:"",verificationNote:"",verificationStatus:"OPEN"}),[capaFile,setCapaFile]=useState(null);
  const [profileForm,setProfileForm]=useState({name:"",code:"",version:"CUSTOM",description:""}),[selectedProfile,setSelectedProfile]=useState(""),[requirementForm,setRequirementForm]=useState({title:"",code:"",category:"Genel",ownerDepartment:"",warningDays:10,criticalDays:3,mandatory:true}),[applicabilityForm,setApplicabilityForm]=useState({requirementId:"",title:"",state:"APPLICABLE",reason:""});
   const [linkRequirementId,setLinkRequirementId]=useState("");
+  const [chemicalProducts,setChemicalProducts]=useState([]);
+  const [selectedChemicalId,setSelectedChemicalId]=useState("");
+  const [chemicalEvidence,setChemicalEvidence]=useState(null);
+  const [chemicalEvidenceKind,setChemicalEvidenceKind]=useState("MSDS");
+  const [chemicalListName,setChemicalListName]=useState("");
+  const [chemicalSourceRevision,setChemicalSourceRevision]=useState("");
   const [newVersionNote,setNewVersionNote]=useState("");
   const [newVersionSigned,setNewVersionSigned]=useState(false);
  const [settings,setSettings]=useState({defaultWarningDays:10,secondaryWarningDays:30,criticalWarningDays:3,aiAutoReview:true});
@@ -46,11 +52,13 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
    const requests=[apiGet("/compliance/dashboard",{}, {timeoutMs:15000,forceFresh:true})];
    if(section==="OVERVIEW")requests.push(apiGet("/compliance/tasks",{}, {timeoutMs:10000,forceFresh:true}),apiGet("/compliance/system-evidence-candidates",{}, {timeoutMs:12000,forceFresh:true}));
    if(["STANDARDS","DOCUMENTS"].includes(section))requests.push(apiGet("/compliance/profiles",{}, {timeoutMs:15000,forceFresh:true}));
+    if(section==="DOCUMENTS")requests.push(apiGet("/compliance/chemicals",{}, {timeoutMs:12000,forceFresh:true}));
    if(section==="CALENDAR")requests.push(apiGet("/compliance/calendar",{}, {timeoutMs:10000,forceFresh:true}));
    if(section==="SETTINGS")requests.push(apiGet("/compliance/settings",{}, {timeoutMs:10000,forceFresh:true}));
    const res=await Promise.all(requests),d=data(res[0],EMPTY_DASH);setDash(d);
    if(section==="OVERVIEW"){setTasks(data(res[1],[]));setSystemCandidates(data(res[2],[]))}
    if(["STANDARDS","DOCUMENTS"].includes(section)){const rows=data(res[1],[]);setProfiles(rows);setSelectedProfile(p=>p||rows[0]?.id||"")}
+    if(section==="DOCUMENTS")setChemicalProducts(data(res[2],[]));
    if(section==="CALENDAR")setCalendar(data(res[1],[]));
    if(section==="SETTINGS")setSettings(v=>({...v,...data(res[1],{})}));
    if(["AUDITS","AUDITOR_ROOM"].includes(section)&&!selectedAuditId&&d.audits?.[0]?.id)setSelectedAuditId(d.audits[0].id);
@@ -134,6 +142,32 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  try{await apiPost(`/compliance/documents/${selectedDocId}/requirements`,{requirementIds:[linkRequirementId]});setLinkRequirementId("");await openDocument(selectedDocId)}
  catch(e){setMessage("Hata: "+(e?.message||"Kriter bağlantısı kaydedilemedi."))}finally{setBusy(false)}
  }
+ async function loadChemicalEvidence(productId){
+  setSelectedChemicalId(productId);setChemicalEvidence(null);
+  if(!productId)return;
+  try{const r=await apiGet(`/compliance/chemicals/${productId}/evidence`,{}, {forceFresh:true});setChemicalEvidence(data(r,null))}
+  catch(e){setMessage("Hata: "+(e?.message||"Ürün belgeleri yüklenemedi."))}
+ }
+ async function attachDocumentToChemical(){
+  const assetId=docDetail?.document?.file_asset_id;
+  if(!selectedChemicalId||!assetId)return setMessage("Hata: Önce ürün ve yüklenmiş evrak seçin.");
+  const product=chemicalProducts.find(p=>String(p.id)===String(selectedChemicalId));
+  setBusy(true);
+  try{
+   const r=await apiPost(`/compliance/chemicals/${selectedChemicalId}/evidence`,{
+    fileAssetId:assetId,kind:chemicalEvidenceKind,listProductName:["ZDHC","GOTS","LCW_INVENTORY"].includes(chemicalEvidenceKind)?(chemicalListName||product?.productName||""):"",
+    sourceRevision:chemicalSourceRevision});
+   setMessage("Ürün kanıtı incelemeye alındı; otomatik uygunluk onayı verilmez.");
+   await loadChemicalEvidence(selectedChemicalId);
+  }catch(e){setMessage("Hata: "+(e?.message||"Ürün/evrak bağlantısı kurulamadı."))}finally{setBusy(false)}
+ }
+ async function verifyChemicalEvidence(assetId){
+  if(!selectedChemicalId)return;setBusy(true);
+  try{await apiPost(`/compliance/chemicals/${selectedChemicalId}/evidence/${assetId}/verify`,{listConfirmed:true});
+  setMessage("Kanıt yönetici tarafından doğrulandı. Ürün genel kullanım onayı ayrıca gereklidir.");
+  await loadChemicalEvidence(selectedChemicalId)}
+  catch(e){setMessage("Hata: "+(e?.message||"Ürün kanıtı doğrulanamadı."))}finally{setBusy(false)}
+ }
  async function saveSettings(e){e.preventDefault();setBusy(true);try{await apiPut("/compliance/settings",settings);setMessage("Denetim ayarları kaydedildi.")}catch(e2){setMessage("Hata: "+(e2?.message||"Ayarlar kaydedilemedi."))}finally{setBusy(false)}}
 
  const s=dash.summary||{};
@@ -191,6 +225,17 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  <label><input type="checkbox" checked={Boolean(editDoc?.auditorShareApproved)} onChange={e=>setEditDoc(v=>({...v,auditorShareApproved:e.target.checked}))}/> Denetçi dış paylaşım izni (kişisel veri içermeyen belge)</label>
  </div><p><strong>Not:</strong> Bu bilgiler imza ve onay sürecini kaydeder; yetkili imzası yerine geçmez.</p></section>
      <div className="detail-section"><h4>Standart ve Kriter Bağlantıları</h4><div className="requirement-scroll">{(docDetail.links||[]).map(r=><div key={r.id} className="requirement-row"><b>{r.profile_name} · {r.requirement_code}</b><span>{r.requirement_title}</span></div>)}</div><div className="inline-upload"><select value={linkRequirementId} onChange={e=>setLinkRequirementId(e.target.value)}><option value="">Kriter seçin</option>{profiles.filter(p=>p.readinessEnabled!==false).flatMap(p=>(p.requirements||[]).map(r=><option value={r.id} key={r.id}>{p.name} · {r.code} · {r.title}</option>))}</select><button type="button" disabled={!linkRequirementId||busy} onClick={linkDocumentRequirement}>Kritere Bağla</button></div></div>
+     <section className="detail-section"><h4>Boyahane Ürün Uygunluğu — Tek Kanıt</h4>
+     <p>MSDS/TDS ürün bazlıdır. Ortak ZDHC ve GOTS listesi dosya kopyalanmadan birden fazla ürüne bağlanır. Deklarasyon ve liste satırı yetkili tarafından doğrulanır.</p>
+     <div className="detail-grid">
+      <label>Ürün<select value={selectedChemicalId} onChange={e=>{loadChemicalEvidence(e.target.value);setChemicalListName("")}}><option value="">Ürün seçin</option>{chemicalProducts.map(p=><option value={p.id} key={p.id}>{p.productName||p.name||p.code}</option>)}</select></label>
+      <label>Kanıt<select value={chemicalEvidenceKind} onChange={e=>setChemicalEvidenceKind(e.target.value)}>{[["MSDS","SDS / MSDS"],["TDS","TDS"],["ZDHC","ZDHC Ortak Listesi"],["GOTS","GOTS Ortak Listesi"],["LCW_DECLARATION","LCW Tedarikçi Deklarasyonu"],["LCW_INVENTORY","LCW Kimyasal Envanteri"],["TEST_REPORT","Ürün Test Raporu"]].map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+      <label>Listede Geçen Ürün Adı<input placeholder="Ürün adı ile aynıysa boş bırakılabilir" value={chemicalListName} onChange={e=>setChemicalListName(e.target.value)}/></label>
+      <label>Kaynak Revizyonu<input placeholder="Rev.06 / Rev.07 vb." value={chemicalSourceRevision} onChange={e=>setChemicalSourceRevision(e.target.value)}/></label>
+     </div>
+     <button type="button" disabled={busy||!selectedChemicalId||!docDetail.document?.file_asset_id} onClick={attachDocumentToChemical}>Bu Evrakı Ürüne Bağla</button>
+     {(chemicalEvidence?.documents||[]).map(r=><div className="version-row" key={r.id}><b>{r.relation_type}</b><span>{r.file_name}</span><small>{r.metadata?.verificationStatus||"PENDING_REVIEW"} · {r.archiveVerified?"Orijinal doğrulandı":"Arşiv doğrulanmadı"}</small>{r.metadata?.verificationStatus!=="VERIFIED"&&<button type="button" disabled={busy||!r.archiveVerified} onClick={()=>verifyChemicalEvidence(r.file_asset_id)}>Yetkili Doğrulama</button>}</div>)}
+     </section>
      <div className="detail-section"><button type="button" onClick={()=>window.print()}>Yazdır / PDF olarak kaydet</button><p>Basılacak formda sorumlu kişi alanları ve imza yerleri bulunur. PDF/JPG orijinal dosyası ayrıca açılıp yazdırılabilir.</p></div>
      <section className="compliance-print-sheet"><h1>{docDetail.document?.title}</h1><p>KY ERP · Denetim ve Uygunluk Merkezi</p><hr/><dl><dt>Belge Numarası</dt><dd>{docDetail.document?.document_no||"-"}</dd><dt>Tür / Kategori</dt><dd>{docDetail.document?.document_type} / {docDetail.document?.category}</dd><dt>Belge Tarihi</dt><dd>{dateText(docDetail.document?.issue_date)}</dd><dt>Başlangıç / Bitiş</dt><dd>{dateText(docDetail.document?.valid_from)} — {dateText(docDetail.document?.expires_at)}</dd><dt>Yenileme Periyodu</dt><dd>{editDoc?.renewalCycleMonths||0} ay</dd><dt>Hazırlayan</dt><dd>{editDoc?.preparedBy||"________________________"}</dd><dt>Kontrol Eden</dt><dd>{editDoc?.reviewedBy||"________________________"}</dd><dt>Onaylayan</dt><dd>{editDoc?.approvedBy||"________________________"}</dd></dl><div className="signature-row"><div>Hazırlayan İmza __________________</div><div>Kontrol İmza __________________</div><div>Onay İmza __________________</div></div></section>
      <div className="detail-section"><h4>Yeni Sürüm / İmzalı Nüsha</h4><div className="inline-upload"><input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv" onChange={e=>setNewVersionFile(e.target.files?.[0]||null)}/><button type="button" onClick={uploadNewVersion} disabled={!newVersionFile||busy}>Yeni Sürümü Yükle</button></div><label><input type="checkbox" checked={newVersionSigned} onChange={e=>setNewVersionSigned(e.target.checked)}/> İmzalı orijinal dosya</label><input placeholder="Revizyon nedeni / tarih / kaynak" value={newVersionNote} onChange={e=>setNewVersionNote(e.target.value)}/></div>
