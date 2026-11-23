@@ -130,12 +130,12 @@ export function registerComplianceCenterRoutes(app:Hono<AppEnv>){
   const rawLimit=Number(c.req.query("limit")||150),rawOffset=Number(c.req.query("offset")||0);
   if(!Number.isSafeInteger(rawLimit)||rawLimit<1||rawLimit>500||!Number.isSafeInteger(rawOffset)||rawOffset<0)
     return c.json(err("INVALID_PAGINATION","limit 1-500 ve offset sıfır veya pozitif tam sayı olmalıdır."),422);
-  const q=text(c.req.query("q")).toLocaleLowerCase("tr-TR");
+  const q=text(c.req.query("q")).toLocaleLowerCase("tr-TR"),archived=c.req.query("archived")==="true";
   const rows=await c.env.DB.prepare(`SELECT * FROM compliance_documents
-     WHERE main_company_slug=? AND archived_at IS NULL
+     WHERE main_company_slug=? AND ${archived?"archived_at IS NOT NULL":"archived_at IS NULL"}
      ORDER BY COALESCE(expires_at,'9999-12-31'),updated_at DESC,id
      LIMIT ? OFFSET ?`).bind(sc.slug,rawLimit,rawOffset).all<Row>();
-  const total=await c.env.DB.prepare("SELECT COUNT(*) n FROM compliance_documents WHERE main_company_slug=? AND archived_at IS NULL").bind(sc.slug).first<Row>();
+  const total=await c.env.DB.prepare(`SELECT COUNT(*) n FROM compliance_documents WHERE main_company_slug=? AND ${archived?"archived_at IS NOT NULL":"archived_at IS NULL"}`).bind(sc.slug).first<Row>();
   const today=now().slice(0,10);
   const data=(rows.results||[]).map(r=>{
     const daysRemaining=daysRemainingForDocument(r,today);
@@ -160,7 +160,7 @@ export function registerComplianceCenterRoutes(app:Hono<AppEnv>){
  app.post("/api/compliance/documents/:id/upload",async c=>{const form=await c.req.parseBody({all:true}) as any,s=await scope(c,{mainCompanySlug:text(form.mainCompanySlug)},true);if(!s.ok)return scopeError(c,s);const id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM compliance_documents WHERE id=? AND main_company_slug=? AND archived_at IS NULL`).bind(id,s.slug).first<Row>();if(!doc)return c.json(err("NOT_FOUND","Evrak bulunamadı."),404);const candidate=Array.isArray(form.file)?form.file[0]:form.file,file=candidate instanceof File?candidate:null;if(!file)return c.json(err("FILE_REQUIRED","Yüklenecek dosya zorunludur."),400);const check=documentFileCheck(file);if(!check.ok)return c.json(err("FILE_NOT_ALLOWED",check.message),422);let uploaded;try{uploaded=await createFileAsset(c,s.slug,file,id,text(s.user?.id))}catch(e:any){return c.json(err(e?.code||"UPLOAD_FAILED",e?.message||"Dosya yüklenemedi."),e?.code==="NOT_FOUND"?404:422)}const ts=now();await c.env.DB.prepare(`UPDATE compliance_documents SET file_asset_id=?,file_name=?,storage_key=?,mime_type=?,file_size=?,version_no=?,custom_fields=?,ai_status='PENDING',updated_at=? WHERE id=? AND main_company_slug=?`).bind(uploaded.assetId,uploaded.fileName,uploaded.key,uploaded.mimeType,uploaded.size,uploaded.versionNo,JSON.stringify({...json(doc.custom_fields),archiveStatus:uploaded.archiveStatus}),ts,id,s.slug).run();return c.json({ok:true,data:uploaded})});
   app.get("/api/compliance/documents/:id/file",async c=>{
  const sc=await scope(c);if(!sc.ok)return scopeError(c,sc);
- const doc=await c.env.DB.prepare("SELECT file_name,storage_key,mime_type FROM compliance_documents WHERE id=? AND main_company_slug=? AND archived_at IS NULL").bind(c.req.param("id"),sc.slug).first<Row>();
+ const doc=await c.env.DB.prepare("SELECT file_name,storage_key,mime_type FROM compliance_documents WHERE id=? AND main_company_slug=?").bind(c.req.param("id"),sc.slug).first<Row>();
  if(!doc?.storage_key)return c.json(err("FILE_NOT_FOUND","Bu evrakta dosya bulunmuyor."),404);
  try{return await readComplianceEvidence(c,sc.slug,doc.storage_key,doc.file_name,doc.mime_type)}
  catch(error:any){return c.json(err(error?.code||"FILE_READ_FAILED",error?.message||"Evrak açılamadı."),error?.status||502)}
