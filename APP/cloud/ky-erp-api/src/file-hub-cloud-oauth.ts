@@ -1336,6 +1336,48 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
 }
 
 export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
+  // A single, tenant-scoped cloud readiness check for all devices. It is
+  // metadata-only: never returns OAuth credentials, filenames or document data.
+  app.get("/api/file-hub/cloud/tenant-readiness", async (c) => {
+    const user=await currentUser(c),slug=companySlug(c);
+    if(!user)return c.json(err("UNAUTHORIZED","Oturum gerekli."),401);
+    if(!slug)return c.json(err("TENANT_REQUIRED","Ana firma seçimi gerekli."),422);
+    if(!canReadOwnCompanyStorage(user,slug))
+      return c.json(err("TENANT_FORBIDDEN","Başka firmanın depolama bilgisi görüntülenemez."),403);
+    const accounts=await c.env.DB.prepare(
+      "SELECT provider_type,COUNT(*) n FROM file_hub_oauth_accounts WHERE main_company_slug=? GROUP BY provider_type"
+    ).bind(slug).all<Row>();
+    const active=(await c.env.DB.prepare(`
+      SELECT co.id,co.provider_type,co.connection_status,co.last_sync_at,
+       CASE WHEN EXISTS (
+         SELECT 1 FROM file_hub_bindings b
+         WHERE b.main_company_slug=co.main_company_slug
+           AND b.storage_connection_id=co.id AND b.read_enabled=1 AND b.sync_enabled=1
+           AND b.module_code IN ('E_BELGE','EBELGE') AND b.purpose_code='E_DOCUMENT'
+       ) THEN 1 ELSE 0 END AS e_document_bound
+      FROM file_hub_connections co
+      WHERE co.main_company_slug=? AND co.is_active=1 AND co.sync_mode='CLOUD_API'
+       AND co.provider_type IN ('GOOGLE_DRIVE','ONEDRIVE','SHAREPOINT','DROPBOX')
+      ORDER BY co.is_primary DESC,co.updated_at DESC LIMIT 30
+    `).bind(slug).all<Row>()).results||[];
+    const counts=new Map((accounts.results||[]).map((row:Row)=>[upper(row.provider_type),Number(row.n||0)]));
+    const providers=["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT","DROPBOX"].map(providerType=>{
+      const links=active.filter((row:Row)=>upper(row.provider_type)===providerType);
+      const eDocumentBindings=links.filter((row:Row)=>Number(row.e_document_bound)===1);
+      const indexed=eDocumentBindings.filter((row:Row)=>Boolean(text(row.last_sync_at)));
+      const configured=providerReady(c,providerType);
+      const accountCount=counts.get(providerType)||0;
+      const status=!configured?"APP_NOT_CONFIGURED":!accountCount?"OAUTH_AUTHORIZATION_REQUIRED":
+        !links.length?"ROOT_SELECTION_REQUIRED":!eDocumentBindings.length?"E_DOCUMENT_BINDING_REQUIRED":
+        !indexed.length?"FIRST_INDEX_REQUIRED":"INDEX_PRESENT";
+      return {providerType,configured,accountCount,activeConnectionCount:links.length,
+        eDocumentBindingCount:eDocumentBindings.length,indexedConnectionCount:indexed.length,
+        status};
+    });
+    return c.json({ok:true,data:{source:"TENANT_D1_METADATA_ONLY",
+      requiresComputerIp:false,providers,storageAdapter:"FILE_HUB_CLOUD_API",
+      note:"INDEX_PRESENT yalnız D1 son indeks kaydıdır; gerçek dosya ve İşNet API oturumu ayrıca doğrulanır."}});
+  });
   app.get("/api/file-hub/cloud/providers", async (c) => {
     const user = await currentUser(c); if (!user) return c.json(err("UNAUTHORIZED", "Oturum gerekli."), 401);
     return c.json({ ok: true, data: [
