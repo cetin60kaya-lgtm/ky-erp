@@ -1,7 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
-import { storeComplianceEvidence, readComplianceEvidence, complianceStoragePurpose } from "./compliance-storage";
+import { storeComplianceEvidence, readComplianceEvidence, finalizeComplianceStagedArchive, complianceStoragePurpose } from "./compliance-storage";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -106,6 +106,17 @@ export function registerComplianceConfigRoutes(app:Hono<AppEnv>){
   app.patch("/api/compliance/requirements/:id",async c=>{const b=await bodyOf(c),s=await scope(c,b,true);if(!s.ok)return scopeError(c,s);const old=await requirementOwned(c,s.slug,c.req.param("id"));if(!old)return c.json(err("NOT_FOUND","Gereklilik bulunamadı."),404);const ts=now();await c.env.DB.prepare(`UPDATE compliance_requirements SET title=?,category=?,requirement_type=?,description=?,evidence_types=?,source_url=?,legal_basis=?,recurrence_rule=?,applicability_rule=?,is_active=?,custom_fields=?,mandatory=?,cycle_days=?,warning_days=?,critical_days=?,owner_department=?,sort_order=?,metadata=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(text(b.title??old.title),text(b.category??old.category),upper(b.requirementType??old.requirement_type)||"DOCUMENT",text(b.description??old.description)||null,JSON.stringify(b.evidenceTypes===undefined?json(old.evidence_types,[]):json(b.evidenceTypes,[])),text(b.sourceUrl??old.source_url)||null,text(b.legalBasis??old.legal_basis)||null,text(b.recurrenceRule??old.recurrence_rule)||null,text(b.applicabilityRule??old.applicability_rule)||null,b.isActive===undefined?old.is_active:(bool(b.isActive)?1:0),JSON.stringify(b.customFields===undefined?json(old.custom_fields,{}):json(b.customFields,{})),b.mandatory===undefined?old.mandatory:(bool(b.mandatory)?1:0),b.cycleDays===undefined?old.cycle_days:(b.cycleDays==null?null:Number(b.cycleDays)),Number(b.warningDays??old.warning_days??10),Number(b.criticalDays??old.critical_days??3),text(b.ownerDepartment??old.owner_department)||null,Number(b.sortOrder??old.sort_order??0),JSON.stringify(b.metadata===undefined?json(old.metadata,{}):json(b.metadata,{})),ts,old.id,s.slug).run();await event(c,s.slug,"REQUIREMENT_UPDATED","REQUIREMENT",old.id,text(s.user?.id));return c.json({ok:true})});
   app.delete("/api/compliance/requirements/:id",async c=>{const s=await scope(c,{},true);if(!s.ok)return scopeError(c,s);const old=await requirementOwned(c,s.slug,c.req.param("id"));if(!old)return c.json(err("NOT_FOUND","Gereklilik bulunamadı."),404);await c.env.DB.prepare(`UPDATE compliance_requirements SET is_active=0,updated_at=? WHERE id=? AND main_company_slug=?`).bind(now(),old.id,s.slug).run();await event(c,s.slug,"REQUIREMENT_ARCHIVED","REQUIREMENT",old.id,text(s.user?.id));return c.json({ok:true})});
   app.get("/api/compliance/documents/:id/detail",async c=>{const s=await scope(c);if(!s.ok)return scopeError(c,s);const id=c.req.param("id"),doc=await c.env.DB.prepare(`SELECT * FROM compliance_documents WHERE id=? AND main_company_slug=? AND archived_at IS NULL`).bind(id,s.slug).first<Row>();if(!doc)return c.json(err("NOT_FOUND","Evrak bulunamadı."),404);const [links,versions,events]=await Promise.all([c.env.DB.prepare(`SELECT l.*,r.code requirement_code,r.title requirement_title,r.category requirement_category,p.code profile_code,p.name profile_name FROM compliance_document_requirements l JOIN compliance_requirements r ON r.id=l.requirement_id LEFT JOIN compliance_profiles p ON p.id=r.profile_id WHERE l.main_company_slug=? AND l.document_id=? ORDER BY p.code,r.sort_order`).bind(s.slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM compliance_document_versions WHERE main_company_slug=? AND document_id=? ORDER BY version_no DESC`).bind(s.slug,id).all<Row>(),c.env.DB.prepare(`SELECT * FROM compliance_events WHERE main_company_slug=? AND entity_type='DOCUMENT' AND entity_id=? ORDER BY created_at DESC LIMIT 50`).bind(s.slug,id).all<Row>()]);return c.json({ok:true,data:{document:normalizeDocument(doc),links:links.results||[],versions:(versions.results||[]).map((x:Row)=>({...x,metadata_snapshot:json(x.metadata_snapshot,{})})),events:(events.results||[]).map((x:Row)=>({...x,detail:json(x.detail,{})}))}})});
+  app.post("/api/compliance/files/:id/finalize-archive",async c=>{
+    const sc=await scope(c,{},true);if(!sc.ok)return scopeError(c,sc);
+    try{
+      const result=await finalizeComplianceStagedArchive(c,sc.slug,c.req.param("id"));
+      await event(c,sc.slug,"COMPLIANCE_ARCHIVE_FINALIZED","FILE",c.req.param("id"),text(sc.user?.id),{archiveStatus:result.archiveStatus});
+      return c.json({ok:true,data:result});
+    }catch(e:any){
+      return c.json(err(e?.code||"ARCHIVE_FINALIZE_FAILED",e?.message||"Bulut arşiv işlemi tamamlanamadı."),e?.status||502);
+    }
+  });
+
   app.get("/api/compliance/documents/:id/versions/:versionId/file",async c=>{
     const sc=await scope(c);if(!sc.ok)return scopeError(c,sc);
     const old=await c.env.DB.prepare("SELECT v.file_name,v.storage_key,v.mime_type FROM compliance_document_versions v JOIN compliance_documents d ON d.id=v.document_id AND d.main_company_slug=v.main_company_slug WHERE v.id=? AND v.document_id=? AND v.main_company_slug=? LIMIT 1")
