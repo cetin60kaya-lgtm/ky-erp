@@ -90,7 +90,7 @@ export function registerComplianceConfigRoutes(app:Hono<AppEnv>){
     const previous=json(old.metadata,{}),next={...previous,...(b.metadata===undefined?{}:json(b.metadata,{}))};
     const state=upper(b.selectionState??next.selectionState??(next.readinessEnabled===true?"ACTIVE":"CATALOG"));
     if(!["CATALOG","TARGET","ACTIVE","VERIFIED"].includes(state))return c.json(err("PROFILE_STATE_INVALID","Geçerli seçim: Katalog, Hedef, Aktif veya Onaylı."),422);
-    if(text(old.code)==="TR_YASAL"&&state==="CATALOG")return c.json(err("LEGAL_TRACKING_REQUIRED","Yasal izlemeyi katalog moduna kapatamazsınız; uygulanmayan kriterleri gerekçeli kapsam dışı işaretleyin."),422);
+    if(text(old.code)==="TR_YASAL"&&(state==="CATALOG"||state==="TARGET"||b.isActive===false))return c.json(err("LEGAL_TRACKING_REQUIRED","Yasal izleme pasifleştirilemez; uygulanmayan maddeler gerekçeli kapsam dışı işaretlenmelidir."),422);
     if(state==="VERIFIED"&&!(text(next.verificationReference)&&text(next.verifiedAt)))return c.json(err("PROFILE_VERIFICATION_REQUIRED","Resmî onay durumu için belge/referans ve doğrulama tarihi zorunludur."),422);
     next.selectionState=state;next.readinessEnabled=["ACTIVE","VERIFIED"].includes(state);
     const ts=now();
