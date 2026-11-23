@@ -273,22 +273,23 @@ function UploadPanel({ onUploaded }) {
   </section>;
 }
 
-function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDrafts }) {
+function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDrafts, autoOpenPdf = false }) {
   const [detail, setDetail] = useState(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [pdfPreview, setPdfPreview] = useState(null);
+  const autoPreviewStarted = useRef(false);
   useEffect(() => () => {
     if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
   }, [pdfPreview?.url]);
 
-  const showPdfInPlace = async (blob, fileName) => {
+  const showPdfInPlace = useCallback(async (blob, fileName) => {
     if (!(blob instanceof Blob) || blob.size < 5 || await blob.slice(0, 5).text() !== "%PDF-")
       throw new Error("PDF imzası doğrulanamadı. Orijinal belgeyi kontrol edin.");
     const pdf = /^application\/pdf(?:;|$)/i.test(blob.type) ? blob : new Blob([blob], { type: "application/pdf" });
     setPdfPreview({ url: URL.createObjectURL(pdf), fileName: String(fileName || "Belge.pdf") });
-  };
+  }, []);
   const [companyOpen, setCompanyOpen] = useState(false);
   const [finalConfirmOpen, setFinalConfirmOpen] = useState(false);
   const [finalAcknowledged, setFinalAcknowledged] = useState(false);
@@ -371,6 +372,22 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
       setError(e?.message || "Muhasebe PDF'si açılamadı.");
     }
   };
+  // The workflow's "Müşteri İrsaliyesini Aç" must display the original PDF
+  // immediately in this same KY ERP screen, not navigate to another module tab.
+  useEffect(() => {
+    if (!autoOpenPdf || autoPreviewStarted.current || !detail?.files) return;
+    autoPreviewStarted.current = true;
+    const file = detail.files.find(item => /[.]pdf$/i.test(String(item.file_name || "")));
+    if (!file) return; // XML stays accessible; no fake PDF fallback for an irsaliye.
+    let cancelled = false;
+    getEBelgeFilePreview(file.id).then(async blob => {
+      if (!cancelled) await showPdfInPlace(blob, file.file_name);
+    }).catch(error => {
+      if (!cancelled) setError(error?.message || "İlişkili PDF açılamadı.");
+    });
+    return () => { cancelled = true; };
+  }, [autoOpenPdf, detail, showPdfInPlace]);
+
   const saveDocument = async () => action("edit", async () => { await updateEBelge(id, editForm); setEditing(false); });
   const confirmFinancialPosting = async () => {
     if (finalInFlight.current || busy || !finalConfirmOpen || !finalAcknowledged || !detail || detail.status === "POSTED") return;
@@ -594,6 +611,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const [autoPdfDocumentId, setAutoPdfDocumentId] = useState("");
   const [printStatuses,setPrintStatuses]=useState({});
   const [printStatusError,setPrintStatusError]=useState("");
   const [onlyPrintPending,setOnlyPrintPending]=useState(false);
@@ -923,7 +941,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       </section>
     </>}
 
-    {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} onOpenDocument={(documentId) => setSelectedId(String(documentId))} />}
+    {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} onOpenDocument={(documentId) => { setAutoPdfDocumentId(String(documentId)); setSelectedId(String(documentId)); }} />}
     {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 
     {view === "integrations" && <>
@@ -945,7 +963,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <footer><button type="button" disabled={matching} onClick={() => setMatchingConfirmOpen(false)}>Vazgeç</button><button type="button" className="eb-primary" disabled={matching || !matchingApproved} onClick={runMatching}>{matching ? "Kontrol Ediliyor..." : "Onayla ve Kontrol Et"}</button></footer>
       </section>
     </div> : null}
-    <DetailDrawer key={selectedId || "empty-document"} id={selectedId}
+    <DetailDrawer key={selectedId || "empty-document"} id={selectedId} autoOpenPdf={Boolean(selectedId && autoPdfDocumentId === selectedId)}
       mainCompanySlug={mainCompanySlug}
       onOpenMailDrafts={(doc)=>{
         const no=String(doc.document_no||"").trim().toUpperCase();
@@ -961,7 +979,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           }
         });
       }}
-      onClose={()=>setSelectedId("")}
+      onClose={()=>{setSelectedId("");setAutoPdfDocumentId("");}}
       onChanged={showPool ? loadPool : loadDashboard} />
   </section>;
 }
