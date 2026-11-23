@@ -1,5 +1,6 @@
 import { writeCurrentAccount } from "./accounting-current-write.ts";
 import { auditCompanyBalance, summarizeCompanyBalanceAudit } from "./accounting-balance-audit";
+import { loadCompanyInvoiceSummaries, emptyCompanyInvoiceTotals } from "./accounting-company-invoice-summary";
 import { registerAccountingObligationsRoutes } from "./accounting-obligations";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
@@ -1376,6 +1377,9 @@ app.get("/api/muhasebe/firmalar", async (c) => {
   const movementByCompany = new Map(
     (movementResult.results || []).map((row) => [databaseText(row.company_id), row]),
   );
+  let invoiceOverview: Awaited<ReturnType<typeof loadCompanyInvoiceSummaries>> | null = null;
+  try { invoiceOverview = await loadCompanyInvoiceSummaries(c.env.DB, slug); }
+  catch { /* Keep company ledger available; mark invoice overview unavailable explicitly. */ }
   const data = await Promise.all(
     rows.map(async (row) => {
       const companyId = databaseText(row.id);
@@ -1393,6 +1397,8 @@ app.get("/api/muhasebe/firmalar", async (c) => {
         email: row.email,
         address: row.address,
         currentBalance: databaseNumber(row.current_balance),
+        invoiceTotals: invoiceOverview?.byCompany.get(companyId) || emptyCompanyInvoiceTotals(),
+        invoiceSummaryAvailable: Boolean(invoiceOverview),
         openingBalance: databaseNumber(row.opening_balance),
         isActive: row.is_active !== 0 && row.is_active !== false,
         note: row.note,
@@ -1403,7 +1409,11 @@ app.get("/api/muhasebe/firmalar", async (c) => {
       };
     }),
   );
-  return c.json({ ok: true, success: true, data });
+  return c.json({ ok: true, success: true, data,
+    invoiceSummary: { available: Boolean(invoiceOverview),
+      unmatched: invoiceOverview?.unmatched || null,
+      currency: "TRY", readOnly: true },
+  });
 });
 
 app.get("/api/muhasebe/cari-hareketler", (c) =>
