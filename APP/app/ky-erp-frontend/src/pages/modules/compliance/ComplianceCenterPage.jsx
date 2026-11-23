@@ -43,6 +43,7 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
   const [chemicalListName,setChemicalListName]=useState("");
   const [chemicalSourceRevision,setChemicalSourceRevision]=useState("");
   const [newVersionNote,setNewVersionNote]=useState("");
+  const [newVersionEffectiveFrom,setNewVersionEffectiveFrom]=useState(today());
   const [newVersionSigned,setNewVersionSigned]=useState(false);
  const [settings,setSettings]=useState({defaultWarningDays:10,secondaryWarningDays:30,criticalWarningDays:3,aiAutoReview:true});
 
@@ -52,7 +53,7 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
    const requests=[apiGet("/compliance/dashboard",{}, {timeoutMs:15000,forceFresh:true})];
    if(section==="OVERVIEW")requests.push(apiGet("/compliance/tasks",{}, {timeoutMs:10000,forceFresh:true}),apiGet("/compliance/system-evidence-candidates",{}, {timeoutMs:12000,forceFresh:true}));
    if(["STANDARDS","DOCUMENTS"].includes(section))requests.push(apiGet("/compliance/profiles",{}, {timeoutMs:15000,forceFresh:true}));
-    if(section==="DOCUMENTS")requests.push(apiGet("/compliance/chemicals",{}, {timeoutMs:12000,forceFresh:true}));
+    if(section==="DOCUMENTS")requests.push(apiGet("/compliance/chemicals",{}, {timeoutMs:12000,forceFresh:true}).catch(()=>({data:[]})));
    if(section==="CALENDAR")requests.push(apiGet("/compliance/calendar",{}, {timeoutMs:10000,forceFresh:true}));
    if(section==="SETTINGS")requests.push(apiGet("/compliance/settings",{}, {timeoutMs:10000,forceFresh:true}));
    const res=await Promise.all(requests),d=data(res[0],EMPTY_DASH);setDash(d);
@@ -103,9 +104,9 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  async function uploadNewVersion(){
  if(!selectedDocId||!newVersionFile)return;setBusy(true);
  try{
- const f=new FormData();f.append("file",newVersionFile);f.append("signedOriginal",String(newVersionSigned));f.append("changeNote",newVersionNote);
+ const f=new FormData();f.append("file",newVersionFile);f.append("signedOriginal",String(newVersionSigned));f.append("changeNote",newVersionNote);f.append("effectiveFrom",newVersionEffectiveFrom||"");
  const r=await apiUpload(`/compliance/documents/${selectedDocId}/new-version`,f);
- setNewVersionFile(null);setNewVersionSigned(false);setNewVersionNote("");
+ setNewVersionFile(null);setNewVersionSigned(false);setNewVersionNote("");setNewVersionEffectiveFrom(today());
  setMessage("Yeni sürüm kaydedildi. Önceki sürümler korunur. Arşiv: "+(r?.data?.archiveStatus||"kontrol edilmeli"));
  await loadAll();await openDocument(selectedDocId)
  }catch(e){setMessage("Hata: "+(e?.message||"Yeni sürüm yüklenemedi."))}finally{setBusy(false)}
@@ -238,7 +239,7 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
      </section>
      <div className="detail-section"><button type="button" onClick={()=>window.print()}>Yazdır / PDF olarak kaydet</button><p>Basılacak formda sorumlu kişi alanları ve imza yerleri bulunur. PDF/JPG orijinal dosyası ayrıca açılıp yazdırılabilir.</p></div>
      <section className="compliance-print-sheet"><h1>{docDetail.document?.title}</h1><p>KY ERP · Denetim ve Uygunluk Merkezi</p><hr/><dl><dt>Belge Numarası</dt><dd>{docDetail.document?.document_no||"-"}</dd><dt>Tür / Kategori</dt><dd>{docDetail.document?.document_type} / {docDetail.document?.category}</dd><dt>Belge Tarihi</dt><dd>{dateText(docDetail.document?.issue_date)}</dd><dt>Başlangıç / Bitiş</dt><dd>{dateText(docDetail.document?.valid_from)} — {dateText(docDetail.document?.expires_at)}</dd><dt>Yenileme Periyodu</dt><dd>{editDoc?.renewalCycleMonths||0} ay</dd><dt>Hazırlayan</dt><dd>{editDoc?.preparedBy||"________________________"}</dd><dt>Kontrol Eden</dt><dd>{editDoc?.reviewedBy||"________________________"}</dd><dt>Onaylayan</dt><dd>{editDoc?.approvedBy||"________________________"}</dd></dl><div className="signature-row"><div>Hazırlayan İmza __________________</div><div>Kontrol İmza __________________</div><div>Onay İmza __________________</div></div></section>
-     <div className="detail-section"><h4>Yeni Sürüm / İmzalı Nüsha</h4><div className="inline-upload"><input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv" onChange={e=>setNewVersionFile(e.target.files?.[0]||null)}/><button type="button" onClick={uploadNewVersion} disabled={!newVersionFile||busy}>Yeni Sürümü Yükle</button></div><label><input type="checkbox" checked={newVersionSigned} onChange={e=>setNewVersionSigned(e.target.checked)}/> İmzalı orijinal dosya</label><input placeholder="Revizyon nedeni / tarih / kaynak" value={newVersionNote} onChange={e=>setNewVersionNote(e.target.value)}/></div>
+     <div className="detail-section"><h4>Yeni Sürüm / İmzalı Nüsha</h4><div className="inline-upload"><input type="file" accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.csv" onChange={e=>setNewVersionFile(e.target.files?.[0]||null)}/><button type="button" onClick={uploadNewVersion} disabled={!newVersionFile||busy}>Yeni Sürümü Yükle</button></div><label><input type="checkbox" checked={newVersionSigned} onChange={e=>setNewVersionSigned(e.target.checked)}/> İmzalı orijinal dosya</label><label>Yeni Belgenin Başlangıç Tarihi<input type="date" value={newVersionEffectiveFrom} onChange={e=>setNewVersionEffectiveFrom(e.target.value)}/></label><input placeholder="Revizyon nedeni / tarih / kaynak" value={newVersionNote} onChange={e=>setNewVersionNote(e.target.value)}/></div>
     <div className="detail-section"><h4>Bağlı Standart Maddeleri</h4><div className="chip-list">{(docDetail.links||[]).map(x=><span key={x.id}>{x.profile_code} · {x.requirement_code}</span>)}{!(docDetail.links||[]).length&&<small>Otomatik veya manuel eşleşme yok.</small>}</div></div>
      <div className="detail-section"><h4>Sürüm Geçmişi — Eski nüshalar korunur</h4>{(docDetail.versions||[]).map(v=><div className="version-row" key={v.id}><b>v{v.version_no}</b><span>{v.file_name}</span><small>{dateText(v.created_at)} · {sizeText(v.file_size)}{v.metadata_snapshot?.signedOriginal?" · İmzalı":""}</small><button type="button" onClick={()=>previewFile(`/compliance/documents/${selectedDocId}/versions/${v.id}/file`)}>Aç</button></div>)}</div>
    </aside>}</div>}
