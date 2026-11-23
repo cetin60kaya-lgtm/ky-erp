@@ -26,7 +26,7 @@ test("linked companies and nonzero balances are fail closed", () => {
   assert.doesNotMatch(linkScan, /PRAGMA table_info\\(/);
   assert.match(linkScan, /columnNamesFromCreateSql/);
   assert.doesNotMatch(linkScan, /LEFT JOIN pragma_table_info/);
-  assert.match(linkScan, /refs\.has\(n\)/);
+  assert.match(linkScan, /refNames/);
   assert.match(linkScan, /model_records/);
   assert.match(linkScan, /json_store/);
   assert.match(linkScan, /INSTR\(COALESCE/);
