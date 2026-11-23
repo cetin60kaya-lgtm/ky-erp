@@ -20,6 +20,7 @@ const addCalendarMonths=(date,months)=>{if(!date||!months)return"";const d=new D
 const KINDS=[["AUDIT_EVIDENCE","Genel denetim evrakı"],["AUDIT_REPORT","Denetim raporu"],["MSDS","SDS / MSDS"],["TDS","TDS"],["DECLARATION","Ürün / tedarikçi deklarasyonu"],["INVENTORY","Kimyasal envanter / ortak liste"],["PROCEDURE","Prosedür / talimat"],["PERIODIC_MAINTENANCE","Periyodik kontrol"],["OHS_DOCUMENT","İSG / yangın"],["QUALITY","Kalite / test raporu"]];
 const remainingText=row=>row?.days_remaining==null?(row?.expires_at?"-":"Süresiz"):row.days_remaining<0?Math.abs(row.days_remaining)+" gün geçti":row.days_remaining===0?"Bugün":row.days_remaining+" gün";
 const emptyDocForm=()=>({title:"",category:"Genel",documentType:"DOCUMENT",documentKind:"AUDIT_EVIDENCE",issuer:"",documentNo:"",issueDate:today(),validFrom:today(),expiresAt:"",validityMode:"DATED",renewalCycleDays:0,renewalCycleMonths:0,nextReviewAt:"",reminderDays:10,ownerDepartment:"",preparedBy:"",reviewedBy:"",approvedBy:"",approvalStatus:"DRAFT",signedOriginal:false,auditorShareApproved:false,requirementId:"",notes:""});
+const docCustomFields=f=>({validityMode:f.validityMode,renewalCycleDays:Number(f.renewalCycleDays||0),renewalCycleMonths:Number(f.renewalCycleMonths||0),nextReviewAt:f.nextReviewAt||null,documentKind:f.documentKind||"AUDIT_EVIDENCE",preparedBy:f.preparedBy||"",reviewedBy:f.reviewedBy||"",approvedBy:f.approvedBy||"",approvalStatus:f.approvalStatus||"DRAFT",signedOriginal:Boolean(f.signedOriginal),auditorShareApproved:Boolean(f.auditorShareApproved)});
 const emptyAuditForm=()=>({name:"",profileId:"",auditType:"CUSTOMER",plannedDate:"",auditorName:"",notes:""});
 const emptyFindingForm=()=>({title:"",severity:"MEDIUM",auditId:"",description:"",correctiveAction:"",dueDate:""});
 
@@ -34,6 +35,9 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  const [shareForm,setShareForm]=useState({label:"Dış Denetçi",expiresDays:14,allowDownload:false}),[lastShareUrl,setLastShareUrl]=useState("");
  const [showFindingForm,setShowFindingForm]=useState(false),[findingForm,setFindingForm]=useState(emptyFindingForm),[selectedFindingId,setSelectedFindingId]=useState(""),[capaDetail,setCapaDetail]=useState(null),[capaForm,setCapaForm]=useState({immediateCorrection:"",rootCause:"",correctiveAction:"",preventiveAction:"",verificationNote:"",verificationStatus:"OPEN"}),[capaFile,setCapaFile]=useState(null);
  const [profileForm,setProfileForm]=useState({name:"",code:"",version:"CUSTOM",description:""}),[selectedProfile,setSelectedProfile]=useState(""),[requirementForm,setRequirementForm]=useState({title:"",code:"",category:"Genel",ownerDepartment:"",warningDays:10,criticalDays:3,mandatory:true}),[applicabilityForm,setApplicabilityForm]=useState({requirementId:"",title:"",state:"APPLICABLE",reason:""});
+  const [linkRequirementId,setLinkRequirementId]=useState("");
+  const [newVersionNote,setNewVersionNote]=useState("");
+  const [newVersionSigned,setNewVersionSigned]=useState(false);
  const [settings,setSettings]=useState({defaultWarningDays:10,secondaryWarningDays:30,criticalWarningDays:3,aiAutoReview:true});
 
  const loadAll=useCallback(async()=>{
@@ -60,10 +64,44 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  const profile=useMemo(()=>profiles.find(r=>String(r.id)===String(selectedProfile))||profiles[0]||null,[profiles,selectedProfile]);
  const selectedAudit=useMemo(()=>(dash.audits||[]).find(r=>String(r.id)===String(selectedAuditId))||null,[dash.audits,selectedAuditId]);
 
- async function createDocument(e){e.preventDefault();if(!docFile)return setMessage("Hata: Belgenin görseli veya dosyası zorunlu.");setBusy(true);try{const customFields={validityMode:docForm.validityMode,renewalCycleDays:Number(docForm.renewalCycleDays||0),nextReviewAt:docForm.nextReviewAt||null};const created=await apiPost("/compliance/documents",{...docForm,customFields});const id=created?.data?.id;if(!id)throw new Error("Evrak kaydı oluşturulamadı.");const f=new FormData();f.append("file",docFile);await apiUpload(`/compliance/documents/${id}/upload`,f);await apiPost(`/compliance/documents/${id}/auto-link`,{});setDocForm(emptyDocForm());setDocFile(null);setShowDocForm(false);setMessage("Evrak, dosya ve süre takibi birlikte kaydedildi.");await loadAll();await openDocument(id)}catch(e2){setMessage("Hata: "+(e2?.message||"Evrak kaydedilemedi."))}finally{setBusy(false)}}
- async function openDocument(id){setSelectedDocId(id);setBusy(true);try{const r=await apiGet(`/compliance/documents/${id}/detail`,{}, {forceFresh:true});const x=data(r,null);setDocDetail(x);const d=x?.document||{};setEditDoc({title:d.title||"",category:d.category||"Genel",documentType:d.document_type||"DOCUMENT",issuer:d.issuer||"",documentNo:d.document_no||"",issueDate:String(d.issue_date||"").slice(0,10),validFrom:String(d.valid_from||"").slice(0,10),expiresAt:String(d.expires_at||"").slice(0,10),validityMode:d.custom_fields?.validityMode||"DATED",renewalCycleDays:d.custom_fields?.renewalCycleDays||0,nextReviewAt:d.custom_fields?.nextReviewAt||"",reminderDays:d.reminder_days||10,ownerDepartment:d.owner_department||"",notes:d.notes||""})}catch(e){setMessage("Hata: "+(e?.message||"Evrak detayı açılamadı."))}finally{setBusy(false)}}
- async function saveDocument(e){e.preventDefault();if(!selectedDocId)return;setBusy(true);try{await apiPatch(`/compliance/documents/${selectedDocId}`,{...editDoc,customFields:{validityMode:editDoc.validityMode,renewalCycleDays:Number(editDoc.renewalCycleDays||0),nextReviewAt:editDoc.nextReviewAt||null}});setMessage("Evrak bilgileri güncellendi.");await loadAll();await openDocument(selectedDocId)}catch(e2){setMessage("Hata: "+(e2?.message||"Evrak güncellenemedi."))}finally{setBusy(false)}}
- async function uploadNewVersion(){if(!selectedDocId||!newVersionFile)return;setBusy(true);try{const f=new FormData();f.append("file",newVersionFile);await apiUpload(`/compliance/documents/${selectedDocId}/new-version`,f);setNewVersionFile(null);setMessage("Yeni dosya sürümü kaydedildi; eski sürüm geçmişte korundu.");await loadAll();await openDocument(selectedDocId)}catch(e){setMessage("Hata: "+(e?.message||"Yeni sürüm yüklenemedi."))}finally{setBusy(false)}}
+ async function createDocument(e){
+ e.preventDefault();setBusy(true);
+ try{
+ const created=await apiPost("/compliance/documents",{...docForm,customFields:docCustomFields(docForm)});
+ const id=created?.data?.id;if(!id)throw new Error("Evrak kaydı oluşturulamadı.");
+ let stored=null;
+ if(docFile){const f=new FormData();f.append("file",docFile);stored=await apiUpload(`/compliance/documents/${id}/upload`,f);}
+ if(docForm.requirementId)await apiPost(`/compliance/documents/${id}/requirements`,{requirementIds:[docForm.requirementId]});
+ else if(stored)await apiPost(`/compliance/documents/${id}/auto-link`,{});
+ setDocForm(emptyDocForm());setDocFile(null);setShowDocForm(false);
+ setMessage(stored?"Evrak kaydedildi. Orijinal depolama durumu: "+(stored?.data?.archiveStatus||"kontrol edilmeli"):"Evrak taslağı açıldı; kanıt dosyası henüz yok.");
+ await loadAll();await openDocument(id);
+ }catch(e2){setMessage("Hata: "+(e2?.message||"Evrak kaydedilemedi."))}finally{setBusy(false)}
+ }
+ async function openDocument(id){
+ setSelectedDocId(id);setBusy(true);
+ try{
+ const r=await apiGet(`/compliance/documents/${id}/detail`,{}, {forceFresh:true}),x=data(r,null);setDocDetail(x);
+ const d=x?.document||{},c=d.custom_fields||{};
+ setEditDoc({title:d.title||"",category:d.category||"Genel",documentType:d.document_type||"DOCUMENT",issuer:d.issuer||"",documentNo:d.document_no||"",issueDate:String(d.issue_date||"").slice(0,10),validFrom:String(d.valid_from||"").slice(0,10),expiresAt:String(d.expires_at||"").slice(0,10),validityMode:c.validityMode||"DATED",renewalCycleDays:c.renewalCycleDays||0,renewalCycleMonths:c.renewalCycleMonths||0,nextReviewAt:c.nextReviewAt||"",reminderDays:d.reminder_days||10,ownerDepartment:d.owner_department||"",documentKind:c.documentKind||"AUDIT_EVIDENCE",preparedBy:c.preparedBy||"",reviewedBy:c.reviewedBy||"",approvedBy:c.approvedBy||"",approvalStatus:c.approvalStatus||"DRAFT",signedOriginal:Boolean(c.signedOriginal),auditorShareApproved:Boolean(c.auditorShareApproved),notes:d.notes||""});
+ }catch(e){setMessage("Hata: "+(e?.message||"Evrak detayı açılamadı."))}finally{setBusy(false)}
+ }
+ async function saveDocument(e){
+ e.preventDefault();if(!selectedDocId)return;setBusy(true);
+ try{await apiPatch(`/compliance/documents/${selectedDocId}`,{...editDoc,customFields:docCustomFields(editDoc)});
+ setMessage("Evrak ve prosedür kayıt bilgileri güncellendi.");await loadAll();await openDocument(selectedDocId);
+ }catch(e2){setMessage("Hata: "+(e2?.message||"Evrak güncellenemedi."))}finally{setBusy(false)}
+ }
+ async function uploadNewVersion(){
+ if(!selectedDocId||!newVersionFile)return;setBusy(true);
+ try{
+ const f=new FormData();f.append("file",newVersionFile);f.append("signedOriginal",String(newVersionSigned));f.append("changeNote",newVersionNote);
+ const r=await apiUpload(`/compliance/documents/${selectedDocId}/new-version`,f);
+ setNewVersionFile(null);setNewVersionSigned(false);setNewVersionNote("");
+ setMessage("Yeni sürüm kaydedildi. Önceki sürümler korunur. Arşiv: "+(r?.data?.archiveStatus||"kontrol edilmeli"));
+ await loadAll();await openDocument(selectedDocId)
+ }catch(e){setMessage("Hata: "+(e?.message||"Yeni sürüm yüklenemedi."))}finally{setBusy(false)}
+ }
  async function previewFile(path){try{const blob=await apiFetch(path,{responseType:"blob",timeoutMs:60000});const u=URL.createObjectURL(blob);window.open(u,"_blank","noopener");window.setTimeout(()=>URL.revokeObjectURL(u),120000)}catch(e){setMessage("Hata: "+(e?.message||"Dosya açılamadı."))}}
 
  async function createAudit(e){e.preventDefault();setBusy(true);try{const r=await apiPost("/compliance/audits",auditForm);setAuditForm(emptyAuditForm());setShowAuditForm(false);setSelectedAuditId(r?.data?.id||"");setMessage("Denetim dosyası oluşturuldu.");await loadAll()}catch(e2){setMessage("Hata: "+(e2?.message||"Denetim dosyası oluşturulamadı."))}finally{setBusy(false)}}
@@ -85,7 +123,17 @@ export default function ComplianceCenterPage({activeTab="denetim-genel"}){
  async function createProfile(e){e.preventDefault();setBusy(true);try{await apiPost("/compliance/profiles",profileForm);setProfileForm({name:"",code:"",version:"CUSTOM",description:""});setMessage("Yeni standart oluşturuldu.");await loadAll()}catch(e2){setMessage("Hata: "+(e2?.message||"Standart oluşturulamadı."))}finally{setBusy(false)}}
  async function createRequirement(e){e.preventDefault();if(!profile?.id)return;setBusy(true);try{await apiPost(`/compliance/profiles/${profile.id}/requirements`,requirementForm);setRequirementForm({title:"",code:"",category:"Genel",ownerDepartment:"",warningDays:10,criticalDays:3,mandatory:true});await loadAll()}catch(e2){setMessage("Hata: "+(e2?.message||"Madde eklenemedi."))}finally{setBusy(false)}}
  async function saveApplicability(e){e.preventDefault();setBusy(true);try{await apiPatch(`/compliance/requirements/${applicabilityForm.requirementId}/applicability`,{state:applicabilityForm.state,reason:applicabilityForm.reason});setApplicabilityForm({requirementId:"",title:"",state:"APPLICABLE",reason:""});await loadAll()}catch(e2){setMessage("Hata: "+(e2?.message||"Uygulanabilirlik kaydedilemedi."))}finally{setBusy(false)}}
- async function toggleProfileReadiness(){if(!profile?.id)return;setBusy(true);try{await apiPatch(`/compliance/profiles/${profile.id}`,{metadata:{...(profile.metadata||{}),readinessEnabled:profile.readinessEnabled===false}});await loadAll()}catch(e){setMessage("Hata: "+(e?.message||"Standart durumu değiştirilemedi."))}finally{setBusy(false)}}
+ async function changeProfileSelection(selectionState){
+ if(!profile?.id)return;setBusy(true);
+ try{await apiPatch(`/compliance/profiles/${profile.id}`,{selectionState});setMessage("Firma standardı: "+selectionState);await loadAll()}
+ catch(e){setMessage("Hata: "+(e?.message||"Standart durumu değiştirilemedi."))}finally{setBusy(false)}
+ }
+ async function linkDocumentRequirement(){
+ if(!selectedDocId||!linkRequirementId)return;
+ setBusy(true);
+ try{await apiPost(`/compliance/documents/${selectedDocId}/requirements`,{requirementIds:[linkRequirementId]});setLinkRequirementId("");await openDocument(selectedDocId)}
+ catch(e){setMessage("Hata: "+(e?.message||"Kriter bağlantısı kaydedilemedi."))}finally{setBusy(false)}
+ }
  async function saveSettings(e){e.preventDefault();setBusy(true);try{await apiPut("/compliance/settings",settings);setMessage("Denetim ayarları kaydedildi.")}catch(e2){setMessage("Hata: "+(e2?.message||"Ayarlar kaydedilemedi."))}finally{setBusy(false)}}
 
  const s=dash.summary||{};
