@@ -53,7 +53,7 @@ test("document explicit firm identity wins over fallback tax and other tenant re
   const { db, adapter } = fixture();
   const result = await listCompanyCanonicalDocuments(adapter,"main","taha");
   assert.equal(result?.total,2);
-  assert.deepEqual(result?.items.map(x=>x.document_no),["T001","HKN2026000000994"]);
+  assert.deepEqual(result?.items.map(x=>x.document_no),["HKN2026000000994","T001"]);
   assert.equal((await listCompanyCanonicalDocuments(adapter,"other","can")),null);
   db.close();
 });
