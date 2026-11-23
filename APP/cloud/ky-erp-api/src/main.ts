@@ -34,6 +34,7 @@ import { registerEBelgeAdapterProfileRoutes } from "./e-belge-adapter-profile-ro
 import { registerIsnetReadOnlyPreviewRoutes } from "./isnet-read-only-preview";
 import { registerIsnetDocumentTestRoutes } from "./isnet-document-test-routes";
 import { registerIsnetReadOnlyXmlDownloadRoutes } from "./isnet-read-only-xml-download";
+import { registerIsnetApiLiveAcceptanceRoutes } from "./isnet-api-live-acceptance";
 import { registerModelFileTransferRoutes } from "./model-file-transfer.ts";
 import { registerModelDocumentCenterRoutes } from "./model-document-center";
 import { registerModel360IdentityRoutes } from "./model-360-identity";
@@ -208,6 +209,7 @@ registerEBelgeAdapterProfileRoutes(app);
 registerIsnetReadOnlyPreviewRoutes(app);
 registerIsnetDocumentTestRoutes(app);
 registerIsnetReadOnlyXmlDownloadRoutes(app);
+registerIsnetApiLiveAcceptanceRoutes(app);
 registerModelFileTransferRoutes(app);
 registerModelDocumentCenterRoutes(app);
 registerModel360IdentityRoutes(app);
