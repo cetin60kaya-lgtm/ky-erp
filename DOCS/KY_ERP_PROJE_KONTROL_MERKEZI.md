@@ -1,5 +1,14 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 23.11.2026 — Denetim Merkezi Hakan Emp Drive/File Hub klasör kontrolü ve test kapısı
+
+- **Gerçek Drive kontrolü:** Hakan Emp → DENETİM klasöründe eski 5 üst klasör korundu; eksik 9 üst klasör ve standart/kimyasal/marka için 7 yeni alt klasör oluşturulup listeleme ile doğrulandı. Son durum 14 üst klasör; Standartlar'da LCW/ZDHC/GOTS, Kimyasal Envanter ve Deklarasyonlar'da 3 alt klasör, Denetim Evrakları'nda LCW/FAMA/Disney.
+- **Kaynak bulgular:** Eski “hava emisyon kaynakları.pdf” üç fikse bacası içeriyor, geçerli emisyon izin/ölçüm raporu sayılamaz. Kimyasal satın alma ve yönetim prosedürlerinin 2020 Rev00 nüshaları korundu. LCW envanterinde Rev06/07 yanında Rev09 Mart 2025 var. Eski belge tarihleri ve “MSDS var” hücreleri insan onayı olmadan güncel uygunluk değildir.
+- **Kod:** `feature/denetim-drive-hakanemp-filehub-kabul-20261123` dalında Denetim Ayarlar'da `DENETIM+purpose` fiziksel File Hub atama sağlık görünümü, indeksli mevcut orijinali kopyalamadan evraka sürüm olarak bağlama, arşivlenmiş eski evrakı görüntüleme, yeni revizyonda eski onayı sıfırlama ve yönetici onay kontrolü geliştirildi. **Fiziksel kaynak dosyaları taşınmadı/silinmedi.**
+- **Açık kabul:** Gerçek canlı D1 tenant File Hub atamaları, yetkili oturumdan yeni evrak→orijinal provider okuma, eski sürüm, kimyasal liste ve LOT uçtan uca testi kullanıcı testiyle doğrulanacaktır. CI/deploy sonucu gerçek tool kanıtıyla yazılmadan PASS sayılmayacak.
+- **Detay ve test sözleşmesi:** `DOCS/KY_DENETIM_DRIVE_FILE_HUB_TEST_KABUL_20261123.md`.
+
+
 ## 22.11.2026 — Muhasebe 50.000 TL kökeni + oturum 401 güvenli düzeltme, PR #646
 
 - **Kod/test:** `fix/muhasebe-cari-acilis-bakiye-20261122` feature dalı, taslak [PR #646](https://github.com/cetin60kaya-lgtm/ky-erp/pull/646). `accounting-current-write.ts` açılış + hareket toplamını koruyor. Yöneticiye yalnız salt-okunur `/api/muhasebe/cari-bakiye-denetimi` ve Firmalar & Cari **Bakiye Kaynağını İncele** arayüzü eklendi. Oturum istemcisi artık iş API'sindeki 401'i gerçek `/auth/me` ile doğrulamadan bütün girişi silmiyor; gerçek 401 ile iptal edilmiş oturumu korumaya çalışmıyor.
