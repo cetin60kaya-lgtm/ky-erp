@@ -40,7 +40,7 @@ function contextualMenuFor(target) {
   }
 
   if (kind === "company-row" || kind === "company-detail") {
-    const panel = kind === "company-detail" ? marked : document.querySelector('[data-ky-context-kind="company-detail"]');
+    const panel = kind === "company-detail" ? marked : marked.closest(".ccw-root")?.querySelector('[data-ky-context-kind="company-detail"]');
     const matching = panel && String(panel.dataset.kyContextId || "") === String(marked.dataset.kyContextId || "");
     if (!matching && kind === "company-row") {
       return {
