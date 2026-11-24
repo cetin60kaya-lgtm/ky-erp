@@ -1,7 +1,7 @@
 /* KY ERP · İşNet QA only — separate Cloudflare Worker and separate D1.
  * No production D1/R2/Google Drive access, no official document send.
  * User's password is not saved; provider token is encrypted at rest with AES-GCM.
- * Access is restricted to the X PC's public IP (server-verified Cloudflare header).
+ * Access is restricted to the public IP approved from DESEN (server-verified Cloudflare header).
  */
 import { PAGE, APP_JS } from './ui.mjs';
 const API='https://einvoiceapi.isnet.net.tr';
