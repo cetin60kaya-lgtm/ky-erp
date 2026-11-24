@@ -143,8 +143,27 @@ async function parseJson(req){
 export default {
  async fetch(req,env){
   const u=new URL(req.url),path=u.pathname;
-  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'service-probe-5'});
+  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'browser-run-probe-6'});
   if(!allowed(req,env))return denied('QA_IP_NOT_ALLOWED',403);
+
+  if(req.method==='POST'&&path==='/api/browser-run-probe'){
+   if(!validateOrigin(req))return denied('QA_ORIGIN_INVALID',403);
+   if(!env.BROWSER||typeof env.BROWSER.quickAction!=='function')return denied('BROWSER_BINDING_UNAVAILABLE',503);
+   // Single bounded anonymous reachability test; no credentials, no private pages.
+   const key=await sha('KYERP_BROWSER_RUN_PUBLIC_FORM_PROBE_V6'),now=Date.now();
+   const lock=await env.DB.prepare('INSERT INTO qa_login_attempts(ip_hash,tries,window_start) VALUES(?,1,?) ON CONFLICT(ip_hash) DO UPDATE SET tries=1,window_start=excluded.window_start WHERE qa_login_attempts.window_start<?').bind(key,now,now-86400000).run();
+   if(Number(lock.meta?.changes||0)!==1)return denied('BROWSER_PROBE_DAILY_LIMIT',429);
+   const start=Date.now();
+   try{
+    const r=await env.BROWSER.quickAction('content',{url:'https://nettefatura.isnet.net.tr/Account/Login',gotoOptions:{waitUntil:'domcontentloaded',timeout:20000}});
+    const used=Number(r.headers.get('X-Browser-Ms-Used')||0);
+    const html=(await r.text()).slice(0,200000);
+    const form=/<form\b/i.test(html)&&/__RequestVerificationToken/.test(html)&&/type\s*=\s*["']password["']/i.test(html);
+    const prod=/if\s*\(\s*['"]PROD['"]\s*==\s*['"]TEST['"]\s*\)/i.test(html);
+    const challenge=/cf-chl-|captcha|verify you are human|access denied|bot detection/i.test(html)&&!form;
+    return json({ok:true,probe:'PUBLIC_FORM_ONLY',browserHttp:r.status,elapsedMs:Date.now()-start,browserMs:used||null,form,productionVerified:form&&prod,challenge,credentialsSent:false,authenticated:false});
+   }catch(e){return json({ok:false,error:'BROWSER_PROBE_FAILED',elapsedMs:Date.now()-start,credentialsSent:false,authenticated:false},502)}
+  }
 
   if(req.method==='GET'&&path==='/api/service-connectivity'){
    const targets=[
