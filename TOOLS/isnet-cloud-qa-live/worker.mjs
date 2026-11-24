@@ -143,8 +143,27 @@ async function parseJson(req){
 export default {
  async fetch(req,env){
   const u=new URL(req.url),path=u.pathname;
-  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'portal-prod-only-4'});
+  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'service-probe-5'});
   if(!allowed(req,env))return denied('QA_IP_NOT_ALLOWED',403);
+
+  if(req.method==='GET'&&path==='/api/service-connectivity'){
+   const targets=[
+    ['PROD_PORTAL','https://nettefatura.isnet.net.tr/Account/Login'],
+    ['PROD_LEGACY_WSDL','https://nfhostservis.isnet.net.tr/ws/services/efatura?singleWsdl'],
+    ['PROD_SOAP_WSDL','https://einvoiceservice.isnet.net.tr/InvoiceService/ServiceContract/InvoiceService.svc?singleWsdl'],
+    ['PROD_ADDRESS_WSDL','https://einvoiceservice.isnet.net.tr/AddressBookService/ServiceContract/AddressBookService.svc?singleWsdl']
+   ];
+   const results=await Promise.all(targets.map(async([name,url])=>{
+    const start=Date.now();
+    try{
+     const r=await fetch(url,{method:'GET',redirect:'manual',signal:AbortSignal.timeout(25000),headers:{Accept:'application/xml,text/xml,text/html'}});
+     const reader=r.body?.getReader();let bytes=0,head='';
+     if(reader){try{while(bytes<65536){const x=await reader.read();if(x.done)break;bytes+=x.value.length;head+=new TextDecoder().decode(x.value.subarray(0,65536));if(head.length>=65536)break}}finally{await reader.cancel().catch(()=>{})}}
+     return {name,host:new URL(url).hostname,status:r.status,ms:Date.now()-start,wsdl:/<(?:\w+:)?definitions\b|<(?:\w+:)?description\b/i.test(head),loginForm:/__RequestVerificationToken/.test(head)&&/type=["']password["']/i.test(head),redirect:r.status>=300&&r.status<400,authenticated:false};
+    }catch(e){return {name,host:new URL(url).hostname,status:null,ms:Date.now()-start,error:e?.name==='TimeoutError'||e?.name==='AbortError'?'TIMEOUT':'NETWORK_ERROR',authenticated:false}}
+   }));
+   return json({ok:true,credentialsSent:false,results});
+  }
   if(req.method==='GET'&&path==='/api/portal-form-health')return json({ok:true,credentialTested:false,targets:await portalFormHealth()});
   if(req.method==='GET'&&path==='/')return new Response(PAGE,{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8',
     'content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
