@@ -140,7 +140,45 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
 }
 
 function errorResponse(c:Context<AppEnv>,error:any){return c.json({ok:false,error:{code:text(error?.code)||"DISPATCH_CONTROL_FAILED",message:text(error?.message)||"İrsaliye/fatura kontrolü hazırlanamadı."}},Number(error?.status||500))}
+
+/** Read-only incoming customer -> explicitly linked outgoing dispatch preview.
+ * Absence of a relation is never official reconciliation. No reservation/write. */
+async function partialDispatchPreview(c:Context<AppEnv>){
+  const slug=await assertAccountingScope(c),id=text(c.req.param("id"));
+  const doc=await c.env.DB.prepare(`SELECT d.id,d.document_no,d.party_company_id,d.party_tax_no,d.direction,d.document_type,c.company_type,c.type AS company_legacy_type
+    FROM accounting_documents d JOIN companies c ON c.id=d.party_company_id AND c.main_company_slug=d.main_company_slug AND c.deleted_at IS NULL
+    WHERE d.id=? AND d.main_company_slug=? AND d.deleted_at IS NULL`).bind(id,slug).first<Row>();
+  if(!doc||upper(doc.direction)!=="INCOMING"||!isDispatch(doc.document_type)||upper(doc.company_type||doc.company_legacy_type)!=="CUSTOMER")
+    throw Object.assign(new Error("Doğrulanmış müşteri gelen irsaliyesi bulunamadı."),{status:404,code:"CUSTOMER_DISPATCH_REQUIRED"});
+  const readLines=async (docId:string)=>(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,docId).all<Row>()).results||[];
+  const linked=async (docId:string)=>(await c.env.DB.prepare(`SELECT DISTINCT d.id,d.document_no,d.direction,d.document_type,d.party_company_id,d.party_tax_no
+    FROM accounting_document_relations r JOIN accounting_documents d ON d.main_company_slug=r.main_company_slug AND d.deleted_at IS NULL AND d.id=CASE WHEN r.document_id=? THEN r.related_document_id ELSE r.document_id END
+    WHERE r.main_company_slug=? AND (r.document_id=? OR r.related_document_id=?) AND r.relation_type IN ('INVOICE_OF','DESPATCH_OF','DISPATCH_OF')`).bind(docId,slug,docId,docId).all<Row>()).results||[];
+  const original=await readLines(id),related=await linked(id),warnings:string[]=[];
+  const key=(l:Row)=>{const k=canonicalLineKey(l),u=canonicalUnit(l.unit_code);return k&&u?k+"|"+u:"";};
+  const used=new Map<string,number>(),keys=new Set<string>();let blocked=!original.length;
+  for(const line of original){const k=key(line);if(!k||keys.has(k)||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0){blocked=true;}keys.add(k);}
+  if(blocked)warnings.push("Kaynak kalem kimliği, birimi veya miktarı belirsiz; satır eşleştirmesi gerekli.");
+  const dispatches=related.filter(d=>upper(d.direction)==="OUTGOING"&&isDispatch(d.document_type));
+  if(related.some(d=>isInvoice(d.document_type))){blocked=true;warnings.push("Doğrudan fatura bağlantısı var; önce sevk/fatura ilişkileri mutabakatı gerekli.");}
+  const sameParty=(d:Row)=>text(d.party_company_id)===text(doc.party_company_id)&&(!text(d.party_tax_no)||!text(doc.party_tax_no)||text(d.party_tax_no)===text(doc.party_tax_no));
+  for(const d of dispatches){
+    if(!sameParty(d)){blocked=true;warnings.push("Farklı cari bağlı sevk bulundu.");continue;}
+    const peers=await linked(text(d.id));
+    const sources=peers.filter(p=>upper(p.direction)==="INCOMING"&&isDispatch(p.document_type));
+    if(sources.length!==1||text(sources[0].id)!==id){blocked=true;warnings.push("Birden fazla kaynak irsaliye bağlantısı; kalem tahsisi gerekli.");continue;}
+    const child=await readLines(text(d.id));
+    if(!child.length){blocked=true;warnings.push("Bağlı sevk kalemleri eksik.");}
+    for(const l of child){const k=key(l),qty=Number(l.quantity);if(!k||!keys.has(k)||!Number.isFinite(qty)||qty<=0){blocked=true;warnings.push("Bağlı sevk kalem eşleşmesi eksik.");continue;}used.set(k,(used.get(k)||0)+qty);}
+  }
+  const lines=original.map(l=>{const quantity=num(l.quantity),linkedQuantity=used.get(key(l))||0;if(linkedQuantity>quantity){blocked=true;warnings.push("Bağlı sevk miktarı kaynak miktarı aşıyor.");}return{id:text(l.id),description:text(l.description)||text(l.product_code)||"Kalem",unit:canonicalUnit(l.unit_code),quantity,linked:linkedQuantity,remaining:Math.max(0,Number((quantity-linkedQuantity).toFixed(6)))};});
+  return{sourceId:id,sourceNo:text(doc.document_no),lines,blocked,warnings:[...new Set(warnings)],officialReconciled:false,readOnly:true};
+}
+
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+  app.get("/api/muhasebe/incoming-dispatches/:id/partial-preview",async c=>{
+    try{const data=await partialDispatchPreview(c);return c.json({ok:true,success:true,data});}catch(error:any){return errorResponse(c,error);}
+  });
   app.get("/api/muhasebe/incoming-dispatches/billing",async c=>{
     try{const data=await buildIncomingDispatchBilling(c);return c.json({ok:true,success:true,data});}
     catch(error:any){return errorResponse(c,error);}
