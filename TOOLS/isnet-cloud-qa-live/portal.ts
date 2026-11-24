@@ -45,7 +45,8 @@ function verificationToken(html: string) {
 
 function mergeCookies(response: Response, jar: Map<string, string>) {
   const headers = response.headers as Headers & { getSetCookie?: () => string[] };
-  const values = headers.getSetCookie?.() ||
+  const values = typeof headers.getSetCookie === "function" ? headers.getSetCookie() :
+    typeof (headers as any).getAll === "function" ? (headers as any).getAll("Set-Cookie") :
     (headers.get("set-cookie") ? [headers.get("set-cookie") as string] : []);
   for (const value of values) {
     const pair = text(value.split(";", 1)[0]);
@@ -166,7 +167,7 @@ export async function portalLogin(username: string, password: string, companyId 
       // Portal form/action and redirects are untrusted provider input. Never
       // send credentials or cookies to an arbitrary origin.
       if (target.origin !== new URL(base).origin || target.username || target.password) {
-        throw new Error("İşNet form adresi güvenlik doğrulamasını geçemedi.");
+        throw new Error("PORTAL_UNSAFE_TARGET");
       }
       const response = await fetch(target.toString(), {
         ...init,
@@ -204,7 +205,7 @@ export async function portalLogin(username: string, password: string, companyId 
         }
       }
       if (!loginPath || !token) {
-        throw new Error("Portal giriş sayfası veya doğrulama anahtarı alınamadı.");
+        throw new Error("PORTAL_FORM_UNAVAILABLE");
       }
 
       const inputs = inputRows(loginHtml);
@@ -243,10 +244,10 @@ export async function portalLogin(username: string, password: string, companyId 
         loginResponse.status < 400 &&
         /login/i.test(location);
       if (explicitPortalError && looksLikeLoginPage(loginResult)) {
-        throw new Error(explicitPortalError);
+        throw new Error(/ek güvenlik/i.test(explicitPortalError) ? "PORTAL_INTERACTIVE_SECURITY_REQUIRED" : "PORTAL_CREDENTIAL_REJECTED");
       }
       if (redirectedToLogin) {
-        throw new Error("İşNet giriş sayfasına yönlendirme yaptı; portal oturumu veya ek güvenlik kontrolü doğrulanmadı.");
+        throw new Error("PORTAL_LOGIN_REDIRECT");
       }
 
       const companyPaths = [
@@ -256,6 +257,8 @@ export async function portalLogin(username: string, password: string, companyId 
       ];
       let companies = companyOptionsFromHtml(loginResult);
       let companyRaw = "";
+      const companyStatuses:number[]=[];
+      const companyJsonCounts:number[]=[];
       const companyToken = verificationToken(loginResult) || token;
 
       if (!companies.length) {
@@ -274,6 +277,7 @@ export async function portalLogin(username: string, password: string, companyId 
               },
               body: body.toString(),
             });
+            companyStatuses.push(response.status);
             const raw = await response.text();
             companyRaw += ` ${raw}`;
             let payload: any = {};
@@ -282,7 +286,8 @@ export async function portalLogin(username: string, password: string, companyId 
             } catch {
               payload = {};
             }
-            const rows = normalizeCompanies(payload);
+            const rows = response.ok ? normalizeCompanies(payload) : [];
+            companyJsonCounts.push(rows.length);
             if (rows.length) {
               companies = rows;
               break;
@@ -305,11 +310,10 @@ export async function portalLogin(username: string, password: string, companyId 
 
       if (!companies.length) {
         const message = portalErrorText(`${loginResult} ${companyRaw}`);
-        if (message) throw new Error(message);
-        if (looksLikeLoginPage(loginResult)) {
-          throw new Error("İşNet yetkili firma listesi yerine giriş sayfası döndü. Oturum çerezleri doğrulanmalı.");
-        }
-        throw new Error("Portal girişi açıldı ancak yetkili firma listesi alınamadı.");
+        if (message) throw new Error(/ek güvenlik/i.test(message) ? "PORTAL_INTERACTIVE_SECURITY_REQUIRED" : "PORTAL_CREDENTIAL_REJECTED");
+        if (companyStatuses.some(n=>n===401||n===403||n===429)) throw Error("PORTAL_COMPANY_ACCESS_REJECTED");
+        if (looksLikeLoginPage(loginResult)) throw new Error("PORTAL_LOGIN_FORM_RETURNED");
+        throw new Error("PORTAL_COMPANY_LIST_EMPTY");
       }
 
       if (!companyId) {
@@ -388,7 +392,7 @@ export async function portalLogin(username: string, password: string, companyId 
       const safe = text(error?.message) || "Portal isteği tamamlanamadı.";
       lastError = `${base.replace(/^https?:\/\//, "")}: ${safe}`;
       // Never silently retry a password against another İşNet host.
-      if (credentialsSubmitted) break;
+      if (credentialsSubmitted || /PORTAL_(INTERACTIVE_SECURITY|USER_CONFIRMATION|UNSAFE_TARGET)/.test(safe)) break;
     }
   }
 
@@ -516,4 +520,17 @@ export async function portalDownload(session,kind,dir,from,to,id,format){
   if(root!==(kind==="invoice"?"Invoice":"DespatchAdvice"))throw Error("ISNET_XML_KIND_MISMATCH");
  }
  return {bytes,format};
+}
+
+// Public form connectivity only. No credentials, cookies, HTML, or identifiers returned.
+export async function portalFormHealth(){
+ return Promise.all(PORTAL_BASES.map(async base=>{
+  const started=Date.now();
+  try{
+   const r=await fetch(base+"/Account/Login",{method:"GET",redirect:"manual",signal:AbortSignal.timeout(7000),headers:{Accept:"text/html","User-Agent":"Mozilla/5.0 KY-ERP-IsNet-Cloud/6.0"}});
+   const html=await r.text();
+   const jar=new Map<string,string>();mergeCookies(r,jar);
+   return {host:new URL(base).hostname,status:r.status,form:looksLikeLoginPage(html),csrfPresent:!!verificationToken(html),cookieCount:jar.size,companySearchPresent:/GetCompanyList/i.test(html),elapsedMs:Date.now()-started};
+  }catch(e){return {host:new URL(base).hostname,status:null,reason:e?.name==="TimeoutError"||e?.name==="AbortError"?"TIMEOUT":"REQUEST_FAILED",elapsedMs:Date.now()-started}}
+ }));
 }
