@@ -691,6 +691,64 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
 const invoiceTypeSql="(d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%ARSIV%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%IADE%')";
 function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:`d.direction='INCOMING' AND ${invoiceTypeSql}`};if(f==="OUTGOING_INVOICE")return{sql:`d.direction='OUTGOING' AND ${invoiceTypeSql}`};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
 
+
+/** Browser intake uses a verified XML as the only document identity, and PDF as an attachment.
+ * No OCR, official submission, new archive table, or financial finalization. */
+async function ingestBrowserIsnetPair(c:Context<AppEnv>,slug:string,body:Row,files:File[]){
+  const user=await getAuthenticatedUser(c);
+  if(!user?.id)return c.json(error("UNAUTHORIZED","İşNet aktarımı için KY ERP oturumu gerekli."),401);
+  if(!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Seçili ana firmaya belge aktarım yetkisi gerekli."),403);
+  const reject=(code:string,message:string)=>c.json(error(code,message),422);
+  if(files.length!==2||files.some(f=>!f.size||f.size>MAX_FILE_BYTES))return reject("PAIR_REQUIRED","Bir orijinal XML ve bir PDF gerekli; her biri en fazla 20 MB.");
+  const xml=files.find(f=>/\.xml$/i.test(f.name)),pdf=files.find(f=>/\.pdf$/i.test(f.name));
+  if(!xml||!pdf||xml.name.replace(/\.xml$/i,"")!==pdf.name.replace(/\.pdf$/i,""))return reject("PAIR_NAME_MISMATCH","XML/PDF dosya çifti eşleşmedi.");
+  const requested=upper(body.direction),kind=upper(body.documentKind),expected=text(body.documentNo);
+  if(!["INCOMING","OUTGOING"].includes(requested)||!["FATURA","IRSALIYE"].includes(kind)||!expected||expected.length>100)return reject("PAIR_METADATA_INVALID","Belge yönü, türü ve numarası gerekli.");
+  const xmlText=await xml.text();
+  if(/<!DOCTYPE\b|<!ENTITY\b/i.test(xmlText))return reject("XML_UNSAFE","XML güvenlik kontrolü başarısız.");
+  const root=/^(?:\s*<\?xml\b[^>]*\?>\s*)?(?:\s*<!--[\s\S]*?-->\s*)*\s*<(?:[\w.-]+:)?(Invoice|DespatchAdvice)\b/.exec(xmlText.replace(/^\uFEFF/,""))?.[1];
+  if(root!==(kind==="FATURA"?"Invoice":"DespatchAdvice")||!/urn:oasis:names:specification:ubl:schema:xsd:/.test(xmlText.slice(0,8192)))return reject("UBL_KIND_MISMATCH","Orijinal UBL belge türü doğrulanamadı.");
+  const b=new Uint8Array(await pdf.arrayBuffer()),decoder=new TextDecoder();
+  if(!decoder.decode(b.slice(0,8)).startsWith("%PDF-")||!decoder.decode(b.slice(-2048)).includes("%%EOF"))return reject("PDF_INVALID","Orijinal PDF biçimi doğrulanamadı.");
+  let parsed:Row;try{parsed=parseCanonicalEBelgeUbl(xmlText,requested)}catch{return reject("UBL_PARSE_FAILED","XML okunamadı.")}
+  const uuid=text(parsed.uuid).toLowerCase();
+  if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid)||text(parsed.documentNo)!==expected||!validDate(text(parsed.issueDate)))return reject("UBL_IDENTITY_MISMATCH","XML ETTN, belge numarası veya tarih doğrulanamadı.");
+  const owner=await mainCompanyIdentity(c,slug),own=new Set(owner.taxNos.filter(t=>/^\d{10,11}$/.test(t)));
+  const supplier=cleanTax(parsed.supplierTaxNo),customer=cleanTax(parsed.customerTaxNo);
+  const ownSide=requested==="INCOMING"?customer:supplier,otherSide=requested==="INCOMING"?supplier:customer;
+  if(!own.size||!own.has(ownSide)||own.has(otherSide))return reject("OWNER_VKN_MISMATCH","XML'deki ana firma VKN/TCKN seçili ERP firmasıyla doğrulanamadı. Aktarım yapılmadı.");
+  const resolved=await resolveManualDirection(c,slug,requested,parsed,kind);
+  if(resolved.direction!==requested||resolved.directionNeedsReview)return reject("DIRECTION_UNVERIFIED","XML belge yönü doğrulanamadı.");
+  // Exact ETTN; avoid accepting an invoice-number-only duplicate of a different document.
+  const found=await c.env.DB.prepare("SELECT * FROM accounting_documents WHERE main_company_slug=? AND LOWER(uuid)=? AND deleted_at IS NULL LIMIT 2").bind(slug,uuid).all<Row>();
+  const matches=found.results||[];
+  if(matches.length>1)return reject("DUPLICATE_REVIEW","Aynı ETTN birden fazla kayıtta var; kontrol gerekli.");
+  let doc=matches[0]||null,duplicate=Boolean(doc);
+  if(doc&&(text(doc.document_no)!==expected||upper(doc.direction)!==requested||isDispatch(doc.document_type)!==(kind==="IRSALIYE")||text(doc.issue_date)!==text(parsed.issueDate)))return reject("DUPLICATE_CONFLICT","Mevcut ETTN kaydı farklı belge bilgisi içeriyor.");
+  if(!doc){
+    const conflict=await findDuplicate(c,slug,{...resolved,uuid,providerType:"ISNET",providerDocumentId:""});
+    if(conflict&&text(conflict.uuid).toLowerCase()!==uuid)return reject("DOCUMENT_IDENTITY_CONFLICT","Belge numarası başka ETTN kaydıyla çakışıyor.");
+    if(conflict)doc=conflict;
+  }
+  // Existing originals are never replaced. A failed/uncertain write requires inspection, not auto-retry.
+  try{
+    if(!doc||!text(doc.xml_file_asset_id)){
+      const asset=await stageFile(c,slug,xml);
+      const result=doc?await attachDuplicateFile(c,slug,doc,asset):await createDocument(c,slug,{...resolved,uuid,providerType:"ISNET",sourceType:"ISNET_BROWSER_XML",extractionConfidence:1,status:"REVIEW_REQUIRED",rawMetadata:{...safeJson(resolved.rawMetadata),browserPairIntake:true}},asset);
+      duplicate=duplicate||result.duplicate===true;
+      doc=await c.env.DB.prepare("SELECT * FROM accounting_documents WHERE main_company_slug=? AND id=? AND deleted_at IS NULL").bind(slug,result.documentId).first<Row>();
+      if(!doc||text(doc.uuid).toLowerCase()!==uuid||text(doc.document_no)!==expected||!text(doc.xml_file_asset_id))throw Error("XML kayıt doğrulaması başarısız.");
+    }
+    if(!text(doc.pdf_file_asset_id)){
+      const asset=await stageFile(c,slug,pdf);
+      await attachDuplicateFile(c,slug,doc,asset);
+    }
+    const verified=await c.env.DB.prepare("SELECT id,uuid,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND id=? AND deleted_at IS NULL").bind(slug,doc.id).first<Row>();
+    if(!verified?.xml_file_asset_id||!verified?.pdf_file_asset_id||text(verified.uuid).toLowerCase()!==uuid)throw Error("Belge çifti doğrulanamadı.");
+    return c.json({ok:true,data:{documentId:text(verified.id),duplicate,xmlAttached:true,pdfAttached:true,archiveStatus:"CHECK_ARCHIVE_QUEUE",financialFinalized:false}},201);
+  }catch{return c.json(error("PAIR_RESULT_UNCERTAIN","Aktarım sonucu kısmi veya belirsiz olabilir. Belge Havuzunu kontrol edin; otomatik tekrar yapılmadı."),409)}
+}
+
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   app.get("/api/e-belge/dashboard",async c=>{
     const slug=slugOf(c);
@@ -758,6 +816,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     const slug=slugOf(c),body=await c.req.parseBody({all:true}),direction=explicitEBelgeDirection(body.direction),kind=upper(body.documentKind||"AUTO");
     let rawFiles:any=body.files||body.file||[];const files=(Array.isArray(rawFiles)?rawFiles:[rawFiles]).filter((x:any)=>x instanceof File) as File[];
     if(!files.length)return c.json(error("FILES_REQUIRED","Yüklenecek XML/PDF/görsel bulunamadı."),400);
+    if(text(body.source)==="ISNET_BROWSER_PAIR")return ingestBrowserIsnetPair(c,slug,body,files);
     const manualOnly=text(body.manualOnly)==="true";
     const manualData=manualOnly?safeJson(body.manualData):null;
     if(manualOnly){
