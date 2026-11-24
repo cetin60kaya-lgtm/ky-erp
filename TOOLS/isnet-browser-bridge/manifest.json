@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "KY ERP · NetteFatura Aktarım",
+  "version": "0.1.0",
+  "description": "Açık NetteFatura oturumundan seçili belge XML ve PDF dosyalarını doğrular ve yerel aktarım paketi oluşturur.",
+  "permissions": [
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://nettefatura.isnet.net.tr/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "KY ERP Belge Aktarım"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://nettefatura.isnet.net.tr/*"
+      ],
+      "js": [
+        "core.js",
+        "content.js"
+      ],
+      "css": [
+        "panel.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
