@@ -21,9 +21,9 @@ async function request(path,init={}){
 }
 async function list(p){
  snapshot=null;
- if(!portalSession())throw Error("PORTAL_LOGIN_REQUIRED");
+ if(/\/Account\/(Login|Logout)/i.test(location.pathname)||document.querySelector('input[type="password"]'))throw Error("PORTAL_LOGIN_REQUIRED");
  const route=routes[p.kind];if(!route||!dateOK(p.from)||!dateOK(p.to)||p.from>p.to||(Date.parse(p.to)-Date.parse(p.from))>31*86400000)throw Error("INVALID_DATE_OR_TYPE");
- const page=route[0]+"?minDate="+encodeURIComponent(p.from),r=await request(page),html=await r.text(),doc=new DOMParser().parseFromString(html,"text/html");
+ const page=route[0]+(p.kind==="outgoing-dispatch"?"":"?minDate="+encodeURIComponent(p.from)),r=await request(page),html=await r.text(),doc=new DOMParser().parseFromString(html,"text/html");
  if(doc.querySelector('input[type="password"]'))throw Error("PORTAL_LOGIN_REQUIRED");
  const token=doc.querySelector('input[name="__RequestVerificationToken"]')?.value;
  const field=doc.querySelector('[name="CompanyIdFilter"],#CompanyIdFilter');
@@ -31,19 +31,19 @@ async function list(p){
  if(!token)throw Error("PORTAL_FORM_UNVERIFIED");
  // An explicit selected firm is required; no guessing or all-company fallback.
  if(!/^\d{1,24}$/.test(company))throw Error("PORTAL_COMPANY_FILTER_UNVERIFIED");
- const start=Number(p.start||0);if(!Number.isInteger(start)||start<0||start>5000)throw Error("INVALID_PAGE");
+ const start=Number(p.start||0);if(!Number.isInteger(start)||start<0||start>10000000)throw Error("INVALID_PAGE");
  const form=new URLSearchParams({draw:"1",start:String(start),length:"100","search[value]":"","search[regex]":"false",CompanyIdFilter:company,__RequestVerificationToken:token,IlkTarih:fmt(p.from),SonTarih:fmt(p.to)});
  const prefix=p.kind.endsWith("invoice")?"Fatura":"Irsaliye";form.set(prefix+"IlkTarihi",fmt(p.from));form.set(prefix+"SonTarihi",fmt(p.to));
  const rr=await request(route[1],{method:"POST",headers:{Accept:"application/json","Content-Type":"application/x-www-form-urlencoded; charset=UTF-8","X-Requested-With":"XMLHttpRequest"},body:form});
  const j=await rr.json();if(!Array.isArray(j?.data))throw Error("PORTAL_LIST_UNVERIFIED");
- const src=C.source(route[0]),seen=new Set(),rows=j.data.slice(0,100).map(x=>C.normalize(x,src)).filter(x=>x&&!seen.has(x.id)&&seen.add(x.id));
- if(j.data.length&&!rows.length)throw Error("PORTAL_LIST_UNVERIFIED");
+ const src=C.source(route[0]),seen=new Set(),rows=j.data.map(x=>C.normalize(x,src)).filter(x=>x&&!seen.has(x.id)&&seen.add(x.id));
+ const total=Number(j.recordsFiltered);if(!Number.isSafeInteger(total)||total<0||rows.length!==j.data.length||rows.length>100||start+rows.length>total||(start<total&&!rows.length))throw Error("PORTAL_PAGE_INCOMPLETE");
  const key=crypto.randomUUID();
- snapshot={key,company,rows,expires:Date.now()+10*60*1000};
- return {rows,key,total:Number(j.recordsFiltered||j.recordsTotal||rows.length),companySelected:true};
+ snapshot={key,company,rows,expires:Date.now()+60*60*1000};
+ return {rows,key,total,companySelected:true,companyId:company};
 }
 async function file(p){
- if(!portalSession()||!snapshot||snapshot.key!==p.key||snapshot.expires<Date.now())throw Error("PORTAL_LIST_EXPIRED");
+ if(!snapshot||snapshot.key!==p.key||snapshot.expires<Date.now())throw Error("PORTAL_LIST_EXPIRED");
  const row=snapshot.rows.find(r=>r.id===p.id);if(!row||!["xml","pdf"].includes(p.format))throw Error("DOCUMENT_NOT_SELECTED");
  const r=await request(C.downloadPath(row,p.format));if(Number(r.headers.get("content-length")||0)>C.MAX_FILE||!r.body)throw Error("FILE_TOO_LARGE");
  const reader=r.body.getReader();let size=0;const parts=[];
@@ -55,6 +55,6 @@ async function file(p){
 }
 chrome.runtime.onMessage.addListener((m,s,reply)=>{
  if(s.id!==chrome.runtime.id||m?.type!=="KY_PORTAL_AGENT")return false;
- (async()=>{if(m.op==="status")return{connected:portalSession()};if(m.op==="list")return list(m.payload||{});if(m.op==="file")return file(m.payload||{});throw Error("UNSUPPORTED")})().then(data=>reply({ok:true,data}),e=>reply({ok:false,error:String(e.message||"PORTAL_FAILED").slice(0,160)}));return true;
+ (async()=>{if(m.op==="status"){if(!portalSession())return{connected:false};try{const r=await request(routes["incoming-dispatch"][0]);const d=new DOMParser().parseFromString(await r.text(),"text/html");return{connected:!d.querySelector('input[type="password"]')&&!!d.querySelector('input[name="__RequestVerificationToken"]')};}catch{return{connected:false}}}if(m.op==="list")return list(m.payload||{});if(m.op==="file")return file(m.payload||{});throw Error("UNSUPPORTED")})().then(data=>reply({ok:true,data}),e=>reply({ok:false,error:String(e.message||"PORTAL_FAILED").slice(0,160)}));return true;
 });
 })();
