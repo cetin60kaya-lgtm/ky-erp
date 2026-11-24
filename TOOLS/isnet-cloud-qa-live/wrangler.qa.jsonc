@@ -4,12 +4,24 @@
   "main": "worker.mjs",
   "compatibility_date": "2026-11-20",
   "workers_dev": true,
-  "observability": {"enabled": false},
-  "triggers": {"crons": []},
-  "d1_databases": [{
-    "binding": "DB",
-    "database_name": "kyerp-isnet-qa-20261124",
-    "database_id": "cda199d5-23cf-405b-a15e-c579ac8fa6fb"
-  }],
-  "vars": {"QA_ENV": "ISOLATED_QA", "OFFICIAL_DOCUMENT_SEND_ENABLED": "false"}
+  "observability": {
+    "enabled": false
+  },
+  "triggers": {
+    "crons": []
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "kyerp-isnet-qa-20261124",
+      "database_id": "cda199d5-23cf-405b-a15e-c579ac8fa6fb"
+    }
+  ],
+  "vars": {
+    "QA_ENV": "ISOLATED_QA",
+    "OFFICIAL_DOCUMENT_SEND_ENABLED": "false"
+  },
+  "browser": {
+    "binding": "BROWSER"
+  }
 }
