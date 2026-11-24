@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { accountingAccess } from "./accounting-access-policy";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -175,7 +176,51 @@ async function partialDispatchPreview(c:Context<AppEnv>){
   return{sourceId:id,sourceNo:text(doc.document_no),lines,blocked,warnings:[...new Set(warnings)],officialReconciled:false,readOnly:true};
 }
 
+
+const WORKFLOW_SCOPE="ISNET_BUSINESS_SETTINGS";
+const workflowKey=(slug:string)=>"workflow-defaults:"+slug;
+async function defaultsAccess(c:Context<AppEnv>,write=false){
+  const slug=await assertAccountingScope(c),user=await getAuthenticatedUser(c) as Row;
+  if(!accountingAccess(user,write?"PUT":"GET","/api/muhasebe/isnet-workflow-defaults"))throw Object.assign(new Error("Varsayılan ayar yetkiniz yok."),{status:403,code:"DEFAULTS_FORBIDDEN"});
+  return slug;
+}
+async function readWorkflowDefaults(c:Context<AppEnv>,slug:string){
+  const key=workflowKey(slug);
+  const row=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?").bind(key,WORKFLOW_SCOPE,slug,key).first<Row>();
+  const legacy=await c.env.DB.prepare("SELECT data FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? ORDER BY updated_at DESC LIMIT 1").bind(WORKFLOW_SCOPE,slug,slug).first<Row>();
+  const old=json(legacy?.data),stored=json(row?.data),carrier=json(old.carrier),sample=json(json(old.nonBillableRules).TEST_NUMUNESI);
+  return{version:text(stored.version),profiles:Array.isArray(stored.profiles)?stored.profiles:[],legacy:{driver:text(carrier.driverName),plate:text(carrier.vehiclePlate),carrierName:text(carrier.carrierName),trailerPlate:text(carrier.trailerPlate),deliveryMethod:text(carrier.deliveryMethod)||"ELDEN_TESLIM",deliveryAddress:text(carrier.deliveryAddress),sampleReason:text(sample.exemptionReason)||"Test numuneleri bedelsiz olarak elden teslim edilmiştir.",sampleCode:text(sample.exemptionCode),vat:20,scenario:"TICARI"}};
+}
+async function saveWorkflowDefaults(c:Context<AppEnv>,slug:string){
+  const body=await c.req.json(),key=workflowKey(slug);
+  if(!Array.isArray(body.profiles)||body.profiles.length>50||typeof body.version!=="string")throw Object.assign(new Error("Profil listesi veya sürümü geçersiz."),{status:400,code:"DEFAULTS_INVALID"});
+  const profiles:Row[]=[],ids=new Set<string>(),defaultScopes=new Set<string>();
+  for(const p of body.profiles){
+    const id=text(p.id),name=text(p.name).slice(0,100),companyId=text(p.companyId),vat=Number(p.vat);
+    if(!id||ids.has(id)||!name||p.vat===""||p.vat==null||!Number.isFinite(vat)||vat<0||vat>100||!["TICARI","TEMEL"].includes(p.scenario)||!["ELDEN_TESLIM","NAKLIYE","KARGO"].includes(p.deliveryMethod))throw Object.assign(new Error("Profil adı, KDV veya senaryo geçersiz."),{status:400,code:"DEFAULTS_INVALID"});
+    ids.add(id);
+    if(companyId&&!await c.env.DB.prepare("SELECT id FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(companyId,slug).first())throw Object.assign(new Error("Cari bu firmada bulunamadı."),{status:400,code:"DEFAULTS_COMPANY_INVALID"});
+    if(p.isDefault===true){if(defaultScopes.has(companyId))throw Object.assign(new Error("Her cari için yalnız bir varsayılan profil seçilebilir."),{status:400,code:"DEFAULTS_DUPLICATE"});defaultScopes.add(companyId);}
+    const sampleProductId=text(p.sampleProductId);
+    if(sampleProductId&&!await c.env.DB.prepare("SELECT id FROM products WHERE id=? AND main_company_slug=?").bind(sampleProductId,slug).first())throw Object.assign(new Error("Numune ürünü mevcut firma ürün kartında bulunamadı."),{status:400,code:"DEFAULTS_PRODUCT_INVALID"});
+    const sampleQuantity=text(p.sampleQuantity);
+    if(sampleQuantity&&(!Number.isFinite(Number(sampleQuantity))||Number(sampleQuantity)<=0))throw Object.assign(new Error("Varsayılan numune miktarı pozitif olmalıdır."),{status:400,code:"DEFAULTS_QUANTITY_INVALID"});
+    const fields=Object.fromEntries(["driver","plate","carrierName","trailerPlate","deliveryAddress","dispatchNote","invoiceNote","sampleReason","sampleCode"].map(k=>[k,text(p[k]).slice(0,1000)]));
+    profiles.push({id,name,companyId,isDefault:p.isDefault===true,vat,scenario:p.scenario,deliveryMethod:p.deliveryMethod,sampleProductId,sampleQuantity,...fields});
+  }
+  const current=await readWorkflowDefaults(c,slug);
+  if(current.version!==body.version)throw Object.assign(new Error("Ayarlar başka bir oturumda değişti; yenileyin."),{status:409,code:"DEFAULTS_CONFLICT"});
+  const version=crypto.randomUUID(),ts=new Date().toISOString(),payload=JSON.stringify({version,profiles});
+  const result=current.version?await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND json_extract(data,'$.version')=?").bind(payload,ts,key,WORKFLOW_SCOPE,slug,key,current.version).run():await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING").bind(key,WORKFLOW_SCOPE,slug,key,payload,ts,ts).run();
+  if(result.meta?.changes!==1)throw Object.assign(new Error("Ayarlar başka bir oturumda değişti; yenileyin."),{status:409,code:"DEFAULTS_CONFLICT"});
+  return{version,profiles,legacy:current.legacy};
+}
+
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+  app.get("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await readWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+  app.put("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c,true);return c.json({ok:true,data:await saveWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+  app.get("/api/muhasebe/isnet-workflow-defaults/products",async c=>{try{const slug=await defaultsAccess(c),q=text(c.req.query("q")).slice(0,100);const rows=(await c.env.DB.prepare("SELECT id,name,unit FROM products WHERE main_company_slug=? AND name LIKE ? ORDER BY name LIMIT 50").bind(slug,"%"+q+"%").all<Row>()).results||[];return c.json({ok:true,data:{rows}});}catch(e:any){return errorResponse(c,e);}});
+
   app.get("/api/muhasebe/incoming-dispatches/:id/partial-preview",async c=>{
     try{const data=await partialDispatchPreview(c);return c.json({ok:true,success:true,data});}catch(error:any){return errorResponse(c,error);}
   });
