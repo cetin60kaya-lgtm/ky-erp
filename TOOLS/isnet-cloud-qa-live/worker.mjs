@@ -1,14 +1,11 @@
 /* KY ERP · İşNet QA only — separate Cloudflare Worker and separate D1.
  * No production D1/R2/Google Drive access, no official document send.
- * User's password is not saved; provider token is encrypted at rest with AES-GCM.
+ * User's password is not saved; selected portal session is encrypted at rest with AES-GCM.
  * Access is restricted to the public IP approved from DESEN (server-verified Cloudflare header).
  */
 import { PAGE, APP_JS } from './ui.mjs';
-const API='https://einvoiceapi.isnet.net.tr';
-const UUID=/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
+import { portalLogin, portalList, portalDownload } from './portal.ts';
 const txt=v=>String(v??'').trim();
-const keyNames=['IdFirma','idFirma','CompanyId','companyId','Id','id'];
-const goodResult=x=>[0,'0',true,'Success','success'].includes(x);
 const NO_STORE={'cache-control':'private, no-store, max-age=0','x-content-type-options':'nosniff','x-robots-tag':'noindex, nofollow','referrer-policy':'no-referrer'};
 const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{...NO_STORE,'content-type':'application/json; charset=utf-8',...headers}});
 const denied=(code='DENIED',status=403)=>json({ok:false,error:code},status);
@@ -21,100 +18,6 @@ const dateOk=x=>/^\d{4}-\d{2}-\d{2}$/.test(x)&&!Number.isNaN(Date.parse(x+'T00:0
 const periodOk=(a,b)=>dateOk(a)&&dateOk(b)&&a<=b&&(Date.parse(b)-Date.parse(a)<=31*86400000);
 const kindOk=x=>x==='invoice'||x==='despatch';
 const dirOk=x=>x==='incoming'||x==='outgoing';
-function listConfig(kind,dir,companyId,from,to){
- if(kind==='invoice')return {path:dir==='incoming'?'/api/Invoice/GetIncomingEInvoiceList':'/api/Invoice/GetSentStagingInvoiceList',
-  key:'Invoices',body:{CompanyId:Number(companyId),FirstInvoiceDate:from,LastInvoiceDate:to,PageIndex:0,PageSize:25,IsArchiveIncluded:true,...(dir==='outgoing'?{IsSended:true}:{})}};
- return {path:dir==='incoming'?'/api/Invoice/GetIncomingDespatchList':'/api/Invoice/GetSentStagingDespatchList',
-  key:'Despatches',body:{CompanyId:Number(companyId),FirstDespatchDate:from,LastDespatchDate:to,PageIndex:0,PageSize:25}};
-}
-function normalizeCompanies(payload){
- const array=payload?.CompanyList??payload?.companyList??payload?.Companies??payload?.companies??[];
- if(!Array.isArray(array))return [];
- const seen=new Set();
- return array.map(row=>{
-  const id=txt(keyNames.map(k=>row?.[k]).find(v=>v!==undefined&&v!==null));
-  const name=txt(row?.FirmaAdi??row?.firmaAdi??row?.CompanyName??row?.companyName??row?.Name??row?.name);
-  return {id,name};
- }).filter(row=>/^\d+$/.test(row.id)&&row.name.length>0&&!seen.has(row.id)&&seen.add(row.id)).slice(0,60);
-}
-export async function providerLogin(fetcher,username,password){
- const a=delayAbort(15000);
- try{
-  const res=await fetcher(API+'/api/Account/Login',{method:'POST',redirect:'manual',signal:a.signal,
-   headers:{Accept:'application/json','Content-Type':'application/json'},
-   body:JSON.stringify({IdentificationNumber:username,Password:password})});
-  if(res.status===401||res.status===403)throw Error('ISNET_API_NOT_AUTHORIZED');
-  if(!res.ok)throw Error('ISNET_LOGIN_HTTP_ERROR');
-  if(!(res.headers.get('content-type')||'').toLowerCase().includes('json'))throw Error('ISNET_LOGIN_NOT_JSON');
-  const payload=await res.json();
-  if(payload.ErrorMessage||payload.errorMessage)throw Error('ISNET_API_REJECTED');
-  const token=txt(payload.Token??payload.token),companies=normalizeCompanies(payload);
-  if(!token||!companies.length)throw Error('ISNET_API_NO_AUTHORIZED_COMPANIES');
-  return {token,companies,expiresOn:txt(payload.ExpiresOn??payload.expiresOn)};
- }finally{a.done()}
-}
-async function providerPost(fetcher,token,path,body){
- const a=delayAbort(10500);
- try{
-  const res=await fetcher(API+path,{method:'POST',redirect:'manual',signal:a.signal,
-    headers:{Accept:'application/json','Content-Type':'application/json',Authorization:'Bearer '+token,Token:token},body:JSON.stringify(body)});
-  if(res.status===401||res.status===403)throw Error('ISNET_API_SESSION_INVALID');
-  if(!res.ok)throw Error('ISNET_PROVIDER_HTTP_ERROR');
-  if(!(res.headers.get('content-type')||'').toLowerCase().includes('json'))throw Error('ISNET_PROVIDER_NON_JSON');
-  const data=await res.json();
-  if(!goodResult(data.Result??data.result))throw Error('ISNET_PROVIDER_REJECTED');
-  return data;
- }finally{a.done()}
-}
-export async function listRemote(fetcher,token,companyId,kind,dir,from,to){
- if(!kindOk(kind)||!dirOk(dir)||!periodOk(from,to)||!/^\d+$/.test(txt(companyId)))throw Error('INVALID_QUERY');
- const def=listConfig(kind,dir,companyId,from,to);
- const obj=await providerPost(fetcher,token,def.path,def.body);
- const rows=obj[def.key]??obj[def.key.toLowerCase()];
- if(!Array.isArray(rows))throw Error('ISNET_LIST_FORMAT_UNVERIFIED');
- const seen=new Set();
- const result=rows.slice(0,25).map(r=>({
-  ettn:txt(r.Ettn??r.ETTN),
-  number:txt(r.InvoiceNumber??r.DespatchNumber??r.DocumentNumber??r.Number).slice(0,100),
-  date:txt(r.InvoiceDate??r.DespatchDate??r.DocumentDate).slice(0,40),
-  company:txt(r.RecipientCompanyName??r.SenderCompanyName??r.CompanyName).slice(0,160),
-  state:txt(r.Status).slice(0,80)
- })).filter(r=>UUID.test(r.ettn)&&!seen.has(r.ettn)&&seen.add(r.ettn));
- return {rows:result,kind,direction:dir,from,to,providerCount:rows.length,firstPageOnly:true,readOnly:true};
-}
-function safeIsnetUrl(raw){
- let u;
- try{u=new URL(raw)}catch{throw Error('ISNET_FILE_URL_INVALID')}
- const host=u.hostname.toLowerCase();
- if(u.protocol!=='https:'||!!u.port||!!u.username||!!u.password||!(host==='isnet.net.tr'||host.endsWith('.isnet.net.tr')))
-  throw Error('ISNET_FILE_URL_BLOCKED');
- return u.toString();
-}
-export async function downloadRemote(fetcher,token,companyId,kind,dir,from,to,ettn,format){
- if(!UUID.test(ettn)||!['xml','pdf'].includes(format))throw Error('INVALID_DOCUMENT');
- const list=await listRemote(fetcher,token,companyId,kind,dir,from,to);
- if(!list.rows.some(row=>row.ettn.toLowerCase()===ettn.toLowerCase()))throw Error('DOCUMENT_NOT_IN_CURRENT_PAGE');
- const path=format==='xml'?'/api/Invoice/GetInvoiceExternalXmlUrl':'/api/Invoice/GetInvoiceExternalUrl';
- const meta=await providerPost(fetcher,token,path,{Ettn:ettn,InvoiceDirection:dir==='incoming'?1:2,InvoiceDocumentType:kind==='invoice'?1:4});
- const url=safeIsnetUrl(txt(meta.ExternalLink));
- const a=delayAbort(16000);
- try{
-  const res=await fetcher(url,{method:'GET',redirect:'manual',signal:a.signal,headers:{Accept:format==='pdf'?'application/pdf,application/octet-stream':'application/xml,text/xml,application/octet-stream'}});
-  if(!res.ok)throw Error('ISNET_FILE_HTTP_ERROR');
-  if(Number(res.headers.get('content-length')||0)>20*1024*1024)throw Error('ISNET_FILE_TOO_LARGE');
-  const bytes=await res.arrayBuffer();
-  if(!bytes.byteLength||bytes.byteLength>20*1024*1024)throw Error('ISNET_FILE_SIZE_INVALID');
-  const head=new TextDecoder().decode(bytes.slice(0,4096)).replace(/^\uFEFF/,'').trimStart();
-  if(format==='pdf'){
-   if(!head.startsWith('%PDF-'))throw Error('ISNET_NOT_A_REAL_PDF');
-  }else{
-   if(/<!DOCTYPE\b|<!ENTITY\b/i.test(head)||!/^(?:<\?xml\b[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:[\w.-]+:)?(?:Invoice|DespatchAdvice)\b/i.test(head))throw Error('ISNET_NOT_A_UBL_XML');
-   const root=/^(?:<\?xml\b[^>]*\?>\s*)?(?:<!--[\s\S]*?-->\s*)*<(?:[\w.-]+:)?(Invoice|DespatchAdvice)\b/i.exec(head)?.[1];
-   if(root!==(kind==='invoice'?'Invoice':'DespatchAdvice'))throw Error('ISNET_XML_KIND_MISMATCH');
-  }
-  return {bytes,format};
- }finally{a.done()}
-}
 const hex=b=>Array.from(new Uint8Array(b)).map(v=>v.toString(16).padStart(2,'0')).join('');
 async function sha(s){return hex(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s)))}
 async function aesKey(env){
@@ -153,6 +56,7 @@ async function getSession(req,env){
   .bind(await sha(id)).first();
  if(!row||Number(row.expires_at)<=Date.now()||row.client_tag!==await clientTag(req))throw Error('QA_LOGIN_EXPIRED');
  const data=await decrypt(env,row);
+ if(data.mode!=='portal-v1')throw Error('QA_LOGIN_EXPIRED');
  return {data,id};
 }
 async function saveSession(req,env,session){
@@ -165,7 +69,16 @@ function validateOrigin(req){
  return !!origin&&origin===new URL(req.url).origin;
 }
 const problems={
- QA_LOGIN_REQUIRED:'Önce İşNet API hesabınızla giriş yapın.',
+ QA_LOGIN_REQUIRED:'Önce normal İşNet portal hesabınızla giriş yapın.',
+ PORTAL_LOGIN_REJECTED:'İşNet portal girişini reddetti. Tekrar denemeden portal hesabını kontrol edin.',
+ PORTAL_LOGIN_HTTP_ERROR:'İşNet portalı giriş isteğinde HTTP hatası döndürdü.',
+ PORTAL_INTERACTIVE_SECURITY_REQUIRED:'İşNet ek güvenlik doğrulaması istiyor. İşNet portalında tamamlanması gerekiyor; otomatik geçilmez.',
+ PORTAL_USER_CONFIRMATION_REQUIRED:'İşNet kullanıcı onayı istiyor. Otomatik onay verilmez.',
+ PORTAL_SELECTION_REQUIRED:'Önce yetkili firmayı seçip portal oturumunu doğrulayın.',
+ PORTAL_LIST_HTTP_ERROR:'İşNet belge listesi isteğinde HTTP hatası verdi.',
+ PORTAL_LIST_UNVERIFIED:'Portal belge listesi beklenen biçimde doğrulanamadı.',
+ PORTAL_SESSION_EXPIRED:'İşNet portal oturumu doğrulanamadı veya süresi doldu.',
+ PORTAL_LOGIN_UNVERIFIED:'Normal portal girişi veya firma listesi doğrulanamadı.',
  QA_LOGIN_EXPIRED:'Test oturumu süresi doldu; tekrar giriş yapın.',
  QA_KEY_MISSING:'Test Worker güvenlik anahtarı tanımlı değil.',
  ISNET_API_NOT_AUTHORIZED:'İşNet API 401/403: Hesap API için yetkili değil veya giriş reddedildi.',
@@ -194,7 +107,7 @@ const problems={
  FORBIDDEN:'Bu test yalnız yetkili bilgisayarda açılır.',
 };
 const errResponse=e=>{
- const raw=txt(e?.message),code=Object.hasOwn(problems,raw)?raw:e?.name==='AbortError'?'ISNET_TIMEOUT':'QA_UNVERIFIED';
+ const raw=txt(e?.message); const suffix=raw.split(': ').at(-1); const code=Object.hasOwn(problems,raw)?raw:Object.hasOwn(problems,suffix)?suffix:/ek güvenlik|doğrulaması gerekiyor/i.test(raw)?'PORTAL_INTERACTIVE_SECURITY_REQUIRED':/portal|İşNet|firma/i.test(raw)?'PORTAL_LOGIN_UNVERIFIED':e?.name==='AbortError'||e?.name==='TimeoutError'?'ISNET_TIMEOUT':'QA_UNVERIFIED';
  const status=code==='QA_LOGIN_REQUIRED'||code==='QA_LOGIN_EXPIRED'?401:code==='TOO_MANY_ATTEMPTS'?429:code==='FORBIDDEN'?403:
   code==='INVALID_QUERY'||code==='INVALID_DOCUMENT'||code==='BAD_INPUT'?400:502;
  return json({ok:false,error:code,message:problems[code]||'İşNet sonucu doğrulanamadı; test başarılı sayılmadı.'},status);
@@ -222,7 +135,7 @@ async function parseJson(req){
 export default {
  async fetch(req,env){
   const u=new URL(req.url),path=u.pathname;
-  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true});
+  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1'});
   if(!allowed(req,env))return denied('QA_IP_NOT_ALLOWED',403);
   if(req.method==='GET'&&path==='/')return new Response(PAGE,{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8',
     'content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
@@ -235,9 +148,11 @@ export default {
     await loginRateLimit(req,env);
     const body=await parseJson(req),username=txt(body.username),password=txt(body.password);
     if(!username||username.length>80||!password||password.length>200)throw Error('BAD_INPUT');
-    const res=await providerLogin(fetch,username,password);
-    const cookie=await newSession(req,env,{token:res.token,companies:res.companies,companyId:'',createdAt:Date.now()});
-    return json({ok:true,stage:'COMPANY_SELECTION',companies:res.companies,message:'İşNet API girişi doğrulandı.'},200,{'set-cookie':cookie});
+    const res=await portalLogin(username,password);
+    const companies=res.companies.filter(c=>/^\d+$/.test(c.id)&&c.hasRole!==false).map(c=>({id:c.id,name:c.name}));
+    if(!companies.length)throw Error('PORTAL_LOGIN_UNVERIFIED');
+    const cookie=await newSession(req,env,{mode:'portal-v1',username,companies,companyId:'',createdAt:Date.now()});
+    return json({ok:true,stage:'COMPANY_SELECTION',companies,message:'İşNet portal firma listesi doğrulandı.'},200,{'set-cookie':cookie});
    }
    if(path==='/api/state'&&req.method==='GET'){
     const {data}=await getSession(req,env);
@@ -246,7 +161,13 @@ export default {
    if(path==='/api/company'&&req.method==='POST'){
     const s=await getSession(req,env),body=await parseJson(req),id=txt(body.companyId);
     if(!/^\d+$/.test(id)||!s.data.companies.some(c=>c.id===id))throw Error('BAD_INPUT');
-    s.data.companyId=id;await saveSession(req,env,s);
+    const selected=s.data.companies.find(c=>c.id===id);
+    const password=String(body.password??'');if(!password||password.length>200)throw Error('BAD_INPUT');
+    await loginRateLimit(req,env);
+    const session=await portalLogin(s.data.username,password,id,selected.name);
+    if(!session.companySelected||!session.cookie||!session.companies.some(c=>c.id===id))throw Error('PORTAL_SELECTION_REQUIRED');
+    s.data.companyId=id;s.data.portal={base:session.base,cookie:session.cookie,companyId:id,companySelected:true};
+    await saveSession(req,env,s);
     return json({ok:true,stage:'READY',companyId:id});
    }
    if(path==='/api/list'&&req.method==='GET'){
@@ -254,14 +175,16 @@ export default {
     if(!s.data.companyId)throw Error('QA_LOGIN_REQUIRED');
     const p={kind:txt(u.searchParams.get('kind')),direction:txt(u.searchParams.get('direction')),
       from:txt(u.searchParams.get('from')),to:txt(u.searchParams.get('to'))};
-    const r=await listRemote(fetch,s.data.token,s.data.companyId,p.kind,p.direction,p.from,p.to);
+    if(!kindOk(p.kind)||!dirOk(p.direction)||!periodOk(p.from,p.to))throw Error('INVALID_QUERY');
+    const r=await portalList(s.data.portal,p.kind,p.direction,p.from,p.to);
     return json({ok:true,...r});
    }
    if(path==='/api/download'&&req.method==='GET'){
     const s=await getSession(req,env);
     if(!s.data.companyId)throw Error('QA_LOGIN_REQUIRED');
     const x=k=>txt(u.searchParams.get(k)),kind=x('kind'),direction=x('direction'),from=x('from'),to=x('to'),ettn=x('ettn'),format=x('format');
-    const {bytes}=await downloadRemote(fetch,s.data.token,s.data.companyId,kind,direction,from,to,ettn,format);
+    if(!kindOk(kind)||!dirOk(direction)||!periodOk(from,to))throw Error('INVALID_QUERY');
+    const {bytes}=await portalDownload(s.data.portal,kind,direction,from,to,ettn,format);
     const fname='ISNET-QA-'+direction+'-'+kind+'-'+ettn+'.'+format;
     return new Response(bytes,{headers:{...NO_STORE,'content-type':format==='pdf'?'application/pdf':'application/xml; charset=utf-8',
       'content-disposition':'attachment; filename="'+fname+'"','content-security-policy':"default-src 'none'"}});
