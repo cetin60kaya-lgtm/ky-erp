@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 24.11.2026 — İşNet NetteFatura resmî servis A–Z hazırlığı (test daveti bekleniyor)
+
+- Kapsam: mevcut KY ERP e-Belge/İşNet merkezi içinde altı belge ailesi, 31 işlem kimliği; firma/cari, ürün, mükellef, rapor, ayar/rol, kontör, tahsilat ve mevcut File Hub. Hizmet yetkisi ve sağlayıcı sözleşmesi olmadan aktif gösterilmez.
+- Hazırlık dalı: `feat/isnet-official-full-lifecycle-20261124`. Güvenlik sözleşmesi + 10 sentetik birim testi kaynak commit `61f830cfe9818e76f7b50ba5970b66f613ac0a96`; izole Node test **10/10 PASS**, helper strict TypeScript **PASS**, iki kaynak blob SHA eşleşti. Tam Worker/CI ve gerçek sağlayıcı kabulü yapılmadı.
+- Kalan P0: İşNet test daveti ve güncel servis sözleşmesi; resmi transport/mapping, mevcut iki gönderim yolunu birleştirme, gerçek doğrulama ve atomik gönderim kilidi, TEST/PROD vault ayrımı, altı belge ailesinin resmi şemaları, tüm yetkili yönlerde liste/XML/PDF, File Hub ve gerçek test belge kabulü. Test gönderimi yalnız açık kullanıcı onayıyla.
+- Ayrıntılı kaynak/menü/kabul sırası: [KY_ISNET_RESMI_SERVIS_A_Z_KABUL_20261124.md](KY_ISNET_RESMI_SERVIS_A_Z_KABUL_20261124.md), commit `7a6be5810481035552de69e5c9e82da1a5503d29`. Mevcut üretim ve çalışan eklenti korunuyor; yeni ücret, canlı veri, migration, merge veya deploy yok.
+
+
 ## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
 
 - **Kaynak kullanıcı kabulü:** TAHA mükerrer güvenli birleştirme kullanıcı tarafından başarılı bildirildi; 13 aktif firma kartı görüntülendi. Gelir/gider faturaları firma bazında görünüyordu ancak henüz POSTED olmayan belgeler cari hareket olmadığı için cari hareket listesi boştu. Arşiv & Çıktı `HISTORY` yalnız `POSTED` kayıtları gösterdiği için 107 canonical belgenin hiçbirini görüntülemiyordu.
