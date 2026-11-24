@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { apiFetch, getApiActiveMainCompanySlug, clearApiGetCache } from "../../../utils/api";
-import { CheckCircle2, RefreshCw, ShieldCheck, FolderOpen, AlertTriangle } from "lucide-react";
+import { RefreshCw, ShieldCheck, FolderOpen } from "lucide-react";
 import "./eBelgeIsnetPortalSync.css";
 
 const TYPES=[
@@ -71,6 +71,7 @@ export default function EBelgeIsnetPortalSync({activeMainCompany,openModule,enab
    if(!health?.connected)throw Error("PORTAL_LOGIN_REQUIRED");
    for(const [kind,title] of TYPES){
     const direction=kind.startsWith("incoming")?"INCOMING":"OUTGOING",documentKind=kind.endsWith("invoice")?"FATURA":"IRSALIYE";
+    const allSeen=new Set();
     for(let startDate=from;startDate<=to;){
      const monthEnd=endMonth(startDate),last=monthEnd<to?monthEnd:to;
      let offset=0,total=null;const seen=new Set();
@@ -82,20 +83,26 @@ export default function EBelgeIsnetPortalSync({activeMainCompany,openModule,enab
       expectedCompany=page.companyId;
       if(total===null){total=page.total;update(kind,x=>({...x,total:x.total+total}))}
       if(page.total!==total||offset+page.rows.length>total||(offset<total&&!page.rows.length))throw Error("PORTAL_PAGE_INCOMPLETE");
+      const fast=page.rows.filter(r=>r.uuid).map(r=>({uuid:r.uuid,number:r.number}));
+      const lookup=fast.length?await post("/e-belge/isnet-browser/lookup",{direction,documentKind,rows:fast}):{found:[]};
+      const complete=new Map((lookup.found||[]).map(r=>[r.uuid,r.documentId]));
       for(const row of page.rows){
-       assertTenant();if(seen.has(row.id))throw Error("PORTAL_PAGE_INCOMPLETE");seen.add(row.id);
+       assertTenant();if(seen.has(row.id)||allSeen.has(row.id))throw Error("PORTAL_PAGE_INCOMPLETE");seen.add(row.id);allSeen.add(row.id);
        setStatus(title+" · "+seen.size+" / "+total+" · "+row.number);
        try{
+        let id=row.uuid?complete.get(row.uuid):null,existing=!!id;
+        if(!existing){
         const xml=toFile(await callBridge("file",{key:page.key,id:row.id,format:"xml"}),"xml");
         const check=new FormData();check.set("xml",xml);check.set("direction",direction);check.set("documentKind",documentKind);check.set("documentNo",row.number);
         const inspected=await post("/e-belge/isnet-browser/inspect",check);
-        let id=inspected.documentId,existing=inspected.complete===true;
+        id=inspected.documentId;existing=inspected.complete===true;
         if(!existing){
          const pdf=toFile(await callBridge("file",{key:page.key,id:row.id,format:"pdf"}),"pdf");
          const form=new FormData();form.append("files",xml);form.append("files",pdf);form.set("source","ISNET_BROWSER_PAIR");form.set("direction",direction);form.set("documentKind",documentKind);form.set("documentNo",row.number);
          const result=await post("/e-belge/upload",form);
          if(!result?.documentId||!result.xmlAttached||!result.pdfAttached)throw Error("PAIR_RESULT_UNCERTAIN");
          id=result.documentId;
+        }
         }
         update(kind,x=>({...x,done:x.done+1,existing:x.existing+(existing?1:0),added:x.added+(existing?0:1)}));
         try{const arc=await post("/e-belge/isnet-browser/archive",{documentId:id},90000);update(kind,x=>({...x,archived:x.archived+(arc.complete?1:0),pending:x.pending+(arc.complete?0:1)}));}
