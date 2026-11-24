@@ -45,7 +45,7 @@ function Run-WranglerQuiet([string[]]$options) {
     $ErrorActionPreference = $previous
   }
 }
-if ((Run-WranglerQuiet @("whoami")) -ne 0) {
+if ((Run-WranglerQuiet -options @("whoami")) -ne 0) {
   Write-Output "CLOUDFLARE_DESEN_AUTH=False"
   Write-Output "On DESEN, sign in through the browser with: wrangler login"
   Write-Output "Do not paste tokens or passwords in the chat or GitHub."
@@ -110,7 +110,7 @@ foreach ($name in @("worker.mjs", "ui.mjs")) {
   Invoke-WebRequest -UseBasicParsing -Uri "$base/$name" -OutFile $target -TimeoutSec 40
   if ((Get-Item -LiteralPath $target).Length -lt 200) { throw "QA_SOURCE_MISSING" }
 }
-if ((Run-WranglerQuiet @("deploy", "--config", $confPath, "--cwd", $qaDir)) -ne 0) {
+if ((Run-WranglerQuiet -options @("deploy", "--config", $confPath, "--cwd", $qaDir)) -ne 0) {
   throw "ISOLATED_QA_DEPLOY_FAILED"
 }
 Write-Output "ISOLATED_QA_DEPLOY=True"
