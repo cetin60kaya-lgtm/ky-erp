@@ -143,9 +143,22 @@ async function parseJson(req){
 export default {
  async fetch(req,env){
   const u=new URL(req.url),path=u.pathname;
-  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'browser-run-probe-6'});
+  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'browser-control-7'});
   if(!allowed(req,env))return denied('QA_IP_NOT_ALLOWED',403);
 
+  if(req.method==='POST'&&path==='/api/browser-run-control'){
+   if(!validateOrigin(req))return denied('QA_ORIGIN_INVALID',403);
+   if(!env.BROWSER||typeof env.BROWSER.quickAction!=='function')return denied('BROWSER_BINDING_UNAVAILABLE',503);
+   const key=await sha('KYERP_BROWSER_RUN_NEUTRAL_CONTROL_V7'),now=Date.now();
+   const lock=await env.DB.prepare('INSERT INTO qa_login_attempts(ip_hash,tries,window_start) VALUES(?,1,?) ON CONFLICT(ip_hash) DO UPDATE SET tries=1,window_start=excluded.window_start WHERE qa_login_attempts.window_start<?').bind(key,now,now-86400000).run();
+   if(Number(lock.meta?.changes||0)!==1)return denied('BROWSER_CONTROL_DAILY_LIMIT',429);
+   const start=Date.now();
+   try{
+    const r=await env.BROWSER.quickAction('content',{url:'https://example.com/',gotoOptions:{waitUntil:'domcontentloaded',timeout:20000}});
+    const html=(await r.text()).slice(0,200000);
+    return json({ok:r.ok&&/Example Domain/i.test(html),browserHttp:r.status,neutralControl:/Example Domain/i.test(html),elapsedMs:Date.now()-start,credentialsSent:false,authenticated:false});
+   }catch(e){return json({ok:false,error:'BROWSER_CONTROL_FAILED',elapsedMs:Date.now()-start,credentialsSent:false,authenticated:false},502)}
+  }
   if(req.method==='POST'&&path==='/api/browser-run-probe'){
    if(!validateOrigin(req))return denied('QA_ORIGIN_INVALID',403);
    if(!env.BROWSER||typeof env.BROWSER.quickAction!=='function')return denied('BROWSER_BINDING_UNAVAILABLE',503);
