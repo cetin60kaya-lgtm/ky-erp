@@ -50,7 +50,7 @@ export default function EBelgeIsnetPortalSync({activeMainCompany,openModule,enab
  const slug=String(activeMainCompany?.slug||activeMainCompany?.mainCompanySlug||activeMainCompany?.id||"");
  const [from,setFrom]=useState("2010-01-01"),[to,setTo]=useState(today);
  const [stats,setStats]=useState(initial),[state,setState]=useState("idle"),[status,setStatus]=useState("İşNet oturumu kontrol edilecek.");
- const [errors,setErrors]=useState([]),[confirm,setConfirm]=useState(false);
+ const [errors,setErrors]=useState([]);
  const running=useRef(false),stop=useRef(false),mounted=useRef(true);
  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;stop.current=true}},[]);
  const update=(k,fn)=>{if(mounted.current)setStats(old=>({...old,[k]:fn(old[k])}))};
@@ -62,7 +62,7 @@ export default function EBelgeIsnetPortalSync({activeMainCompany,openModule,enab
  };
  const connect=async()=>{try{await callBridge("connect");setStatus("Gerekliyse İşNet'in kendi sayfasında giriş ve firma seçimini yapın. Sonra bu merkezden senkronize edin.");}catch(e){setStatus(message(e))}};
  const sync=async()=>{
-  if(running.current||!enabled||!slug||!confirm||!validDate(from)||!validDate(to)||from>to)return;
+  if(running.current||!enabled||!slug||!validDate(from)||!validDate(to)||from>to)return;
   running.current=true;stop.current=false;setState("running");setStats(initial());setErrors([]);setStatus("İşNet oturumu doğrulanıyor…");
   let problemCount=0,expectedCompany=null;
   try{
@@ -84,7 +84,7 @@ export default function EBelgeIsnetPortalSync({activeMainCompany,openModule,enab
       if(page.total!==total||offset+page.rows.length>total||(offset<total&&!page.rows.length))throw Error("PORTAL_PAGE_INCOMPLETE");
       for(const row of page.rows){
        assertTenant();if(seen.has(row.id))throw Error("PORTAL_PAGE_INCOMPLETE");seen.add(row.id);
-       setStatus(title+" · "+(offset+seen.size)+" / "+total+" · "+row.number);
+       setStatus(title+" · "+seen.size+" / "+total+" · "+row.number);
        try{
         const xml=toFile(await callBridge("file",{key:page.key,id:row.id,format:"xml"}),"xml");
         const check=new FormData();check.set("xml",xml);check.set("direction",direction);check.set("documentKind",documentKind);check.set("documentNo",row.number);
@@ -126,8 +126,8 @@ export default function EBelgeIsnetPortalSync({activeMainCompany,openModule,enab
    <label>Bitiş <input type="date" value={to} onChange={e=>setTo(e.target.value)} disabled={busy}/></label>
    <button type="button" disabled={busy} onClick={()=>{setFrom("2010-01-01");setTo(today())}}>Tüm geçmiş</button>
   </div>
-  <label><input type="checkbox" checked={confirm} disabled={busy} onChange={e=>setConfirm(e.target.checked)}/> Seçili ana firmaya ait belgeleri otomatik havuza ve Drive arşivine aktar.</label>
-  <div className="eis-local-actions"><button type="button" className="eb-primary" disabled={busy||!enabled||!slug||!confirm||!validDate(from)||!validDate(to)||from>to} onClick={sync}><RefreshCw size={17}/> {busy?"Senkronize ediliyor…":"Tümünü Senkronize Et"}</button>{busy&&<button type="button" onClick={()=>{stop.current=true;setStatus("Mevcut işlem bitince durdurulacak…")}}>Durdur</button>}</div>
+  <p>Tek tık: seçili ana firmaya ait dört belge türü havuza alınır ve Drive arşivi kontrol edilir.</p>
+  <div className="eis-local-actions"><button type="button" className="eb-primary" disabled={busy||!enabled||!slug||!validDate(from)||!validDate(to)||from>to} onClick={sync}><RefreshCw size={17}/> {busy?"Senkronize ediliyor…":"Tümünü Senkronize Et"}</button>{busy&&<button type="button" onClick={()=>{stop.current=true;setStatus("Mevcut işlem bitince durdurulacak…")}}>Durdur</button>}</div>
   <div className="eis-local-directions">{TYPES.map(([key,title,tab])=>{const x=stats[key];return <div key={key}><span><strong>{title}</strong><small>{x.finished?"Tarandı":"Bekliyor / taranıyor"} · {x.done}/{x.total} havuz · {x.archived} Drive · {x.failed} hata</small><button type="button" disabled={busy} onClick={()=>openModule?.("e-belge",{tabKey:tab})}>Belgeleri gör</button></span></div>})}</div>
   <div className="eis-status" role="status"><div><strong>{sum.done} belge havuzda · {sum.archive} Drive doğrulandı</strong><small>{sum.total} listelendi · {sum.pending} Drive bekliyor · {sum.failed} belge hatalı. {state==="complete"&&sum.pending===0&&sum.done===sum.total?"Seçilen tarih aralığı tamamlandı.":"Tam kabul için bütün kategoriler ve arşiv durumları doğrulanır."}</small></div></div>
   {!!errors.length&&<details><summary>Son {errors.length} sorun</summary>{errors.map((x,i)=><p key={i}>{x.type} / {x.number}: {x.detail}</p>)}</details>}
