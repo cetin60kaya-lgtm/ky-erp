@@ -14,7 +14,7 @@ function normalize(raw,src){
  if(!src||!raw||typeof raw!=="object")return null;
  const id=t(raw[src.id]),number=t(raw[src.no]);
  if(!/^\d{1,24}$/.test(id)||!number||number.length>100)return null;
- return {id,number,date:t(raw[src.date]).slice(0,40),partner:t(raw.FirmaAdi||raw.AliciAdi).slice(0,160),kind:src.kind,dir:src.dir};
+ const uuid=t(raw.Ettn||raw.ETTN||raw.UUID||raw.Uuid||raw.uuid).toLowerCase();return {id,number,date:t(raw[src.date]).slice(0,40),partner:t(raw.FirmaAdi||raw.AliciAdi).slice(0,160),kind:src.kind,dir:src.dir,uuid:/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(uuid)?uuid:""};
 }
 function downloadPath(row,fmt){
  if(!/^\d{1,24}$/.test(t(row.id))||!["pdf","xml"].includes(fmt)||!["invoice","dispatch"].includes(row.kind)||!["incoming","outgoing"].includes(row.dir))throw Error("Geçersiz belge seçimi.");
