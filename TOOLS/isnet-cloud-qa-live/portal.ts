@@ -180,7 +180,7 @@ export async function portalLogin(username: string, password: string, companyId 
           ...(init.headers || {}),
         },
         redirect: "manual",
-        signal: AbortSignal.timeout(init.method === "POST" ? 25_000 : 9_000),
+        signal: AbortSignal.timeout(init.method === "POST" ? 25_000 : 25_000),
       });
       mergeCookies(response, jar);
       return response;
@@ -531,7 +531,7 @@ export async function portalFormHealth(){
  return Promise.all(PORTAL_BASES.map(async base=>{
   const started=Date.now();
   try{
-   const r=await fetch(base+"/Account/Login",{method:"GET",redirect:"manual",signal:AbortSignal.timeout(7000),headers:{Accept:"text/html","User-Agent":"Mozilla/5.0 KY-ERP-IsNet-Cloud/6.0"}});
+   const r=await fetch(base+"/Account/Login",{method:"GET",redirect:"manual",signal:AbortSignal.timeout(25000),headers:{Accept:"text/html","User-Agent":"Mozilla/5.0 KY-ERP-IsNet-Cloud/6.0"}});
    const html=await r.text();
    const jar=new Map<string,string>();mergeCookies(r,jar);
    return {host:new URL(base).hostname,status:r.status,form:looksLikeLoginPage(html),productionVerified:isProductionForm(html),csrfPresent:!!verificationToken(html),cookieCount:jar.size,companySearchPresent:/GetCompanyList/i.test(html),elapsedMs:Date.now()-started};
