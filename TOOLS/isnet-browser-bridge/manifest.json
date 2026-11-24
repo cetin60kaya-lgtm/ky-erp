@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "KY ERP · NetteFatura Aktarım",
   "version": "0.2.0",
-  "description": "KY ERP tek merkez: mevcut güvenli NetteFatura oturumu, belge seçimi ve XML/PDF aktarımı.",
+  "description": "KY ERP tek merkez: dört belge yönü, tüm sayfalar, doğrudan XML/PDF senkronizasyonu.",
   "permissions": [
     "scripting"
   ],
@@ -24,18 +24,15 @@
       ],
       "js": [
         "core.js",
-        "portal-agent.js",
-        "content.js"
+        "portal-agent.js"
       ],
-      "css": [
-        "panel.css"
-      ],
+      "css": [],
       "run_at": "document_idle"
     },
     {
       "matches": [
-        "https://kyerp.net/e-belge/*",
-        "https://app.kyerp.net/e-belge/*"
+        "https://kyerp.net/*",
+        "https://app.kyerp.net/*"
       ],
       "js": [
         "erp-bridge.js"
