@@ -1,0 +1,46 @@
+{
+  "manifest_version": 3,
+  "name": "KY ERP · NetteFatura Aktarım",
+  "version": "0.2.0",
+  "description": "KY ERP tek merkez: mevcut güvenli NetteFatura oturumu, belge seçimi ve XML/PDF aktarımı.",
+  "permissions": [
+    "scripting"
+  ],
+  "host_permissions": [
+    "https://nettefatura.isnet.net.tr/*",
+    "https://kyerp.net/*",
+    "https://app.kyerp.net/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "KY ERP Belge Aktarım"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://nettefatura.isnet.net.tr/*"
+      ],
+      "js": [
+        "core.js",
+        "portal-agent.js",
+        "content.js"
+      ],
+      "css": [
+        "panel.css"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://kyerp.net/e-belge/*",
+        "https://app.kyerp.net/e-belge/*"
+      ],
+      "js": [
+        "erp-bridge.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}
