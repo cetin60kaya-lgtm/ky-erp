@@ -4,7 +4,7 @@
  * Access is restricted to the public IP approved from DESEN (server-verified Cloudflare header).
  */
 import { PAGE, APP_JS } from './ui.mjs';
-import { portalLogin, portalList, portalDownload } from './portal.ts';
+import { portalLogin, portalList, portalDownload, portalFormHealth } from './portal.ts';
 const txt=v=>String(v??'').trim();
 const NO_STORE={'cache-control':'private, no-store, max-age=0','x-content-type-options':'nosniff','x-robots-tag':'noindex, nofollow','referrer-policy':'no-referrer'};
 const json=(data,status=200,headers={})=>new Response(JSON.stringify(data),{status,headers:{...NO_STORE,'content-type':'application/json; charset=utf-8',...headers}});
@@ -70,6 +70,13 @@ function validateOrigin(req){
 }
 const problems={
  QA_LOGIN_REQUIRED:'Önce normal İşNet portal hesabınızla giriş yapın.',
+ PORTAL_FORM_UNAVAILABLE:'Aşama 1: Cloudflare üzerinden gerçek portal giriş formu ve doğrulama alanı alınamadı.',
+ PORTAL_UNSAFE_TARGET:'Portal yönlendirmesi izinli kaynak dışında kaldı.',
+ PORTAL_CREDENTIAL_REJECTED:'Aşama 2: İşNet giriş yanıtında kimlik doğrulama hatası bildirdi.',
+ PORTAL_LOGIN_REDIRECT:'Aşama 2: İşNet yeniden giriş ekranına yönlendirdi; oturum doğrulanamadı.',
+ PORTAL_LOGIN_FORM_RETURNED:'Aşama 2: Giriş formu geri döndü; yetkili oturum doğrulanamadı.',
+ PORTAL_COMPANY_ACCESS_REJECTED:'Aşama 3: İşNet firma listeleme isteğini reddetti.',
+ PORTAL_COMPANY_LIST_EMPTY:'Aşama 3: İşNet yetkili firma listesi doğrulanamadı.',
  PORTAL_LOGIN_REJECTED:'İşNet portal girişini reddetti. Tekrar denemeden portal hesabını kontrol edin.',
  PORTAL_LOGIN_HTTP_ERROR:'İşNet portalı giriş isteğinde HTTP hatası döndürdü.',
  PORTAL_INTERACTIVE_SECURITY_REQUIRED:'İşNet ek güvenlik doğrulaması istiyor. İşNet portalında tamamlanması gerekiyor; otomatik geçilmez.',
@@ -135,8 +142,9 @@ async function parseJson(req){
 export default {
  async fetch(req,env){
   const u=new URL(req.url),path=u.pathname;
-  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1'});
+  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'portal-diagnostics-2'});
   if(!allowed(req,env))return denied('QA_IP_NOT_ALLOWED',403);
+  if(req.method==='GET'&&path==='/api/portal-form-health')return json({ok:true,credentialTested:false,targets:await portalFormHealth()});
   if(req.method==='GET'&&path==='/')return new Response(PAGE,{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8',
     'content-security-policy':"default-src 'none'; style-src 'unsafe-inline'; script-src 'self'; connect-src 'self'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'"}});
   if(req.method==='GET'&&path==='/app.js')return new Response(APP_JS,{headers:{...NO_STORE,'content-type':'application/javascript; charset=utf-8'}});
