@@ -1,5 +1,10 @@
 # KY ERP — AI Agent Ana Kuralları
 
+## ZORUNLU — Ürün adı (24.11.2026)
+
+- Kullanıcıya görünen resmi proje ve ürün adı **KYERP** (alan adı `kyerp.net`) olarak kullanılacaktır. KayaERP, Kaya ERP, Kaya RP adları kullanılmaz. Yeni arayüz, doküman, menü, teslim ve sohbetlerde KYERP esas alınır.
+- Mevcut repo/dosya/teknik kimlikler, URL, API, veritabanı ve geçmiş kayıtlar yalnız isim için değiştirilmez. Geçmiş dokümanlardaki KY ERP yazımı tarihsel referans olarak korunabilir.
+
 > **16.11.2026 — TÜM PROJELER ARAÇ/KOTA ANA KURALI:** [Tek güncel ortak kaynak](https://github.com/cetin60kaya-lgtm/kyerp/blob/main/CONTROL/KY_TUM_PROJELER_ARAC_VE_KOTA_ANA_KURALI.md) her KY ERP / PC PDKS / KYGRAFİK / DESEN / X / HKN sohbeti ve ajanı için zorunlu maliyet/araç önceliğidir. **Actions: bütün depolarda paylaşılan aylık 5 USD ek limit (otomatik durdurma açık); Packages / Git LFS / AI Credits / Codespaces: 0 USD.** Gereksiz CI/run/retry ve broad trigger yok. Depo/kod için doğrudan GitHub bağlayıcısı; yerel Windows işi için önce mevcut yetkili **KY Control Hub / Chat Bridge / Drive**, ancak zorunlu yerel işlemde kullanıcının somut isteğiyle minimum **Remote Desktop Commander**. Token/şifre/kişisel veri aktarımı, güvenlik dolanması veya gerçek Windows kabulü olmadan PASS yok. Eski Actions 0 USD bütçesi tarihîdir. Kaynak bir bütün olarak okunur; açık/eski sohbetler otomatik güncellenmez.
 
 

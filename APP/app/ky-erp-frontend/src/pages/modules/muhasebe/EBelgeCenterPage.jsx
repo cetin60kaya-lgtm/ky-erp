@@ -349,6 +349,25 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
       setError(e?.message || "Orijinal belge açılamadı. PDF kaynağını kontrol edin.");
     } finally { setBusy(""); }
   };
+  const downloadOriginal = async (file, kind) => {
+    if (busy || !file?.id) return;
+    setBusy("download-" + file.id); setError("");
+    try {
+      const blob = await getEBelgeFilePreview(file.id);
+      if (kind === "pdf" && await blob.slice(0, 5).text() !== "%PDF-") throw new Error("Orijinal PDF imzası doğrulanamadı.");
+      if (kind === "xml") {
+        const xml = new DOMParser().parseFromString(await blob.text(), "application/xml");
+        if (xml.querySelector("parsererror") || /^(html|parsererror)$/i.test(xml.documentElement?.localName || "")) throw new Error("Orijinal XML doğrulanamadı.");
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = String(file.file_name || ("Belge." + kind)).replace(/[\\/]/g, "_");
+      document.body.appendChild(link);
+      try { link.click(); } finally { link.remove(); window.setTimeout(() => URL.revokeObjectURL(url), 60000); }
+    } catch (e) { setError(e?.message || "Orijinal dosya indirilemedi."); }
+    finally { setBusy(""); }
+  };
   const openSupplierAccountingPdf = async () => {
     setError("");
     try {
@@ -448,6 +467,10 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
             {originalXml?<button type="button" className="eb-original-file-xml" disabled={busy===`file-${originalXml.id}`} onClick={()=>void preview(originalXml)}>
               <FileCheck2 size={19}/><span><strong>Orijinal XML</strong><small>UBL-TR · Aç / İndir</small></span><CheckCircle2 size={16}/>
             </button>:<div className="eb-original-file-missing"><FileCheck2 size={19}/><span><strong>Orijinal XML eksik</strong><small>Belge kaynağı kontrol edilmeli.</small></span></div>}
+          </div>
+          <div className="eb-document-toolbar" aria-label="Orijinal dosyaları indir">
+            <button type="button" disabled={!originalPdf||Boolean(busy)} onClick={()=>void downloadOriginal(originalPdf,"pdf")}>PDF İndir</button>
+            <button type="button" disabled={!originalXml||Boolean(busy)} onClick={()=>void downloadOriginal(originalXml,"xml")}>XML İndir</button>
           </div>
           {otherFiles.length>0&&<details className="eb-original-extra"><summary>Diğer ek dosyalar · {otherFiles.length}</summary>
             <div className="eb-original-extra-list">{otherFiles.map(file=><button key={file.id} type="button" onClick={()=>void preview(file)}>{file.file_name||"Ek dosya"}</button>)}</div>
@@ -978,7 +1001,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
                    <small>Durum yükleniyor</small>):
                  <><small>{sourceLabel(row.source_type)}</small><em>{view==="archive"&&isIncomingAccountingInvoice(row)
                   ? (printStatusError ? "Çıktı durumu okunamadı" : printStatuses[row.id]?.status==="PRINTED" ? "Çıktı alındı" : printStatuses[row.id]?.status==="PENDING" ? "Çıktı bekliyor" : "Durum yükleniyor")
-                  : (row.archive_status || "Orijinal PDF arşivde")}</em></>}
+                  : (row.archive_status || "Arşiv durumunu belgede kontrol et")}</em></>}
                  </span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
             return view==="archive" ? <div className="eb-archive-select-row" key={row.id}>
               <label aria-label={`${row.document_no||"Belge"} seç`}>

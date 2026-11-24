@@ -1,0 +1,11 @@
+.isow{display:grid;gap:14px;padding:16px;min-width:0}
+.isow-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.isow-head h3{margin:4px 0;font-size:1.25rem}.isow-head p,.isow-group-body p{margin:6px 0;line-height:1.5}
+.isow-state,.isow-note{font-size:.85rem;border:1px solid currentColor;border-radius:8px;padding:9px;opacity:.85}
+.isow-docs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,170px),1fr));gap:10px}
+.isow button{font:inherit;color:inherit;background:transparent;border:1px solid var(--border-color,#94a3b8);border-radius:8px;padding:10px;cursor:pointer}
+.isow button:disabled{opacity:.5;cursor:not-allowed}.isow button:focus-visible{outline:2px solid currentColor;outline-offset:2px}
+.isow-docs button{text-align:left;font-weight:600}.isow-docs small{display:block;font-size:.75rem;font-weight:400;margin-top:6px;opacity:.8}
+.isow-actions{display:flex;flex-wrap:wrap;gap:8px}.isow-groups{display:grid;gap:8px}
+.isow .isow-group-title{width:100%;display:flex;justify-content:space-between;align-items:center;text-align:left;font-weight:600}
+.isow-group-body{padding:10px 0}.isow-note{margin:0}

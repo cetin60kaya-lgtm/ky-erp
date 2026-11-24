@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 24.11.2026 — KYERP İşNet işlem merkezi / arayüz önceliği
+
+- Mevcut resmî entegrasyon hazırlık dalında dört belge görünümüne, belge havuzuna, arşive ve mevcut bağlantı/dosya kontrolüne tek merkezden erişim eklendi. Belge detayında doğrudan orijinal PDF/XML indirme; doğrulanmamış arşiv durumunda sahte PDF mevcut etiketi kaldırıldı.
+- Resmî taslak, gönderim, yanıt, ek belge aileleri, sağlayıcı yönetim ve finans işlemleri servis sözleşmesi ve güvenli sunucu uygulaması beklediğinden kapalı. Muhasebe onayı resmî gönderim değildir. Mevcut sync korunur. CI, canlı kullanıcı kabulü ve sağlayıcı testi henüz yok; merge/deploy yok.
+- Ürün adı KYERP; teknik kimlikler korunur.
+
 ## 24.11.2026 — İşNet NetteFatura resmî servis A–Z hazırlığı (test daveti bekleniyor)
 
 - Kapsam: mevcut KY ERP e-Belge/İşNet merkezi içinde altı belge ailesi, 31 işlem kimliği; firma/cari, ürün, mükellef, rapor, ayar/rol, kontör, tahsilat ve mevcut File Hub. Hizmet yetkisi ve sağlayıcı sözleşmesi olmadan aktif gösterilmez.

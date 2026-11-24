@@ -79,3 +79,9 @@ Tüm portal fonksiyonlarının web serviste yayınlandığı iddia edilmez. Yetk
 | 15 | Canlıya hazırlık | İşNet kabulü, üretim yetkisi, gerekiyorsa egress şartı, full typecheck/test/build/PR; gerçek smoke ve ilk canlı gönderim ayrı kullanıcı onayı |
 
 Sağlayıcı cevabı gelmeden örnek belgeyi gerçek servise göndermiyoruz. İlk TEST e-Fatura başarıyla tamamlandıktan sonra tüm yetkili metotlar aynı resmi sürücü altında birleştirilir. Kullanıcıdan yeni EXE/eklenti/VPS veya yeni token oluşturması istenmez; İşNet'in resmi güvenlik/egress şartı sağlanamıyorsa somut blocker olarak gösterilir.
+
+## 24.11.2026 — KYERP İşNet işlem merkezi / arayüz önceliği
+
+- Mevcut resmî entegrasyon hazırlık dalında dört belge görünümüne, belge havuzuna, arşive ve mevcut bağlantı/dosya kontrolüne tek merkezden erişim eklendi. Belge detayında doğrudan orijinal PDF/XML indirme; doğrulanmamış arşiv durumunda sahte PDF mevcut etiketi kaldırıldı.
+- Resmî taslak, gönderim, yanıt, ek belge aileleri, sağlayıcı yönetim ve finans işlemleri servis sözleşmesi ve güvenli sunucu uygulaması beklediğinden kapalı. Muhasebe onayı resmî gönderim değildir. Mevcut sync korunur. CI, canlı kullanıcı kabulü ve sağlayıcı testi henüz yok; merge/deploy yok.
+- Ürün adı KYERP; teknik kimlikler korunur.

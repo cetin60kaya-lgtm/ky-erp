@@ -5,6 +5,7 @@ import EBelgeIntegrationTestCenter from "./EBelgeIntegrationTestCenter";
 import EBelgeIntegrationProfileEditor from "./EBelgeIntegrationProfileEditor";
 import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
 import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
+import IsnetOfficialWorkspace from "./IsnetOfficialWorkspace";
 import "./eBelgeAdapterManager.css";
 
 const connectionStatus=(adapter,provider,entry)=>{
@@ -164,13 +165,15 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
      {active.key!=="ISNET"&&profile?.serviceUrl&&<code>{profile.serviceUrl}</code>}
      <p>{providerService(active.key).description}</p></div></div>
     <div className="eam-tabs" role="tablist" aria-label="Entegrasyon çalışma alanları">
+     {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="official"} className={panel==="official"?"active":""} onClick={()=>setPanel("official")}>İşNet İşlem Merkezi</button>}
      {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="sync"} className={panel==="sync"?"active":""} onClick={()=>setPanel("sync")}>Belgeleri Al · XML + PDF</button>}
      <button type="button" role="tab" aria-selected={panel==="connection"} className={panel==="connection"?"active":""} onClick={()=>setPanel("connection")}>Gelişmiş İş Kuralları</button>
      <button type="button" role="tab" aria-selected={panel==="test"} className={panel==="test"?"active":""} onClick={()=>setPanel("test")}>{active.key==="ISNET"?"Dosya Kontrolü":"Belge Test Merkezi"}</button>
      <button type="button" role="tab" aria-selected={panel==="profile"} className={panel==="profile"?"active":""} onClick={()=>setPanel("profile")}>Entegrasyonu Düzenle</button>
     </div>
     {profileError&&<div className="eam-alert" role="alert">{profileError}</div>}
-    {panel==="sync"&&active.key==="ISNET"?<EBelgeIsnetPortalSync key={tenant+":sync"} activeMainCompany={activeMainCompany} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onSynced={refresh}/>:
+    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onOpenSync={()=>setPanel("sync")} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")}/>:
+     panel==="sync"&&active.key==="ISNET"?<EBelgeIsnetPortalSync key={tenant+":sync"} activeMainCompany={activeMainCompany} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onSynced={refresh}/>:
      panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenSync={()=>setPanel("sync")} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
      panel==="profile"?<EBelgeIntegrationProfileEditor key={tenant+":"+active.key} adapter={active} company={owner} profile={profile} onSaved={setProfile}/>:
      active.key==="ISNET"?<div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule} onOpenDocumentTest={()=>setPanel("test")} hideConnection/></div>:
