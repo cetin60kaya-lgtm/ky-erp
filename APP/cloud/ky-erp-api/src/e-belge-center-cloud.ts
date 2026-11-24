@@ -812,6 +812,28 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     }
   });
   app.get("/api/e-belge/company-suggestions",async c=>{const slug=slugOf(c),q=text(c.req.query("q")),term=`%${q}%`;const rows=await c.env.DB.prepare(`SELECT id,name,tax_no,company_type,current_balance FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND is_active=1 AND (?='' OR UPPER(name) LIKE UPPER(?) OR COALESCE(tax_no,'') LIKE ?) ORDER BY name COLLATE NOCASE LIMIT 30`).bind(slug,q,term,term).all<Row>();return c.json({ok:true,data:rows.results||[]})});
+  app.post("/api/e-belge/isnet-browser/lookup",async c=>{
+    const user=await getAuthenticatedUser(c),slug=slugOf(c);
+    if(!user?.id||!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Belge kontrol yetkisi gerekli."),403);
+    const body=await c.req.json<Row>().catch(()=>({})),direction=upper(body.direction),kind=upper(body.documentKind);
+    const rows=Array.isArray(body.rows)?body.rows:[];
+    if(rows.length>100||!["INCOMING","OUTGOING"].includes(direction)||!["FATURA","IRSALIYE"].includes(kind))return c.json(error("LOOKUP_INVALID","Belge kontrol listesi geçersiz."),422);
+    const refs=new Map<string,string>();
+    for(const row of rows){const id=text(row?.uuid).toLowerCase(),no=text(row?.number);if(/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/.test(id)&&no&&no.length<=100){if(refs.has(id)&&refs.get(id)!==no)return c.json(error("LOOKUP_CONFLICT","Listede aynı ETTN farklı belge numarasıyla geldi."),409);refs.set(id,no)}}
+    const matches:Row[]=[];
+    const keys=[...refs.keys()];
+    for(let offset=0;offset<keys.length;offset+=40){
+      const group=keys.slice(offset,offset+40);
+      const result=await c.env.DB.prepare("SELECT id,LOWER(uuid) uuid,document_no,direction,document_type,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND LOWER(uuid) IN ("+group.map(()=>"?").join(",")+") AND deleted_at IS NULL").bind(slug,...group).all<Row>();
+      matches.push(...(result.results||[]));
+    }
+    const found:Row[]=[];
+    for(const doc of matches){
+      if(matches.filter(x=>x.uuid===doc.uuid).length!==1||refs.get(doc.uuid)!==text(doc.document_no)||upper(doc.direction)!==direction||isDispatch(doc.document_type)!==(kind==="IRSALIYE")||!doc.xml_file_asset_id||!doc.pdf_file_asset_id)continue;
+      found.push({uuid:doc.uuid,documentId:doc.id});
+    }
+    return c.json({ok:true,data:{found}});
+  });
   app.post("/api/e-belge/isnet-browser/inspect",async c=>{
     const user=await getAuthenticatedUser(c),slug=slugOf(c);
     if(!user?.id||!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Aktif firma ve belge aktarım yetkisi gerekli."),403);
