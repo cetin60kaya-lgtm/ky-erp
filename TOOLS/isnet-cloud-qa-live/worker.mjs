@@ -70,7 +70,8 @@ function validateOrigin(req){
 }
 const problems={
  QA_LOGIN_REQUIRED:'Önce normal İşNet portal hesabınızla giriş yapın.',
- PORTAL_FORM_UNAVAILABLE:'Aşama 1: Cloudflare üzerinden gerçek portal giriş formu ve doğrulama alanı alınamadı.',
+ PORTAL_FORM_UNAVAILABLE:'Cloudflare gerçek NetteFatura PROD giriş formuna ulaşamadı. Şifre İşNet’e gönderilmedi.',
+ PORTAL_PRODUCTION_UNVERIFIED:'İşNet PROD ortamı doğrulanamadı; hesap bilgileri gönderilmeyecek.',
  PORTAL_UNSAFE_TARGET:'Portal yönlendirmesi izinli kaynak dışında kaldı.',
  PORTAL_CREDENTIAL_REJECTED:'Aşama 2: İşNet giriş yanıtında kimlik doğrulama hatası bildirdi.',
  PORTAL_LOGIN_REDIRECT:'Aşama 2: İşNet yeniden giriş ekranına yönlendirdi; oturum doğrulanamadı.',
@@ -142,7 +143,7 @@ async function parseJson(req){
 export default {
  async fetch(req,env){
   const u=new URL(req.url),path=u.pathname;
-  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'portal-diagnostics-2'});
+  if(req.method==='GET'&&path==='/api/health')return json({ok:true,app:'KY ERP İşNet Gerçek Bulut Test',environment:'ISOLATED_QA',readOnly:true,noProductionBinding:true,mode:'portal-v1',revision:'portal-prod-only-3'});
   if(!allowed(req,env))return denied('QA_IP_NOT_ALLOWED',403);
   if(req.method==='GET'&&path==='/api/portal-form-health')return json({ok:true,credentialTested:false,targets:await portalFormHealth()});
   if(req.method==='GET'&&path==='/')return new Response(PAGE,{headers:{...NO_STORE,'content-type':'text/html; charset=utf-8',
