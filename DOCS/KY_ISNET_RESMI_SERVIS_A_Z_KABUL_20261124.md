@@ -85,3 +85,27 @@ Sağlayıcı cevabı gelmeden örnek belgeyi gerçek servise göndermiyoruz. İl
 - Mevcut resmî entegrasyon hazırlık dalında dört belge görünümüne, belge havuzuna, arşive ve mevcut bağlantı/dosya kontrolüne tek merkezden erişim eklendi. Belge detayında doğrudan orijinal PDF/XML indirme; doğrulanmamış arşiv durumunda sahte PDF mevcut etiketi kaldırıldı.
 - Resmî taslak, gönderim, yanıt, ek belge aileleri, sağlayıcı yönetim ve finans işlemleri servis sözleşmesi ve güvenli sunucu uygulaması beklediğinden kapalı. Muhasebe onayı resmî gönderim değildir. Mevcut sync korunur. CI, canlı kullanıcı kabulü ve sağlayıcı testi henüz yok; merge/deploy yok.
 - Ürün adı KYERP; teknik kimlikler korunur.
+
+
+## NetteFatura kamuya açık menü araştırması ve KYERP eşlemesi (24.11.2026)
+
+Kaynaklar (kamuya açık):
+- https://nettefatura.isnet.net.tr/account/login/Login — resmî yardım video başlıkları: e-İrsaliye oluşturma, e-Fatura kesme, mükellef, tevkifat, kontör/şifre, e-SMM.
+- https://www.youtube.com/watch?v=apgiQsa4N6s — İşNet, 19.06.2023 e-İrsaliye Oluşturma eğitimi. Video başlığı/yayın tarihi doğrulandı; kareler ve güncel portal sırası izlenmiş/teyit edilmiş değildir.
+- https://www.isnet.net.tr/edonusum/e-irsaliye — e-İrsaliye oluşturma/gönderme/yanıt/arşiv işlevleri.
+- https://www.isnet.net.tr/bilgi-merkezi/blog/e-fatura-iptal-iade-nasil-yapilir — NetteFatura fatura oluşturma, taslak ve gönderim akışı (iade örneği).
+- https://nettefatura.isnet.net.tr/EFaturaSSS.html — firma/seri, kullanıcı rolü, Excel yükleme, mükellef ve ürün aktarımı, belge durumları, web servis başvurusu.
+- https://www.isnet.net.tr/edonusum/e-fatura — irsaliyeden faturaya dönüştürme özelliği ürün ailesinde tanıtılıyor; NetteFatura web portalındaki kesin düğme adı veya API kontratı kanıtı değil.
+- LucaNet, LucaNetOne ve BelgeApp ayrı ürünler; ekranları NetteFatura portalı olarak kullanılmaz.
+
+| İşlem | Kanıt seviyesi | KYERP hedefi |
+|---|---|---|
+| Sıfırdan irsaliye | Resmî özellik ve eğitim başlığı | Belge oluştur > e-İrsaliye; alıcı, seri, sevk, taşıyıcı, kalem, not, taslak, önizleme, gönderim |
+| Gelenden irsaliye oluştur | Kullanıcı tarafından anlatılan gerçek kullanım; bağımsız güncel ekran teyidi yok | Gelen İrsaliyeler > kaynak satır ve kalan miktar > giden taslak |
+| Kısmi miktar / kalan | Kullanıcı iş kuralı | Kaynak değişmez, satır bazlı rezervasyon ve sevk/fatura bakiyesi |
+| Gidenden fatura | Özellik ve kullanıcı akışı; kesin güncel portal sekmeleri test bekler | Giden İrsaliyeler > Faturaya çevir; gerçek sevk kimliği, Ticari/Satış, fiyat/KDV, not, taslak |
+| Sıfırdan fatura | Resmî kaynakta taslak/gönderim akışı | Belge oluştur > e-Fatura; kaynak irsaliye opsiyonu, cari/kalem doğrulama |
+| Taslak güncelle, önizle ve gönder | Fatura taslak/gönderim genel olarak doğrulandı; tam irsaliye ekran sırası kullanıcı anlatımı | İrsaliye ve fatura ayrı taslak yaşam döngüleri |
+| Mükellef, ürün, seri, yükleme ve roller | Resmî yardım kaynağı | Mevcut firma/ürün kartları ve yetkili entegrasyon ayarları |
+
+Güncel oturum arkasındaki menü ve alan sırası, zorunlu alanlar, gerçek servis çağrıları ve bedelsiz muafiyet kodu bağımsız doğrulanmadı. Kullanıcıya tüm ekranları tek tek anlattırma; test hesabı/servis sözleşmesi geldiğinde yalnız kalan ekran farklarını doğrula. Öncelikli test dört akış: sıfırdan irsaliye, gelenden tam ve kısmi irsaliye (5500→5000+500), gidenden ticari satış faturası, sıfırdan fatura; ayrıca bedelsiz numune. Gerçek üretim gönderimi yok. İşlem merkezi menü etiketleri bu kapsamla hizalandı; yeni resmi eylemler kapalı, mevcut gelen irsaliye önizlemesine yönlendirme var. Tam CI ve canlı yayın yapılmadı.
