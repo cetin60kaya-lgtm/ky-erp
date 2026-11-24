@@ -3,7 +3,9 @@
 // @ts-nocheck
 type Row=Record<string,any>;
 type PortalSession={base:string,cookie:string,companies:Row[],companySelected:boolean,loginPath:string};
-const PORTAL_BASES=["https://efatura.isnet.net.tr","https://nettefatura.isnet.net.tr"];
+const PORTAL_BASES=["https://nettefatura.isnet.net.tr"];
+// Real-account acceptance never sends credentials to a shared TEST portal.
+const isProductionForm=(html:string)=>/if\s*\(\s*[\x27\x22]PROD[\x27\x22]\s*==\s*[\x27\x22]TEST[\x27\x22]\s*\)/i.test(html)&&!/<input\b[^>]*\bid\s*=\s*[\x27\x22]ReadedKvkk[\x27\x22][^>]*\brequired\b/i.test(html);
 const text=(v:unknown)=>v==null?"":String(v).trim();
 const numberValue=(v:unknown)=>Number.isFinite(Number(v))?Number(v):0;
 function normalizeCompanies(payload: any) {
@@ -194,7 +196,7 @@ export async function portalLogin(username: string, password: string, companyId 
           const response = await request(candidate);
           const html = await response.text();
           const nextToken = verificationToken(html);
-          if (response.ok && nextToken) {
+          if (response.ok && nextToken && isProductionForm(html)) {
             loginPath = candidate;
             loginHtml = html;
             token = nextToken;
@@ -208,6 +210,7 @@ export async function portalLogin(username: string, password: string, companyId 
         throw new Error("PORTAL_FORM_UNAVAILABLE");
       }
 
+      if (!isProductionForm(loginHtml)) throw Error("PORTAL_PRODUCTION_UNVERIFIED");
       const inputs = inputRows(loginHtml);
       const inputNames = inputs.map((row) => row.name).filter(Boolean);
       const usernameField =
@@ -338,6 +341,7 @@ export async function portalLogin(username: string, password: string, companyId 
       }
       if (!selectionToken) throw new Error("Portal firma seçimi başlatılamadı.");
 
+      if (!isProductionForm(selectionHtml)) throw Error("PORTAL_PRODUCTION_UNVERIFIED");
       const selectionBody = formDefaults(selectionHtml);
       applyConsentFields(selectionHtml, selectionBody);
       selectionBody.set(usernameField, username);
@@ -530,7 +534,7 @@ export async function portalFormHealth(){
    const r=await fetch(base+"/Account/Login",{method:"GET",redirect:"manual",signal:AbortSignal.timeout(7000),headers:{Accept:"text/html","User-Agent":"Mozilla/5.0 KY-ERP-IsNet-Cloud/6.0"}});
    const html=await r.text();
    const jar=new Map<string,string>();mergeCookies(r,jar);
-   return {host:new URL(base).hostname,status:r.status,form:looksLikeLoginPage(html),csrfPresent:!!verificationToken(html),cookieCount:jar.size,companySearchPresent:/GetCompanyList/i.test(html),elapsedMs:Date.now()-started};
+   return {host:new URL(base).hostname,status:r.status,form:looksLikeLoginPage(html),productionVerified:isProductionForm(html),csrfPresent:!!verificationToken(html),cookieCount:jar.size,companySearchPresent:/GetCompanyList/i.test(html),elapsedMs:Date.now()-started};
   }catch(e){return {host:new URL(base).hostname,status:null,reason:e?.name==="TimeoutError"||e?.name==="AbortError"?"TIMEOUT":"REQUEST_FAILED",elapsedMs:Date.now()-started}}
  }));
 }
