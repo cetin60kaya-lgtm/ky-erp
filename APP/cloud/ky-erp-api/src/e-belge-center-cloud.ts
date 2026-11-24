@@ -812,6 +812,36 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     }
   });
   app.get("/api/e-belge/company-suggestions",async c=>{const slug=slugOf(c),q=text(c.req.query("q")),term=`%${q}%`;const rows=await c.env.DB.prepare(`SELECT id,name,tax_no,company_type,current_balance FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND is_active=1 AND (?='' OR UPPER(name) LIKE UPPER(?) OR COALESCE(tax_no,'') LIKE ?) ORDER BY name COLLATE NOCASE LIMIT 30`).bind(slug,q,term,term).all<Row>();return c.json({ok:true,data:rows.results||[]})});
+  app.post("/api/e-belge/isnet-browser/inspect",async c=>{
+    const user=await getAuthenticatedUser(c),slug=slugOf(c);
+    if(!user?.id||!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Aktif firma ve belge aktarım yetkisi gerekli."),403);
+    const body=await c.req.parseBody({all:true}),xml=body.xml,requested=upper(body.direction),kind=upper(body.documentKind),expected=text(body.documentNo);
+    if(!(xml instanceof File)||!xml.size||xml.size>MAX_FILE_BYTES||!["INCOMING","OUTGOING"].includes(requested)||!["FATURA","IRSALIYE"].includes(kind))return c.json(error("INSPECT_INVALID","XML belge kontrol bilgileri eksik."),422);
+    const xmlText=await xml.text();
+    if(/<!DOCTYPE\b|<!ENTITY\b/i.test(xmlText))return c.json(error("XML_UNSAFE","XML güvenlik kontrolü başarısız."),422);
+    let parsed:Row;try{parsed=parseCanonicalEBelgeUbl(xmlText,requested)}catch{return c.json(error("UBL_PARSE_FAILED","Orijinal XML okunamadı."),422)}
+    const uuid=text(parsed.uuid).toLowerCase(),owner=await mainCompanyIdentity(c,slug),own=new Set(owner.taxNos.filter(t=>/^\d{10,11}$/.test(t)));
+    const ownSide=cleanTax(requested==="INCOMING"?parsed.customerTaxNo:parsed.supplierTaxNo),otherSide=cleanTax(requested==="INCOMING"?parsed.supplierTaxNo:parsed.customerTaxNo);
+    if(!own.size||!own.has(ownSide)||own.has(otherSide))return c.json(error("OWNER_VKN_MISMATCH","İşNet firması ERP ana firmasıyla eşleşmedi. Aktarım durduruldu."),422);
+    if(!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(uuid)||!expected||text(parsed.documentNo)!==expected||!validDate(text(parsed.issueDate))||isDispatch(parsed.documentType)!==(kind==="IRSALIYE"))return c.json(error("UBL_IDENTITY_MISMATCH","XML türü, numarası, ETTN veya tarihi eşleşmedi."),422);
+    const rows=(await c.env.DB.prepare("SELECT id,document_no,direction,document_type,issue_date,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND LOWER(uuid)=? AND deleted_at IS NULL LIMIT 2").bind(slug,uuid).all<Row>()).results||[];
+    if(rows.length>1)return c.json(error("DUPLICATE_REVIEW","Aynı ETTN için birden fazla kayıt var."),409);
+    const doc=rows[0]||null;
+    if(doc&&(text(doc.document_no)!==expected||upper(doc.direction)!==requested||isDispatch(doc.document_type)!==(kind==="IRSALIYE")||text(doc.issue_date)!==text(parsed.issueDate)))return c.json(error("DUPLICATE_CONFLICT","ETTN kayıt bilgisi çakışıyor."),409);
+    return c.json({ok:true,data:{exists:!!doc,complete:!!(doc?.xml_file_asset_id&&doc?.pdf_file_asset_id),documentId:doc?.id||null}});
+  });
+  app.post("/api/e-belge/isnet-browser/archive",async c=>{
+    const user=await getAuthenticatedUser(c),slug=slugOf(c),body=await c.req.json<Row>().catch(()=>({}));
+    if(!user?.id||!slug||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Arşiv işlem yetkisi gerekli."),403);
+    const id=text(body.documentId);
+    if(!id)return c.json(error("DOCUMENT_REQUIRED","Belge kimliği gerekli."),422);
+    const doc=await c.env.DB.prepare("SELECT id,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND id=? AND deleted_at IS NULL").bind(slug,id).first<Row>();
+    if(!doc?.xml_file_asset_id||!doc?.pdf_file_asset_id)return c.json(error("PAIR_INCOMPLETE","XML ve PDF çifti eksik."),422);
+    await processCloudArchiveJobs(c,slug,{documentId:id,limit:2}).catch(()=>null);
+    const result=await c.env.DB.prepare("SELECT COUNT(DISTINCT a.id) n FROM file_hub_assets a JOIN file_hub_locations l ON l.file_asset_id=a.id AND l.main_company_slug=a.main_company_slug JOIN file_hub_connections fc ON fc.id=l.storage_connection_id AND fc.main_company_slug=a.main_company_slug WHERE a.main_company_slug=? AND a.id IN (?,?) AND l.is_available=1 AND upper(fc.provider_type)='GOOGLE_DRIVE' AND COALESCE(l.provider_file_id,'')<>''").bind(slug,doc.xml_file_asset_id,doc.pdf_file_asset_id).first<Row>();
+    return c.json({ok:true,data:{complete:Number(result?.n||0)===2,archiveStatus:Number(result?.n||0)===2?"GOOGLE_DRIVE_VERIFIED":"ARCHIVE_PENDING"}});
+  });
+
   app.post("/api/e-belge/upload",async c=>{
     const slug=slugOf(c),body=await c.req.parseBody({all:true}),direction=explicitEBelgeDirection(body.direction),kind=upper(body.documentKind||"AUTO");
     let rawFiles:any=body.files||body.file||[];const files=(Array.isArray(rawFiles)?rawFiles:[rawFiles]).filter((x:any)=>x instanceof File) as File[];
