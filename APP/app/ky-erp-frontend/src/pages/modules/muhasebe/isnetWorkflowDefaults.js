@@ -6,4 +6,4 @@ export function localSevkTime(now=new Date()){
   return {date:parts.year+"-"+parts.month+"-"+parts.day,time:parts.hour+":"+parts.minute};
 }
 export const sampleReason="Test numuneleri bedelsiz olarak elden teslim edilmiştir.";
-export const blankProfile=()=>({id:"",name:"",companyId:"",isDefault:true,driver:"",plate:"",carrierName:"",trailerPlate:"",deliveryMethod:"ELDEN_TESLIM",deliveryAddress:"",dispatchNote:"",invoiceNote:"",vat:20,scenario:"TICARI",sampleProductId:"",sampleReason,sampleCode:"",sampleQuantity:""});
+export const blankProfile=()=>({id:"",name:"",companyId:"",isDefault:true,driver:"",driverId:"",carrierTaxNo:"",plate:"",carrierName:"",trailerPlate:"",deliveryMethod:"ELDEN_TESLIM",deliveryAddress:"",dispatchNote:"",invoiceNote:"",vat:20,scenario:"TICARI",sampleProductId:"",sampleReason,sampleCode:"",sampleQuantity:""});

@@ -189,7 +189,11 @@ async function readWorkflowDefaults(c:Context<AppEnv>,slug:string){
   const row=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?").bind(key,WORKFLOW_SCOPE,slug,key).first<Row>();
   const legacy=await c.env.DB.prepare("SELECT data FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? ORDER BY updated_at DESC LIMIT 1").bind(WORKFLOW_SCOPE,slug,slug).first<Row>();
   const old=json(legacy?.data),stored=json(row?.data),carrier=json(old.carrier),sample=json(json(old.nonBillableRules).TEST_NUMUNESI);
-  return{version:text(stored.version),profiles:Array.isArray(stored.profiles)?stored.profiles:[],legacy:{driver:text(carrier.driverName),plate:text(carrier.vehiclePlate),carrierName:text(carrier.carrierName),trailerPlate:text(carrier.trailerPlate),deliveryMethod:text(carrier.deliveryMethod)||"ELDEN_TESLIM",deliveryAddress:text(carrier.deliveryAddress),sampleReason:text(sample.exemptionReason)||"Test numuneleri bedelsiz olarak elden teslim edilmiştir.",sampleCode:text(sample.exemptionCode),vat:20,scenario:"TICARI"}};
+  const profiles=Array.isArray(stored.profiles)?stored.profiles:[];
+  const productIds=[...new Set(profiles.map(p=>text(p.sampleProductId)).filter(Boolean))].slice(0,50);
+  const productRows=productIds.length?(await c.env.DB.prepare("SELECT id,name FROM products WHERE main_company_slug=? AND id IN ("+productIds.map(()=>"?").join(",")+")").bind(slug,...productIds).all<Row>()).results||[]:[];
+  const names=new Map(productRows.map(p=>[text(p.id),text(p.name)]));
+  return{version:text(stored.version),profiles:profiles.map(p=>({...p,sampleProductName:names.get(text(p.sampleProductId))||""})),legacy:{driver:text(carrier.driverName),driverId:text(carrier.driverId),carrierTaxNo:text(carrier.taxNo),plate:text(carrier.vehiclePlate),carrierName:text(carrier.carrierName),trailerPlate:text(carrier.trailerPlate),deliveryMethod:text(carrier.deliveryMethod)||"ELDEN_TESLIM",deliveryAddress:text(carrier.deliveryAddress),sampleReason:text(sample.exemptionReason)||"Test numuneleri bedelsiz olarak elden teslim edilmiştir.",sampleCode:text(sample.exemptionCode),vat:20,scenario:"TICARI"}};
 }
 async function saveWorkflowDefaults(c:Context<AppEnv>,slug:string){
   const body=await c.req.json(),key=workflowKey(slug);
@@ -205,7 +209,7 @@ async function saveWorkflowDefaults(c:Context<AppEnv>,slug:string){
     if(sampleProductId&&!await c.env.DB.prepare("SELECT id FROM products WHERE id=? AND main_company_slug=?").bind(sampleProductId,slug).first())throw Object.assign(new Error("Numune ürünü mevcut firma ürün kartında bulunamadı."),{status:400,code:"DEFAULTS_PRODUCT_INVALID"});
     const sampleQuantity=text(p.sampleQuantity);
     if(sampleQuantity&&(!Number.isFinite(Number(sampleQuantity))||Number(sampleQuantity)<=0))throw Object.assign(new Error("Varsayılan numune miktarı pozitif olmalıdır."),{status:400,code:"DEFAULTS_QUANTITY_INVALID"});
-    const fields=Object.fromEntries(["driver","plate","carrierName","trailerPlate","deliveryAddress","dispatchNote","invoiceNote","sampleReason","sampleCode"].map(k=>[k,text(p[k]).slice(0,1000)]));
+    const fields=Object.fromEntries(["driver","driverId","carrierTaxNo","plate","carrierName","trailerPlate","deliveryAddress","dispatchNote","invoiceNote","sampleReason","sampleCode"].map(k=>[k,text(p[k]).slice(0,1000)]));
     profiles.push({id,name,companyId,isDefault:p.isDefault===true,vat,scenario:p.scenario,deliveryMethod:p.deliveryMethod,sampleProductId,sampleQuantity,...fields});
   }
   const current=await readWorkflowDefaults(c,slug);
@@ -213,7 +217,7 @@ async function saveWorkflowDefaults(c:Context<AppEnv>,slug:string){
   const version=crypto.randomUUID(),ts=new Date().toISOString(),payload=JSON.stringify({version,profiles});
   const result=current.version?await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND json_extract(data,'$.version')=?").bind(payload,ts,key,WORKFLOW_SCOPE,slug,key,current.version).run():await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING").bind(key,WORKFLOW_SCOPE,slug,key,payload,ts,ts).run();
   if(result.meta?.changes!==1)throw Object.assign(new Error("Ayarlar başka bir oturumda değişti; yenileyin."),{status:409,code:"DEFAULTS_CONFLICT"});
-  return{version,profiles,legacy:current.legacy};
+  return await readWorkflowDefaults(c,slug);
 }
 
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
