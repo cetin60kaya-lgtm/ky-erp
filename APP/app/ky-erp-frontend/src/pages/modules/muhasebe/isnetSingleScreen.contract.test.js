@@ -24,3 +24,8 @@ test("Gelen irsaliye aynı havuzda müşteri/tedarikçi ve fatura bağı ayrıl�
   assert.match(incoming,/onOpenDocument\?\.\(row.id\)/);
   assert.doesNotMatch(incoming,/apiPost|window\.location\.assign/);
 });
+
+const official = readFileSync(new URL("./IsnetOfficialWorkspace.jsx",import.meta.url),"utf8");
+test("operator starts outside TEST; SOAP catalogue is explicitly read-only and official actions stay disabled",()=>{
+ assert.match(official,/\[technical,setTechnical\]=useState\(false\)/);assert.match(official,/technical&&<section/);assert.match(official,/isnet-provider-catalog/);assert.match(official,/WSDL_DISCOVERED/);assert.match(official,/data.environment!=="TEST"/);assert.match(official,/disabled title="Sağlayıcı gönderim kabulü bekliyor"/);assert.doesNotMatch(official,/apiPost|apiPut/);
+});
