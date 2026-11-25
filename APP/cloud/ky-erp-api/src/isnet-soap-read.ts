@@ -72,6 +72,21 @@ export function buildReadRequest(wsdl,q){
  const payload=emit(wrap.local,wrap.uri,emit(req.local,req.uri,encode(fields(req.n,req.s),vals))),env=s===S11?E11:E12;
  return{endpoint,out,env,headers:s===S11?{"Content-Type":"text/xml; charset=utf-8",SOAPAction:'"'+action+'"'}:{"Content-Type":'application/soap+xml; charset=utf-8; action="'+action+'"'},body:'<?xml version="1.0" encoding="utf-8"?><s:Envelope xmlns:s="'+env+'"><s:Body>'+payload+'</s:Body></s:Envelope>'};
 }
+
+/** Pinned read-only SOAP 1.1 contract, verified against supplied InvoiceService
+ * singleWsdl SHA256 d728e3eea7c05acb1c5ca2db85ec6741e9eff9aa19880d358f02e87a35aca67e
+ * and four successful Windows TEST search calls. No WSDL fetch on each request.
+ * Do not use for production or send operations. */
+export function buildVerifiedTestReadRequest(q){
+ const {info,page,ettn}=validateReadQuery(q);
+ const ns="http://tempuri.org/",model="http://schemas.datacontract.org/2004/07/EInvoice.Service.Model";
+ const field=(name,value)=>"<m:"+name+">"+esc(value)+"</m:"+name+">";
+ const flags=q.kind==="INVOICE"?["IsAdditionalTaxIncluded","IsArchiveIncluded","IsAttachmentIncluded","IsExternalUrlIncluded","IsHtmlIncluded","IsInvoiceDetailIncluded","IsPDFIncluded","IsXMLIncluded"]:["IsArchiveIncluded","IsAttachmentIncluded","IsDespatchAdviceDetailIncluded","IsExternalUrlIncluded","IsHtmlIncluded","IsPDFIncluded","IsXMLIncluded"];
+ const values={[info.detail]:true,IsXMLIncluded:q.file==="XML",IsPDFIncluded:q.file==="PDF"};
+ const fields=field("CompanyTaxCode",q.companyTaxCode)+(q.kind==="INVOICE"&&ettn?field("Ettn",ettn):"")+field(info.direction,q.direction==="INCOMING"?"Incoming":"Outgoing")+(q.kind==="DISPATCH"&&ettn?field("Ettn",ettn):"")+field(info.max,q.to+"T23:59:59")+field(info.min,q.from+"T00:00:00")+"<m:PagingRequest>"+field("PageNumber",page)+field("RecordsPerPage",ettn?1:20)+"</m:PagingRequest><m:ResultSet>"+flags.map(name=>field(name,Boolean(values[name]))).join("")+"</m:ResultSet>";
+ return {endpoint:SOAP_TEST_ENDPOINTS.InvoiceService,out:{uri:ns,local:info.op+"Response"},env:E11,headers:{"Content-Type":"text/xml; charset=utf-8",SOAPAction:'"'+ns+"IInvoiceService/"+info.op+'"'},body:'<s:Envelope xmlns:s="'+E11+'" xmlns:m="'+model+'"><s:Body><'+info.op+' xmlns="'+ns+'"><request>'+fields+'</request></'+info.op+'></s:Body></s:Envelope>'};
+}
+
 export function readSearchResponse(xml,request,q){
  const {info,page,ettn}=validateReadQuery(q),root=parseSoapXml(xml);if(root.local!=="Envelope"||root.uri!==request.env)fail("SOAP_ENVELOPE");
  const body=one(children(root,request.env,"Body"));if(body.children.some(n=>n.local==="Fault"))fail("SOAP_FAULT");
@@ -80,16 +95,15 @@ export function readSearchResponse(xml,request,q){
  const list=pick(result,info.list),paging=pick(result,"PagingResponse");
  const count=k=>{const v=scalar(paging,k);if(!/^\d+$/.test(v)||!Number.isSafeInteger(Number(v)))fail("PAGING_INVALID");return Number(v)};
  const pages=count("TotalNumberOfPages"),total=count("TotalNumberOfRecords"),actualPage=count("PageNumber"),perPage=count("RecordsPerPage");if(actualPage!==page||perPage<1||perPage>(ettn?1:20)||list.children.length>perPage||pages!==Math.ceil(total/perPage)||list.children.length>total)fail("PAGING_MISMATCH");
- const seen=new Set(),rows=list.children.map(n=>{const id=scalar(n,"Ettn"),number=scalar(n,info.number);if(!uuid.test(id)||!number||seen.has(id.toLowerCase())||(ettn&&id.toLowerCase()!==ettn.toLowerCase()))fail("DOCUMENT_IDENTITY");seen.add(id.toLowerCase());return{ettn:id,number,date:scalar(n,info.date),status:scalar(n,"Status"),amount:q.kind==="INVOICE"?scalar(n,"TotalPayableAmount"):"",currency:scalar(n,"CurrencyCode")};});
+ const seen=new Set(),rows=list.children.map(n=>{const id=scalar(n,"ETTN"),number=scalar(n,info.number);if(!uuid.test(id)||!number||seen.has(id.toLowerCase())||(ettn&&id.toLowerCase()!==ettn.toLowerCase()))fail("DOCUMENT_IDENTITY");seen.add(id.toLowerCase());return{ettn:id,number,date:scalar(n,info.date),status:scalar(n,"Status"),amount:q.kind==="INVOICE"?scalar(n,"TotalPayableAmount"):"",currency:scalar(n,"CurrencyCode")};});
  let file=null;if(q.file){if(rows.length!==1)fail("DOCUMENT_NOT_FOUND");const b64=scalar(list.children[0],q.file==="XML"?info.xml:info.pdf).replace(/\s/g,"");if(!b64||b64.length>10000000||!/^[A-Za-z0-9+/]+={0,2}$/.test(b64)||b64.length%4!==0)fail("FILE_UNAVAILABLE");const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));if(q.file==="PDF"){if(new TextDecoder().decode(bytes.subarray(0,5))!=="%PDF-")fail("PDF_INVALID");}else{const doc=parseSoapXml(new TextDecoder("utf-8",{fatal:true}).decode(bytes)),kind=q.kind==="INVOICE"?"Invoice":"DespatchAdvice";if(doc.local!==kind||doc.uri!=="urn:oasis:names:specification:ubl:schema:xsd:"+kind+"-2"||scalar(doc,"UUID").toLowerCase()!==ettn.toLowerCase())fail("XML_IDENTITY");}file={base64:b64,format:q.file,ettn:rows[0].ettn};}
  return{rows,page,total,pages,perPage,file,environment:"TEST",providerRead:true,officialSent:false};
 }
 async function boundedText(response,limit){const reader=response.body?.getReader();if(!reader)fail("RESPONSE_EMPTY");let size=0,s="",d=new TextDecoder();try{while(true){const r=await reader.read();if(r.done)break;size+=r.value.byteLength;if(size>limit){await reader.cancel();fail("RESPONSE_LIMIT")}s+=d.decode(r.value,{stream:true})}return s+d.decode()}finally{reader.releaseLock()}}
 export async function searchSoapTest(q,fetcher=fetch){
- validateReadQuery(q);const ep=SOAP_TEST_ENDPOINTS.InvoiceService;
- let wsdl;try{const r=await fetcher(ep+"?singleWsdl",{method:"GET",redirect:"error",signal:AbortSignal.timeout(12000)});if(!r.ok)fail("WSDL_HTTP_"+r.status);wsdl=await boundedText(r,4000000)}catch(e){if(e.code)throw e;fail("WSDL_NETWORK_UNAVAILABLE")}
- const req=buildReadRequest(wsdl,q);
- let response;try{response=await fetcher(ep,{method:"POST",headers:req.headers,body:req.body,redirect:"error",signal:AbortSignal.timeout(25000)})}catch{fail("SOAP_NETWORK_UNAVAILABLE")}
+ const req=buildVerifiedTestReadRequest(q),ep=req.endpoint;
+ let response;try{response=await fetcher(ep,{method:"POST",headers:req.headers,body:req.body,redirect:"manual",signal:AbortSignal.timeout(25000)})}catch(e){fail(e?.name==="TimeoutError"||e?.name==="AbortError"?"SOAP_TIMEOUT":"SOAP_NETWORK_UNAVAILABLE")}
+ if(response.status>=300&&response.status<400)fail("SOAP_REDIRECT_REJECTED");
  if(!response.ok)fail("SOAP_HTTP_"+response.status);
  return readSearchResponse(await boundedText(response,12000000),req,q);
 }
