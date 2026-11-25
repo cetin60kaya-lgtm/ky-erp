@@ -1,31 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
-- 25.11.2026 İşNet: TEST taslak çalışma alanına Worker çıkışından iki resmî TEST WSDL salt-okunur ağ tanısı eklendi. WSDL keşfi yetki veya gönderim kabulü değildir. Gönderim çekirdeği ayrı, resmî adapter/claim/parser/UBL ve gerçek erişim bekler. Canlı yayın yok.
+## 25.11.2026 — KYERP SECURITY PRO / PR #658
 
-
-## 25.11.2026 — İşNet TEST taslak kabulü
-- Mevcut İşNet işlem merkezinde sentetik 5.500 adet örnek kaynak, tam/kısmi irsaliye, sıfırdan irsaliye/fatura, bağlı fatura, düzenle/kaydet/önizle/iptal. Tenant ve yetki kontrollü json_store TEST scope, CAS; muhasebe tablolarına yazmaz, gönderim yok. Bağlı fatura adedi server-side kilitli, fazla rezervasyon ve çift fatura taslağı engelli. 12/12 sentetik state machine kontrolü başarılı; gerçek D1 ve UI/CI kabulü yok. Gerçek kaynak/çoklu kalem, WSDL/UBL ve resmî gönderim motoru ayrıca tamamlanacak. Kullanıcı gönderim özelliğini de istedi; gerçek belge gönderme izni olarak yorumlanmadı.
-
-
-## 25.11.2026 — İşNet SOAP test daveti ve resmî sözleşme
-
-- Sekiz PDF alındı, resmi operasyonlar ve IP-VKN modeli kayda alındı. e-MM SOAP yok. İki test URL'si sağlandı. [SOAP sözleşme ve test planı](KY_ISNET_SOAP_TEST_20261125.md).
-- Salt-okunur WSDL/GetTaxPayer Windows test aracı ve dokümana bağlı operasyon kataloğu hazırlık dalında. Doğrudan ağ DNS başarısız; web WCF tanıtım sayfası SOAP kabulü değil. Test gönderimi kullanıcı tarafından yetkilendirildi ama henüz gerçekleşmedi; tam CI, merge/deploy yok.
-
-
-## 24.11.2026 — KYERP İşNet işlem merkezi / arayüz önceliği
-
-- Mevcut resmî entegrasyon hazırlık dalında dört belge görünümüne, belge havuzuna, arşive ve mevcut bağlantı/dosya kontrolüne tek merkezden erişim eklendi. Belge detayında doğrudan orijinal PDF/XML indirme; doğrulanmamış arşiv durumunda sahte PDF mevcut etiketi kaldırıldı.
-- Resmî taslak, gönderim, yanıt, ek belge aileleri, sağlayıcı yönetim ve finans işlemleri servis sözleşmesi ve güvenli sunucu uygulaması beklediğinden kapalı. Muhasebe onayı resmî gönderim değildir. Mevcut sync korunur. CI, canlı kullanıcı kabulü ve sağlayıcı testi henüz yok; merge/deploy yok.
-- Ürün adı KYERP; teknik kimlikler korunur.
-
-## 24.11.2026 — İşNet NetteFatura resmî servis A–Z hazırlığı (test daveti bekleniyor)
-
-- Kapsam: mevcut KY ERP e-Belge/İşNet merkezi içinde altı belge ailesi, 31 işlem kimliği; firma/cari, ürün, mükellef, rapor, ayar/rol, kontör, tahsilat ve mevcut File Hub. Hizmet yetkisi ve sağlayıcı sözleşmesi olmadan aktif gösterilmez.
-- Hazırlık dalı: `feat/isnet-official-full-lifecycle-20261124`. Güvenlik sözleşmesi + 10 sentetik birim testi kaynak commit `61f830cfe9818e76f7b50ba5970b66f613ac0a96`; izole Node test **10/10 PASS**, helper strict TypeScript **PASS**, iki kaynak blob SHA eşleşti. Tam Worker/CI ve gerçek sağlayıcı kabulü yapılmadı.
-- Kalan P0: İşNet test daveti ve güncel servis sözleşmesi; resmi transport/mapping, mevcut iki gönderim yolunu birleştirme, gerçek doğrulama ve atomik gönderim kilidi, TEST/PROD vault ayrımı, altı belge ailesinin resmi şemaları, tüm yetkili yönlerde liste/XML/PDF, File Hub ve gerçek test belge kabulü. Test gönderimi yalnız açık kullanıcı onayıyla.
-- Ayrıntılı kaynak/menü/kabul sırası: [KY_ISNET_RESMI_SERVIS_A_Z_KABUL_20261124.md](KY_ISNET_RESMI_SERVIS_A_Z_KABUL_20261124.md), commit `7a6be5810481035552de69e5c9e82da1a5503d29`. Mevcut üretim ve çalışan eklenti korunuyor; yeni ücret, canlı veri, migration, merge veya deploy yok.
-
+- PR #658 merge `aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf`; son kaynak `e3f94b18f554`; CI [#45558145529](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45558145529) frontend + Worker SUCCESS.
+- PRO firma sahibi/çalışan hesap yönetimi; kullanıcı bazlı telefon MFA; izinli mobil çalışma alanları; KY Firma bağlantısı; hesap durumu, oturum ve onay iptali ile audit atomik kayıt; yetki öncesi/sonrası ve gerçek onay aktörü.
+- Production: Pages Git Integration + mevcut Security Canonical Final Deploy (API + Security Host). Yayın talep edildi; canlı kanıt ayrıca kaydedilir. D1 migration, toplu hesap değişikliği, secret rotasyonu yok.
+- Açık: fiziksel telefon ve yetkili tenant senaryoları, uzun süreli güvenli cookie/refresh ve bütün iş modülleri log kapsamı. Mevcut owner MFA sınırı kaldırılmadı. [Ayrıntı](KYERP_SECURITY_PRO_CANONICAL_20261125.md).
 
 ## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
 
@@ -1861,3 +1841,24 @@ Bu dosya bu kaynakları kaldırmaz; **devam noktası için tek güncel indeks/ko
 - **Canlı Worker release:** attempt **62**, run `45044905778` **SUCCESS**: Time Travel + D1 schema + Worker deploy + API health. Migration 0060 ve diğerleri **SKIPPED**.
 - **Canlı Pages release:** attempt **9**, run `45044932000` **SUCCESS**: Pages deploy + gerçek canlı bundle smoke. D1/muhasebe/vergi/onay/ödeme/İşNet gönderimi değişmedi.
 - **AÇIK gerçek kabul:** Kullanıcının mevcut Chrome oturumunda tekrar girişten sonra kyerp.net'i yenileyip PDF görüntüle/yazdır denemesi. Canlı üretim PDF'nin açılması ve oturumun düşmemesi kullanıcı ekranından görülmeden Windows/browser uçtan uca PASS denmez. Bekleyen açık belge incelemesi ve XML firma doğrulaması ayrı iştir.
+
+
+## 25.11.2026 — İşNet TEST erişim ve taslak kabulü (ayrı dal)
+
+- Önce gerçek belge erişimi: SearchInvoice/SearchDespatchAdvice, gelen/giden, 31 gün, sayfalama, ETTN/XML/PDF. TEST VKN sınırı, no-store, canlıya yazma/gönderme yok. WSDL inline contract keşfi, unsupported binding fail-closed. 17 sentetik okuma kontrolü; gerçek erişim DNS nedeniyle doğrulanmadı. İrsaliye/fatura taslakları ve gönderim güvenliği sonraki kabul.
+- Önceki İşNet dal kayıtları (üretim güvenlik kayıtları korunmuştur):
+- 25.11.2026 İşNet: TEST taslak çalışma alanına Worker çıkışından iki resmî TEST WSDL salt-okunur ağ tanısı eklendi. WSDL keşfi yetki veya gönderim kabulü değildir. Gönderim çekirdeği ayrı, resmî adapter/claim/parser/UBL ve gerçek erişim bekler. Canlı yayın yok.
+## 25.11.2026 — İşNet TEST taslak kabulü
+- Mevcut İşNet işlem merkezinde sentetik 5.500 adet örnek kaynak, tam/kısmi irsaliye, sıfırdan irsaliye/fatura, bağlı fatura, düzenle/kaydet/önizle/iptal. Tenant ve yetki kontrollü json_store TEST scope, CAS; muhasebe tablolarına yazmaz, gönderim yok. Bağlı fatura adedi server-side kilitli, fazla rezervasyon ve çift fatura taslağı engelli. 12/12 sentetik state machine kontrolü başarılı; gerçek D1 ve UI/CI kabulü yok. Gerçek kaynak/çoklu kalem, WSDL/UBL ve resmî gönderim motoru ayrıca tamamlanacak. Kullanıcı gönderim özelliğini de istedi; gerçek belge gönderme izni olarak yorumlanmadı.
+## 25.11.2026 — İşNet SOAP test daveti ve resmî sözleşme
+- Sekiz PDF alındı, resmi operasyonlar ve IP-VKN modeli kayda alındı. e-MM SOAP yok. İki test URL'si sağlandı. [SOAP sözleşme ve test planı](KY_ISNET_SOAP_TEST_20261125.md).
+- Salt-okunur WSDL/GetTaxPayer Windows test aracı ve dokümana bağlı operasyon kataloğu hazırlık dalında. Doğrudan ağ DNS başarısız; web WCF tanıtım sayfası SOAP kabulü değil. Test gönderimi kullanıcı tarafından yetkilendirildi ama henüz gerçekleşmedi; tam CI, merge/deploy yok.
+## 24.11.2026 — KYERP İşNet işlem merkezi / arayüz önceliği
+- Mevcut resmî entegrasyon hazırlık dalında dört belge görünümüne, belge havuzuna, arşive ve mevcut bağlantı/dosya kontrolüne tek merkezden erişim eklendi. Belge detayında doğrudan orijinal PDF/XML indirme; doğrulanmamış arşiv durumunda sahte PDF mevcut etiketi kaldırıldı.
+- Resmî taslak, gönderim, yanıt, ek belge aileleri, sağlayıcı yönetim ve finans işlemleri servis sözleşmesi ve güvenli sunucu uygulaması beklediğinden kapalı. Muhasebe onayı resmî gönderim değildir. Mevcut sync korunur. CI, canlı kullanıcı kabulü ve sağlayıcı testi henüz yok; merge/deploy yok.
+- Ürün adı KYERP; teknik kimlikler korunur.
+## 24.11.2026 — İşNet NetteFatura resmî servis A–Z hazırlığı (test daveti bekleniyor)
+- Kapsam: mevcut KY ERP e-Belge/İşNet merkezi içinde altı belge ailesi, 31 işlem kimliği; firma/cari, ürün, mükellef, rapor, ayar/rol, kontör, tahsilat ve mevcut File Hub. Hizmet yetkisi ve sağlayıcı sözleşmesi olmadan aktif gösterilmez.
+- Hazırlık dalı: `feat/isnet-official-full-lifecycle-20261124`. Güvenlik sözleşmesi + 10 sentetik birim testi kaynak commit `61f830cfe9818e76f7b50ba5970b66f613ac0a96`; izole Node test **10/10 PASS**, helper strict TypeScript **PASS**, iki kaynak blob SHA eşleşti. Tam Worker/CI ve gerçek sağlayıcı kabulü yapılmadı.
+- Kalan P0: İşNet test daveti ve güncel servis sözleşmesi; resmi transport/mapping, mevcut iki gönderim yolunu birleştirme, gerçek doğrulama ve atomik gönderim kilidi, TEST/PROD vault ayrımı, altı belge ailesinin resmi şemaları, tüm yetkili yönlerde liste/XML/PDF, File Hub ve gerçek test belge kabulü. Test gönderimi yalnız açık kullanıcı onayıyla.
+- Ayrıntılı kaynak/menü/kabul sırası: [KY_ISNET_RESMI_SERVIS_A_Z_KABUL_20261124.md](KY_ISNET_RESMI_SERVIS_A_Z_KABUL_20261124.md), commit `7a6be5810481035552de69e5c9e82da1a5503d29`. Mevcut üretim ve çalışan eklenti korunuyor; yeni ücret, canlı veri, migration, merge veya deploy yok.

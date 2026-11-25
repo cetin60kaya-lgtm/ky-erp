@@ -1,7 +1,7 @@
-deploy: kyerp-pro-mobil-firma-merkezi-20261117
-pr: 590
-merge: bd0c14327ae8f68811e631bc3ee15c94f40216b1
-scope: Unified KY ERP PRO owner company cards, users, module permissions, company-scoped security events; canonical API and Security Host
+deploy: kyerp-security-pro-canonical-20261125
+pr: 658
+merge: aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf
+scope: canonical phone MFA, account management and atomic audit; authorized mobile ERP; API and Security Host
 release: Existing KY Security Canonical Final Deploy
 migration: NONE
 production_data_mutation: NONE

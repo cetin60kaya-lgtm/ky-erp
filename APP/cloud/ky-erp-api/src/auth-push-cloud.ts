@@ -573,7 +573,9 @@ function canApproveTarget(actor: AnyRow, approval: AnyRow, settings: AnyRow) {
 }
 
 function canApprovePhoneChallenge(actor: AnyRow, challenge: AnyRow, targetUser: AnyRow | null) {
+  if (!targetUser || !Boolean(targetUser.is_active)) return false;
   if (text(challenge.userId) === text(actor.userId)) return true;
+  if (challenge.selfOnly === true) return false;
   if (isSuper(actor.role)) return actor.ownerControlAuthorized === true;
   const targetRole = roleOf(targetUser || {});
   return isCompanyAdmin(actor.role) &&
@@ -595,11 +597,12 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
   const selfDevices = await activeDevicesForUser(c, text(user.id), "SELF");
   if (!selfDevices.length) return null;
   const companySlug = text(user.main_company_slug || user.mainCompanySlug || "mecit-hakan");
+  const selfOnly = !isSuper(roleOf(user)) && !isCompanyAdmin(roleOf(user)) && !Boolean(user.approval_required);
   const observerCandidates = await approvalObserverDevices(c, user, companySlug);
   const selfEndpoints = new Set(selfDevices.map((device: AnyRow) => pushEndpointOf(device)).filter(Boolean));
   const observerDevices = observerCandidates.filter((device: AnyRow) => {
     const endpoint = pushEndpointOf(device);
-    return endpoint && !selfEndpoints.has(endpoint);
+    return !selfOnly && endpoint && !selfEndpoints.has(endpoint);
   });
 
   const id = crypto.randomUUID();
@@ -619,6 +622,7 @@ export async function startPhoneApprovalChallenge(c: any, user: AnyRow, source: 
     mainCompanySlug: companySlug,
     challengeTokenHash: await sha256(token),
     status: "PENDING",
+    selfOnly,
     matchNumber,
     deviceLabel: text(source.deviceLabel || source.device_label),
     userAgent: text(source.userAgent || source.user_agent || userAgent(c)),
@@ -690,7 +694,7 @@ export async function resendPhoneApprovalChallenge(c: any, idValue: unknown, tok
   const selfEndpoints = new Set(selfDevices.map((device: AnyRow) => pushEndpointOf(device)).filter(Boolean));
   const observerDevices = observerCandidates.filter((device: AnyRow) => {
     const endpoint = pushEndpointOf(device);
-    return endpoint && !selfEndpoints.has(endpoint);
+    return approval.selfOnly !== true && endpoint && !selfEndpoints.has(endpoint);
   });
   const selfSent = await sendWakeMany(c, selfDevices);
   const observerSent = await sendWakeMany(c, observerDevices);
@@ -1854,6 +1858,7 @@ export function registerAuthPushRoutes(app: any) {
         status,
         decidedAt: nowIso(),
         decidedByDeviceId: actor.device.id,
+        decidedByUserId: actor.userId,
         ...(status === "DENIED" ? { consumedAt: nowIso() } : {}),
       });
       const finalStatus = upper(update.row?.status || status);
