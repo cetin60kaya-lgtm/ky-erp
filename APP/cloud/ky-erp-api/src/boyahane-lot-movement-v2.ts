@@ -90,6 +90,8 @@ async function applyMovement(c:Context<AppEnv>,slug:string,snapshot:StoreSnapsho
     return {movement:previous.value,lot:(await storeSnapshot(db,LOT_SCOPE,slug,lotId))?.value || lot,idempotent:true};
   }
   const current=balances(lot),at=now();
+  const rfProduct=direction==="OUT" && !original && upper(lot.source)==="RF_PREPARED"?await storeSnapshot(db,"BOYAHANE_APPROVED_PRODUCT",slug,text(lot.productId || lot.inventoryId)):null;
+  if(direction==="OUT" && !original && upper(lot.source)==="RF_PREPARED" && (rfProduct?.value.approvalStatus!=="APPROVED" || rfProduct.value.isActive===false))throw movementError("RF_APPROVAL_REQUIRED","RF ürün onayı tamamlanmamış.");
   if(direction==="OUT" && quantity>current.remaining+1e-9)throw movementError("INSUFFICIENT_STOCK","LOT bakiyesi hareket miktarından düşük.");
   if(direction==="OUT" && !original && !["AVAILABLE","ACTIVE"].includes(upper(lot.status)))throw movementError("LOT_NOT_AVAILABLE","LOT kullanıma açık değil.");
   const nextEntry=direction==="IN"?current.entry+quantity:current.entry;
@@ -102,7 +104,7 @@ async function applyMovement(c:Context<AppEnv>,slug:string,snapshot:StoreSnapsho
   const priorStatus=upper(lot.status);
   const nextLot={...lot,entryKg:entry,quantity:entry,remainingKg:remaining,remainingQuantity:remaining,usedKg:Math.max(0,entry-remaining),status:remaining<=0?"DEPLETED":["QUARANTINE","INACTIVE"].includes(priorStatus)?priorStatus:"AVAILABLE",lastMovementAt:at,updatedAt:at};
   const movement={id:movementId,payloadHash,lotId,productId:text(lot.productId || lot.inventoryId),productName:text(lot.productName),lotNo:text(lot.lotNo),type:direction,movementType:reason,reason,quantity,quantityKg:quantity,unit:text(lot.unit || "KG"),remainingKg:remaining,unitCostAtMovement:unitCost,costAmount:quantity*unitCost,source:original?"REVERSAL":text(body.source || "MANUAL"),modelId:text(body.modelId)||null,modelName:text(body.modelName)||null,recipeId:text(body.recipeId)||null,productionId:text(body.productionId)||null,actor:"KY ERP",note:text(body.note || body.description || reason+" LOT hareketi"),originalMovementId:original?.fileName || null,reversalOf:original?.fileName || null,createdAt:at,updatedAt:at};
-  const guards=[storeGuard(db,snapshot)],writes=[storeUpdate(db,snapshot,nextLot,at),storeInsert(db,MOVEMENT_SCOPE,slug,movementId,movement,at)];
+  const guards=[storeGuard(db,snapshot),...(rfProduct?[storeGuard(db,rfProduct)]:[])],writes=[storeUpdate(db,snapshot,nextLot,at),storeInsert(db,MOVEMENT_SCOPE,slug,movementId,movement,at)];
   if(original){guards.push(storeGuard(db,original));writes.push(storeUpdate(db,original,{...original.value,reversedAt:at,reversedByMovementId:movementId,reversalReason:text(body.note || "Ters hareket")},at));}
   try{await commitStoreBatch(db,guards,writes);}catch{
     const winner=await replay();

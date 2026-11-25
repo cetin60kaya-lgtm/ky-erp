@@ -692,13 +692,15 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
     const lot=snapshot.value;
     if(previous)return c.json({ok:true,success:true,data:lot,idempotent:true});
     const incoming=/(^| )IN$/.test(type);
+    const rfProduct=!incoming && normalize(lot.source)==="RF PREPARED"?await storeSnapshot(db,PRODUCT_SCOPE,slug,text(lot.productId || lot.inventoryId)):null;
+    if(!incoming && normalize(lot.source)==="RF PREPARED" && (rfProduct?.value.approvalStatus!=="APPROVED" || rfProduct.value.isActive===false))return c.json(jsonError("RF_APPROVAL_REQUIRED","RF ürün onayı tamamlanmamış."),409);
     const remaining=numberValue(lot.remainingKg ?? lot.remainingQuantity ?? lot.entryKg ?? lot.quantity);
     if(!incoming && (quantity>remaining || !["AVAILABLE","ACTIVE"].includes(normalize(lot.status))))
       return c.json(jsonError("INSUFFICIENT_STOCK","LOT bakiyesi yetersiz veya LOT kullanıma açık değil."),409);
     const at=new Date().toISOString(),entry=numberValue(lot.entryKg || lot.quantity)+(incoming?quantity:0),nextRemaining=remaining+(incoming?quantity:-quantity);
     const nextLot={...lot,entryKg:entry,quantity:entry,remainingKg:nextRemaining,remainingQuantity:nextRemaining,usedKg:Math.max(0,entry-nextRemaining),status:nextRemaining<=0?"DEPLETED":normalize(lot.status)==="QUARANTINE"?"QUARANTINE":normalize(lot.status)==="INACTIVE"?"INACTIVE":"AVAILABLE",updatedAt:at};
     const movement={payloadHash,lotId:id,productId:lot.productId || lot.inventoryId,type:incoming?"IN":"OUT",movementType:type,quantity,unit:lot.unit || "KG",recipeId:body.recipeId || null,productionId:body.productionId || null,note:text(body.note || "Boyahane stok hareketi"),createdAt:at};
-    try {await commitStoreBatch(db,[storeGuard(db,snapshot)],[storeUpdate(db,snapshot,nextLot,at),storeInsert(db,MOVEMENT_SCOPE,slug,movementId,movement,at)]);}
+    try {await commitStoreBatch(db,[storeGuard(db,snapshot),...(rfProduct?[storeGuard(db,rfProduct)]:[])],[storeUpdate(db,snapshot,nextLot,at),storeInsert(db,MOVEMENT_SCOPE,slug,movementId,movement,at)]);}
     catch {
       const winner=await duplicate();
       if(winner?.value.payloadHash===payloadHash) return c.json({ok:true,success:true,data:(await storeSnapshot(db,LOT_SCOPE,slug,id))?.value,idempotent:true});

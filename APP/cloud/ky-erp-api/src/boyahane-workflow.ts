@@ -1,6 +1,6 @@
 import type { Context, Hono } from "hono";
 import { reserveLotKg } from "./production-flow-safety.ts";
-import { storeSnapshot, storeGuard, storeUpdate, storeInsert, stableStoreId, commitStoreBatch, type StoreSnapshot } from "./atomic-json-store.ts";
+import { storeSnapshot, storeGuard, storeAbsentGuard, storeUpdate, storeInsert, stableStoreId, commitStoreBatch, type StoreSnapshot } from "./atomic-json-store.ts";
 import {getAuthenticatedUser} from "./auth-cloud";
 import {accountingTenantReadAllowed} from "./accounting-access-policy";
 
@@ -652,47 +652,31 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
     const colorId = c.req.param("id");
-    const color = await storeGet(c, SCOPES.color, colorId, slug);
-    if (!color) return c.json(errorBody("NOT_FOUND", "Kayıtlı renk bulunamadı."), 404);
-    const lines = recipeLines(body.lines);
-    if (!lines.length || lines.some((line) => !line.productId || line.referenceGram <= 0)) {
-      return c.json(
-        errorBody(
-          "INVALID_RECIPE_LINES",
-          "Reçetede onaylı ürün ve sıfırdan büyük gramaj zorunludur.",
-        ),
-        400,
-      );
+    const db=c.env.DB;
+    const colorSnapshot=await storeSnapshot(db,SCOPES.color,slug,colorId);
+    if(!colorSnapshot)return c.json(errorBody("NOT_FOUND","Firma kapsamındaki kayıtlı renk bulunamadı."),404);
+    const color=colorSnapshot.value;
+    const lines=recipeLines(body.lines);
+    if(!lines.length || lines.some(line=>!line.productId || line.referenceGram<=0))
+      return c.json(errorBody("INVALID_RECIPE_LINES","Reçetede ürün ve pozitif gramaj zorunludur."),400);
+    const dyeType=text(body.paintType || body.dyeType || color.dyeType || "SUBAZLI");
+    const existing=(await storeList(c,SCOPES.recipe,slug)).filter(row=>text(row.registeredColorId)===colorId);
+    const versionNumber=existing.reduce((max,row)=>Math.max(max,num(row.versionNumber)),0)+1;
+    const id=await stableStoreId("BYRCP:",[slug,colorId,versionNumber]);
+    const at=nowIso();
+    const recipe={id,registeredColorId:colorId,colorName:color.colorName,pantone:color.pantone,versionNumber,version:`V${versionNumber}`,dyeType,paintType:dyeType,status:"ACTIVE",lines,createdAt:at,updatedAt:at};
+    const guards=[storeGuard(db,colorSnapshot),storeAbsentGuard(db,SCOPES.recipe,slug,id)];
+    const writes=[storeUpdate(db,colorSnapshot,{...color,recipeVersionRevision:id},at)];
+    // Only the same paint type is superseded; keep other formulations active.
+    for(const row of existing.filter(item=>upper(item.status)==="ACTIVE" && normalize(item.dyeType || item.paintType || "SUBAZLI")===normalize(dyeType))){
+      const snapshot=await storeSnapshot(db,SCOPES.recipe,slug,text(row.id || row.fileName));
+      if(!snapshot)return c.json(errorBody("RECIPE_LEGACY_REVIEW","Eski reçete firma kapsamı doğrulanmalı."),409);
+      guards.push(storeGuard(db,snapshot));
+      writes.push(storeUpdate(db,snapshot,{...snapshot.value,status:"ARCHIVED"},at));
     }
-    const existing = (await storeList(c, SCOPES.recipe, slug)).filter(
-      (row) => text(row.registeredColorId) === colorId,
-    );
-    const versionNumber =
-      existing.reduce((max, row) => Math.max(max, num(row.versionNumber)), 0) + 1;
-    for (const row of existing.filter((item) => item.status === "ACTIVE")) {
-      await storePut(c, SCOPES.recipe, text(row.id), { ...row, status: "ARCHIVED" }, slug);
-    }
-    const id = crypto.randomUUID();
-    const recipe = await storePut(
-      c,
-      SCOPES.recipe,
-      id,
-      {
-        id,
-        registeredColorId: colorId,
-        colorName: color.colorName,
-        pantone: color.pantone,
-        versionNumber,
-        version: `V${versionNumber}`,
-        dyeType: text(body.paintType || body.dyeType || color.dyeType || "SUBAZLI"),
-        paintType: text(body.paintType || body.dyeType || color.dyeType || "SUBAZLI"),
-        status: "ACTIVE",
-        lines,
-        createdAt: nowIso(),
-      },
-      slug,
-    );
-    await logAction(c, slug, "DYE_RECIPE", id, "RECIPE_VERSION_CREATED", `${color.colorName} için V${versionNumber} reçetesi oluşturuldu.`);
+    writes.push(storeInsert(db,SCOPES.recipe,slug,id,recipe,at));
+    writes.push(storeInsert(db,SCOPES.log,slug,id+":L",{mainCompanySlug:slug,module:"BOYAHANE",entityType:"DYE_RECIPE",entityId:id,action:"RECIPE_VERSION_CREATED",actionType:"RECIPE_VERSION_CREATED",description:`${color.colorName} için V${versionNumber} reçetesi oluşturuldu.`,actor:"KY ERP",createdAt:at},at));
+    try{await commitStoreBatch(db,guards,writes);}catch{return c.json(errorBody("RECIPE_VERSION_CONFLICT","Reçete eşzamanlı değişti; kayıtları yenileyin."),409);}
     return c.json({ ok: true, success: true, data: recipeView(recipe) }, 201);
   });
 
@@ -702,6 +686,7 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const id = c.req.param("id");
     const current = await storeGet(c, SCOPES.recipe, id, slug);
     if (!current) return c.json(errorBody("NOT_FOUND", "Reçete bulunamadı."), 404);
+    if(upper(current.status)==="ARCHIVED" || (await storeList(c,SCOPES.production,slug)).some(row=>text(row.recipeId)===id))return c.json(errorBody("RECIPE_HISTORY_LOCKED","Arşivlenmiş veya üretimde kullanılmış reçete değiştirilemez; yeni sürüm açın."),409);
     const lines = body.lines === undefined ? recipeLines(current.lines) : recipeLines(body.lines);
     if (!lines.length || lines.some((line) => !line.productId || line.referenceGram <= 0)) {
       return c.json(errorBody("INVALID_RECIPE_LINES", "Reçete satırları eksik."), 400);
@@ -738,7 +723,7 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const legacy = (await storeList(c,SCOPES.production,slug)).find(row=>text(row.requestId)===requestId);
     if (legacy) {
       if (legacy.id===productionId && legacy.payloadHash===payloadHash) return c.json({ok:true,success:true,data:{...legacy,idempotent:true}});
-      return c.json(errorBody("LEGACY_PRODUCTION_REVIEW","Bu işlem kimliği eski veya farklı üretim fişinde mevcut. Stok tekrar düşülmedi; mevcut fişi inceleyin.",{productionId:legacy.id}),409);
+      return c.json(errorBody("LEGACY_PRODUCTION_REVIEW","Bu işlem kimliği eski veya farklı üretim fişinde mevcut. Stok tekrar düşülmedi; mevcut fişi inceleyin."),409);
     }
     const [jobSnapshot,colorSnapshot] = await Promise.all([
       storeSnapshot(db,SCOPES.job,slug,text(body.jobId)),
