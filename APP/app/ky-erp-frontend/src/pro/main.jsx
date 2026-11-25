@@ -80,6 +80,8 @@ function ProHome({onSecurity,onCompanies}){
  const allowed=MODULES.filter(m=>owner||Boolean(hasModule(m.permissionKey||m.key.toUpperCase())));
  const visible=allowed.filter(m=>String(m.label||"").toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
  const fullCount=allowed.reduce((sum,m)=>sum+getVisibleModuleTabs(m).length,0);
+ const preferredKeys=["muhasebe","gunluk-operasyon","ik","imalat","desen","boyahane","pdks"];
+ const quickModules=preferredKeys.map(key=>allowed.find(m=>m.key===key)).filter(Boolean);
  return <main className="ky-pro-home" aria-label="KY ERP PRO ana sayfa">
    <section className="ky-pro-home-hero">
     <div className="ky-pro-home-top"><span>KY ERP PRO 4.2.1</span><ShieldCheck size={21}/></div>
@@ -97,7 +99,7 @@ function ProHome({onSecurity,onCompanies}){
    <div className="ky-pro-home-tools">
     <button type="button" onClick={onSecurity}><ShieldCheck size={22}/><span><b>Güvenlik Onayları</b><small>Giriş, cihaz, oturum ve kod</small></span><ChevronRight size={17}/></button>
     {owner?<button type="button" onClick={onCompanies}><Building2 size={22}/><span><b>Firmalarım</b><small>Firma sahibi, kullanıcı ve yetkiler</small></span><ChevronRight size={17}/></button>:null}
-    <button type="button" onClick={()=>{const m=allowed.find(x=>x.key==="muhasebe");const t=m&&getModuleTabs(m)[0];if(m&&t)goModule(m.key,t[0])}}><ChartNoAxesCombined size={22}/><span><b>ERP Çalışma Alanı</b><small>Bu uygulamada muhasebe ve operasyon</small></span><ChevronRight size={17}/></button>
+    {quickModules.map(m=>{const first=getVisibleModuleTabs(m)[0];return first?<button key={m.key} type="button" onClick={()=>goModule(m.key,first[0])}><LayoutGrid size={22}/><span><b>{m.label}</b><small>Yetkili mobil çalışma alanı</small></span><ChevronRight size={17}/></button>:null})}
    </div>
    <div className="ky-pro-home-title"><div><span>TÜM ERİŞİLEBİLİR MODÜLLER</span><h2>Çalışma Alanları</h2></div><LayoutGrid size={20}/></div>
    <label className="ky-pro-search ky-pro-home-search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Modül ara..." aria-label="Modüllerde ara"/></label>
@@ -167,7 +169,7 @@ function ProDock({onSecurity,securityActive,securityPending,onCompanies,companie
  const security=onSecurity;
  const isAnalytic=/ozet|dashboard|rapor|analiz/i.test(currentPath);
  return <>
-   <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>{owner?"Sistem Sahibi · Tam Yönetim":"Yetkili ERP Kullanıcısı"} · v4.2.1</small></div></div>
+   <header className="ky-pro-header"><div className="ky-pro-brand"><span className="ky-pro-mark">KY</span><div><strong>KY ERP <em>PRO</em></strong><small>{owner?"Sistem Sahibi · Tam Yönetim":String(user?.role||"").toUpperCase()==="COMPANY_ADMIN"?"Firma Sahibi · Kendi Firması":"Yetkili ERP Kullanıcısı"} · v4.2.1</small></div></div>
     <button type="button" className="ky-pro-header-action" onClick={security}><ShieldCheck size={18}/>Güvenlik</button></header>
    <nav className="ky-pro-dock" aria-label="KY ERP PRO telefon gezinmesi">
      <button type="button" onClick={onHome}><House size={23}/><span>Ana Sayfa</span></button>

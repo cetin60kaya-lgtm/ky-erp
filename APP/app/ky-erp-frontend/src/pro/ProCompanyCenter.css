@@ -35,3 +35,5 @@
 .ky-pro-firm-audit strong{font-size:12px}.ky-pro-firm-audit span,.ky-pro-firm-audit small{font-size:10px;color:#6c8499}
 .ky-pro-firm-deep-link{justify-self:start}
 @media(max-width:380px){.ky-pro-firm-modules,.ky-pro-firm-choices{grid-template-columns:1fr}.ky-pro-firm-metrics strong{font-size:20px}}
+
+.ky-pro-account-actions{justify-content:flex-end;gap:6px}.ky-pro-firm-user .ky-pro-account-danger{background:#fff1f1;color:#a12525;border-color:#efb9b9}.ky-pro-firm-user button:disabled{opacity:.55}@media(max-width:600px){.ky-pro-firm-user{grid-template-columns:minmax(0,1fr)}.ky-pro-account-actions{justify-content:flex-start}.ky-pro-account-actions button{min-height:46px;flex:1 1 120px}}

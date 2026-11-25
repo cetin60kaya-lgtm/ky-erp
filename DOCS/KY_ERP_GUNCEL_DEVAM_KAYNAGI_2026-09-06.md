@@ -1,12 +1,19 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
-## 25.11.2026 — İmalat / Desen / Boyahane stabilizasyonu (kod dalı, canlı kabul açık)
+## 25.11.2026 — İmalat / Desen / Boyahane bütünleşik stabilizasyon (PR #659, canlı kabul açık)
 
-- İmalat: tek bulk isteğinde başarılı yeni satırlar model + baskı bölgesi bazında kalan irsaliye kapasitesini tüketir; negatif sakat/test ve aynı clientId tekrarları reddedilir. Canonical route önceliği, mevcut idempotent D1 kayıt ve model ilişkisi korunur. Farklı eşzamanlı isteklerin kapasite yarışı ayrı test konusudur.
-- Desen → Boyahane: tekrar sync mevcut işin statüsünü, önceliğini ve zamanlarını korur; tamamlanan iş yalnız yeni renk geldiğinde WAITING'e döner. Manuel renkler desen kaynak listesinde bulunmadığı için iptal edilmez; tamamlanmış eski renkler korunur.
-- Boyahane: renk seçilen işe ait olmalıdır; sıfır çarpan kabul edilmez; aynı LOT'ta birden çok reçete satırı kümülatif miktarla doğrulanır ve yazılır. INACTIVE gibi kısmi statü eşleşmeleri kabul edilmez. LOT/hareket/üretim/gider işlemlerinin atomik ve eşzamanlı güvenliği ayrıca tamamlanmalıdır.
-- Dört yardımcı mantık için toplam 10 izole sentetik kontrol PASS; repo testleri eklendi. Tam Worker test/typecheck/build ve gerçek canlı kabul henüz yapılmadı. D1 migration, stok veya iş kayıtlarına canlı müdahale, PC komutu ve resmî belge gönderimi yok. Ayrı ortak API/muhasebe ön paketini bu dala karıştırmadık.
+- İmalat: kümülatif irsaliye/bölge kapasite kontrolü, negatif sakat/test reddi, istemci işlem kilidi ve aynı işlem kimliğiyle retry; D1 fiş+model bağlantısı transaction ve farklı isteklerin aynı kayıt sayısı snapshot yarışı koruması. Eski PATCH/DELETE alias rotaları canonical bakım işlemlerine bağlandı. Arşivli model kimliği yeniden açılmaz.
+- Desen → Boyahane: iş/renk senkronu tek D1 batch; mevcut statü/öncelik, manuel ve tamamlanmış renk korunur. Yeni renk tamamlanan işi yeniden beklemeye alır. Modelin sipariş, firma ve görsel alanları korunur; tamamlanmış renk reçetesi sessiz değiştirilmez.
+- Boyahane: stok, hareket, üretim, renk, gider ve log aynı transaction; LOT kümülatif bakiye, gerçek reçete/iş/renk doğrulama, deterministik işlem kimliği. Gerçek movements-v2 ve ters kayıt rotaları kayıtlı; bağlı üretim/belge hareketi tek başına iptal edilmez. Reçete sürümü kendi boya türünde atomik değişir; kullanılmış/arşivli reçete kilitli. RF ürün+LOT+giriş üretimle aynı transaction, ikinci sarf yok; ürün REVIEW_REQUIRED, onaysız RF çıkışı reddedilir. Firma yetki kapısı eklendi, eski tenant NULL kayıtlar için ayrıca uzlaştırma gerekir.
+- Kanıt: kod commit `ca47207303bac38d10b82560ee1ecf8a6388524c`; yerelde GitHub blob SHA eşleşmeli Node SQLite 15/15 test PASS, dört saf yardımcı senaryo PASS, 12 gerçek kaynak bağlama kontrolü PASS. Bunlar tam frontend/Worker derleme veya gerçek Cloudflare D1 kabulü değildir. Son kod CI sorgusunda PR workflow bulunmadı, AppVeyor birleşik durum failure; güvenli yayın kapısı açık. Bu dal yayınlanmadı.
+- Açık: tam CI/typecheck/build, canlı tenant ve RF onay/LOT kabulü, Desen merkez model yazısının ayrı transaction olması, İmalat kapasite snapshot'ında sayı değiştirmeyen eşzamanlı düzenleme ve 10.000 kayıt sınırı, eski NULL tenant kayıtları ve fiziksel LOT entegrasyon uzlaştırması. D1 migration, canlı kayıt/stoğa müdahale, PC işlemi ve resmi belge gönderimi yapılmadı.
 
+## 25.11.2026 — KYERP SECURITY PRO / PR #658
+
+- PR #658 merge `aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf`; son kaynak `e3f94b18f554`; CI [#45558145529](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45558145529) frontend + Worker SUCCESS.
+- PRO firma sahibi/çalışan hesap yönetimi; kullanıcı bazlı telefon MFA; izinli mobil çalışma alanları; KY Firma bağlantısı; hesap durumu, oturum ve onay iptali ile audit atomik kayıt; yetki öncesi/sonrası ve gerçek onay aktörü.
+- Production: Pages Git Integration + mevcut Security Canonical Final Deploy (API + Security Host). Yayın talep edildi; canlı kanıt ayrıca kaydedilir. D1 migration, toplu hesap değişikliği, secret rotasyonu yok.
+- Açık: fiziksel telefon ve yetkili tenant senaryoları, uzun süreli güvenli cookie/refresh ve bütün iş modülleri log kapsamı. Mevcut owner MFA sınırı kaldırılmadı. [Ayrıntı](KYERP_SECURITY_PRO_CANONICAL_20261125.md).
 
 ## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
 

@@ -527,8 +527,8 @@ async function issueSession(c: any, user: AnyRow, source: AnyRow = {}) {
     }
   } else if (text(source.phoneApprovalId)) {
     try {
-      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "VERIFIED", decidedByUserId: text(user.id), decidedByDeviceId: text(source.securityDeviceId), decidedAt: timestamp, source: "PHONE_LOGIN", phoneApprovalId: text(source.phoneApprovalId) });
-      await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", user.id, user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
+      await securityStorePut(c, SESSION_TRUST_SCOPE, sid, text(security.main_company_slug) || DEFAULT_COMPANY_SLUG, { sessionId: sid, userId: text(user.id), status: "VERIFIED", decidedByUserId: text(source.phoneApprovalActorId || user.id), decidedByDeviceId: text(source.securityDeviceId), decidedAt: timestamp, source: "PHONE_LOGIN", phoneApprovalId: text(source.phoneApprovalId) });
+      await audit(c, "SESSION_VERIFIED_BY_PHONE_LOGIN", text(source.phoneApprovalActorId || user.id), user.id, text(security.main_company_slug), sid, { phoneApprovalId: text(source.phoneApprovalId), securityDeviceId: text(source.securityDeviceId) });
     } catch (error) { logAuthError(c, "PHONE_LOGIN_SESSION_TRUST_WRITE", error, { userId: user.id, sessionId: sid, phoneApprovalId: text(source.phoneApprovalId) }); }
   }
   if (!kySecurityCodeVerified && !text(source.phoneApprovalId)) {
@@ -677,8 +677,8 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, optio
   // Telefon onayı kayıtlı güvenilir cihaz varsa her normal girişte ilk denenir.
   // Böylece eski/taşınmış MFA kolonları kullanıcıyı istemeden Google'a göndermez.
   // BOTH_MFA özel politikası iki ayrı Authenticator kanalı istediği için korunur.
-  const phoneFactorAllowed = isSuper(role) || isCompanyAdmin(role) || Boolean(refreshed?.approval_required);
-  // Personel ve onayi kapatilmis muhasebe kullanicisi her giriste KY Guvenlik telefonuna dusmez.
+  const phoneFactorAllowed = isSuper(role) || isCompanyAdmin(role) || policy !== "PASSWORD_ONLY" || Boolean(refreshed?.approval_required);
+  // Kendi telefonuyla MFA ve firma yöneticisi onayı ayrı kararlardır. BOTH_MFA aşağıdaki kapıda korunur.
   if (!options.skipPhone && phoneFactorAllowed && policy !== "BOTH_MFA") {
     const phoneApproval = await startPhoneApprovalChallenge(c, refreshed || user, source);
     if (phoneApproval) return phoneApproval;
@@ -909,12 +909,13 @@ export function registerAuthPolicyRoutes(app: any) {
     const user = await userById(c, text(approval.userId));
     if (!user || !Boolean(user.is_active)) return c.json(jsonError("USER_UNAVAILABLE", "Kullanıcı hesabı aktif değil."), 403);
     if (!(await consumePhoneApproval(c, approval.id))) return c.json(jsonError("PHONE_APPROVAL_CONSUMED", "Bu telefon giriş onayı daha önce kullanıldı."), 409);
-    await audit(c, "PHONE_LOGIN_FACTOR_VERIFIED", user.id, user.id, text(user.main_company_slug), "", { phoneApprovalId: approval.id });
+    await audit(c, "PHONE_LOGIN_FACTOR_VERIFIED", text(approval.decidedByUserId || user.id), user.id, text(user.main_company_slug), "", { phoneApprovalId: approval.id });
     return c.json(await afterFactors(c, user, {
       deviceLabel: approval.deviceLabel,
       userAgent: approval.userAgent,
       ipAddress: approval.ipAddress,
       phoneApprovalId: approval.id,
+      phoneApprovalActorId: approval.decidedByUserId || user.id,
       securityDeviceId: approval.decidedByDeviceId,
     }));
   });
