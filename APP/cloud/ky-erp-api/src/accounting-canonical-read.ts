@@ -87,26 +87,33 @@ function optionMatch(row:Row,options:{kind?:string;search?:string;status?:string
   return true;
 }
 
-export async function listCanonicalAccountingDocuments(c:Context<AppEnv>,slug:string,options:{kind?:string;search?:string;status?:string}={}){
-  try{
-    const rows=await c.env.DB.prepare(`SELECT d.*,
-      (SELECT COALESCE(SUM(l.quantity),0) FROM accounting_document_lines l WHERE l.main_company_slug=d.main_company_slug AND l.document_id=d.id) quantity_total
-      FROM accounting_documents d WHERE d.main_company_slug=? AND d.deleted_at IS NULL
-      ORDER BY COALESCE(d.issue_date,d.created_at) DESC,d.created_at DESC LIMIT 20000`).bind(slug).all<Row>();
-    return(rows.results||[]).map(row=>{const view=documentView(row);if(!view.quantity)view.quantity=num(row.quantity_total);return view}).filter(row=>optionMatch(row,options));
-  }catch{return[]}
+// A failed or truncated read is not an empty accounting ledger. Let the
+// existing API error handler report failure; legacy fallback is only for a
+// successfully read, genuinely absent canonical record.
+const CANONICAL_READ_LIMIT = 20000;
+function requireReadRows(result: any): Row[] {
+  if (result?.success === false || !Array.isArray(result?.results))
+    throw new Error("Canonical muhasebe sorgusu doğrulanamadı.");
+  return result.results;
 }
-
+export async function listCanonicalAccountingDocuments(c:Context<AppEnv>,slug:string,options:{kind?:string;search?:string;status?:string}={}){
+  const result=await c.env.DB.prepare(`SELECT d.*,
+    (SELECT COALESCE(SUM(l.quantity),0) FROM accounting_document_lines l WHERE l.main_company_slug=d.main_company_slug AND l.document_id=d.id) quantity_total
+    FROM accounting_documents d WHERE d.main_company_slug=? AND d.deleted_at IS NULL
+    ORDER BY COALESCE(d.issue_date,d.created_at) DESC,d.created_at DESC LIMIT ${CANONICAL_READ_LIMIT+1}`).bind(slug).all<Row>();
+  const rows=requireReadRows(result);
+  if(rows.length>CANONICAL_READ_LIMIT)
+    throw new Error("Canonical muhasebe okuma sınırı aşıldı; eksik liste raporlanamaz.");
+  return rows.map(row=>{const view=documentView(row);if(!view.quantity)view.quantity=num(row.quantity_total);return view}).filter(row=>optionMatch(row,options));
+}
 export async function canonicalAccountingDocumentDetail(c:Context<AppEnv>,slug:string,id:string){
-  try{
-    const row=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
-    if(!row)return null;
-    const [lines,files]=await Promise.all([
-      c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no,id`).bind(slug,id).all<Row>(),
-      c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.source_type,a.preview_status FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>().catch(()=>({results:[]})),
-    ]);
-    return documentView({...row,files:files.results||[]},lines.results||[]);
-  }catch{return null}
+  const row=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
+  if(!row)return null;
+  const [lines,files]=await Promise.all([
+    c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no,id`).bind(slug,id).all<Row>(),
+    c.env.DB.prepare(`SELECT a.id,a.file_name,a.extension,a.mime_type,a.size_bytes,a.source_type,a.preview_status FROM file_hub_relations r JOIN file_hub_assets a ON a.id=r.file_asset_id AND a.main_company_slug=r.main_company_slug WHERE r.main_company_slug=? AND r.entity_type='DOCUMENT' AND r.entity_id=? ORDER BY a.created_at`).bind(slug,id).all<Row>(),
+  ]);
+  return documentView({...row,files:requireReadRows(files)},requireReadRows(lines));
 }
 
 export function accountingReadDedupeKey(row:Row){
