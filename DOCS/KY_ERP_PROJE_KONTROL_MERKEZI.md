@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.11.2026 — KYERP stabilizasyon ön düzenleme (salt kod, canlı kabul açık)
+
+- Ortak GET önbelleği: oturum/firma ayrımı, nesil bazlı invalidation, eski isteğin yeni in-flight kaydını silmemesi ve force-fresh sonucunu ezmemesi. Dört izole sentetik JS senaryosu hazırlıkta başarılı; repo regresyon testleri eklendi, tam CI/build ve canlı kabul henüz yapılmadı.
+- Muhasebe canonical liste/detay: D1 hatası boş liste veya olmayan belge gibi sunulmaz; 20.000 üstü kesilmiş liste sessizce raporlanmaz. SQL sayfalama ve legacy mutabakatı ayrı iş. Gerçek cari, KDV, LOT ve belge verisine dokunulmadı.
+- İmalat: main.ts canonical route önce, legacy sonra sıralaması bilinçli; tekil legacy uçlar korunur. Route testleri ve sadeleştirme sonraki adım, bu pakette davranış değiştirilmedi.
+- Kalan: File Hub / İşNet gerçek belge zinciri, Desen görsel eşleştirme, Boyahane LOT, İK / Günlük / PDKS ve denetim kabulü. Migration, gerçek belge gönderimi, Windows müdahalesi ve yeni Actions tetikleme yok.
+
+
 ## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
 
 - **Kaynak kullanıcı kabulü:** TAHA mükerrer güvenli birleştirme kullanıcı tarafından başarılı bildirildi; 13 aktif firma kartı görüntülendi. Gelir/gider faturaları firma bazında görünüyordu ancak henüz POSTED olmayan belgeler cari hareket olmadığı için cari hareket listesi boştu. Arşiv & Çıktı `HISTORY` yalnız `POSTED` kayıtları gösterdiği için 107 canonical belgenin hiçbirini görüntülemiyordu.

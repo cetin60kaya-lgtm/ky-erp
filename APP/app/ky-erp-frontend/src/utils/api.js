@@ -1,5 +1,6 @@
 import { shouldClearStoredAuthForStatus } from "../context/authSessionPolicy";
 import { canonicalCompanySlug } from "./companyIdentity";
+import { createApiGetMemo } from "./apiGetMemo.js";
 
 const PRODUCTION_API_ORIGIN = "https://api.kyerp.net";
 const DEFAULT_API_ORIGIN =
@@ -12,8 +13,7 @@ const DEFAULT_API_TIMEOUT_MS = 45000;
 const DEFAULT_UPLOAD_TIMEOUT_MS = 60000;
 const ACTIVE_COMPANY_STORAGE_KEY = "kyerp.activeCompany";
 const COMPANY_PARAM_NAME = "mainCompanySlug";
-const apiGetCache = new Map();
-const apiGetInFlight = new Map();
+const apiGetMemo = createApiGetMemo(API_GET_CACHE_TTL_MS);
 let activeMainCompany = null;
 let authTokenGetter = () => "";
 let onUnauthorized = () => {};
@@ -389,46 +389,35 @@ export async function apiFetch(path, options = {}) {
 export async function apiGet(path, params, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 0) > 0 ? Number(options.timeoutMs) : undefined;
   const forceFresh = options.forceFresh === true || options.cache === false;
-  const url = buildApiUrl(path, params);
-  const inFlightKey = forceFresh ? `${url}::force-fresh` : url;
-  const now = Date.now();
-  const cached = apiGetCache.get(url);
-  if (!forceFresh && cached && now - cached.timestamp < API_GET_CACHE_TTL_MS) return cached.payload;
-  if (apiGetInFlight.has(inFlightKey)) return apiGetInFlight.get(inFlightKey);
-
-  const requestPromise = (async () => {
-    let lastError;
-    for (let attempt = 0; attempt < 2; attempt += 1) {
-      try {
-        const payload = await apiFetch(path, {
-          params,
-          ...(timeoutMs ? { timeoutMs } : {}),
-        });
-        apiGetCache.set(url, { timestamp: Date.now(), payload });
-        return payload;
-      } catch (error) {
-        lastError = error;
-        const status = Number(error?.status || 0);
-        const transient = [0, 500, 502, 503, 504].includes(status) ||
-          ["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || ""));
-        if (!transient || attempt === 1) throw error;
-        await new Promise((resolve) => window.setTimeout(resolve, 300));
+  return apiGetMemo.get({
+    key: buildApiUrl(path, params),
+    forceFresh,
+    readScope: () => [String(authTokenGetter?.() || "").trim(), getApiActiveMainCompanySlug()],
+    load: async (assertScope) => {
+      let lastError;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        assertScope();
+        try {
+          return await apiFetch(path, {
+            params,
+            ...(timeoutMs ? { timeoutMs } : {}),
+          });
+        } catch (error) {
+          lastError = error;
+          assertScope();
+          const status = Number(error?.status || 0);
+          const transient = [0, 500, 502, 503, 504].includes(status) ||
+            ["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || ""));
+          if (!transient || attempt === 1) throw error;
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+        }
       }
-    }
-    throw lastError;
-  })();
-
-  apiGetInFlight.set(inFlightKey, requestPromise);
-  try {
-    return await requestPromise;
-  } finally {
-    apiGetInFlight.delete(inFlightKey);
-  }
+      throw lastError;
+    },
+  });
 }
-
 export function clearApiGetCache() {
-  apiGetCache.clear();
-  apiGetInFlight.clear();
+  apiGetMemo.clear();
 }
 
 export async function apiPost(path, body, { timeoutMs, suppressUnauthorized = false } = {}) {
