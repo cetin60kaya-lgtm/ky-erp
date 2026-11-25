@@ -29,3 +29,16 @@ const official = readFileSync(new URL("./IsnetOfficialWorkspace.jsx",import.meta
 test("operator starts outside TEST; SOAP catalogue is explicitly read-only and official actions stay disabled",()=>{
  assert.match(official,/\[technical,setTechnical\]=useState\(false\)/);assert.match(official,/technical&&<section/);assert.match(official,/isnet-provider-catalog/);assert.match(official,/WSDL_DISCOVERED/);assert.match(official,/data.environment!=="TEST"/);assert.match(official,/disabled title="Sağlayıcı gönderim kabulü bekliyor"/);assert.doesNotMatch(official,/apiPost|apiPut/);
 });
+
+const families = readFileSync(new URL("./isnetOperatorFamilies.js",import.meta.url),"utf8");
+const manager = readFileSync(new URL("./EBelgeAdapterManager.jsx",import.meta.url),"utf8");
+test("İşNet belge aileleri ve gerçek günlük çalışma alanı, TEST dışında varsayılan giriş",()=>{
+ assert.match(manager,/\[panel,setPanel\]=useState\("official"\)/);
+ assert.match(official,/KYERP_DOCUMENT_FLOW\.map/);
+ assert.match(official,/family\.actions\.map/);
+ assert.match(official,/Servis kabulü bekliyor/);
+ assert.match(official,/onOpenProfile/);
+ for(const method of ["GetCompanyBalance","GetDespatchTaxPayer","SendDespatchAdviceXml","SendReceiptAdviceXml","ContestArchiveInvoice","CreateReturnInvoice","SearchExpenseVoucher","GetAbbreviationReport"])assert.ok(families.includes('"'+method+'"'));
+ assert.match(families,/Kontör bakiyesi/);
+ assert.doesNotMatch(families,/SendDespatchAdviceXML|SendReceiptAdviceXML/);
+});

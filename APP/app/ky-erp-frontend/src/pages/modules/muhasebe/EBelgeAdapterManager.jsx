@@ -35,7 +35,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const owner=useMemo(()=>({slug:tenant}),[tenant]);
  const [data,setData]=useState({mainCompanySlug:"",systemCatalog:[],companyAdapters:[]});
  const [selected,setSelected]=useState("");
- const [panel,setPanel]=useState("sync");
+ const [panel,setPanel]=useState("official");
  const [profile,setProfile]=useState(null);
  const [profileError,setProfileError]=useState("");
  const [showCatalog,setShowCatalog]=useState(false);
@@ -128,7 +128,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     <label htmlFor="eam-company-integration">Firma Entegrasyonları</label>
     <div className="eam-select-wrap">
      <Layers3 size={17}/>
-     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setPanel(e.target.value==="ISNET"?"sync":"test");setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
+     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setPanel(e.target.value==="ISNET"?"official":"test");setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
       <option value="">{loading?"Entegrasyonlar yükleniyor...":error?"Liste doğrulanamadı":installed.length?"Entegrasyon seçin":"Henüz entegrasyon seçilmemiş"}</option>
       {installed.map(adapter=><option key={adapter.key} value={adapter.key}>{adapter.label}{choice(adapter.key)?.enabled===false?" (Pasif)":""}</option>)}
      </select><ChevronDown size={16}/>
@@ -183,7 +183,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
      <button type="button" role="tab" aria-selected={panel==="profile"} className={panel==="profile"?"active":""} onClick={()=>setPanel("profile")}>Entegrasyonu Düzenle</button>
     </div>
     {profileError&&<div className="eam-alert" role="alert">{profileError}</div>}
-    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace slug={tenant} key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onOpenSync={()=>setPanel("sync")} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")}/>:
+    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace slug={tenant} key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onOpenSync={()=>setPanel("sync")} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")} onOpenProfile={()=>setPanel("profile")}/>:
      panel==="sync"&&active.key==="ISNET"?<EBelgeIsnetPortalSync key={tenant+":sync"} activeMainCompany={activeMainCompany} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onSynced={refresh}/>:
      panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenSync={()=>setPanel("sync")} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
      panel==="profile"?<EBelgeIntegrationProfileEditor key={tenant+":"+active.key} adapter={active} company={owner} profile={profile} onSaved={setProfile}/>:
