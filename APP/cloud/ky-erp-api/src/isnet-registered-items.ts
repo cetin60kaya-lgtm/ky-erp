@@ -6,9 +6,9 @@ type Row=Record<string,any>;
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 const clean=(v:unknown)=>String(v??"").trim();
 const specs=[
- {prefix:"MODEL:",unit:"'ADET'",from:"model_records m",scope:"m.main_company_slug=? AND m.deleted_at IS NULL",expr:"m.model_name"},
- {prefix:"PRODUCT:",unit:"m.unit",from:"products m",scope:"m.main_company_slug=?",expr:"m.name"},
- {prefix:"HISTORY:",unit:"m.unit_code",from:"accounting_document_lines m JOIN accounting_documents d ON d.id=m.document_id AND d.main_company_slug=m.main_company_slug",scope:"m.main_company_slug=? AND d.deleted_at IS NULL AND d.direction='OUTGOING' AND (d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%ARSIV%')",expr:"m.description"}
+ {prefix:"MODEL:",unit:"'ADET'",from:"model_records m",scope:"m.main_company_slug=? AND m.deleted_at IS NULL",expr:"m.model_name",search:"COALESCE(m.model_name,'')||' '||COALESCE(m.model_code,'')"},
+ {prefix:"PRODUCT:",unit:"m.unit",from:"products m",scope:"m.main_company_slug=?",expr:"m.name",search:"m.name"},
+ {prefix:"HISTORY:",unit:"m.unit_code",from:"accounting_document_lines m JOIN accounting_documents d ON d.id=m.document_id AND d.main_company_slug=m.main_company_slug",scope:"m.main_company_slug=? AND d.deleted_at IS NULL AND d.direction='OUTGOING' AND (d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%ARSIV%')",expr:"m.description",search:"COALESCE(m.description,'')||' '||COALESCE(m.product_code,'')||' '||COALESCE(m.supplier_product_code,'')"}
 ] as const;
 const view=(prefix:string,row:Row)=>({id:prefix+clean(row.id),description:clean(row.description),unit:clean(row.unit)||"ADET",freeKind:classifyFree(clean(row.description)),origin:prefix.slice(0,-1)});
 export function uniqueRegisteredItems(rows:Row[]){
@@ -17,7 +17,7 @@ export function uniqueRegisteredItems(rows:Row[]){
 export async function searchRegisteredItems(c:Context<Env>,slug:string,query:string){
  const q=clean(query).slice(0,100);if(q.length<2)return [];
  const rows=await Promise.all(specs.map(async s=>{
- const rs=await c.env.DB.prepare("SELECT m.id AS id,"+s.expr+" AS description,"+s.unit+" AS unit FROM "+s.from+" WHERE "+s.scope+" AND instr(upper("+s.expr+"),upper(?))>0 ORDER BY CASE WHEN instr(upper("+s.expr+"),upper(?))=1 THEN 0 ELSE 1 END,"+s.expr+",m.id LIMIT 25").bind(slug,q,q).all<Row>();return (rs.results||[]).map(row=>view(s.prefix,row));
+ const rs=await c.env.DB.prepare("SELECT m.id AS id,"+s.expr+" AS description,"+s.unit+" AS unit FROM "+s.from+" WHERE "+s.scope+" AND instr(upper("+s.search+"),upper(?))>0 ORDER BY CASE WHEN instr(upper("+s.expr+"),upper(?))=1 THEN 0 ELSE 1 END,"+s.expr+",m.id LIMIT 25").bind(slug,q,q).all<Row>();return (rs.results||[]).map(row=>view(s.prefix,row));
  }));
  return uniqueRegisteredItems(rows.flat());
 }
