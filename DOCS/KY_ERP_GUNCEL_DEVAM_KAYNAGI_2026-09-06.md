@@ -1,5 +1,12 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.11.2026 — KYERP SECURITY PRO / PR #658
+
+- PR #658 merge `aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf`; son kaynak `e3f94b18f554`; CI [#45558145529](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45558145529) frontend + Worker SUCCESS.
+- PRO firma sahibi/çalışan hesap yönetimi; kullanıcı bazlı telefon MFA; izinli mobil çalışma alanları; KY Firma bağlantısı; hesap durumu, oturum ve onay iptali ile audit atomik kayıt; yetki öncesi/sonrası ve gerçek onay aktörü.
+- Production: Pages Git Integration + mevcut Security Canonical Final Deploy (API + Security Host). Yayın talep edildi; canlı kanıt ayrıca kaydedilir. D1 migration, toplu hesap değişikliği, secret rotasyonu yok.
+- Açık: fiziksel telefon ve yetkili tenant senaryoları, uzun süreli güvenli cookie/refresh ve bütün iş modülleri log kapsamı. Mevcut owner MFA sınırı kaldırılmadı. [Ayrıntı](KYERP_SECURITY_PRO_CANONICAL_20261125.md).
+
 ## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
 
 - **Kaynak kullanıcı kabulü:** TAHA mükerrer güvenli birleştirme kullanıcı tarafından başarılı bildirildi; 13 aktif firma kartı görüntülendi. Gelir/gider faturaları firma bazında görünüyordu ancak henüz POSTED olmayan belgeler cari hareket olmadığı için cari hareket listesi boştu. Arşiv & Çıktı `HISTORY` yalnız `POSTED` kayıtları gösterdiği için 107 canonical belgenin hiçbirini görüntülemiyordu.
