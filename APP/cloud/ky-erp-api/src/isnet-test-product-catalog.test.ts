@@ -5,3 +5,12 @@ test("existing legacy descriptions and source lines remain readable, no new unkn
 test("manual invoice cannot bypass the registered product requirement with a demo dispatch flag",()=>{assert.throws(()=>resolveTestProductAction({drafts:[]},{kind:"SAVE_INVOICE",source:"DEMO_INCOMING",lines:[{description:"unknown",quantity:1}]}));});
 
 test("registered model from current tenant resolver is authoritative",()=>{const a={kind:"SAVE_INVOICE",source:"MANUAL",lines:[{productId:"MODEL:synthetic",description:"wrong",unit:"KG",quantity:2}]};const registered=[{id:"MODEL:synthetic",description:"TEST MODEL 27Y",unit:"ADET",freeKind:""}];assert.equal(resolveTestProductAction({drafts:[]},a,registered).lines[0].description,"TEST MODEL 27Y");assert.throws(()=>resolveTestProductAction({drafts:[]},a));});
+
+ test("mixed invoice edit preserves free lines, resets review, and keeps same draft identity",()=>{
+ const a={kind:"SAVE_INVOICE",source:"MANUAL",scenario:"TICARI",issueDate:"2026-11-25",lines:testProductCatalog.map((p,i)=>({productId:p.id,quantity:[100,10,5,5][i],price:10,vatRate:20}))};
+ let state=transition({drafts:[]},resolveTestProductAction({drafts:[]},a),"invoice","2026-11-25T10:00:00Z");
+ state=transition(state,{kind:"REVIEW",id:"invoice"},"unused","2026-11-25T10:01:00Z");
+ const update={...a,id:"invoice",lines:state.drafts[0].lines.map((l,i)=>({...l,price:i===0?12:99,vatRate:20}))};
+ state=transition(state,resolveTestProductAction(state,update),"unused","2026-11-25T10:02:00Z");
+ const d=state.drafts[0];assert.equal(state.drafts.length,1);assert.equal(d.id,"invoice");assert.equal(d.reviewedAt,null);assert.equal(d.net,1200);assert.equal(d.vat,240);assert.equal(d.total,1440);assert.equal(d.taxReviewRequired,true);assert.equal(d.officialSent,false);assert.ok(d.lines.slice(1).every(l=>l.price===0&&l.vatRate===0&&l.taxExemptionCandidate==="351"));
+ });
