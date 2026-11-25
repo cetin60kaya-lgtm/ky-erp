@@ -1,6 +1,6 @@
 // A business request may report a session error even while the browser token is valid.
 // Confirm with the canonical auth endpoint before clearing a user session.
-export function createUnauthorizedSessionVerifier({ readToken, verify, invalidate, pause = () => Promise.resolve() }) {
+export function createUnauthorizedSessionVerifier({ readToken, verify, invalidate, recover = async () => false, pause = () => Promise.resolve() }) {
   let inFlight = null;
   return () => {
     if (inFlight) return inFlight;
@@ -16,6 +16,8 @@ export function createUnauthorizedSessionVerifier({ readToken, verify, invalidat
       }
       await pause();
       // A concurrent approved login/refresh may already have changed the token.
+      if (String(readToken() || "") !== candidate) return false;
+      if (await recover(candidate)) return false;
       if (String(readToken() || "") !== candidate) return false;
       invalidate();
       return true;

@@ -221,22 +221,21 @@ async function signToken(c: any, signingInput: string) {
 async function parseSignedToken(c: any, token: string) {
   const parts = text(token).split(".");
   if (parts.length !== 3) return null;
-  try {
-    const expected = await signToken(c, `${parts[0]}.${parts[1]}`);
-    if (!safeEqual(expected, parts[2])) return null;
-    const payload = decodeJson(parts[1]);
-    if (!payload?.sub || !payload?.sid || Number(payload?.exp || 0) <= Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch {
-    return null;
-  }
+  // A temporary signing-secret storage failure is a service error, not proof
+  // that the user logged out. Only malformed, expired or invalid signatures are 401.
+  let payload: AnyRow;
+  try { payload = decodeJson(parts[1]); } catch { return null; }
+  if (!payload?.sub || !payload?.sid || Number(payload?.exp || 0) <= Math.floor(Date.now() / 1000)) return null;
+  const expected = await signToken(c, `${parts[0]}.${parts[1]}`);
+  if (!safeEqual(expected, parts[2])) return null;
+  return payload;
 }
 function bearerToken(c: any) {
   const match = text(c.req.header("Authorization")).match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : "";
 }
-export async function getAuthenticatedUser(c: any) {
-  const token = bearerToken(c);
+export async function getAuthenticatedUser(c: any, explicitToken?: string) {
+  const token = explicitToken === undefined ? bearerToken(c) : text(explicitToken);
   if (!token) return null;
   const payload = await parseSignedToken(c, token);
   if (!payload) return null;

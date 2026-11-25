@@ -12,6 +12,8 @@ const AUTH_REFRESH_LOCK_KEY = "kyerp_auth_refresh_lock_v1";
 const AUTH_TAB_KEY = "kyerp_auth_tab_v1";
 const AUTH_MOBILE_OWNER_RESUME_KEY = "kyerp_owner_mobile_resume_v1";
 const AUTH_VERSION = "canonical-v3";
+const AUTH_BROWSER_SIGNAL = "kyerp_browser_session_signal_v1";
+const AUTH_BROWSER_LOGOUT = "kyerp_browser_session_logout_v1";
 const MOBILE_OWNER_RESUME_MS = 12 * 60 * 60 * 1000;
 const NORMAL_REFRESH_BEFORE_MS = 30 * 60 * 1000;
 const REFRESH_RETRY_MS = 60 * 1000;
@@ -188,7 +190,7 @@ function wait(ms) {
 }
 
 async function directAuthRequest(path, options = {}) {
-  const { method = "POST", body, token = "", timeoutMs = 20000 } = options;
+  const { method = "POST", body, token = "", timeoutMs = 20000, credentials = "omit" } = options;
   const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
   const requestUrl = `${API_BASE}${normalizedPath}`;
   const loginTransportRetry = normalizedPath === "/auth/login" && String(method).toUpperCase() === "POST" && !token;
@@ -214,6 +216,7 @@ async function directAuthRequest(path, options = {}) {
         signal: controller.signal,
         cache: "no-store",
         mode: "cors",
+        credentials,
       });
       const raw = await response.text();
       let payload = null;
@@ -263,6 +266,18 @@ async function directAuthRequest(path, options = {}) {
   throw wrapped;
 }
 
+function browserResumeEnabled() {
+  return ["https://kyerp.net","https://www.kyerp.net","https://security.kyerp.net"].includes(window.location.origin);
+}
+function browserLogoutPending() {
+  try { return Boolean(window.localStorage.getItem(AUTH_BROWSER_LOGOUT)); } catch { return false; }
+}
+function setBrowserLogoutPending(value) {
+  try { if(value) window.localStorage.setItem(AUTH_BROWSER_LOGOUT,"1"); else window.localStorage.removeItem(AUTH_BROWSER_LOGOUT); } catch { /* noop */ }
+}
+function signalBrowserSession() {
+  try { window.localStorage.setItem(AUTH_BROWSER_SIGNAL,`${Date.now()}:${stableTabId()}`); } catch { /* noop */ }
+}
 function clearPersistentAuth() {
   try {
     window.localStorage.removeItem(AUTH_TOKEN_KEY);
@@ -314,6 +329,7 @@ function authSnapshot(token, user) {
 function readStoredAuth() {
   try {
     cleanLegacyAuthStorage();
+    if (browserLogoutPending()) { removeStoredAuth(); return { token: "", user: null, permissions: [] }; }
 
     const sessionToken = String(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "");
     const sessionUser = parseStoredUser(window.sessionStorage.getItem(AUTH_USER_KEY));
@@ -324,6 +340,17 @@ function readStoredAuth() {
         if (!mobileOwnerResumeAllowed(sessionToken)) clearPersistentAuth();
         clearPendingRefresh();
         return authSnapshot(sessionToken, sessionUser);
+      }
+      const sharedToken = String(window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
+      const sharedUser = parseStoredUser(window.localStorage.getItem(AUTH_USER_KEY));
+      const sharedPayload = parseJwtPayload(sharedToken), sessionPayload = parseJwtPayload(sessionToken);
+      if (sharedUser && isTokenUsable(sharedToken) && !isOwnerAuthPair(sharedToken,sharedUser) &&
+          String(sharedPayload?.sub) === String(sessionPayload?.sub) &&
+          String(sharedPayload?.sub) === String(sharedUser.id) &&
+          Number(sharedPayload?.iat || 0) >= Number(sessionPayload?.iat || 0)) {
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY,sharedToken);
+        window.sessionStorage.setItem(AUTH_USER_KEY,JSON.stringify(sharedUser));
+        return authSnapshot(sharedToken,sharedUser);
       }
       window.localStorage.setItem(AUTH_TOKEN_KEY, sessionToken);
       window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(sessionUser));
@@ -364,6 +391,8 @@ export function AuthProvider({ children }) {
   const tokenRef = useRef(token);
   const authMutationRef = useRef(new Map());
   const tabIdRef = useRef(stableTabId());
+  const browserRestoreRef = useRef(async () => false);
+  const logoutRef = useRef(browserLogoutPending());
   authSnapshotRef.current = { user, permissions };
   tokenRef.current = token;
 
@@ -391,6 +420,7 @@ export function AuthProvider({ children }) {
     readToken: () => tokenRef.current,
     verify: (candidate) => directAuthRequest("/auth/me", { method: "GET", token: candidate, timeoutMs: 9000 }),
     invalidate: clearAuth,
+    recover: (candidate) => browserRestoreRef.current(candidate),
     pause: () => wait(400),
   }), [clearAuth]);
 
@@ -427,14 +457,37 @@ export function AuthProvider({ children }) {
     return true;
   }, [verifyUnauthorized]);
 
-  const finalizeResponse = useCallback((response) => {
-    if (!response?.token || !response?.user) return response;
-    saveAuth(response.token, response.user, response.user?.permissions || response.permissions || []);
-    return response;
+  const bindBrowserSession = useCallback(async (candidate, announce = false) => {
+    if (!browserResumeEnabled() || logoutRef.current || browserLogoutPending() || tokenRef.current !== candidate) return false;
+    try {
+      await directAuthRequest("/auth/browser-session/bind", { token: candidate, credentials: "include", timeoutMs: 8000 });
+      if (tokenRef.current !== candidate || logoutRef.current) return false;
+      if (announce) signalBrowserSession();
+      return true;
+    } catch { return false; }
+  }, []);
+  const restoreBrowserSession = useCallback(async (candidate = "") => {
+    if (!browserResumeEnabled() || logoutRef.current || browserLogoutPending()) return false;
+    try {
+      const response = await directAuthRequest("/auth/browser-session/restore", { credentials: "include", timeoutMs: 8000 });
+      if (logoutRef.current || browserLogoutPending() || tokenRef.current !== candidate || !response?.token || !response?.user) return false;
+      const previousId = parseJwtPayload(candidate)?.sub;
+      if (candidate && previousId && String(response.user.id) !== String(previousId)) return false;
+      return saveAuth(response.token, response.user, response.user?.permissions || []);
+    } catch { return false; }
   }, [saveAuth]);
+  useEffect(() => { browserRestoreRef.current = restoreBrowserSession; }, [restoreBrowserSession]);
+  const finalizeResponse = useCallback(async (response, isRefresh = false) => {
+    if (!response?.token || !response?.user) return response;
+    if (isRefresh && (logoutRef.current || browserLogoutPending())) return null;
+    logoutRef.current = false;
+    setBrowserLogoutPending(false);
+    if (saveAuth(response.token, response.user, response.user?.permissions || response.permissions || [])) await bindBrowserSession(response.token, true);
+    return response;
+  }, [saveAuth, bindBrowserSession]);
 
   const commitPreparedRefresh = useCallback(async (prepared) => {
-    if (!prepared?.refreshId || !prepared?.refreshSecret || !prepared?.token) return null;
+    if (!prepared?.refreshId || !prepared?.refreshSecret || !prepared?.token || logoutRef.current || browserLogoutPending()) return null;
     let lastError = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -443,7 +496,7 @@ export function AuthProvider({ children }) {
           timeoutMs: 12000,
         });
         clearPendingRefresh();
-        return finalizeResponse({ ...prepared, stage: "AUTHENTICATED" });
+        return finalizeResponse({ ...prepared, stage: "AUTHENTICATED" }, true);
       } catch (error) {
         lastError = error;
         const status = Number(error?.status || 0);
@@ -472,7 +525,7 @@ export function AuthProvider({ children }) {
       const probe = await directAuthRequest("/auth/me", { method: "GET", token: prepared.token, timeoutMs: 6000 });
       if (probe?.user) {
         clearPendingRefresh();
-        return finalizeResponse({ ...prepared, user: probe.user, stage: "AUTHENTICATED" });
+        return finalizeResponse({ ...prepared, user: probe.user, stage: "AUTHENTICATED" }, true);
       }
     } catch { /* pending korunur */ }
     void lastError;
@@ -491,7 +544,7 @@ export function AuthProvider({ children }) {
     }
 
     const currentToken = tokenRef.current;
-    if (!currentToken || !isTokenUsable(currentToken)) return null;
+    if (!currentToken || !isTokenUsable(currentToken) || logoutRef.current || browserLogoutPending()) return null;
     try {
       const prepared = await directAuthRequest("/auth/refresh", {
         token: currentToken,
@@ -507,12 +560,13 @@ export function AuthProvider({ children }) {
         // Başka sekme tokenı tam bu anda yenilemiş olabilir. Storage olayına kısa bir
         // pencere ver; yeni token geldiyse logout yerine onu kullan.
         await wait(500);
+        if (tokenRef.current !== currentToken || logoutRef.current) return null;
         const stored = readStoredAuth();
         if (stored.token && stored.token !== currentToken && isTokenUsable(stored.token)) {
           saveAuth(stored.token, stored.user, stored.permissions);
           return { syncedFromOtherTab: true };
         }
-        clearAuth();
+        if (!(await browserRestoreRef.current(currentToken)) && tokenRef.current === currentToken) clearAuth();
       }
       return null;
     }
@@ -538,6 +592,7 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     async function restoreSession() {
       const snapshot = authSnapshotRef.current;
+      if (browserLogoutPending()) { if (!cancelled) setLoading(false); return; }
       let pending = readPendingRefresh();
       if (isSuperAdmin(snapshot.user?.role) || isSuperAdmin(pending?.user?.role)) {
         clearPendingRefresh();
@@ -545,6 +600,7 @@ export function AuthProvider({ children }) {
       }
 
       if (!token) {
+        if (await restoreBrowserSession("") && !cancelled) { setLoading(false); return; }
         if (pending?.token && isTokenUsable(pending.token)) {
           const recovered = await commitPreparedRefresh(pending);
           if (recovered && !cancelled) { setLoading(false); return; }
@@ -563,18 +619,22 @@ export function AuthProvider({ children }) {
 
       try {
         const response = await directAuthRequest("/auth/me", { method: "GET", token, timeoutMs: 12000 });
-        if (cancelled) return;
+        if (cancelled || tokenRef.current !== token || logoutRef.current) return;
         saveAuth(token, response?.user || snapshot.user, response?.user?.permissions || snapshot.permissions);
+        await bindBrowserSession(token);
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled || tokenRef.current !== token || logoutRef.current) return;
         const status = Number(error?.status || 0);
         const code = String(error?.code || "");
         if (shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) {
+          if (await restoreBrowserSession(token)) return;
+          if (cancelled || tokenRef.current !== token) return;
           if (pending?.token && isTokenUsable(pending.token)) {
             const recovered = await commitPreparedRefresh(pending);
             if (recovered || cancelled) return;
           }
           await wait(400);
+          if (cancelled || tokenRef.current !== token) return;
           const stored = readStoredAuth();
           if (stored.token && stored.token !== token && isTokenUsable(stored.token)) saveAuth(stored.token, stored.user, stored.permissions);
           else clearAuth();
@@ -584,7 +644,7 @@ export function AuthProvider({ children }) {
     }
     restoreSession();
     return () => { cancelled = true; };
-  }, [clearAuth, commitPreparedRefresh, saveAuth, token]);
+  }, [clearAuth, commitPreparedRefresh, saveAuth, token, bindBrowserSession, restoreBrowserSession]);
 
   useEffect(() => {
     if (!token || !user || !isTokenUsable(token)) return undefined;
@@ -635,13 +695,14 @@ export function AuthProvider({ children }) {
       }
       if (!hiddenAt || Date.now() - hiddenAt < 1000 || checking) return;
       checking = true;
+      const candidate = tokenRef.current;
       try {
-        const response = await directAuthRequest("/auth/me", { method: "GET", token: tokenRef.current, timeoutMs: 12000 });
-        if (response?.user && tokenRef.current) saveAuth(tokenRef.current, response.user, response.user?.permissions || permissions);
+        const response = await directAuthRequest("/auth/me", { method: "GET", token: candidate, timeoutMs: 12000 });
+        if (response?.user && tokenRef.current === candidate && !logoutRef.current) saveAuth(candidate, response.user, response.user?.permissions || permissions);
       } catch (error) {
         const status = Number(error?.status || 0);
         const code = String(error?.code || "");
-        if (shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) clearAuth();
+        if (candidate && tokenRef.current === candidate && shouldClearStoredAuthForStatus(status, code, "/api/auth/me")) await verifyUnauthorized();
       } finally {
         hiddenAt = 0;
         checking = false;
@@ -653,21 +714,26 @@ export function AuthProvider({ children }) {
       document.removeEventListener("visibilitychange", revalidateOnResume);
       window.removeEventListener("pageshow", revalidateOnResume);
     };
-  }, [clearAuth, permissions, saveAuth, token, user]);
+  }, [permissions, saveAuth, token, user, verifyUnauthorized]);
 
   useEffect(() => {
     const syncFromStorage = (event) => {
-      if (![AUTH_TOKEN_KEY, AUTH_USER_KEY].includes(String(event.key || ""))) return;
-      if (isSuperAdmin(authSnapshotRef.current.user?.role)) return;
-      const stored = readStoredAuth();
-      tokenRef.current = stored.token;
-      setAuthState(stored);
-      if (stored.token) setApiAuthHandlers({ getToken: () => tokenRef.current, onUnauthorized: verifyUnauthorized });
-      else setApiAuthHandlers({ getToken: () => "", onUnauthorized: () => {} });
+      const key = String(event.key || "");
+      if (key === AUTH_BROWSER_LOGOUT && event.newValue) { logoutRef.current = true; clearAuth(); return; }
+      if (key === AUTH_BROWSER_SIGNAL) { logoutRef.current = false; void restoreBrowserSession(tokenRef.current); return; }
+      if (browserLogoutPending() || ![AUTH_TOKEN_KEY, AUTH_USER_KEY].includes(key) || isSuperAdmin(authSnapshotRef.current.user?.role)) return;
+      try {
+        const sharedToken = String(window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
+        const sharedUser = parseStoredUser(window.localStorage.getItem(AUTH_USER_KEY));
+        const payload = parseJwtPayload(sharedToken);
+        if (!sharedUser || !isTokenUsable(sharedToken) || isOwnerAuthPair(sharedToken, sharedUser) || String(payload?.sub) !== String(sharedUser.id)) return;
+        if (authSnapshotRef.current.user?.id && authSnapshotRef.current.user.id !== sharedUser.id) return;
+        if (sharedToken !== tokenRef.current) saveAuth(sharedToken, sharedUser, sharedUser.permissions);
+      } catch { /* storage blocked: retain verified session */ }
     };
     window.addEventListener("storage", syncFromStorage);
     return () => window.removeEventListener("storage", syncFromStorage);
-  }, [verifyUnauthorized]);
+  }, [clearAuth, restoreBrowserSession, saveAuth]);
 
   const getTurnstileConfig = useCallback(() => directAuthRequest("/auth/turnstile-config", { method: "GET" }), []);
 
@@ -733,9 +799,14 @@ export function AuthProvider({ children }) {
     })), [runAuthOnce]);
 
   const logout = useCallback(async () => {
-    try { if (token) await directAuthRequest("/auth/logout", { token }); }
-    catch { /* cihaz oturumu yine kapanır */ }
-    finally { clearAuth(); }
+    logoutRef.current = true;
+    setBrowserLogoutPending(true);
+    try {
+      if (token && browserResumeEnabled()) await directAuthRequest("/auth/browser-session/close", { token, credentials: "include", timeoutMs: 8000 });
+      else if (token) await directAuthRequest("/auth/logout", { token });
+    } catch {
+      try { if (token) await directAuthRequest("/auth/logout", { token }); } catch { /* offline: marker blocks automatic restore */ }
+    } finally { clearAuth(); }
   }, [clearAuth, token]);
 
   const hasModule = useCallback((moduleKey) => {

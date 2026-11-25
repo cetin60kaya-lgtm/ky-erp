@@ -64,3 +64,6 @@ test("simultaneous business errors use one canonical auth/me request", async () 
   await Promise.all([first, second]);
   assert.equal(probes, 1);
 });
+
+test("verified browser cookie can recover before logout",async()=>{let token="old",cleared=0;const check=createUnauthorizedSessionVerifier({readToken:()=>token,verify:async()=>{throw failure(401)},recover:async()=>{token="new";return true},invalidate:()=>cleared++});assert.equal(await check(),false);assert.equal(cleared,0)});
+test("old recovery cannot clear a newer token",async()=>{let token="old",cleared=0;const check=createUnauthorizedSessionVerifier({readToken:()=>token,verify:async()=>{throw failure(401)},recover:async()=>{token="new";return false},invalidate:()=>cleared++});assert.equal(await check(),false);assert.equal(cleared,0)});
