@@ -6,7 +6,7 @@ const main = readFileSync(new URL("./main.ts", import.meta.url), "utf8");
 
 test("all production and model flow API routes have independent auth/tenant middleware", () => {
   for (const route of ["/api/production-center", "/api/production-center/*",
-    "/api/model-flow/*", "/api/production/*", "/api/imalat/kayitlar", "/api/uretim/seri/*"]) {
+    "/api/model-flow/*", "/api/production/*", "/api/imalat/kayitlar", "/api/imalat/*", "/api/uretim/seri/*"]) {
     assert.ok(main.includes('"' + route + '"'), route);
   }
   assert.match(main, /shell\.use\(productionRoute, enforceProductionTenant\)/);

@@ -414,7 +414,8 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     if (
       !colors.length ||
       colors.some(
-        (row) => !["COMPLETED", "CANCELLED"].includes(normalizedColorStatus(row.status)),
+        (row) => !["COMPLETED", "CANCELLED"].includes(normalizedColorStatus(row.status)) ||
+          (normalizedColorStatus(row.status)==="COMPLETED" && !text(row.recipeId)),
       )
     ) {
       return c.json(
@@ -720,7 +721,7 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     if (!lines.length) return c.json(errorBody("PRODUCTION_LINES_REQUIRED", "Üretim reçetesi boş olamaz."), 400);
     const db = c.env.DB;
     const productionId = await stableStoreId("BYP:",[slug,requestId]);
-    const payloadHash = await stableStoreId("",[text(body.jobId),text(body.jobColorId),multiplier,lines.map(line=>[line.productId,line.lotId,line.referenceGram]),text(body.recipeId),text(body.colorId),text(body.jobType),text(body.paintType),text(body.version)]);
+    const payloadHash = await stableStoreId("",[text(body.jobId),text(body.jobColorId),multiplier,lines.map(line=>[line.productId,line.lotId,line.referenceGram]),text(body.recipeId),text(body.colorId),text(body.jobType),text(body.paintType),text(body.version),text(body.pantone),text(body.companyName),text(body.orderNo)]);
     const replay = async () => {
       const previous = await storeSnapshot(db,SCOPES.production,slug,productionId);
       if (!previous) return null;
@@ -734,7 +735,10 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     // Historical random-ID receipts are not re-consumed. Their old payload is
     // not hashed, so a differing or unverifiable retry requires manual review.
     const legacy = (await storeList(c,SCOPES.production,slug)).find(row=>text(row.requestId)===requestId);
-    if (legacy) return c.json(errorBody("LEGACY_PRODUCTION_REVIEW","Bu işlem kimliği eski üretim fişinde mevcut. Stok tekrar düşülmedi; mevcut fişi inceleyin.",{productionId:legacy.id}),409);
+    if (legacy) {
+      if (legacy.id===productionId && legacy.payloadHash===payloadHash) return c.json({ok:true,success:true,data:{...legacy,idempotent:true}});
+      return c.json(errorBody("LEGACY_PRODUCTION_REVIEW","Bu işlem kimliği eski veya farklı üretim fişinde mevcut. Stok tekrar düşülmedi; mevcut fişi inceleyin.",{productionId:legacy.id}),409);
+    }
     const [jobSnapshot,colorSnapshot] = await Promise.all([
       storeSnapshot(db,SCOPES.job,slug,text(body.jobId)),
       storeSnapshot(db,SCOPES.jobColor,slug,text(body.jobColorId)),

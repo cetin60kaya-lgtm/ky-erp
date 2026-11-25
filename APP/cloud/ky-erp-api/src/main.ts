@@ -58,6 +58,8 @@ import { registerBoyahaneJobIntegrityRoutes } from "./boyahane-job-integrity";
 import { registerBoyahaneManualJobV2Routes } from "./boyahane-manual-job-v2";
 import { registerBoyahaneSampleRoutes } from "./boyahane-sample";
 import { registerBoyahaneWorkflowRoutes } from "./boyahane-workflow";
+import { registerBoyahaneLotMovementV2Routes } from "./boyahane-lot-movement-v2";
+import { enforceBoyahaneTenant } from "./boyahane-tenant-guard";
 import { registerDesenBridgeRoutes } from "./desen-bridge";
 import { registerDesenOperationRoutes } from "./desen-operations";
 import { registerDesenStorageRoutes } from "./desen-storage";
@@ -231,6 +233,7 @@ registerMailCommunicationRoutes(app);
 registerGoogleMailRoutes(app);
 registerMicrosoftMailRoutes(app);
 registerBoyahaneInventoryRoutes(app);
+registerBoyahaneLotMovementV2Routes(app);
 registerBoyahaneExcelImportRoutes(app);
 registerBoyahaneManualJobV2Routes(app);
 registerBoyahaneSampleRoutes(app);
@@ -359,6 +362,7 @@ shell.use("/api/mail/*", async (c, next) => {
 shell.use("/api/gunluk-operasyon/*", enforceDailyOperationsTenant);
 
 shell.use("/api/desen/*", enforceDesenTenant);
+shell.use("/api/boyahane/*", enforceBoyahaneTenant);
 
 // İmalat raporları/fişleri dahil tüm kanonik ve legacy uyumluluk uçları
 // tenant+yetki kontrolünden aynı şekilde geçer; yalnız oturum kontrolü yeterli değildir.

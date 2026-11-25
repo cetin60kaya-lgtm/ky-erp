@@ -1122,7 +1122,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       errors.push("Üretim okuma sınırı aşıldı; eksik kapasiteyle yeni kayıt yapılamaz.");
     const quantityIssue = productionQuantityIssue(grossQty,
       [printDefectQty, fabricDefectQty, testQty], numberValue(card?.incomingQty),
-      existingQty, alreadyCommitted, Boolean(body.allowOverProduction));
+      existingQty, alreadyCommitted, body.allowOverProduction === true);
     if (quantityIssue) errors.push(quantityIssue);
     // Replay is checked against persistent DB identity before any capacity validation.
     seenThisBatch.add(clientId);

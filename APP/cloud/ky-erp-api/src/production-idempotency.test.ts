@@ -93,3 +93,13 @@ test("model link tablosu yoksa json_store'a sessiz yazılmaz",async()=>{
   await assert.rejects(()=>commit(d),(e:any)=>e.code==="PRODUCTION_SCHEMA_NOT_READY"||e.code==="PRODUCTION_ATOMIC_WRITE_FAILED");
   assert.equal(d.sql.prepare("SELECT COUNT(*) AS n FROM production_records").get().n,0);
 });
+
+test("two different requests based on same tenant snapshot cannot both commit",async()=>{
+ const d=new LocalD1();
+ const create=(requestId:string)=>writeProductionEntryAtomic(d,"tenant1",requestId,"0",payload,{model_id:"model1",total_quantity:25,raw:{}},{model_id:"model1"},0);
+ const results=await Promise.allSettled([create("new1"),create("new2")]);
+ assert.equal(results.filter(r=>r.status==="fulfilled").length,1);
+ const rejected=results.find(r=>r.status==="rejected") as PromiseRejectedResult;
+ assert.equal(rejected.reason.code,"PRODUCTION_SNAPSHOT_CONFLICT");
+ assert.equal(d.snapshot().rows.length,1);assert.equal(d.snapshot().links.length,1);
+});

@@ -42,6 +42,8 @@ test("three actual routes use the safety helpers", () => {
   assert.match(design,/designJobState\(currentJob, hasNewPendingColor\)/);
   assert.match(design,/isRemovedDesignColor\(old\.sourceChannelKey/);
   assert.match(dye,/JOB_COLOR_MISMATCH/);
-  assert.match(dye,/remainingByLot\.set\(lotKey, nextRemaining\)/);
-  assert.match(dye,/const nextRemaining = consumption\.nextRemaining as number/);
+  assert.match(dye,/remainingByLot\.set\(line\.lotId,nextRemaining\)/);
+  assert.match(dye,/await commitStoreBatch\(db,guards,writes\)/);
+  assert.match(read("./main.ts"),/registerBoyahaneLotMovementV2Routes\(app\)/);
+  assert.match(read("./main.ts"),/shell\.use\("\/api\/boyahane\/\*", enforceBoyahaneTenant\)/);
 });

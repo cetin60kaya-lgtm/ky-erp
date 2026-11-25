@@ -943,6 +943,7 @@ async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
     const current = existingColors.find(
       (row) => text(row.sourceChannelKey) === `design:${key}` || text(row.id) === id,
     );
+    if (upper(current?.status)==="COMPLETED") continue;
     await storePut(
       c,
       BOYAHANE_COLOR_SCOPE,
