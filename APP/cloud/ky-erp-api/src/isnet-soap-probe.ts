@@ -1,6 +1,6 @@
 // Read-only diagnostic from the actual Worker network. Does not authenticate or grant send capability.
 // @ts-nocheck
-import {SOAP_TEST_ENDPOINTS} from "./isnet-soap-test-contract";
+import {SOAP_TEST_ENDPOINTS} from "./isnet-soap-test-contract.ts";
 export function wsdlSummary(xml){
  if(typeof xml!=="string"||xml.length>4000000||/<!DOCTYPE|<!ENTITY/i.test(xml))return {status:"INVALID_WSDL",operations:[]};
  const root=xml.replace(/^\uFEFF?\s*(?:<\?xml[^?]*\?>\s*)?/,"").match(/^<((?:[\w.-]+:)?definitions)\b([^>]*)>/);

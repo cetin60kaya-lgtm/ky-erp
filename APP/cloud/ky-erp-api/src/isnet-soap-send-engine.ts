@@ -1,7 +1,7 @@
 // TEST transport primitives; no public route, no live endpoint, no caller-supplied binding.
 // Exact QNames, action and SOAP version MUST come from reviewed WSDL, not the PDF or UI.
 // @ts-nocheck
-import { requireApprovedSend, classifySendResult } from "./isnet-official-acceptance";
+import { requireApprovedSend, classifySendResult } from "./isnet-official-acceptance.ts";
 export function buildEnvelope(binding,xmlBase64,receiverTag,kind){
  const esc=s=>String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&apos;");
  const expected=kind==="E_FATURA"?{op:"SendInvoiceXml",list:"Invoices",item:"InvoiceXml",content:"InvoiceContent"}:kind==="E_IRSALIYE"?{op:"SendDespatchAdviceXml",list:"DespatchAdvices",item:"DespatchAdviceXml",content:"DespatchAdviceContent"}:null;
