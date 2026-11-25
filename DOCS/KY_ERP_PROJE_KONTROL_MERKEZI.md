@@ -1,5 +1,9 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.11.2026 — İşNet TEST taslak kabulü
+- Mevcut İşNet işlem merkezinde sentetik 5.500 adet örnek kaynak, tam/kısmi irsaliye, sıfırdan irsaliye/fatura, bağlı fatura, düzenle/kaydet/önizle/iptal. Tenant ve yetki kontrollü json_store TEST scope, CAS; muhasebe tablolarına yazmaz, gönderim yok. Bağlı fatura adedi server-side kilitli, fazla rezervasyon ve çift fatura taslağı engelli. 12/12 sentetik state machine kontrolü başarılı; gerçek D1 ve UI/CI kabulü yok. Gerçek kaynak/çoklu kalem, WSDL/UBL ve resmî gönderim motoru ayrıca tamamlanacak. Kullanıcı gönderim özelliğini de istedi; gerçek belge gönderme izni olarak yorumlanmadı.
+
+
 ## 25.11.2026 — İşNet SOAP test daveti ve resmî sözleşme
 
 - Sekiz PDF alındı, resmi operasyonlar ve IP-VKN modeli kayda alındı. e-MM SOAP yok. İki test URL'si sağlandı. [SOAP sözleşme ve test planı](KY_ISNET_SOAP_TEST_20261125.md).

@@ -2,6 +2,7 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { accountingAccess } from "./accounting-access-policy";
+import { transition } from "./isnet-test-draft-core";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -220,7 +221,32 @@ async function saveWorkflowDefaults(c:Context<AppEnv>,slug:string){
   return await readWorkflowDefaults(c,slug);
 }
 
+
+const TEST_DRAFT_SCOPE="ISNET_TEST_DRAFT_WORKSPACE";
+const testDraftKey=(slug:string)=>"isnet-test-drafts:"+slug;
+async function loadTestDrafts(c:Context<AppEnv>,slug:string){
+ const key=testDraftKey(slug);
+ const row=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?").bind(key,TEST_DRAFT_SCOPE,slug,key).first<Row>();
+ if(!row)return{version:"",drafts:[]};
+ const data=JSON.parse(row.data);if(typeof data.version!=="string"||!Array.isArray(data.drafts))throw Error("Test taslakları okunamadı.");return data;
+}
+async function saveTestDrafts(c:Context<AppEnv>,slug:string){
+ const body=await c.req.json(),user=await getAuthenticatedUser(c) as Row;
+ const method=body.action?.kind==="CANCEL"?"DELETE":body.action?.id?"PUT":"POST";
+ if(!accountingAccess(user,method,"/api/muhasebe/isnet-test-drafts"))throw Object.assign(new Error("Test taslak işlem yetkiniz yok."),{status:403,code:"DRAFT_FORBIDDEN"});
+ const current=await loadTestDrafts(c,slug);
+ if(current.version!==body.version)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});
+ const version=crypto.randomUUID(),ts=new Date().toISOString(),key=testDraftKey(slug);
+ let next;try{next={...transition(current,body.action||{},crypto.randomUUID(),ts),version};}catch(e:any){throw Object.assign(e,{status:400,code:"DRAFT_INVALID"});}
+ const payload=JSON.stringify(next);
+ const result=current.version?await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND json_extract(data,'$.version')=?").bind(payload,ts,key,TEST_DRAFT_SCOPE,slug,key,current.version).run():await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING").bind(key,TEST_DRAFT_SCOPE,slug,key,payload,ts,ts).run();
+ if(result.meta?.changes!==1)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});return next;
+}
+
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+ app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await loadTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+ app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await saveTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+
   app.get("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await readWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
   app.put("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c,true);return c.json({ok:true,data:await saveWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
   app.get("/api/muhasebe/isnet-workflow-defaults/products",async c=>{try{const slug=await defaultsAccess(c),q=text(c.req.query("q")).slice(0,100);const rows=(await c.env.DB.prepare("SELECT id,name,unit FROM products WHERE main_company_slug=? AND name LIKE ? ORDER BY name LIMIT 50").bind(slug,"%"+q+"%").all<Row>()).results||[];return c.json({ok:true,data:{rows}});}catch(e:any){return errorResponse(c,e);}});

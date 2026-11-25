@@ -1,5 +1,6 @@
 import { useState } from "react";
 import "./isnetOfficialWorkspace.css";
+import IsnetTestDraftWorkspace from "./IsnetTestDraftWorkspace";
 
 // Existing KYERP views remain the source of truth. No official write path is
 // enabled until a server-owned service capability and atomic send gate exist.
@@ -18,8 +19,9 @@ const groups = [
   { title: "Firma ve araçlar", actions: ["Firma / şube / seri", "Mükellef / adres defteri", "Ürün / hizmet", "Kullanıcı / rol", "Parametreler"], reason: "Sağlayıcının yetkili yönetim metotları bekleniyor; mevcut KYERP kartları korunur." },
   { title: "Raporlar ve finans", actions: ["İşNet raporları", "Kontör bakiyesi", "Tahsilat durumu"], reason: "Sağlayıcıdan doğrulanmış okuma servisi bekleniyor." },
 ];
-export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenRules, onOpenTest, enabled }) {
+export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenRules, onOpenTest, enabled, slug }) {
   const [expanded, setExpanded] = useState(null);
+  const [testDrafts,setTestDrafts]=useState(false);
   const navigate = tabKey => openModule?.("e-belge", { tabKey });
   return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
     <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet İşlem Merkezi</h3>
@@ -27,6 +29,7 @@ export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenR
       <span className="isow-state">{enabled ? "SOAP test sözleşmesi alındı · bağlantı kabulü bekliyor" : "Firma entegrasyonu pasif"}</span></header>
     <div className="isow-docs">{documents.map(([label, tabKey]) => <button type="button" key={tabKey} disabled={!openModule} onClick={() => navigate(tabKey)}>{label}<small>KYERP belge havuzu · XML / PDF</small></button>)}</div>
     <div className="isow-actions">
+      <button type="button" disabled={!slug} onClick={()=>setTestDrafts(v=>!v)}>{testDrafts?"Test taslaklarını kapat":"TEST · Taslak hazırlama"}</button>
       <button type="button" disabled={!openModule} onClick={() => navigate("gelen-irsaliyeler")}>Gelenden irsaliye oluştur / kısmi sevk hazırlığı</button>
       <button type="button" disabled={!enabled} onClick={onOpenSync}>XML + PDF Al</button>
       <button type="button" disabled={!openModule} onClick={() => navigate("belge-havuzu")}>Belge Yükle / Havuz</button>
@@ -35,6 +38,7 @@ export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenR
       <button type="button" disabled={!enabled} onClick={onOpenRules}>Bağlantı ve İş Kuralları</button>
       <button type="button" disabled={!enabled} onClick={onOpenTest}>Dosya Kontrolü</button>
     </div>
+    {testDrafts&&slug&&<IsnetTestDraftWorkspace key={slug} slug={slug}/>}
     <p className="isow-note" role="status">Mevcut belge okuma ve arşiv akışı kullanılabilir. Aşağıdaki resmî işlemler tasarım kapsamındadır; henüz sağlayıcıya çağrı yapmaz. Muhasebe onayı resmî gönderim onayı değildir.</p>
     <div className="isow-groups">{groups.map((group, index) => <section key={group.title} className="isow-group">
       <button type="button" className="isow-group-title" aria-expanded={expanded === index} onClick={() => setExpanded(current => current === index ? null : index)}>{group.title}<span>{expanded === index ? "−" : "+"}</span></button>

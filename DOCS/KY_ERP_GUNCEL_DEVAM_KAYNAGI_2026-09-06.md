@@ -1554,3 +1554,7 @@ Bu karar sonraki mail çalışmalarında kaynak kabul edilecektir.
 - **Canlı Worker release:** attempt **62**, run `45044905778` **SUCCESS**: Time Travel + D1 schema + Worker deploy + API health. Migration 0060 ve diğerleri **SKIPPED**.
 - **Canlı Pages release:** attempt **9**, run `45044932000` **SUCCESS**: Pages deploy + gerçek canlı bundle smoke. D1/muhasebe/vergi/onay/ödeme/İşNet gönderimi değişmedi.
 - **AÇIK gerçek kabul:** Kullanıcının mevcut Chrome oturumunda tekrar girişten sonra kyerp.net'i yenileyip PDF görüntüle/yazdır denemesi. Canlı üretim PDF'nin açılması ve oturumun düşmemesi kullanıcı ekranından görülmeden Windows/browser uçtan uca PASS denmez. Bekleyen açık belge incelemesi ve XML firma doğrulaması ayrı iştir.
+
+
+## 25.11.2026 — İşNet TEST taslak kabulü
+- Mevcut İşNet işlem merkezinde sentetik 5.500 adet örnek kaynak, tam/kısmi irsaliye, sıfırdan irsaliye/fatura, bağlı fatura, düzenle/kaydet/önizle/iptal. Tenant ve yetki kontrollü json_store TEST scope, CAS; muhasebe tablolarına yazmaz, gönderim yok. Bağlı fatura adedi server-side kilitli, fazla rezervasyon ve çift fatura taslağı engelli. 12/12 sentetik state machine kontrolü başarılı; gerçek D1 ve UI/CI kabulü yok. Gerçek kaynak/çoklu kalem, WSDL/UBL ve resmî gönderim motoru ayrıca tamamlanacak. Kullanıcı gönderim özelliğini de istedi; gerçek belge gönderme izni olarak yorumlanmadı.

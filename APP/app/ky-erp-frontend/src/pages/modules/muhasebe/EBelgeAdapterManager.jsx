@@ -172,7 +172,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
      <button type="button" role="tab" aria-selected={panel==="profile"} className={panel==="profile"?"active":""} onClick={()=>setPanel("profile")}>Entegrasyonu Düzenle</button>
     </div>
     {profileError&&<div className="eam-alert" role="alert">{profileError}</div>}
-    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onOpenSync={()=>setPanel("sync")} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")}/>:
+    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace slug={tenant} key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onOpenSync={()=>setPanel("sync")} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")}/>:
      panel==="sync"&&active.key==="ISNET"?<EBelgeIsnetPortalSync key={tenant+":sync"} activeMainCompany={activeMainCompany} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onSynced={refresh}/>:
      panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenSync={()=>setPanel("sync")} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
      panel==="profile"?<EBelgeIntegrationProfileEditor key={tenant+":"+active.key} adapter={active} company={owner} profile={profile} onSaved={setProfile}/>:
