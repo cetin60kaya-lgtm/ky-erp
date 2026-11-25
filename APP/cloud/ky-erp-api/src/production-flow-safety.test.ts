@@ -41,6 +41,7 @@ test("three actual routes use the safety helpers", () => {
   assert.match(production,/committedByRegion\.set\(regionKey, alreadyCommitted \+ grossQty\)/);
   assert.match(design,/designJobState\(currentJob, hasNewPendingColor\)/);
   assert.match(design,/isRemovedDesignColor\(old\.sourceChannelKey/);
+  assert.match(design,/await commitStoreBatch\(db,guards,writes\)/);
   assert.match(dye,/JOB_COLOR_MISMATCH/);
   assert.match(dye,/remainingByLot\.set\(line\.lotId,nextRemaining\)/);
   assert.match(dye,/await commitStoreBatch\(db,guards,writes\)/);

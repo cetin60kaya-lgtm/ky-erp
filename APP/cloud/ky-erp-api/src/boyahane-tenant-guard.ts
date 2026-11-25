@@ -25,42 +25,31 @@ function canAccessBoyahane(user: Row, method: string) {
 }
 
 async function requestTenant(c: Context<AppEnv>) {
-  const candidates = new Set<string>();
-  const add = (raw: unknown) => {
-    const value = canonical(raw);
-    if (value) candidates.add(value);
-  };
-  // mainCompanyId backward-compat: only use it when a slug has not been provided.
-  const querySlug = c.req.query("mainCompanySlug") || c.req.query("main_company_slug");
-  add(querySlug || c.req.query("mainCompanyId"));
+  const candidates=new Set<string>();
+  const add=(raw:unknown)=>{const v=canonical(raw);if(v)candidates.add(v);};
+  const querySlug=c.req.query("mainCompanySlug") || c.req.query("mainCompanyId");
+  // Only values that existing handlers actually consume can select a tenant.
+  let selected=canonical(querySlug);
+  add(querySlug);
+  add(c.req.query("main_company_slug"));
   add(c.req.header("X-KYERP-Tenant-Slug"));
-  if (!["GET", "HEAD", "OPTIONS"].includes(upper(c.req.method))) {
-    const contentType = text(c.req.header("Content-Type")).toLowerCase();
-    try {
-      if (contentType.includes("json") || contentType.includes("text/plain")) {
-        const body = await c.req.raw.clone().json() as Row;
-        add(body?.mainCompanySlug || body?.main_company_slug ||
-          (!querySlug ? body?.mainCompanyId : undefined));
-      } else if (contentType.includes("multipart/form-data")) {
-        const body = await c.req.raw.clone().formData();
-        add(body.get("mainCompanySlug") || body.get("main_company_slug"));
-      }
-    } catch {
-      // Malformed content is rejected by the route; do not infer a new tenant.
-    }
-  }
-  // The existing handlers resolve query/body; a header alone cannot
-  // authorize a fallback to the historical default company.
-  if (!querySlug && !c.req.query("mainCompanyId") && ![...candidates].some(v=>v!==canonical(c.req.header("X-KYERP-Tenant-Slug")))) {
-    if (["GET","HEAD"].includes(upper(c.req.method))) return "";
+  if(!["GET","HEAD","OPTIONS"].includes(upper(c.req.method))){
     const contentType=text(c.req.header("Content-Type")).toLowerCase();
-    try {
-      const raw=contentType.includes("multipart/form-data")?await c.req.raw.clone().formData():await c.req.raw.clone().json();
-      const selected=raw instanceof FormData ? raw.get("mainCompanySlug") || raw.get("main_company_slug") : (raw as Row)?.mainCompanySlug || (raw as Row)?.main_company_slug || (raw as Row)?.mainCompanyId;
-      if(!canonical(selected))return "";
+    try{
+      if(contentType.includes("json")||contentType.includes("text/plain")){
+        const body=await c.req.raw.clone().json() as Row;
+        add(body?.mainCompanySlug);add(body?.main_company_slug);
+        selected=selected || canonical(body?.mainCompanySlug || body?.main_company_slug);
+        // mainCompanyId in body is not honored by all older routes.
+        if(!selected && body?.mainCompanyId)return "";
+      }else if(contentType.includes("multipart/form-data")){
+        const body=await c.req.raw.clone().formData();
+        add(body.get("mainCompanySlug"));add(body.get("main_company_slug"));
+        selected=selected || canonical(body.get("mainCompanySlug") || body.get("main_company_slug"));
+      }
     }catch{return "";}
   }
-  return candidates.size === 1 ? [...candidates][0] : "";
+  return selected && candidates.size === 1 ? selected : "";
 }
 
 export async function enforceBoyahaneTenant(c: Context<AppEnv>, next: Next) {

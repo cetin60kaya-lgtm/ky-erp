@@ -19,6 +19,9 @@ export function storeGuard(db: any, snapshot: StoreSnapshot) {
   return db.prepare("SELECT CASE WHEN EXISTS(SELECT 1 FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND data IS ?) THEN 1 ELSE abs(-9223372036854775808) END AS ok")
     .bind(snapshot.id,snapshot.scope,snapshot.slug,snapshot.fileName,snapshot.raw);
 }
+export function storeAbsentGuard(db:any,scope:string,slug:string,fileName:string){
+  return db.prepare("SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=?) THEN 1 ELSE abs(-9223372036854775808) END AS ok").bind(scope,slug,fileName);
+}
 export function storeUpdate(db: any, snapshot: StoreSnapshot, value: Row, at: string) {
   return db.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?")
     .bind(JSON.stringify({...value,updatedAt:at}),at,snapshot.id,snapshot.scope,snapshot.slug,snapshot.fileName);

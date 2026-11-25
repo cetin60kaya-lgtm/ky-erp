@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { storeSnapshot,storeGuard,storeUpdate,storeInsert,stableStoreId,commitStoreBatch } from "./atomic-json-store.ts";
+import { storeSnapshot,storeGuard,storeAbsentGuard,storeUpdate,storeInsert,stableStoreId,commitStoreBatch } from "./atomic-json-store.ts";
 class LocalD1 {
   sql=new DatabaseSync(":memory:");
   failAt=-1;
@@ -24,3 +24,5 @@ test("independent concurrent requests sharing one stock snapshot: exactly one co
 test("duplicate deterministic production ID rolls back stock even on a fresh snapshot",async()=>{const db=await fixture();await batch(db,"same",4);await assert.rejects(batch(db,"same",4));assert.equal((await storeSnapshot(db,"LOT",slug,"lot"))?.value.remainingKg,6);assert.equal(db.count("PRODUCTION"),1);});
 test("tenant snapshot cannot see another company or unassigned legacy LOT",async()=>{const db=await fixture();assert.equal(await storeSnapshot(db,"LOT","other","lot"),null);db.sql.prepare("INSERT INTO json_store VALUES(?,?,?,?,?,?,?)").run("legacy","LOT",null,"legacy","{}",at,at);assert.equal(await storeSnapshot(db,"LOT",slug,"legacy"),null);});
 test("duplicate logical keys require review",async()=>{const db=await fixture();db.sql.prepare("INSERT INTO json_store VALUES(?,?,?,?,?,?,?)").run("different","LOT",slug,"lot","{}",at,at);await assert.rejects(storeSnapshot(db,"LOT",slug,"lot"),/STORE_DUPLICATE_REVIEW/);});
+
+test("logical absence guard rejects concurrent insertion even with different physical ID",async()=>{const db=await fixture();const guard=storeAbsentGuard(db,"JOB",slug,"job");db.sql.prepare("INSERT INTO json_store VALUES(?,?,?,?,?,?,?)").run("legacy-id","JOB",slug,"job","{}",at,at);await assert.rejects(commitStoreBatch(db,[guard],[storeInsert(db,"JOB",slug,"job",{},at)]));assert.equal(db.count("JOB"),1);});

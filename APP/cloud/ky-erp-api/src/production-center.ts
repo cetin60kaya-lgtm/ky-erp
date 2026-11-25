@@ -1118,7 +1118,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
     const existingQty = (card?.operationRows || [])
       .filter((row: Row) => normalized(row.region) === normalized(printArea))
       .reduce((sum: number, row: Row) => sum + numberValue(row.producedQty), 0);
-    if (expectedRecordCount >= 10000 && card?.incomingQty > 0 && !body.allowOverProduction)
+    if (expectedRecordCount >= 10000 && numberValue(card?.incomingQty) > 0 && body.allowOverProduction !== true)
       errors.push("Üretim okuma sınırı aşıldı; eksik kapasiteyle yeni kayıt yapılamaz.");
     const quantityIssue = productionQuantityIssue(grossQty,
       [printDefectQty, fabricDefectQty, testQty], numberValue(card?.incomingQty),

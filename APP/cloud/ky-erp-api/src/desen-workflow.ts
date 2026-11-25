@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { designJobState, isRemovedDesignColor } from "./production-flow-safety.ts";
+import { storeSnapshot,storeGuard,storeAbsentGuard,storeUpdate,storeInsert,commitStoreBatch } from "./atomic-json-store.ts";
 import { analyzeDesignWithAi, needsAiAnalysis } from "./desen-ai";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
@@ -307,6 +308,18 @@ async function upsertCanonicalModel(c: Context<AppEnv>, id: string, data: Row, s
   const payload = canonicalModelPayload(id, data, slug);
   const existing = await canonicalModelRow(c, id, slug);
   if (existing) {
+    // Desen updates must not erase Imalat's order fields or File Hub previews
+    // merely because this workflow has no value for them.
+    const priorRaw=objectOf(existing.raw);
+    const nextRaw=objectOf(payload.raw);
+    const priorCompany=text(existing.company_id || existing.customer_id);
+    const nextCompany=text(payload.company_id || payload.customer_id);
+    if(priorCompany && nextCompany && priorCompany!==nextCompany)throw Error("MODEL_IDENTITY_REVIEW: Merkez model firma kimliği farklı.");
+    if(!nextCompany && priorCompany){payload.company_id=priorCompany;payload.customer_id=priorCompany;payload.customer_name=existing.customer_name;nextRaw.companyId=priorCompany;nextRaw.companyName=existing.customer_name;}
+    if(!payload.image_url && existing.image_url){payload.image_url=existing.image_url;nextRaw.imageUrl=existing.image_url;}
+    if(!payload.order_no && existing.order_no){payload.order_no=existing.order_no;nextRaw.orderNo=existing.order_no;}
+    if(!payload.ground_color && existing.ground_color){payload.ground_color=existing.ground_color;nextRaw.groundColor=existing.ground_color;}
+    payload.raw={...priorRaw,...nextRaw};
     const entries = Object.entries(payload).filter(
       ([key, value]) => key !== "id" && key !== "created_at" && columns.has(key) && value !== undefined,
     );
@@ -330,12 +343,7 @@ async function upsertCanonicalModel(c: Context<AppEnv>, id: string, data: Row, s
 
 async function listWorkflowModels(c: Context<AppEnv>, slug: string): Promise<Row[]> {
   const workflowModels = (await storeList(c, MODEL_SCOPE, slug)).map(modelView);
-  let canonicalRows: Row[] = [];
-  try {
-    canonicalRows = await canonicalModelRows(c, slug);
-  } catch {
-    canonicalRows = [];
-  }
+  let canonicalRows = await canonicalModelRows(c, slug);
   const canonicalIds = new Set(canonicalRows.map((row) => text(row.id)).filter(Boolean));
   for (const workflow of workflowModels) {
     if (!canonicalIds.has(text(workflow.id))) {
@@ -542,7 +550,7 @@ async function getModel(
   slug: string,
 ): Promise<Row | null> {
   const workflowRow = await storeGet(c, MODEL_SCOPE, id, slug);
-  const canonicalRow = await canonicalModelRow(c, id, slug).catch(() => null);
+  const canonicalRow = await canonicalModelRow(c, id, slug);
   if (!workflowRow && !canonicalRow) return null;
   if (!workflowRow && canonicalRow) return canonicalRecordView(canonicalRow);
   const workflow = modelView(workflowRow || {});
@@ -880,120 +888,81 @@ async function analyzeAndSave(c: Context<AppEnv>, model: Row, slug: string) {
 }
 
 async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
-  const jobId = `design-${model.id}`;
+  const db=c.env.DB,jobId=`design-${model.id}`,at=nowIso();
   const operations = model.operations || [];
-  const colorSources: Row[] = [];
+  const sourceMap=new Map<string,Row>();
   for (const operation of operations) {
-    const groups = operation.colorGroups?.length
-      ? operation.colorGroups
-      : (operation.channels || [])
-          .filter((channel: Row) => channel.included !== false)
-          .map((channel: Row) => ({
-            id: channel.id,
-            groupKey: channel.groupKey || channel.id,
-            displayName: channel.normalizedName || channel.rawName,
-            colorCode: channel.colorCode,
-            registeredColorId: channel.registeredColorId,
-            moldCount: channel.moldCount || 1,
-          }));
-    groups.forEach((group: Row) =>
-      colorSources.push({ ...group, printRegion: operation.printAreaName }),
-    );
-  }
-  const currentJob = await storeGet(c, BOYAHANE_JOB_SCOPE, jobId, slug);
-  const existingColors = (await storeList(c, BOYAHANE_COLOR_SCOPE, slug)).filter(
-    (row) => text(row.jobId || row.dyehouseModelId) === jobId,
-  );
-  const hasNewPendingColor = colorSources.some((source: Row) => {
-    const key = text(source.id || source.groupKey || stableId(JSON.stringify(source)));
-    const id = `design-color-${stableId(`${model.id}:${key}`).slice(4)}`;
-    return !existingColors.some(row => text(row.sourceChannelKey) === `design:${key}` || text(row.id) === id);
-  });
-  const job = await storePut(
-    c,
-    BOYAHANE_JOB_SCOPE,
-    jobId,
-    {
-      ...currentJob,
-      id: jobId,
-      designId: model.id,
-      modelId: model.id,
-      modelCardId: model.id,
-      modelName: model.modelName,
-      companyId: model.companyId,
-      companyName: model.companyName,
-      orderNo: model.orderNo || "",
-      printRegion: operations.map((row: Row) => row.printAreaName).filter(Boolean).join(", "),
-      plannedQuantity: num(model.plannedQuantity),
-      channelCount: model.totals.activeChannelCount,
-      uniqueColorCount: model.totals.uniqueColorCount,
-      moldCount: model.totals.totalMoldCount,
-      imageUrl: model.mainImage?.thumbnailUrl || model.mainImage?.previewUrl || "",
-      ...designJobState(currentJob, hasNewPendingColor),
-      source: "DESEN_WORKFLOW",
-      createdAt: currentJob?.createdAt || nowIso(),
-    },
-    slug,
-  );
-  const activeKeys = new Set<string>();
-  for (const source of colorSources) {
-    const key = text(source.id || source.groupKey || stableId(JSON.stringify(source)));
-    activeKeys.add(key);
-    const id = `design-color-${stableId(`${model.id}:${key}`).slice(4)}`;
-    const current = existingColors.find(
-      (row) => text(row.sourceChannelKey) === `design:${key}` || text(row.id) === id,
-    );
-    if (upper(current?.status)==="COMPLETED") continue;
-    await storePut(
-      c,
-      BOYAHANE_COLOR_SCOPE,
-      id,
-      {
-        ...current,
-        id,
-        jobId,
-        dyehouseModelId: jobId,
-        modelCardId: model.id,
-        registeredColorId: text(source.registeredColorId) || current?.registeredColorId || null,
-        sourceChannelKey: `design:${key}`,
-        colorName: text(source.displayName || source.colorCode || "Tanımsız Renk"),
-        pantone: text(source.colorCode),
-        paintType: text(current?.paintType || "SUBAZLI"),
-        recipeId: current?.recipeId || null,
-        printRegion: text(source.printRegion),
-        plannedKg: num(current?.plannedKg),
-        status: current?.status || "WAITING",
-        moldCount: num(source.moldCount || 1),
-        createdAt: current?.createdAt || nowIso(),
-      },
-      slug,
-    );
-  }
-  for (const old of existingColors) {
-    if (isRemovedDesignColor(old.sourceChannelKey, activeKeys, old.status)) {
-      await storePut(c, BOYAHANE_COLOR_SCOPE, text(old.id), { ...old, status: "CANCELLED" }, slug);
+    const groups=operation.colorGroups?.length ? operation.colorGroups : (operation.channels || []).filter((channel:Row)=>channel.included!==false).map((channel:Row)=>({
+      id:channel.id,groupKey:channel.groupKey || channel.id,displayName:channel.normalizedName || channel.rawName,colorCode:channel.colorCode,registeredColorId:channel.registeredColorId,moldCount:channel.moldCount || 1
+    }));
+    for(const group of groups){
+      const key=text(group.id || group.groupKey || stableId(JSON.stringify(group)));
+      const old=sourceMap.get(key);
+      if(old && ((text(old.registeredColorId)&&text(group.registeredColorId)&&text(old.registeredColorId)!==text(group.registeredColorId)) || (text(old.colorCode)&&text(group.colorCode)&&text(old.colorCode)!==text(group.colorCode))))
+        throw Error("DESEN_COLOR_IDENTITY_REVIEW: Aynı kaynak renk kimliği farklı renklerle kullanılmış.");
+      sourceMap.set(key,{...old,...group,printRegion:[...new Set([...(old?.regions || []),text(operation.printAreaName)].filter(Boolean))].join(", "),regions:[...new Set([...(old?.regions || []),text(operation.printAreaName)].filter(Boolean))],moldCount:num(old?.moldCount)+num(group.moldCount || 1)});
     }
   }
-  const updatedOperations = operations.map((operation: Row) => ({
-    ...operation,
-    dyehouseStatus: model.totals.unresolvedColorCount === 0 ? "READY" : "WAITING",
-  }));
-  await saveModel(
-    c,
-    model.id,
-    {
-      ...model,
-      operations: updatedOperations,
-      status:
-        model.totals.unresolvedColorCount === 0
-          ? "DYEHOUSE_READY"
-          : "COLOR_MATCH_MISSING",
-      dyehouseJobId: jobId,
-      dyehouseSyncedAt: nowIso(),
-    },
-    slug,
-  );
-  return { job, jobId, colorCount: colorSources.length };
+  const jobSnapshot=await storeSnapshot(db,BOYAHANE_JOB_SCOPE,slug,jobId);
+  const legacyJob=await storeGet(c,BOYAHANE_JOB_SCOPE,jobId,slug);
+  if(!jobSnapshot && legacyJob)throw Error("DESEN_DYEHOUSE_TENANT_REVIEW: Eski Boyahane işinin firma bağı doğrulanmalı.");
+  const currentJob=jobSnapshot?.value || null;
+  const listed=(await storeList(c,BOYAHANE_COLOR_SCOPE,slug)).filter(row=>text(row.jobId || row.dyehouseModelId)===jobId);
+  const existingColors:Row[]=[];
+  const colorSnapshots=new Map<string,NonNullable<Awaited<ReturnType<typeof storeSnapshot>>>>();
+  for(const row of listed){
+    const id=text(row.id || row.fileName);
+    const snapshot=await storeSnapshot(db,BOYAHANE_COLOR_SCOPE,slug,id);
+    if(!snapshot)throw Error("DESEN_DYEHOUSE_TENANT_REVIEW: Eski renk kaydının firma bağı doğrulanmalı.");
+    colorSnapshots.set(id,snapshot);existingColors.push(snapshot.value);
+  }
+  const existingByKey=new Map<string,Row>();
+  for(const old of existingColors){
+    const key=text(old.sourceChannelKey);
+    if(key.startsWith("design:")){
+      if(existingByKey.has(key.slice(7)))throw Error("DESEN_COLOR_DUPLICATE_REVIEW");
+      existingByKey.set(key.slice(7),old);
+    }
+  }
+  const hasNewPendingColor=[...sourceMap.keys()].some(key=>{
+    const old=existingByKey.get(key);
+    return !old || (upper(old.status)==="CANCELLED" && old.cancelReason==="DESEN_SOURCE_REMOVED");
+  });
+  const job:Row={...currentJob,id:jobId,designId:model.id,modelId:model.id,modelCardId:model.id,modelName:model.modelName,companyId:model.companyId,companyName:model.companyName,orderNo:model.orderNo || "",printRegion:operations.map((row:Row)=>row.printAreaName).filter(Boolean).join(", "),plannedQuantity:num(model.plannedQuantity),channelCount:model.totals.activeChannelCount,uniqueColorCount:model.totals.uniqueColorCount,moldCount:model.totals.totalMoldCount,imageUrl:model.mainImage?.thumbnailUrl || model.mainImage?.previewUrl || currentJob?.imageUrl || "",...designJobState(currentJob,hasNewPendingColor),source:"DESEN_WORKFLOW",createdAt:currentJob?.createdAt || at,updatedAt:at};
+  const guards:any[]=[],writes:any[]=[];
+  if(jobSnapshot){guards.push(storeGuard(db,jobSnapshot));writes.push(storeUpdate(db,jobSnapshot,job,at));}
+  else{guards.push(storeAbsentGuard(db,BOYAHANE_JOB_SCOPE,slug,jobId));writes.push(storeInsert(db,BOYAHANE_JOB_SCOPE,slug,jobId,job,at));}
+  const activeKeys=new Set(sourceMap.keys());
+  for(const [key,source] of sourceMap){
+    const candidateId=`design-color-${stableId(`${model.id}:${key}`).slice(4)}`;
+    const current=existingByKey.get(key) || existingColors.find(row=>text(row.id)===candidateId);
+    const id=text(current?.id || candidateId);
+    if(upper(current?.status)==="COMPLETED"){
+      if((text(source.registeredColorId)&&text(current?.registeredColorId)!==text(source.registeredColorId)) ||
+         (text(source.colorCode)&&text(current?.pantone)!==text(source.colorCode)))
+        throw Error("DESEN_COMPLETED_COLOR_REVIEW: Hazırlanmış renk değişmiş; geçmiş reçete korunur, yeni renk revizyonu gerekir.");
+      continue;
+    }
+    const restored=upper(current?.status)==="CANCELLED"&&current?.cancelReason==="DESEN_SOURCE_REMOVED";
+    const value:Row={...current,id,jobId,dyehouseModelId:jobId,modelCardId:model.id,registeredColorId:text(source.registeredColorId)||current?.registeredColorId||null,sourceChannelKey:`design:${key}`,colorName:text(source.displayName||source.colorCode||"Tanımsız Renk"),pantone:text(source.colorCode),paintType:text(current?.paintType||"SUBAZLI"),recipeId:current?.recipeId||null,printRegion:text(source.printRegion),plannedKg:num(current?.plannedKg),status:restored?"WAITING":current?.status||"WAITING",cancelReason:restored?null:current?.cancelReason,moldCount:num(source.moldCount||1),createdAt:current?.createdAt||at};
+    const snap=colorSnapshots.get(id);
+    if(snap){guards.push(storeGuard(db,snap));writes.push(storeUpdate(db,snap,value,at));}
+    else{guards.push(storeAbsentGuard(db,BOYAHANE_COLOR_SCOPE,slug,id));writes.push(storeInsert(db,BOYAHANE_COLOR_SCOPE,slug,id,value,at));}
+  }
+  for(const old of existingColors){
+    if(isRemovedDesignColor(old.sourceChannelKey,activeKeys,old.status)){
+      const snap=colorSnapshots.get(text(old.id))!;
+      guards.push(storeGuard(db,snap));writes.push(storeUpdate(db,snap,{...old,status:"CANCELLED",cancelReason:"DESEN_SOURCE_REMOVED"},at));
+    }
+  }
+  await commitStoreBatch(db,guards,writes);
+  const unresolved=model.totals.unresolvedColorCount>0;
+  const updatedOperations=operations.map((operation:Row)=>({...operation,dyehouseStatus:unresolved?"WAITING":"READY"}));
+  const status=!hasNewPendingColor&&!unresolved&&["PRODUCTION_READY","COMPLETED","ARCHIVE"].includes(upper(model.status))?model.status:unresolved?"COLOR_MATCH_MISSING":"DYEHOUSE_READY";
+  // The model's workflow marker is a separate write. A retry safely reuses
+  // the already committed Boyahane rows; no duplicate stock or color.
+  await saveModel(c,model.id,{...model,operations:updatedOperations,status,dyehouseJobId:jobId,dyehouseSyncedAt:at},slug);
+  return {job,jobId,colorCount:sourceMap.size};
 }
 
 
@@ -1582,8 +1551,14 @@ export function registerDesenWorkflowRoutes(app: Hono<AppEnv>) {
     const slug = slugOf(c, body);
     const model = await getModel(c, c.req.param("id"), slug);
     if (!model) return c.json(errorBody("NOT_FOUND", "Desen modeli bulunamadı."), 404);
-    const data = await syncDyehouse(c, model, slug);
-    return c.json({ ok: true, success: true, data });
+    try{
+      const data=await syncDyehouse(c,model,slug);
+      return c.json({ok:true,success:true,data});
+    }catch(error){
+      const message=error instanceof Error?error.message:String(error);
+      const review=message.startsWith("DESEN_") || message.startsWith("MODEL_");
+      return c.json(errorBody(review?"DESEN_DYEHOUSE_REVIEW":"DESEN_DYEHOUSE_SYNC_CONFLICT",review?message:"Senkron sırasında kayıt değişti veya yazma tamamlanamadı; yenileyip tekrar deneyin."),409);
+    }
   });
 
   app.get("/api/desen/workflow/models/:id/production-summary", async (c) => {
