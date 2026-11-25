@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { reserveLotKg } from "./production-flow-safety.ts";
+import { storeSnapshot, storeGuard, storeUpdate, storeInsert, stableStoreId, commitStoreBatch, type StoreSnapshot } from "./atomic-json-store.ts";
 import {getAuthenticatedUser} from "./auth-cloud";
 import {accountingTenantReadAllowed} from "./accounting-access-policy";
 
@@ -712,203 +713,95 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const body = await bodyOf(c);
     const slug = slugOf(c, body);
     const requestId = text(body.requestId);
-    if (!requestId) {
-      return c.json(errorBody("REQUEST_ID_REQUIRED", "Tekrarlı üretimi önlemek için requestId zorunludur."), 400);
-    }
-    const duplicate = (await storeList(c, SCOPES.production, slug)).find(
-      (row) => text(row.requestId) === requestId,
-    );
-    if (duplicate) {
-      return c.json({ ok: true, success: true, data: { ...duplicate, idempotent: true } });
-    }
-    const job = await storeGet(c, SCOPES.job, text(body.jobId), slug);
-    const jobColor = await storeGet(c, SCOPES.jobColor, text(body.jobColorId), slug);
-    if (!job || !jobColor) {
-      return c.json(errorBody("JOB_OR_COLOR_NOT_FOUND", "Boyahane işi veya renk kaydı bulunamadı."), 404);
-    }
-    if (text(jobColor.jobId || jobColor.dyehouseModelId) !== text(job.id)) {
-      return c.json(errorBody("JOB_COLOR_MISMATCH", "Renk seçilen Boyahane işine ait değil."), 409);
-    }
+    if (!requestId) return c.json(errorBody("REQUEST_ID_REQUIRED", "Tekrarlı üretimi önlemek için requestId zorunludur."), 400);
     const multiplier = num(body.multiplier ?? 1);
-    if (multiplier <= 0) {
-      return c.json(errorBody("INVALID_MULTIPLIER", "Çarpan sıfırdan büyük olmalıdır."), 400);
-    }
+    if (multiplier <= 0) return c.json(errorBody("INVALID_MULTIPLIER", "Çarpan sıfırdan büyük olmalıdır."), 400);
     const lines = recipeLines(body.lines);
-    if (!lines.length) {
-      return c.json(errorBody("PRODUCTION_LINES_REQUIRED", "Üretim reçetesi boş olamaz."), 400);
+    if (!lines.length) return c.json(errorBody("PRODUCTION_LINES_REQUIRED", "Üretim reçetesi boş olamaz."), 400);
+    const db = c.env.DB;
+    const productionId = await stableStoreId("BYP:",[slug,requestId]);
+    const payloadHash = await stableStoreId("",[text(body.jobId),text(body.jobColorId),multiplier,lines.map(line=>[line.productId,line.lotId,line.referenceGram]),text(body.recipeId),text(body.colorId),text(body.jobType),text(body.paintType),text(body.version)]);
+    const replay = async () => {
+      const previous = await storeSnapshot(db,SCOPES.production,slug,productionId);
+      if (!previous) return null;
+      return previous.value;
+    };
+    const existing = await replay();
+    if (existing) {
+      if (existing.payloadHash !== payloadHash) return c.json(errorBody("PRODUCTION_REQUEST_PAYLOAD_CONFLICT","Aynı işlem kimliği başka reçete için kullanılamaz."),409);
+      return c.json({ok:true,success:true,data:{...existing,idempotent:true}});
     }
-    const lots = await storeList(c, SCOPES.lot, slug);
-    const consumptions: Row[] = [];
-    const validation: string[] = [];
-    const remainingByLot = new Map<string, number>();
-    for (const [index, line] of lines.entries()) {
-      const lot = lots.find((row) => text(row.id || row.fileName) === line.lotId);
-      const requiredKg = (num(line.referenceGram) * multiplier) / 1000;
-      const lotKey = text(lot?.id || lot?.fileName);
-      const remainingKg = remainingByLot.get(lotKey) ?? num(lot?.remainingKg ?? lot?.remainingQuantity ?? lot?.quantity);
-      const nextRemaining = reserveLotKg(remainingKg, requiredKg);
-      if (!line.productId) validation.push(`${index + 1}. satır: ürün seçilmedi.`);
-      if (!lot) validation.push(`${index + 1}. satır: lot bulunamadı.`);
-      else if (text(lot.productId || lot.inventoryId) !== line.productId) {
-        validation.push(`${index + 1}. satır: lot seçilen ürüne ait değil.`);
-      } else if (!["AVAILABLE", "ACTIVE"].includes(upper(lot.status))) {
-        validation.push(`${index + 1}. satır: lot kullanıma açık değil.`);
-      } else if (nextRemaining === null) {
-        validation.push(
-          `${index + 1}. satır: stok yetersiz. Gerekli ${requiredKg.toFixed(3)} KG, kalan ${remainingKg.toFixed(3)} KG.`,
-        );
-      } else {
-        remainingByLot.set(lotKey, nextRemaining);
-      }
-      consumptions.push({ line, lot, requiredKg, nextRemaining });
+    // Historical random-ID receipts are not re-consumed. Their old payload is
+    // not hashed, so a differing or unverifiable retry requires manual review.
+    const legacy = (await storeList(c,SCOPES.production,slug)).find(row=>text(row.requestId)===requestId);
+    if (legacy) return c.json(errorBody("LEGACY_PRODUCTION_REVIEW","Bu işlem kimliği eski üretim fişinde mevcut. Stok tekrar düşülmedi; mevcut fişi inceleyin.",{productionId:legacy.id}),409);
+    const [jobSnapshot,colorSnapshot] = await Promise.all([
+      storeSnapshot(db,SCOPES.job,slug,text(body.jobId)),
+      storeSnapshot(db,SCOPES.jobColor,slug,text(body.jobColorId)),
+    ]);
+    if (!jobSnapshot || !colorSnapshot) return c.json(errorBody("JOB_OR_COLOR_NOT_FOUND","Firma kapsamındaki Boyahane işi veya renk kaydı bulunamadı; eski kayıtlar inceleme gerektirir."),404);
+    const job = jobSnapshot.value, jobColor = colorSnapshot.value;
+    if (text(jobColor.jobId || jobColor.dyehouseModelId) !== text(job.id)) return c.json(errorBody("JOB_COLOR_MISMATCH","Renk seçilen Boyahane işine ait değil."),409);
+    if (["CANCELLED","COMPLETED"].includes(upper(job.status)) || upper(jobColor.status)==="CANCELLED") return c.json(errorBody("JOB_CLOSED","Kapanmış veya iptal edilmiş işte yeni sarf yapılamaz."),409);
+    const lotIds = [...new Set(lines.map(line=>line.lotId).filter(Boolean))];
+    const snapshots = new Map<string,StoreSnapshot>();
+    for (const id of lotIds) {
+      const snapshot = await storeSnapshot(db,SCOPES.lot,slug,id);
+      if (snapshot) snapshots.set(id,snapshot);
     }
-    if (validation.length) {
-      return c.json(
-        errorBody("PRODUCTION_VALIDATION_FAILED", "Üretim ve stok kontrolü başarısız.", validation),
-        409,
-      );
+    const remainingByLot = new Map<string,number>();
+    const validation:string[] = [];
+    const consumptions:Row[] = [];
+    for (const [index,line] of lines.entries()) {
+      const lot = snapshots.get(line.lotId)?.value;
+      const requiredKg = num(line.referenceGram)*multiplier/1000;
+      const remaining = remainingByLot.get(line.lotId) ?? num(lot?.remainingKg ?? lot?.remainingQuantity ?? lot?.quantity);
+      const nextRemaining = reserveLotKg(remaining,requiredKg);
+      if (!line.productId || !lot) validation.push(`${index+1}. satır: ürün veya firma kapsamındaki LOT bulunamadı.`);
+      else if (text(lot.productId || lot.inventoryId)!==line.productId) validation.push(`${index+1}. satır: LOT seçilen ürüne ait değil.`);
+      else if (!["AVAILABLE","ACTIVE"].includes(upper(lot.status))) validation.push(`${index+1}. satır: LOT kullanıma açık değil.`);
+      else if (!["KG","KGM","KILOGRAM"].includes(upper(lot.unit || "KG"))) validation.push(`${index+1}. satır: KG dışındaki LOT birimi önce doğrulanmalıdır.`);
+      else if (nextRemaining===null) validation.push(`${index+1}. satır: stok yetersiz. Gerekli ${requiredKg.toFixed(3)} KG, kalan ${remaining.toFixed(3)} KG.`);
+      else {remainingByLot.set(line.lotId,nextRemaining);consumptions.push({line,lot,requiredKg,nextRemaining});}
     }
-
-    const productionId = crypto.randomUUID();
-    const items: Row[] = [];
-    let totalCost = 0;
-    for (const consumption of consumptions) {
-      const nextRemaining = consumption.nextRemaining as number;
-      const lot = consumption.lot as Row;
-      const entryKg = num(lot.entryKg || lot.quantity);
-      await storePut(
-        c,
-        SCOPES.lot,
-        text(lot.id || lot.fileName),
-        {
-          ...lot,
-          remainingKg: nextRemaining,
-          remainingQuantity: nextRemaining,
-          usedKg: Math.max(0, entryKg - nextRemaining),
-          status: nextRemaining <= 0 ? "DEPLETED" : "AVAILABLE",
-        },
-        slug,
-      );
-      const movementId = crypto.randomUUID();
-      await storePut(
-        c,
-        SCOPES.movement,
-        movementId,
-        {
-          id: movementId,
-          lotId: text(lot.id || lot.fileName),
-          productId: consumption.line.productId,
-          type: "OUT",
-          quantity: consumption.requiredKg,
-          unit: lot.unit || "KG",
-          recipeId: body.recipeId || null,
-          productionId,
-          note: `${job.modelName || "Model"} · ${jobColor.colorName || "Renk"} üretim sarfı`,
-          createdAt: nowIso(),
-        },
-        slug,
-      );
-      const cost = consumption.requiredKg * num(lot.unitCost);
-      totalCost += cost;
-      items.push({
-        id: crypto.randomUUID(),
-        productId: consumption.line.productId,
-        productNameSnapshot: consumption.line.productName,
-        lotId: text(lot.id || lot.fileName),
-        lotNoSnapshot: lot.lotNo,
-        referenceGram: consumption.line.referenceGram,
-        consumedKg: consumption.requiredKg,
-        unitCost: num(lot.unitCost),
-        totalCost: cost,
-      });
+    if(validation.length) return c.json(errorBody("PRODUCTION_VALIDATION_FAILED","Üretim ve stok kontrolü başarısız.",validation),409);
+    const at = nowIso(), guards = [storeGuard(db,jobSnapshot),storeGuard(db,colorSnapshot)], writes:any[] = [];
+    for (const [id,remaining] of remainingByLot) {
+      const snapshot=snapshots.get(id)!;
+      guards.push(storeGuard(db,snapshot));
+      const lot=snapshot.value;
+      writes.push(storeUpdate(db,snapshot,{...lot,remainingKg:remaining,remainingQuantity:remaining,usedKg:Math.max(0,num(lot.entryKg || lot.quantity)-remaining),status:remaining<=0?"DEPLETED":"AVAILABLE"},at));
     }
-
-    const production = await storePut(
-      c,
-      SCOPES.production,
-      productionId,
-      {
-        id: productionId,
-        requestId,
-        jobId: job.id,
-        jobColorId: jobColor.id,
-        colorId: body.colorId || jobColor.registeredColorId || null,
-        recipeId: body.recipeId || jobColor.recipeId || null,
-        modelName: job.modelName,
-        companyName: body.companyName || job.companyName,
-        orderNo: body.orderNo || job.orderNo,
-        colorName: body.colorName || jobColor.colorName,
-        pantoneSnapshot: body.pantone || jobColor.pantone,
-        paintTypeSnapshot: body.paintType || jobColor.paintType,
-        version: body.version || "V1",
-        multiplier,
-        jobType: body.jobType || "PRODUCTION",
-        totalReferenceGr: lines.reduce((sum, line) => sum + num(line.referenceGram), 0),
-        totalPreparedKg: items.reduce((sum, item) => sum + num(item.consumedKg), 0),
-        totalCost,
-        items,
-        createdAt: nowIso(),
-      },
-      slug,
-    );
-
-    await storePut(
-      c,
-      SCOPES.jobColor,
-      text(jobColor.id),
-      {
-        ...jobColor,
-        registeredColorId: body.colorId || jobColor.registeredColorId || null,
-        recipeId: body.recipeId || jobColor.recipeId || null,
-        paintType: body.paintType || jobColor.paintType,
-        status: "COMPLETED",
-        completedAt: nowIso(),
-        preparedKg: production.totalPreparedKg,
-      },
-      slug,
-    );
-
-    const expenseId = crypto.randomUUID();
-    await storePut(
-      c,
-      SCOPES.expense,
-      expenseId,
-      {
-        id: expenseId,
-        productionId,
-        jobId: job.id,
-        modelName: job.modelName,
-        companyName: body.companyName || job.companyName,
-        orderNo: body.orderNo || job.orderNo,
-        description: `${job.modelName || "Model"} Boyahane boya/kimyasal sarfı`,
-        amount: totalCost,
-        expenseDate: nowIso().slice(0, 10),
-        source: "BOYAHANE_PRODUCTION",
-        createdAt: nowIso(),
-      },
-      slug,
-    );
-
-    await logAction(
-      c,
-      slug,
-      "DYE_PRODUCTION",
-      productionId,
-      "PRODUCTION_CREATED",
-      `${job.modelName || "Model"} · ${jobColor.colorName || "Renk"} hazırlandı; stok düşümü ve gider kaydı oluşturuldu.`,
-    );
-
-    const colors = (await storeList(c, SCOPES.jobColor, slug)).filter(
-      (row) => text(row.jobId || row.dyehouseModelId) === text(job.id),
-    );
-    const nextColor = colors.find(
-      (row) => text(row.id) !== text(jobColor.id) && normalizedColorStatus(row.status) !== "COMPLETED",
-    );
-    return c.json({
-      ok: true,
-      success: true,
-      data: { ...production, nextColorId: nextColor?.id || null },
-    }, 201);
+    const items:Row[] = [];
+    const modelId=text(job.modelCardId || job.modelId || job.designId) || null;
+    const jobType=upper(job.jobType || job.workflowType || job.type || body.jobType || "PRODUCTION");
+    const recipeId=body.recipeId || jobColor.recipeId || null;
+    let totalCost=0;
+    for (const [index,consumption] of consumptions.entries()) {
+      const {line,lot,requiredKg,nextRemaining}=consumption;
+      const movementId=productionId+":M:"+index;
+      const unitCost=num(lot.unitCost);
+      const cost=requiredKg*unitCost;
+      totalCost+=cost;
+      writes.push(storeInsert(db,SCOPES.movement,slug,movementId,{lotId:line.lotId,productId:line.productId,type:"OUT",movementType:["SAMPLE","TRIAL"].includes(jobType)?"SAMPLE":"PRODUCTION",quantity:requiredKg,quantityKg:requiredKg,remainingKg:nextRemaining,unit:lot.unit || "KG",unitCostAtMovement:unitCost,costAmount:cost,modelId,recipeId,productionId,note:`${job.modelName || "Model"} · ${jobColor.colorName || "Renk"} üretim sarfı`,createdAt:at},at));
+      items.push({id:productionId+":I:"+index,productId:line.productId,productNameSnapshot:line.productName,lotId:line.lotId,lotNoSnapshot:lot.lotNo,referenceGram:line.referenceGram,consumedKg:requiredKg,unitCost,totalCost:cost});
+    }
+    const colors=(await storeList(c,SCOPES.jobColor,slug)).filter(row=>text(row.jobId || row.dyehouseModelId)===text(job.id));
+    const nextColor=colors.find(row=>text(row.id)!==text(jobColor.id)&&!["COMPLETED","CANCELLED"].includes(normalizedColorStatus(row.status)));
+    const production:Row={id:productionId,requestId,payloadHash,jobId:job.id,jobColorId:jobColor.id,modelId,modelCardId:modelId,colorId:body.colorId || jobColor.registeredColorId || null,recipeId,modelName:job.modelName,companyName:job.companyName || body.companyName,orderNo:job.orderNo || body.orderNo,colorName:jobColor.colorName,pantoneSnapshot:body.pantone || jobColor.pantone,paintTypeSnapshot:body.paintType || jobColor.paintType,version:body.version || "V1",multiplier,jobType,totalReferenceGr:lines.reduce((sum,line)=>sum+num(line.referenceGram),0),totalPreparedKg:items.reduce((sum,item)=>sum+num(item.consumedKg),0),totalCost,items,nextColorId:nextColor?.id || null,createdAt:at,updatedAt:at};
+    writes.push(storeInsert(db,SCOPES.production,slug,productionId,production,at));
+    writes.push(storeUpdate(db,colorSnapshot,{...jobColor,registeredColorId:body.colorId || jobColor.registeredColorId || null,recipeId,paintType:body.paintType || jobColor.paintType,status:"COMPLETED",completedAt:at,preparedKg:num(jobColor.preparedKg)+production.totalPreparedKg},at));
+    writes.push(storeInsert(db,SCOPES.expense,slug,productionId+":E",{productionId,jobId:job.id,modelId,modelName:job.modelName,companyName:production.companyName,orderNo:production.orderNo,jobType,description:`${job.modelName || "Model"} Boyahane boya/kimyasal sarfı`,amount:totalCost,expenseDate:at.slice(0,10),source:"BOYAHANE_PRODUCTION",createdAt:at},at));
+    writes.push(storeInsert(db,SCOPES.log,slug,productionId+":L",{mainCompanySlug:slug,module:"BOYAHANE",entityType:"DYE_PRODUCTION",entityId:productionId,action:"PRODUCTION_CREATED",actionType:"PRODUCTION_CREATED",description:`${job.modelName || "Model"} · ${jobColor.colorName || "Renk"} hazırlandı; stok, fiş ve gider birlikte kaydedildi.`,actor:"KY ERP",createdAt:at},at));
+    try {
+      await commitStoreBatch(db,guards,writes);
+    } catch {
+      const winner=await replay();
+      if(winner && winner.payloadHash===payloadHash) return c.json({ok:true,success:true,data:{...winner,idempotent:true}});
+      if(winner) return c.json(errorBody("PRODUCTION_REQUEST_PAYLOAD_CONFLICT","Aynı işlem kimliği başka reçete için kullanıldı."),409);
+      return c.json(errorBody("PRODUCTION_ATOMIC_CONFLICT","Stok veya iş değişti ya da yazma başarısız oldu. İşlem birlikte geri alındı; kayıtları yenileyip tekrar deneyin."),409);
+    }
+    return c.json({ok:true,success:true,data:production},201);
   });
 
   app.get("/api/boyahane/productions", async (c) => {

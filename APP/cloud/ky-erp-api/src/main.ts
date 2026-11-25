@@ -365,7 +365,7 @@ shell.use("/api/desen/*", enforceDesenTenant);
 for (const productionRoute of [
   "/api/production-center", "/api/production-center/*",
   "/api/model-flow/*", "/api/production/*",
-  "/api/imalat/kayitlar", "/api/uretim/seri/*",
+  "/api/imalat/kayitlar", "/api/imalat/*", "/api/uretim/seri/*",
 ]) {
   shell.use(productionRoute, enforceProductionTenant);
 }

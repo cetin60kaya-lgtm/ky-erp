@@ -37,3 +37,7 @@ test("aynı firmada yinelenmiş eski kayıtlar otomatik birleştirilmez", () => 
 test("arşiv modeli sessizce tekrar aktif sayılmaz", () => {
   assert.throws(() => matchCanonicalModel([{ id: "arch", model_name: "GAMER", company_id: "taha", status: "ARCHIVE" }], { modelName: "GAMER", companyId: "taha" }), /MODEL_ARCHIVED_REVIEW/);
 });
+
+test("UUID ile seçilen arşiv model de yeniden aktive edilmez",()=>{
+  assert.throws(()=>matchCanonicalModel([{id:"arch",model_name:"GAMER",company_id:"taha",status:"ARCHIVE"}],{modelName:"GAMER",companyId:"taha",requestedId:"arch"}),/MODEL_ARCHIVED_REVIEW/);
+});

@@ -26,6 +26,7 @@ export function matchCanonicalModel(rows: Row[], input: Pick<IdentityInput, "mod
   if (requested) {
     const direct = rows.find((row) => text(row.id) === requested && !row.deleted_at);
     if (direct) {
+      if (text(direct.status).toUpperCase() === "ARCHIVE") throw Error("MODEL_ARCHIVED_REVIEW: Arşivlenmiş model önce incelenmeli.");
       if (canonicalModelKey(direct.model_name) !== key ||
         (firm && text(direct.company_id || direct.customer_id) && text(direct.company_id || direct.customer_id) !== firm)) {
         throw new Error("MODEL_ID_CONFLICT: Model kimliği başka kayıtla eşleşiyor.");
