@@ -14,7 +14,7 @@ const documents = [
 ];
 const groups = [
  {title:"e-Fatura",methods:["SearchInvoice","SearchAllInvoice","SearchExternalInvoice","GetDocumentViewerLink","SendInvoice","SendInvoiceXml","SendInvoiceXmlWithoutInvoiceNumber","SendInvoiceReply","UpdateInvoiceState","DirectInvoice","ArchiveInvoice","DeArchiveInvoice"]},
- {title:"e-İrsaliye",methods:["SearchDespatchAdvice","SearchReceiptAdvice","SendDespatchAdvice","SendDespatchAdviceXML","SendDespatchAdviceXmlWithoutDespatchAdviceNumber","SendReceiptAdvice","SendReceiptAdviceXML","SendReceiptAdviceXmlWithoutReceiptAdviceNumber"]},
+ {title:"e-İrsaliye",methods:["SearchDespatchAdvice","SearchReceiptAdvice","SendDespatchAdvice","SendDespatchAdviceXml","SendDespatchAdviceXmlWithoutDespatchAdviceNumber","SendReceiptAdvice","SendReceiptAdviceXml","SendReceiptAdviceXmlWithoutReceiptAdviceNumber"]},
  {title:"e-Arşiv",methods:["SearchArchiveInvoice","SearchArchiveInvoiceReport","SendArchiveInvoice","SendArchiveInvoiceXml","SendArchiveInvoiceXmlWithoutInvoiceNumber","CancelArchiveInvoice","SendArchiveInvoiceReport","SendArchiveInvoiceMail","GetDocumentViewerLink"]},
  {title:"Mükellef ve adres defteri",methods:["GetAddressBook","GetTaxPayer","GetDespatchTaxPayer","GetReceiverInboxTags","GetSenderUnitTags","GetTaxOfficeList","GetCityList","GetTownList","GetAllBySearchTaxOfficeNameAndCityCode","SaveAddressBookEntry","DeleteAddressBookEntry"]},
  {title:"Ürün ve firma",methods:["GetProduct","SaveProduct","DeleteProduct","GetCompanyBalance","GetCompanyVendor"]},
@@ -34,8 +34,8 @@ export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRule
   }catch(e){setCatalogError(e?.message||"Servis sözleşmesi alınamadı.");}finally{setCatalogBusy(false);}
  }
  const discovered=(catalog?.services||[]).filter(s=>s.status==="WSDL_DISCOVERED");
- const hits=method=>discovered.flatMap(s=>(s.operations||[]).filter(op=>op.toLowerCase()===method.toLowerCase()).map(op=>s.service+" / "+op));
- const mapped=new Set(groups.flatMap(g=>g.methods.map(m=>m.toLowerCase())));
+ const hits=method=>discovered.flatMap(s=>(s.operations||[]).filter(op=>op===method).map(op=>s.service+" / "+op));
+ const mapped=new Set(groups.flatMap(g=>g.methods));
  return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
   <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet · Belge İşlem Merkezi</h3><p>Gelen ve giden belgeler, sevk ilişkileri, muhasebe kontrolü ve orijinal dosyalar tek merkezde.</p></div><span className="isow-state">{enabled?"Firma entegrasyonu seçili · SOAP canlı kabulü bekliyor":"Firma entegrasyonu pasif"}</span></header>
   <div className="isow-docs">{documents.map(([label,tabKey,detail])=><button type="button" key={tabKey} disabled={!openModule} onClick={()=>navigate(tabKey)}>{label}<small>{detail} · KYERP belge havuzu</small></button>)}</div>
@@ -70,7 +70,7 @@ export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRule
     <p className="isow-note">Metot adı yalnız resmî sözleşme kapsamını gösterir. WSDL varlığı firma yetkisi, başarılı çağrı veya gönderim izni değildir. e-MM için SOAP bulunmuyor; e-Dekont sözleşmesi doğrulanmadı.</p>
     {catalog&&<div>{(catalog.services||[]).map(s=><p key={s.service}>{s.service}: {s.status} · {(s.operations||[]).length} metot</p>)}
      {groups.map(g=><details key={g.title}><summary>{g.title}</summary><table><thead><tr><th>Dokümandaki metot</th><th>Canlı WSDL eşleşmesi (TEST)</th></tr></thead><tbody>{g.methods.map(m=><tr key={m}><td>{m}</td><td>{hits(m).join(", ")||"Bu sorguda doğrulanmadı"}</td></tr>)}</tbody></table></details>)}
-     {discovered.map(s=><details key={s.service}><summary>{s.service} · tam metot ve enum listesi</summary><ul>{(s.operations||[]).map(op=><li key={op}>{op}{!mapped.has(op.toLowerCase())?" · ek sözleşme incelemesi gerekli":""}</li>)}</ul>{(s.enums||[]).map(e=><details key={e.namespace+"#"+e.name}><summary>{e.name} ({e.values.length})</summary><p>{e.values.join(" · ")}</p></details>)}</details>)}
+     {discovered.map(s=><details key={s.service}><summary>{s.service} · tam metot ve enum listesi</summary><ul>{(s.operations||[]).map(op=><li key={op}>{op}{!mapped.has(op)?" · ek sözleşme incelemesi gerekli":""}</li>)}</ul>{(s.enums||[]).map(e=><details key={e.namespace+"#"+e.name}><summary>{e.name} ({e.values.length})</summary><p>{e.values.join(" · ")}</p></details>)}</details>)}
     </div>}
    </div>}
   </section>}
