@@ -625,7 +625,7 @@ export function AuthProvider({ children }) {
   }, [refreshSession, token, user]);
 
   useEffect(() => {
-    if (!token || !user || !isMobileAppRuntime()) return undefined;
+    if (!token || !user) return undefined;
     let hiddenAt = 0;
     let checking = false;
     const revalidateOnResume = async () => {
