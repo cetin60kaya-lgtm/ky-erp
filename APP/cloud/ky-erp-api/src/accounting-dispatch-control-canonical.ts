@@ -144,7 +144,7 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
     readModel:"READ_ONLY_EXPLICIT_RELATIONS",note:"Fatura bağı bulunmaması resmî faturanın kesilmediğini kanıtlamaz."};
 }
 
-function errorResponse(c:Context<AppEnv>,error:any){return c.json({ok:false,error:{code:text(error?.code)||"DISPATCH_CONTROL_FAILED",message:text(error?.message)||"İrsaliye/fatura kontrolü hazırlanamadı."}},Number(error?.status||500))}
+function errorResponse(c:Context<AppEnv>,error:any){const status=Number(error?.status||500);const safeStatus=status===400||status===401||status===403||status===404||status===409||status===422||status===429||status===502||status===503?status:500;return c.json({ok:false,error:{code:text(error?.code)||"DISPATCH_CONTROL_FAILED",message:text(error?.message)||"İrsaliye/fatura kontrolü hazırlanamadı."}},safeStatus)}
 
 /** Read-only incoming customer -> explicitly linked outgoing dispatch preview.
  * Absence of a relation is never official reconciliation. No reservation/write. */
@@ -193,7 +193,7 @@ async function readWorkflowDefaults(c:Context<AppEnv>,slug:string){
   const row=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?").bind(key,WORKFLOW_SCOPE,slug,key).first<Row>();
   const legacy=await c.env.DB.prepare("SELECT data FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? ORDER BY updated_at DESC LIMIT 1").bind(WORKFLOW_SCOPE,slug,slug).first<Row>();
   const old=json(legacy?.data),stored=json(row?.data),carrier=json(old.carrier),sample=json(json(old.nonBillableRules).TEST_NUMUNESI);
-  const profiles=Array.isArray(stored.profiles)?stored.profiles:[];
+  const profiles:Row[]=Array.isArray(stored.profiles)?stored.profiles:[];
   const productIds=[...new Set(profiles.map(p=>text(p.sampleProductId)).filter(Boolean))].slice(0,50);
   const productRows=productIds.length?(await c.env.DB.prepare("SELECT id,name FROM products WHERE main_company_slug=? AND id IN ("+productIds.map(()=>"?").join(",")+")").bind(slug,...productIds).all<Row>()).results||[]:[];
   const names=new Map(productRows.map(p=>[text(p.id),text(p.name)]));
