@@ -43,7 +43,7 @@ export function transition(state,a,id,now,verified=null){
  if(dispatchId&&rows.some(x=>x.dispatchId===dispatchId&&x.status==="DRAFT"&&x.id!==old?.id))fail("Bağlı fatura taslağı zaten var.");
  const providerSource=old?.providerSource||dispatch?.providerSource||verified;
  if(!old&&!dispatch&&["PROVIDER_INCOMING","PROVIDER_OUTGOING"].includes(a.source)&&!verified)fail("Doğrulanmış İşNet kaynağı gerekli.");
- if(verified&&(old||dispatch||verified.direction!==(type==="DISPATCH"?"INCOMING":"OUTGOING")))fail("Kaynak yönü geçersiz.");
+ if(verified&&(old||dispatch||verified.direction!==(type==="DISPATCH"?"INCOMING":"OUTGOING")||a.source!==(type==="DISPATCH"?"PROVIDER_INCOMING":"PROVIDER_OUTGOING")))fail("Kaynak yönü geçersiz.");
  const direct=providerSource&&!dispatch;
  let providerLines=null;
  if(direct){const available=remainingLines(providerSource,rows,old?.id),raw=a.lines,seen=new Set();if(!Array.isArray(raw)||!raw.length||raw.length>available.length)fail("Kaynak kalemleri gerekli.");

@@ -5,3 +5,23 @@ const source=extractSource(xml,{number:"TEST1",status:"Alici_Kabul_Etti"},q,"has
 test("source notes are exact; unknown/rejected status or mismatched company blocked",()=>{assert.deepEqual(source.notes,["  Müşteri & notu\nikinci satır  ","Ek not"]);assert.deepEqual(source.lines[0].notes,["kalem notu"]);assert.equal(source.lines[1].freeKind,"BASKI_SAKATI");assert.throws(()=>extractSource(xml,{number:"TEST1",status:"Reddedildi"},q,"hash"));assert.throws(()=>extractSource(xml,{number:"TEST1",status:"Onaylandi"},q,"hash"));assert.throws(()=>extractSource(xml,{number:"TEST1",status:"Alici_Kabul_Etti"},{...q,companyTaxCode:"1111111111"},"hash"));});
 test("partial reservation, original notes, locked invoice and 351 candidate",()=>{const a={kind:"SAVE_DISPATCH",source:"PROVIDER_INCOMING",issueDate:"2026-11-25",transport:{driver:"TEST",plate:"TEST",date:"2026-11-25",time:"10:00"},lines:[{sourceLineId:"1",quantity:5000},{sourceLineId:"2",quantity:10}],customerNotes:["tampered"]};let state=transition({drafts:[]},a,"d",now,source);assert.deepEqual(state.drafts[0].customerNotes,source.notes);assert.equal(remainingLines(source,state.drafts)[0].remaining,500);assert.throws(()=>transition(state,{...a,lines:[{sourceLineId:"1",quantity:501}]},"bad",now,source));assert.throws(()=>transition({drafts:[]},a,"bad",now));state=transition(state,{kind:"SAVE_INVOICE",dispatchId:"d",issueDate:"2026-11-25",scenario:"TICARI",lines:state.drafts[0].lines.map(l=>({...l,price:2,vatRate:20}))},"i",now);const i=state.drafts[1];assert.equal(i.total,12000);assert.equal(i.lines[1].price,0);assert.equal(i.lines[1].taxExemptionCandidate,"351");assert.equal(i.taxReviewRequired,true);assert.deepEqual(i.customerNotes,source.notes);assert.equal(i.officialSent,false);});
 test("classification is narrow; ordinary TEST model name not zeroed",()=>{assert.equal(classifyFree("TEST model satış"),"");assert.equal(classifyFree("TEST NUMUNESİ"),"TEST_NUMUNESI");assert.equal(classifyFree("KUMAŞ SAKATI"),"KUMAS_SAKATI");});
+
+test("wrong source action rejected, review resets after editing, settings preserve drafts",()=>{
+ const a={kind:"SAVE_DISPATCH",source:"PROVIDER_INCOMING",issueDate:"2026-11-25",transport:{driver:"TEST",plate:"TEST",date:"2026-11-25",time:"10:00"},lines:[{sourceLineId:"1",quantity:500}]};
+ assert.throws(()=>transition({drafts:[]},{...a,source:"MANUAL"},"bad",now,source));
+ let state=transition({drafts:[]},a,"d",now,source);
+ state=transition(state,{kind:"REVIEW",id:"d"},"unused",now);
+ assert.equal(state.drafts[0].reviewedAt,now);
+ state=transition(state,{...a,id:"d",lines:[{sourceLineId:"1",quantity:501}]},"unused",now);
+ assert.equal(state.drafts[0].reviewedAt,null);assert.deepEqual(state.drafts[0].customerNotes,source.notes);
+ const saved=transition(state,{kind:"SAVE_SETTINGS",settings:{driver:"TEST",plate:"TEST",scenario:"TEMEL",vatRate:20}},"unused",now);
+ assert.equal(saved.settings.scenario,"TEMEL");assert.equal(saved.drafts[0].quantity,501);
+ assert.throws(()=>transition(saved,{kind:"SEND",id:"d"},"unused",now));
+});
+test("outgoing source requires whole locked quantities and blocks duplicate invoice draft",()=>{
+ const out={...source,direction:"OUTGOING",key:"hash:OUTGOING:"+id};
+ const a={kind:"SAVE_INVOICE",source:"PROVIDER_OUTGOING",issueDate:"2026-11-25",scenario:"TICARI",lines:[{sourceLineId:"1",quantity:5500,price:2,vatRate:20},{sourceLineId:"2",quantity:10,price:99,vatRate:20}]};
+ assert.throws(()=>transition({drafts:[]},{...a,lines:[{...a.lines[0],quantity:5499},a.lines[1]]},"bad",now,out));
+ assert.throws(()=>transition({drafts:[]},{...a,lines:[a.lines[0]]},"bad",now,out));
+ const state=transition({drafts:[]},a,"i",now,out);assert.equal(state.drafts[0].total,13200);assert.equal(state.drafts[0].lines[1].price,0);assert.throws(()=>transition(state,a,"dup",now,out));
+});
