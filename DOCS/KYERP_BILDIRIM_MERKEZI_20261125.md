@@ -1,2 +1,4 @@
 # Bildirim merkezi ve ana ekran — 25.11.2026
 Dış tıklama, Escape, kapat düğmesi; profil/bildirim tek açık panel; scope değişiminde eski istek sonuçları yok sayılır. Okundu/temizleme sunucu sonucu olmadan başarı gösterilmez. Mail kimlikleri kabul edilir. Oturum bildiriminde gerçek PENDING + kullanıcı aktif + yönetici onayı açık + önceki giriş onayı yok koşulu aranır, owner/firma owner tekrar onay istemez. Güvenlik işlemleri telefonda kalır. Finans ve gelen fatura bağlantıları canonical route. Mevcut owner global güvenlik / seçili firma iş kapsamı korunur. Şema ve gerçek hesap verisi değişikliği yok. CI ve canlı kabul ayrı.
+
+Okundu/temizlendi ID listeleri D1 tek SQL upsert içinde birleştirilir; iki sekme birbirinin kaydını ezmez. Örnek SQLite bellek testinde A/B → C → A/D birleşimi B/C/A/D olarak doğrulandı; production veri testi yapılmadı.

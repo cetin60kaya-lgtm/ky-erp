@@ -77,7 +77,14 @@ async function writeState(c: any, current: AnyRow, tenant: string, ids: string[]
        scope=excluded.scope,
        main_company_slug=excluded.main_company_slug,
        file_name=excluded.file_name,
-       data=excluded.data,
+       data=json_object('readIds',json((SELECT COALESCE(json_group_array(value),'[]') FROM (
+          SELECT value FROM (
+            SELECT value,MAX(pos) AS pos FROM (
+              SELECT value,CAST(key AS INTEGER) AS pos FROM json_each(CASE WHEN json_valid(json_store.data) THEN COALESCE(json_extract(json_store.data,'$.readIds'),'[]') ELSE '[]' END)
+              UNION ALL SELECT value,1000+CAST(key AS INTEGER) FROM json_each(excluded.data,'$.readIds')
+            ) GROUP BY value ORDER BY pos DESC LIMIT 1000
+          ) ORDER BY pos ASC
+       ))),'updatedAt',excluded.updated_at),
        updated_at=excluded.updated_at`,
   ).bind(id, READ_SCOPE, tenant, text(current.id), data, timestamp, timestamp).run();
   return true;
@@ -112,7 +119,14 @@ async function writeDismissedState(c: any, current: AnyRow, tenant: string, ids:
        scope=excluded.scope,
        main_company_slug=excluded.main_company_slug,
        file_name=excluded.file_name,
-       data=excluded.data,
+       data=json_object('dismissedIds',json((SELECT COALESCE(json_group_array(value),'[]') FROM (
+          SELECT value FROM (
+            SELECT value,MAX(pos) AS pos FROM (
+              SELECT value,CAST(key AS INTEGER) AS pos FROM json_each(CASE WHEN json_valid(json_store.data) THEN COALESCE(json_extract(json_store.data,'$.dismissedIds'),'[]') ELSE '[]' END)
+              UNION ALL SELECT value,1000+CAST(key AS INTEGER) FROM json_each(excluded.data,'$.dismissedIds')
+            ) GROUP BY value ORDER BY pos DESC LIMIT 1000
+          ) ORDER BY pos ASC
+       ))),'updatedAt',excluded.updated_at),
        updated_at=excluded.updated_at`,
   ).bind(id, DISMISS_SCOPE, tenant, text(current.id), data, timestamp, timestamp).run();
   return true;
@@ -239,7 +253,6 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
 
   const now = new Date().toISOString();
   const notificationCutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const companyOwner = companyAdminRole(current?.role);
   const trustJoin = `LEFT JOIN json_store t ON t.id=(SELECT js.id FROM json_store js WHERE js.scope=? AND js.file_name=s.id ORDER BY js.updated_at DESC,js.id DESC LIMIT 1)`;
   const result = ownerRole(current?.role)
     ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
@@ -257,12 +270,11 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
               UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
          FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=s.user_id ${trustJoin}
         WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.created_at>? AND s.main_company_slug=?
-          AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))
           AND u.is_active=1 AND COALESCE(us.approval_required,0)=1
           AND COALESCE(TRIM(s.approval_request_id),'')=''
           AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')
           AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING'))='PENDING'
-        ORDER BY s.created_at DESC LIMIT 100`).bind(SECURITY_TRUST_SCOPE, now, notificationCutoff, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
+        ORDER BY s.created_at DESC LIMIT 100`).bind(SECURITY_TRUST_SCOPE, now, notificationCutoff, tenant).all<AnyRow>();
 
   const trustedRows = await c.env.DB.prepare("SELECT file_name,data FROM json_store WHERE scope=?").bind(SECURITY_TRUSTED_DEVICE_SCOPE).all<AnyRow>();
   const trustedKeys = new Set((trustedRows.results || []).map((item: AnyRow) => objectOf(item.data)).filter((item: AnyRow) => item.isTrusted !== false && !text(item.revokedAt)).map((item: AnyRow) => `${text(item.userId)}:${text(item.deviceId)}`));
@@ -489,9 +501,8 @@ export function registerNotificationRoutes(app: any) {
     if (!incoming.length) return c.json({ ok: true, data: { readCount: 0 } });
 
     const stateTenant = ownerRole(current?.role) ? "__SYSTEM__" : tenant;
-    const existing = await readState(c, current, stateTenant);
-    for (const id of incoming) existing.add(id);
-    const merged = [...existing].slice(-MAX_READ_IDS);
+    // Atomic SQL union preserves concurrent writes from other tabs.
+    const merged = incoming;
     if (!(await writeState(c, current, stateTenant, merged))) return c.json({ ok: false, error: { code: "NOTIFICATION_STATE_UNAVAILABLE", message: "Okundu kaydı saklanamadı." } }, 503);
     return c.json({ ok: true, data: { readCount: incoming.length } });
   });
@@ -507,9 +518,7 @@ export function registerNotificationRoutes(app: any) {
     if (!incoming.length) return c.json({ ok: true, data: { dismissedCount: 0 } });
 
     const stateTenant = ownerRole(current?.role) ? "__SYSTEM__" : tenant;
-    const existing = await dismissedState(c, current, stateTenant);
-    for (const id of incoming) existing.add(id);
-    const merged = [...existing].slice(-MAX_READ_IDS);
+    const merged = incoming;
     if (!(await writeDismissedState(c, current, stateTenant, merged))) return c.json({ ok: false, error: { code: "NOTIFICATION_STATE_UNAVAILABLE", message: "Temizleme kaydı saklanamadı." } }, 503);
     return c.json({ ok: true, data: { dismissedCount: incoming.length } });
   });

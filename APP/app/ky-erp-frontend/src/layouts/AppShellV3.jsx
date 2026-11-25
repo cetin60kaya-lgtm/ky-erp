@@ -261,6 +261,7 @@ export default function AppShellV3({
     if (!user?.id || normalizedRole === "DENETIM") {
       setNotificationData((current) => ({ ...current, items: [], unreadCount: 0, totalCount: 0 }));
       setNotificationError("");
+      setNotificationLoading(false);
       return;
     }
     if (!silent) setNotificationLoading(true);
@@ -531,7 +532,7 @@ export default function AppShellV3({
       if (requestId === notificationRequestRef.current) applyNotificationRead(clean);
       if (requestId === notificationRequestRef.current) await refreshNotifications(true);
     } catch (error) {
-      if (requestId === notificationRequestRef.current) setNotificationError(error?.message || "Okundu kaydı yapılamadı.");
+      if (requestId === notificationRequestRef.current) { setNotificationError(error?.message || "Okundu kaydı yapılamadı."); setNotificationLoading(false); }
     } finally {
       notificationMutationRef.current = false;
       setNotificationSaving(false);
@@ -572,7 +573,7 @@ export default function AppShellV3({
       if (result.dismissedCount !== clean.length) throw new Error("Temizleme kaydı doğrulanamadı.");
       if (requestId === notificationRequestRef.current) await refreshNotifications(true);
     } catch (error) {
-      if (requestId === notificationRequestRef.current) setNotificationError(error?.message || "Bildirim temizlenemedi.");
+      if (requestId === notificationRequestRef.current) { setNotificationError(error?.message || "Bildirim temizlenemedi."); setNotificationLoading(false); }
     } finally {
       notificationMutationRef.current = false;
       setNotificationSaving(false);
@@ -721,7 +722,7 @@ export default function AppShellV3({
                 <header>
                   <div>
                     <strong>Bildirim Merkezi</strong>
-                    <small>{notificationLoading && !notificationData.generatedAt ? "Kontrol ediliyor…" : notificationError && !notificationData.generatedAt ? "Bildirimler alınamadı" : notificationData.unreadCount > 0 ? `${notificationData.unreadCount} okunmamış bildirim` : "Yeni bildirim yok"}</small>
+                    <small>{notificationLoading && !notificationData.generatedAt ? "Kontrol ediliyor…" : notificationError && !notificationData.generatedAt ? "Bildirimler alınamadı" : notificationData.partial && !notificationData.items.length ? "Kaynaklar eksik" : notificationData.unreadCount > 0 ? `${notificationData.unreadCount} okunmamış bildirim` : "Yeni bildirim yok"}</small>
                   </div>
                   <div className="shell-v3-notification-actions">
                     <button type="button" onClick={() => refreshNotifications(false)} disabled={notificationLoading || notificationSaving} title="Yenile" aria-label="Bildirimleri yenile"><RefreshCw size={15} className={notificationLoading ? "spin" : ""} /></button>
