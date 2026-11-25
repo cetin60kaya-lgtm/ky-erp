@@ -1858,6 +1858,7 @@ export function registerAuthPushRoutes(app: any) {
         status,
         decidedAt: nowIso(),
         decidedByDeviceId: actor.device.id,
+        decidedByUserId: actor.userId,
         ...(status === "DENIED" ? { consumedAt: nowIso() } : {}),
       });
       const finalStatus = upper(update.row?.status || status);

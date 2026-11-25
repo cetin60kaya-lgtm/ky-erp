@@ -313,6 +313,40 @@ async function invalidateUserLoginArtifacts(c: any, userId: string, actorId: str
   await revokeUserSessions(c, userId, actorId || userId);
 }
 
+// The account state, outstanding login artifacts and actor audit commit together.
+// No account can be reported suspended if its audit transaction failed.
+async function setAccountActive(c: any, current: AnyRow, target: AnyRow, active: boolean) {
+  if (isSuper(target.effectiveRole) || text(target.id) === text(current.id)) {
+    return c.json(jsonError("OWNER_SECURITY_ACTION_REQUIRED", "Sistem sahibi hesabı normal kullanıcı yönetiminden değiştirilemez."), 409);
+  }
+  const db = c.env.DB;
+  const timestamp = nowIso();
+  const auditId = crypto.randomUUID();
+  const action = active ? "USER_ACTIVATED" : "USER_DEACTIVATED";
+  const statements = [];
+  // Invalidate even expired sessions and pending approvals before reactivation.
+  if (!active || !Boolean(target.is_active)) {
+    statements.push(
+      db.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND revoked_at IS NULL").bind(timestamp, current.id, target.id),
+      db.prepare("UPDATE auth_login_challenges SET consumed_at=? WHERE user_id=? AND consumed_at IS NULL").bind(timestamp, target.id),
+      db.prepare("UPDATE auth_login_approvals SET status='DENIED',decided_at=COALESCE(decided_at,?),decided_by=COALESCE(decided_by,?),consumed_at=COALESCE(consumed_at,?) WHERE user_id=? AND consumed_at IS NULL AND status IN ('PENDING','APPROVED')").bind(timestamp, current.id, timestamp, target.id),
+    );
+    if (await tableExists(c, "json_store")) {
+      statements.push(db.prepare(`UPDATE json_store SET data=json_set(data,'$.status','DENIED','$.decidedAt',?,'$.consumedAt',?,'$.updatedAt',?),updated_at=?
+        WHERE scope='AUTH_PHONE_LOGIN' AND CASE WHEN json_valid(data) THEN json_extract(data,'$.userId') END=?
+        AND COALESCE(json_extract(data,'$.consumedAt'),'')='' AND UPPER(COALESCE(json_extract(data,'$.status'),'')) IN ('PENDING','APPROVED')`).bind(timestamp,timestamp,timestamp,timestamp,target.id));
+    }
+  }
+  statements.push(
+    db.prepare("UPDATE auth_users SET is_active=?,updated_at=? WHERE id=?").bind(active?1:0,timestamp,target.id),
+    db.prepare("INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(auditId,current.id,target.id,target.mainCompanySlug,action,text(current.session?.id)||null,clientIp(c)||null,JSON.stringify({oldActive:Boolean(target.is_active),newActive:active,role:target.effectiveRole}),timestamp)
+  );
+  await db.batch(statements);
+  const actual = await targetUserWithSecurity(c, target.id);
+  if (!actual || Boolean(actual.is_active) !== active) return c.json(jsonError("ACCOUNT_STATE_UNVERIFIED","Hesap durumu doğrulanamadı."),409);
+  return c.json({ok:true,data:{id:target.id,isActive:active,auditId}});
+}
+
 export function registerAuthManagementRoutes(app: any) {
   app.get("/api/auth/me", async (c: any) => {
     const current = await getAuthenticatedUser(c);
@@ -426,8 +460,9 @@ export function registerAuthManagementRoutes(app: any) {
       `UPDATE auth_user_security SET email=?,main_company_slug=?,role_override=?,email_verified=?,approval_required=?,updated_at=? WHERE user_id=?`,
     ).bind(email || null, companySlug || DEFAULT_COMPANY_SLUG, roleOverride(requestedRole), boolValue(body.emailVerified, Boolean(target.email_verified)) ? 1 : 0,
       ["SUPER_ADMIN", "COMPANY_ADMIN"].includes(requestedRole) ? 0 : (boolValue(body.approvalRequired, Boolean(target.approval_required)) ? 1 : 0), timestamp, target.id).run();
-    if (!boolValue(body.isActive, Boolean(target.is_active))) await revokeUserSessions(c, target.id, current.id);
-    await audit(c, "USER_UPDATED", current.id, target.id, companySlug, "", { role: requestedRole, email });
+    const nextActive = boolValue(body.isActive, Boolean(target.is_active));
+    if (!nextActive || !Boolean(target.is_active) || requestedRole !== upper(target.effectiveRole) || companySlug !== target.mainCompanySlug) await invalidateUserLoginArtifacts(c, target.id, current.id);
+    await audit(c, "USER_UPDATED", current.id, target.id, companySlug, text(current.session?.id), { oldRole: target.effectiveRole, newRole: requestedRole, oldCompany: target.mainCompanySlug, newCompany: companySlug, oldActive: Boolean(target.is_active), newActive: nextActive, emailChanged: email !== text(target.email) });
     const updated = await targetUserWithSecurity(c, target.id);
     return c.json({ ok: true, data: {
       id: updated.id, username: updated.username, fullName: updated.full_name, email: updated.email,
@@ -456,21 +491,14 @@ export function registerAuthManagementRoutes(app: any) {
     const current = await adminCurrent(c);
     const target = current ? await targetUserWithSecurity(c, c.req.param("id")) : null;
     if (!current || !target || (!isSuper(current.role) && !adminCanManage(current, target))) return c.json(jsonError("FORBIDDEN", "Bu işlem için yetkiniz bulunmuyor."), 403);
-    // Re-activation must not revive a challenge issued before suspension.
-    if (!Boolean(target.is_active)) await invalidateUserLoginArtifacts(c, target.id, current.id);
-    await c.env.DB.prepare("UPDATE auth_users SET is_active=1,updated_at=? WHERE id=?").bind(nowIso(), target.id).run();
-    await audit(c, "USER_ACTIVATED", current.id, target.id, target.mainCompanySlug, "", { oldActive: Boolean(target.is_active), newActive: true });
-    return c.json({ ok: true });
+    return setAccountActive(c, current, target, true);
   });
 
   app.post("/api/admin/users/:id/deactivate", async (c: any) => {
     const current = await adminCurrent(c);
     const target = current ? await targetUserWithSecurity(c, c.req.param("id")) : null;
     if (!current || !target || (!isSuper(current.role) && !adminCanManage(current, target))) return c.json(jsonError("FORBIDDEN", "Bu işlem için yetkiniz bulunmuyor."), 403);
-    await c.env.DB.prepare("UPDATE auth_users SET is_active=0,updated_at=? WHERE id=?").bind(nowIso(), target.id).run();
-    await invalidateUserLoginArtifacts(c, target.id, current.id);
-    await audit(c, "USER_DEACTIVATED", current.id, target.id, target.mainCompanySlug, "", { oldActive: Boolean(target.is_active), newActive: false });
-    return c.json({ ok: true });
+    return setAccountActive(c, current, target, false);
   });
 
   app.get("/api/admin/users/:id/permissions", async (c: any) => {
@@ -486,18 +514,27 @@ export function registerAuthManagementRoutes(app: any) {
     if (!current || !target || (!isSuper(current.role) && !adminCanManage(current, target))) return c.json(jsonError("FORBIDDEN", "Bu kullanıcıyı yönetemezsiniz."), 403);
     const body = await bodyOf(c);
     const rows = Array.isArray(body.permissions) ? body.permissions : [];
-    await c.env.DB.prepare("DELETE FROM auth_user_module_permissions WHERE user_id=?").bind(target.id).run();
+    if (isSuper(target.effectiveRole)) return c.json(jsonError("OWNER_SECURITY_ACTION_REQUIRED", "Sistem sahibi modül yetkileri normal kullanıcı ekranından değiştirilemez."), 409);
+    const oldPermissions = await permissionRows(c, target.id, target.effectiveRole);
     const timestamp = nowIso();
+    const db = c.env.DB;
+    const normalized = new Map();
     for (const row of rows) {
       const moduleKey = upper(row.moduleKey || row.module_key);
       if (!MODULE_KEYS.includes(moduleKey)) continue;
-      await c.env.DB.prepare(
-        `INSERT INTO auth_user_module_permissions(id,user_id,module_key,can_view,can_create,can_update,can_delete,can_approve,created_at,updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      ).bind(crypto.randomUUID(), target.id, moduleKey, boolValue(row.canView) ? 1 : 0, boolValue(row.canCreate) ? 1 : 0, boolValue(row.canUpdate) ? 1 : 0, boolValue(row.canDelete) ? 1 : 0, boolValue(row.canApprove) ? 1 : 0, timestamp, timestamp).run();
+      normalized.set(moduleKey,{moduleKey,canView:boolValue(row.canView),canCreate:boolValue(row.canCreate),canUpdate:boolValue(row.canUpdate),canDelete:boolValue(row.canDelete),canApprove:boolValue(row.canApprove)});
     }
-    await revokeUserSessions(c, target.id, current.id);
-    await audit(c, "PERMISSIONS_UPDATED", current.id, target.id, target.mainCompanySlug);
+    const nextPermissions = [...normalized.values()];
+    const statements = [db.prepare("DELETE FROM auth_user_module_permissions WHERE user_id=?").bind(target.id)];
+    for (const row of nextPermissions) {
+      statements.push(db.prepare(
+        `INSERT INTO auth_user_module_permissions(id,user_id,module_key,can_view,can_create,can_update,can_delete,can_approve,created_at,updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`
+      ).bind(crypto.randomUUID(),target.id,row.moduleKey,+row.canView,+row.canCreate,+row.canUpdate,+row.canDelete,+row.canApprove,timestamp,timestamp));
+    }
+    statements.push(db.prepare("UPDATE auth_sessions SET revoked_at=?,revoked_by=? WHERE user_id=? AND revoked_at IS NULL").bind(timestamp,current.id,target.id));
+    statements.push(db.prepare("INSERT INTO auth_security_audit(id,actor_user_id,target_user_id,main_company_slug,action,session_id,ip_address,detail,created_at) VALUES (?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(),current.id,target.id,target.mainCompanySlug,"PERMISSIONS_UPDATED",text(current.session?.id)||null,clientIp(c)||null,JSON.stringify({oldPermissions,newPermissions:nextPermissions}),timestamp));
+    await db.batch(statements);
     return c.json({ ok: true, data: await permissionRows(c, target.id, target.effectiveRole) });
   });
 

@@ -134,16 +134,17 @@ export default function ProCompanyCenter({ onOpenModule, onClose }) {
     const startedAt = Date.now();
     setActionBusy(true); setActionMessage("");
     try {
-      if (action === "activate") await activateUser(row.id);
-      else if (action === "deactivate") await deactivateUser(row.id);
-      else await revokeAllUserSessions(row.id);
+      let result;
+      if (action === "activate") result = await activateUser(row.id);
+      else if (action === "deactivate") result = await deactivateUser(row.id);
+      else result = await revokeAllUserSessions(row.id);
       const actual = rows(await listUsers());
       setUsers(actual);
       const target = actual.find(item => item.id === row.id);
       if (!target || (action === "activate" && target.isActive !== true) || (action === "deactivate" && target.isActive !== false)) throw new Error("Hesap durumu yeniden okumada doğrulanamadı.");
       const expected = action === "activate" ? "USER_ACTIVATED" : action === "deactivate" ? "USER_DEACTIVATED" : "ALL_SESSIONS_REVOKED";
       const events = rows(await listSecurityAuditLog(250));
-      const logged = events.some(event => event.action === expected && event.targetUserId === row.id && event.actorUserId === user.id && Date.parse(event.createdAt) >= startedAt - 5000);
+      const logged = events.some(event => event.action === expected && event.targetUserId === row.id && event.actorUserId === user.id && (result?.auditId ? event.id === result.auditId : Date.parse(event.createdAt) >= startedAt - 5000));
       setActionMessage(logged ? `${label}: sunucu kaydı ve işlem geçmişi doğrulandı.` : `${label}: sunucu yanıtı alındı; yeni denetim kaydı henüz doğrulanamadı.`);
     } catch (error) { setActionMessage(error?.message || "İşlem sonucu doğrulanamadı. Tekrar denemeden önce kullanıcı durumunu kontrol edin."); }
     finally { setAuditVersion(v => v + 1); setActionBusy(false); }
