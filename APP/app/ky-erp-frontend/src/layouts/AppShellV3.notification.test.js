@@ -16,3 +16,7 @@ test("topbar notification badge is data driven and security approval is phone-ow
   assert.match(source, /shell-v3-notification-readonly/);
   assert.match(source, /Onay ve ret işlemleri yalnız KY ERP Güvenlik uygulamasında tamamlanır/);
 });
+
+test("notification panel closes outside, has explicit close and guards stale results",()=>{
+ for(const snippet of ["notificationWrapRef.current.contains(event.target)",'window.addEventListener("pointerdown", closeOutside, true)','window.removeEventListener("pointerdown", closeOutside, true)','aria-label="Bildirim merkezini kapat"',"requestId !== notificationRequestRef.current","result.readCount !== clean.length","result.dismissedCount !== clean.length"])assert.ok(source.includes(snippet),snippet);
+});

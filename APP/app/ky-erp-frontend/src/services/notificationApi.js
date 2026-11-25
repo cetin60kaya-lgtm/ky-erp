@@ -1,29 +1,25 @@
-import { apiFetch, apiPost } from "../utils/api";
-
-const EMPTY = {
-  items: [], unreadCount: 0, totalCount: 0,
-  partial: false, sourceErrors: [], generatedAt: "",
-};
-
-export async function getNotifications() {
-  const payload = await apiFetch(`/notifications?_ts=${Date.now()}`, { timeoutMs: 20000 });
-  return payload?.data && typeof payload.data === "object" ? payload.data : EMPTY;
-}
+import { apiFetch } from "../utils/api";
 
 function cleanIds(ids = []) {
   return [...new Set((Array.isArray(ids) ? ids : []).map((id) => String(id || "").trim()).filter(Boolean))];
 }
-
-export async function markNotificationsRead(ids = []) {
+function scopeParams(tenant) { return tenant ? { mainCompanySlug: tenant } : {}; }
+export async function getNotifications(tenant) {
+  const payload = await apiFetch("/notifications", { params: { ...scopeParams(tenant), _ts: Date.now() }, timeoutMs: 20000 });
+  if (!Array.isArray(payload?.data?.items)) throw new Error("Bildirim yanıtı doğrulanamadı.");
+  return payload.data;
+}
+export async function markNotificationsRead(ids = [], tenant) {
   const clean = cleanIds(ids);
   if (!clean.length) return { readCount: 0 };
-  const payload = await apiPost("/notifications/read", { ids: clean }, { timeoutMs: 15000 });
-  return payload?.data || { readCount: clean.length };
+  const payload = await apiFetch("/notifications/read", { method: "POST", body: { ids: clean }, params: scopeParams(tenant), timeoutMs: 15000 });
+  if (!Number.isInteger(payload?.data?.readCount)) throw new Error("Okundu kaydı doğrulanamadı.");
+  return payload.data;
 }
-
-export async function dismissNotifications(ids = []) {
+export async function dismissNotifications(ids = [], tenant) {
   const clean = cleanIds(ids);
   if (!clean.length) return { dismissedCount: 0 };
-  const payload = await apiPost("/notifications/dismiss", { ids: clean }, { timeoutMs: 15000 });
-  return payload?.data || { dismissedCount: clean.length };
+  const payload = await apiFetch("/notifications/dismiss", { method: "POST", body: { ids: clean }, params: scopeParams(tenant), timeoutMs: 15000 });
+  if (!Number.isInteger(payload?.data?.dismissedCount)) throw new Error("Temizleme kaydı doğrulanamadı.");
+  return payload.data;
 }

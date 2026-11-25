@@ -12,7 +12,7 @@ const OVERVIEW = [
   { key: "gunluk-operasyon", tab: "daily-dashboard", title: "Günlük İşler", detail: "Günlük kayıt ve hakediş durumunu kontrol et", icon: ClipboardList },
   { key: "pdks", tab: "ana-ekran", title: "Personel Durumu", detail: "Bugünkü kart okutma ve giriş/çıkışları görüntüle", icon: UsersRound },
   { key: "uretim", tab: "uretim-merkezi", title: "Açık İmalat", detail: "Modellerin üretim ve kalan iş durumuna git", icon: Factory },
-  { key: "e-belge", tab: "gelen-belgeler", title: "Belgeler & Faturalar", detail: "Gelen belge ve kontrol bekleyen işlemlere git", icon: FileText },
+  { key: "e-belge", tab: "gelen-faturalar", title: "Belgeler & Faturalar", detail: "Gelen belge ve kontrol bekleyen işlemlere git", icon: FileText },
 ];
 
 const FOLLOW_UP = [

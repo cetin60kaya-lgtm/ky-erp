@@ -194,6 +194,10 @@ export default function AppShellV3({
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [profileImageFailed, setProfileImageFailed] = useState(false);
   const profileMenuRef = useRef(null);
+  const notificationWrapRef = useRef(null);
+  const notificationRequestRef = useRef(0);
+  const notificationMutationRef = useRef(false);
+  const [notificationSaving, setNotificationSaving] = useState(false);
   const resolvedNotificationIdsRef = useRef(new Map());
   function notificationResolutionKey(item) {
   const sessionId = String(item?.meta?.sessionId || "").trim();
@@ -252,16 +256,19 @@ export default function AppShellV3({
   }, [user?.id, user?.role, builtInSecurityAppAccess]);
 
   const refreshNotifications = useCallback(async (silent = false) => {
+    const requestId = ++notificationRequestRef.current;
     const normalizedRole = String(user?.role || "").toUpperCase().replace(/İ/g, "I");
     if (!user?.id || normalizedRole === "DENETIM") {
       setNotificationData((current) => ({ ...current, items: [], unreadCount: 0, totalCount: 0 }));
       setNotificationError("");
+      setNotificationLoading(false);
       return;
     }
     if (!silent) setNotificationLoading(true);
     setNotificationError("");
     try {
-      const data = await getNotifications();
+      const data = await getNotifications(activeCompanySlug);
+      if (requestId !== notificationRequestRef.current) return;
       const now = Date.now();
       for (const [id, expiresAt] of resolvedNotificationIdsRef.current) if (expiresAt <= now) resolvedNotificationIdsRef.current.delete(id);
       const seenNotificationKeys = new Set();
@@ -280,19 +287,23 @@ export default function AppShellV3({
         generatedAt: data?.generatedAt || "",
       });
     } catch (error) {
-      setNotificationError(error?.message || "Bildirimler alınamadı.");
+      if (requestId === notificationRequestRef.current) setNotificationError(error?.message || "Bildirimler alınamadı.");
     } finally {
-      if (!silent) setNotificationLoading(false);
+      if (requestId === notificationRequestRef.current) setNotificationLoading(false);
     }
-  }, [user?.id, user?.role]);
+  }, [user?.id, user?.role, activeCompanySlug]);
 
   useEffect(() => {
     if (!user?.id) return undefined;
-    refreshNotifications(true);
-    const timer = window.setInterval(() => refreshNotifications(true), 60_000);
-    const onFocus = () => refreshNotifications(true);
+    setNotificationOpen(false);
+    setNotificationFilter("all");
+    setNotificationData({ items: [], unreadCount: 0, totalCount: 0, partial: false, sourceErrors: [], generatedAt: "" });
+    refreshNotifications(false);
+    const timer = window.setInterval(() => { if (!notificationMutationRef.current) refreshNotifications(true); }, 60_000);
+    const onFocus = () => { if (!notificationMutationRef.current) refreshNotifications(true); };
     window.addEventListener("focus", onFocus);
     return () => {
+      notificationRequestRef.current += 1;
       window.clearInterval(timer);
       window.removeEventListener("focus", onFocus);
     };
@@ -321,10 +332,20 @@ export default function AppShellV3({
   useEffect(() => {
     if (!notificationOpen) return undefined;
     const closeOnEscape = (event) => {
-      if (event.key === "Escape") setNotificationOpen(false);
+      if (event.key === "Escape") {
+        setNotificationOpen(false);
+        notificationWrapRef.current?.querySelector("button")?.focus();
+      }
+    };
+    const closeOutside = (event) => {
+      if (notificationWrapRef.current && !notificationWrapRef.current.contains(event.target)) setNotificationOpen(false);
     };
     window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
+    window.addEventListener("pointerdown", closeOutside, true);
+    return () => {
+      window.removeEventListener("keydown", closeOnEscape);
+      window.removeEventListener("pointerdown", closeOutside, true);
+    };
   }, [notificationOpen]);
 
   useEffect(() => {
@@ -501,12 +522,20 @@ export default function AppShellV3({
 
   async function markNotificationIdsRead(ids) {
     const clean = [...new Set((ids || []).filter(Boolean))];
-    if (!clean.length) return;
-    applyNotificationRead(clean);
+    if (!clean.length || notificationMutationRef.current) return;
+    notificationMutationRef.current = true;
+    setNotificationSaving(true);
+    const requestId = ++notificationRequestRef.current;
     try {
-      await markNotificationsRead(clean);
-    } catch {
-      refreshNotifications(true);
+      const result = await markNotificationsRead(clean, activeCompanySlug);
+      if (result.readCount !== clean.length) throw new Error("Okundu kaydı doğrulanamadı.");
+      if (requestId === notificationRequestRef.current) applyNotificationRead(clean);
+      if (requestId === notificationRequestRef.current) await refreshNotifications(true);
+    } catch (error) {
+      if (requestId === notificationRequestRef.current) { setNotificationError(error?.message || "Okundu kaydı yapılamadı."); setNotificationLoading(false); }
+    } finally {
+      notificationMutationRef.current = false;
+      setNotificationSaving(false);
     }
   }
 
@@ -535,13 +564,20 @@ export default function AppShellV3({
 
   async function dismissNotificationIds(ids) {
     const clean = [...new Set((ids || []).filter(Boolean))];
-    if (!clean.length) return;
-    setNotificationData((current) => {
-      const items = current.items.filter((item) => !clean.includes(item.id));
-      return { ...current, items, unreadCount: items.filter((item) => item.unread).length, totalCount: items.length };
-    });
-    try { await dismissNotifications(clean); }
-    catch { refreshNotifications(true); }
+    if (!clean.length || notificationMutationRef.current) return;
+    notificationMutationRef.current = true;
+    setNotificationSaving(true);
+    const requestId = ++notificationRequestRef.current;
+    try {
+      const result = await dismissNotifications(clean, activeCompanySlug);
+      if (result.dismissedCount !== clean.length) throw new Error("Temizleme kaydı doğrulanamadı.");
+      if (requestId === notificationRequestRef.current) await refreshNotifications(true);
+    } catch (error) {
+      if (requestId === notificationRequestRef.current) { setNotificationError(error?.message || "Bildirim temizlenemedi."); setNotificationLoading(false); }
+    } finally {
+      notificationMutationRef.current = false;
+      setNotificationSaving(false);
+    }
   }
 
   function clearReadNotifications() {
@@ -664,43 +700,46 @@ export default function AppShellV3({
             <label className="shell-v3-company-context"><small>Firma</small><select value={activeCompanySlug || ""} onChange={(event) => onCompanyChange(event.target.value)}>{companies.map((company) => <option key={company.slug} value={company.slug}>{company.name}</option>)}</select></label>
           )}
 
-          <div className="shell-v3-notification-wrap">
+          <div className="shell-v3-notification-wrap" ref={notificationWrapRef}>
             <button
               type="button"
               className="shell-v3-icon notification"
               aria-label="Bildirim Merkezi"
               aria-expanded={notificationOpen}
+              aria-haspopup="dialog"
+              aria-controls={notificationOpen ? "ky-notification-center" : undefined}
               onClick={() => {
                 const next = !notificationOpen;
                 setNotificationOpen(next);
-                if (next) refreshNotifications(false);
+                if (next) { setProfileMenuOpen(false); setNotificationFilter("all"); if (!notificationMutationRef.current) refreshNotifications(false); }
               }}
             >
               <Bell size={18} />
               {notificationData.unreadCount > 0 ? <span>{notificationData.unreadCount > 99 ? "99+" : notificationData.unreadCount}</span> : null}
             </button>
             {notificationOpen ? (
-              <section className="shell-v3-notification-panel" role="dialog" aria-label="Bildirim Merkezi">
+              <section id="ky-notification-center" className="shell-v3-notification-panel" role="dialog" aria-label="Bildirim Merkezi">
                 <header>
                   <div>
                     <strong>Bildirim Merkezi</strong>
-                    <small>{notificationData.unreadCount > 0 ? `${notificationData.unreadCount} okunmamış bildirim` : "Yeni bildirim yok"}</small>
+                    <small>{notificationLoading && !notificationData.generatedAt ? "Kontrol ediliyor…" : notificationError && !notificationData.generatedAt ? "Bildirimler alınamadı" : notificationData.partial && !notificationData.items.length ? "Kaynaklar eksik" : notificationData.unreadCount > 0 ? `${notificationData.unreadCount} okunmamış bildirim` : "Yeni bildirim yok"}</small>
                   </div>
                   <div className="shell-v3-notification-actions">
-                    <button type="button" onClick={() => refreshNotifications(false)} disabled={notificationLoading} title="Yenile"><RefreshCw size={15} className={notificationLoading ? "spin" : ""} /></button>
-                    <button type="button" onClick={markAllNotificationsRead} disabled={!notificationData.unreadCount} title="Tümünü okundu işaretle"><CheckCheck size={16} /></button>
-                    <button type="button" onClick={clearReadNotifications} disabled={!notificationData.items.some((item) => !item.unread && canDismissNotification(item))} title="Okunan bildirimleri temizle"><Trash2 size={15} /></button>
+                    <button type="button" onClick={() => refreshNotifications(false)} disabled={notificationLoading || notificationSaving} title="Yenile" aria-label="Bildirimleri yenile"><RefreshCw size={15} className={notificationLoading ? "spin" : ""} /></button>
+                    <button type="button" onClick={markAllNotificationsRead} disabled={notificationSaving || notificationLoading || !notificationData.unreadCount} title="Tümünü okundu işaretle" aria-label="Tümünü okundu işaretle"><CheckCheck size={16} /></button>
+                    <button type="button" onClick={clearReadNotifications} disabled={notificationSaving || notificationLoading || !notificationData.items.some((item) => !item.unread && canDismissNotification(item))} title="Okunan bildirimleri temizle" aria-label="Okunan bildirimleri temizle"><Trash2 size={15} /></button>
+                    <button type="button" onClick={() => setNotificationOpen(false)} aria-label="Bildirim merkezini kapat" title="Kapat"><X size={16} /></button>
                   </div>
                 </header>
                 <div className="shell-v3-notification-filters">
-                  <button type="button" className={notificationFilter === "all" ? "active" : ""} onClick={() => setNotificationFilter("all")}>Tümü <b>{notificationData.totalCount}</b></button>
-                  <button type="button" className={notificationFilter === "unread" ? "active" : ""} onClick={() => setNotificationFilter("unread")}>Okunmamış <b>{notificationData.unreadCount}</b></button>
+                  <button type="button" className={notificationFilter === "all" ? "active" : ""} onClick={() => setNotificationFilter("all")}>Tümü <b>{notificationData.generatedAt ? notificationData.totalCount : "—"}</b></button>
+                  <button type="button" className={notificationFilter === "unread" ? "active" : ""} onClick={() => setNotificationFilter("unread")}>Okunmamış <b>{notificationData.generatedAt ? notificationData.unreadCount : "—"}</b></button>
                 </div>
                 {notificationError ? <div className="shell-v3-notification-error">{notificationError}</div> : null}
-                {notificationData.partial ? <div className="shell-v3-notification-warning">Bazı bildirim kaynakları geçici olarak alınamadı. Görünen kayıtlar günceldir.</div> : null}
+                {notificationData.partial ? <div className="shell-v3-notification-warning">Bazı kaynaklar alınamadı. Sayaç yalnız erişilebilen kayıtları gösterir.</div> : null}
                 <div className="shell-v3-notification-list" aria-live="polite">
                   {notificationLoading && !notificationData.items.length ? <div className="shell-v3-notification-empty">Bildirimler kontrol ediliyor...</div> : null}
-                  {!notificationLoading && !notificationView.length ? (
+                  {!notificationLoading && !notificationError && !notificationData.partial && !notificationView.length ? (
                     <div className="shell-v3-notification-empty">
                       <Bell size={22} />
                       <strong>{notificationData.items.length ? "Bu filtrede bildirim yok" : "Bildirim yok"}</strong>
@@ -718,17 +757,17 @@ export default function AppShellV3({
                         <span>
                           <em>{notificationCategoryLabel(item.category)}</em>
                           <strong>{item.title}</strong>
-                          <small>{item.detail}</small>
+                          <small title={item.detail}>{item.detail}</small>
                         </span>
                         <time>{notificationTime(item.createdAt)}</time>
                       </button>
                       {item?.category === "SECURITY" ? <div className="shell-v3-notification-readonly">Bilgi bildirimi · Onay ve ret işlemleri yalnız KY ERP Güvenlik uygulamasında tamamlanır.</div> : null}
-                      {!item.unread && canDismissNotification(item) ? <button type="button" className="shell-v3-notification-dismiss" title="Bildirimi temizle" aria-label="Bildirimi temizle" onClick={() => dismissNotificationIds([item.id])}><X size={14} /></button> : null}
+                      {!item.unread && canDismissNotification(item) ? <button type="button" className="shell-v3-notification-dismiss" disabled={notificationSaving || notificationLoading} title="Bildirimi temizle" aria-label="Bildirimi temizle" onClick={() => dismissNotificationIds([item.id])}><X size={14} /></button> : null}
                     </div>;
                   })}
                 </div>
                 <footer>
-                  <span>Gerçek kayıtlar · Firma ve kullanıcı yetkisine göre</span>
+                  <span>{ownerUser ? "Güvenlik: tüm sistem · İş: seçili firma" : "Seçili firma ve kullanıcı yetkisi"}</span>
                   {notificationData.generatedAt ? <small>Son kontrol {notificationTime(notificationData.generatedAt)}</small> : null}
                 </footer>
               </section>

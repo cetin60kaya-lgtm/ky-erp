@@ -2,3 +2,12 @@
 .shell-v3-notification-entry .shell-v3-notification-item{border-bottom:0;width:100%}
 .shell-v3-notification-readonly{margin:0 12px 9px 34px;padding:7px 9px;border:1px solid #dbe7f3;border-radius:8px;background:#f7faff;color:#60758b;font-size:10px;line-height:1.35}
 @media(max-width:620px){.shell-v3-notification-readonly{margin-left:28px}}
+
+.shell-v3-notification-panel .shell-v3-notification-item strong,.shell-v3-notification-panel .shell-v3-notification-item small{white-space:normal;overflow-wrap:anywhere;text-overflow:clip}
+.shell-v3-notification-panel .shell-v3-notification-item strong{font-size:12px}
+.shell-v3-notification-panel .shell-v3-notification-item small{font-size:11px}
+.shell-v3-notification-panel .shell-v3-notification-item time{font-size:10px}
+.shell-v3-notification-panel .shell-v3-notification-readonly{font-size:11px}
+.shell-v3-notification-panel .shell-v3-notification-dismiss{justify-self:end;margin:0 10px 8px;padding:5px 8px;cursor:pointer}
+.shell-v3-notification-panel .shell-v3-notification-actions button:focus-visible,.shell-v3-notification-panel .shell-v3-notification-item:focus-visible{outline:2px solid #2563eb;outline-offset:-2px}
+@media(max-width:640px){.shell-v3-notification-panel .shell-v3-notification-actions button{min-width:36px;min-height:36px}.shell-v3-notification-panel .shell-v3-notification-list{max-height:calc(100dvh - 220px)}}
