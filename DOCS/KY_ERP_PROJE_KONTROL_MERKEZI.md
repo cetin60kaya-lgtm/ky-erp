@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+
+## 25.11.2026 — İşNet seri belge merkezi / PR #663
+- Drive fatura örneklerinden normal Ticari/Satış ve ayrı 0 TL/%0 bedelsiz kalem, 351 aday açıklaması düzeni doğrulandı (PDF; XML eşleri bulunmadı). Hızlı kaynak irsaliye miktarı/fiyatı → TEST taslak → A4 kontrol; orijinal belge/kalem notları korunur. TEST rezervasyon ve kaynak kimliği kontrolü, varsayılanlar. Resmî gönderim, harici mutabakat, vergi kabulü, UBL/şematron ve gerçek cari profilleri açık. CI/yayın ayrı kabul. Ayrıntı: `DOCS/KY_ISNET_SOAP_TEST_20261125.md`.
+
+
+## 25.11.2026 — İşNet TEST canlı WSDL kataloğu
+- Dört belge yönü ve örnek XML/PDF web kabulü var. Sentetik taslak kaydı var; A4 önizleme ve resmî oluşturma/gönderim açık. Sağlayıcı canlı WSDL işlem/senaryo/tip kataloğu için çalışma: `DOCS/KY_ISNET_SOAP_TEST_20261125.md`. Desteklenmeyen işlemler kilitli; CI ve canlı kabul ayrı.
+
 ## 25.11.2026 — KYERP SECURITY PRO / PR #658
 
 - PR #658 merge `aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf`; son kaynak `e3f94b18f554`; CI [#45558145529](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45558145529) frontend + Worker SUCCESS.
