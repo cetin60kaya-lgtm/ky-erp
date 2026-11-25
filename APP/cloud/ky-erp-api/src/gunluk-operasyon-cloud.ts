@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { dailyTenant } from "./gunluk-operasyon-access-policy";
 import { dailyMoneyCents, dailyRevisionConflict, dailyWageAtDate, resolveRecordedShiftWages, validDailyWageAmount, type DailyWageChange } from "./gunluk-operasyon-core";
 import { dailyAdjustmentNetCents } from "./gunluk-adjustment-core";
 import { summarizeDailyPersonnelHistory, monthlyDailyPersonnelHistory } from "./gunluk-personnel-history-core";
@@ -84,25 +85,7 @@ function resolvedRecordedWages(row: Row, history: Map<string, DailyWageChange[]>
   });
 }
 
-const aliases = new Set([
-  "",
-  "mecit-hakan",
-  "main-mecit-hakan",
-  "mecit-hakan-gursu",
-  "hakan-baski",
-  "main-hakan",
-  "main-hakan-baski",
-  "hkn-baski",
-]);
-
-const canonicalCompany = (value: unknown) => {
-  const normalized = text(value)
-    .toLowerCase()
-    .replace(/_/g, "-")
-    .replace(/\s+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  return aliases.has(normalized) ? "mecit-hakan" : normalized;
-};
+const canonicalCompany = dailyTenant;
 
 function companyIdOf(c: Context<AppEnv>, body: Row = {}) {
   return canonicalCompany(
@@ -622,18 +605,18 @@ async function saveActiveDailyRange(c: Context<AppEnv>) {
     return fail(c,400,"RANGE_REVISION_REQUIRED","Tarih aralığı sürümü belirtilmelidir.");
   const result=await c.env.DB.prepare(`INSERT INTO hr_daily_active_range
     (main_company_id,start_date,end_date,version,updated_at)
-    VALUES(?,?,?,1,CURRENT_TIMESTAMP)
+    SELECT ?,?,?,1,CURRENT_TIMESTAMP WHERE ?=0 OR EXISTS (SELECT 1 FROM hr_daily_active_range WHERE main_company_id=? AND version=?)
     ON CONFLICT(main_company_id) DO UPDATE SET
       start_date=excluded.start_date,end_date=excluded.end_date,
       version=hr_daily_active_range.version+1,updated_at=CURRENT_TIMESTAMP
     WHERE hr_daily_active_range.version=?`)
-    .bind(companyId,start,end,expected).run();
+    .bind(companyId,start,end,expected,companyId,expected,expected).run();
   const saved=await c.env.DB.prepare(`SELECT start_date,end_date,version,updated_at
     FROM hr_daily_active_range WHERE main_company_id=?`).bind(companyId).first<Row>();
   // İlk kurulum yalnız beklenen sürüm=0 için mümkün; aynı anda ikinci kurucu
   // başarılı görünmesin. SQL changes=0 veya kayıt beklenenden farklıysa conflict.
   const created=expected===0 && num(saved?.version)===1 && dateOnly(saved?.start_date)===start && dateOnly(saved?.end_date)===end;
-  if (num(result.meta?.changes)===0 || !saved || !(num(saved.version)===expected+1 || created))
+  if (num(result.meta?.changes)===0 || !saved || dateOnly(saved.start_date)!==start || dateOnly(saved.end_date)!==end || !(num(saved.version)===expected+1 || created))
     return fail(c,409,"SHARED_RANGE_CONFLICT","Başka bilgisayarda tarih aralığı değişti. Son kayıt okunmalı.");
   return ok(c,{
     configured:true, startDate:dateOnly(saved.start_date), endDate:dateOnly(saved.end_date),
@@ -2285,6 +2268,7 @@ function protect(fn: (c: Context<AppEnv>) => Promise<Response>) {
         JSON.stringify({
           code: "GUNLUK_OPERASYON_FAILED",
           path: c.req.path,
+          requestId: c.get("requestId"),
           message: error instanceof Error ? error.message : String(error),
         }),
       );
@@ -2293,6 +2277,7 @@ function protect(fn: (c: Context<AppEnv>) => Promise<Response>) {
         500,
         "GUNLUK_OPERASYON_FAILED",
         "Günlük operasyon verisi güvenli şekilde işlenemedi.",
+        { requestId: c.get("requestId") },
       );
     }
   };
