@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, CheckCircle2, FileText, RefreshCw } from "lucide-react";
 import { apiGet } from "../../../utils/api";
 import "./incomingDispatchBillingWorkspace.css";
+import IsnetPartialWorkflow from "./IsnetPartialWorkflow";
 
 const unwrap = value => value?.data?.data ?? value?.data ?? value ?? {};
 const day = value => {
@@ -20,6 +21,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
   const [data, setData] = useState({ loading: true, error: "", rows: [], summary: {}, truncated: false });
   const [filter, setFilter] = useState("CUSTOMER_MISSING");
   const [search, setSearch] = useState("");
+  const [partial, setPartial] = useState(null);
   const slug = activeMainCompany?.slug || activeMainCompany?.id || "";
   const refresh = useCallback(async () => {
     if (!slug) {
@@ -40,7 +42,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
       }));
     }
   }, [slug]);
-  useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { setPartial(null); void refresh(); }, [refresh]);
 
   const shown = useMemo(() => data.rows.filter(row => {
     const matches = filter === "ALL" ||
@@ -78,6 +80,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
     </label>
     {data.error && <div className="idb-error" role="alert"><AlertTriangle size={16}/> {data.error}</div>}
     {data.truncated && <div className="idb-warning">Son 2.000 gelen irsaliye kontrol edildi. Daha eski kayıtlar bu sayımda bulunmayabilir.</div>}
+    {partial && <IsnetPartialWorkflow key={slug+":"+partial.id} row={partial} slug={slug} onClose={()=>setPartial(null)}/>}
     {data.loading ? <p className="idb-loading">Fatura bağları kontrol ediliyor…</p> :
       <div className="idb-scroll"><table>
         <thead><tr><th>İrsaliye / Tarih</th><th>Firma</th><th>İrsaliye Türü</th>
@@ -94,7 +97,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
               <span className="idb-pending">Fatura bağlantısı bulunamadı · kontrol bekliyor</span>}</td>
             <td><button type="button" onClick={() => onOpenDocument?.(row.id)}>
               <FileText size={14}/> İrsaliyeyi Aç
-            </button></td>
+            </button>{row.companyType==="CUSTOMER"&&<button type="button" onClick={()=>setPartial(row)}>Gelenden irsaliye oluştur</button>}</td>
           </tr>)}
         </tbody>
       </table>{!shown.length && <p className="idb-empty">Bu filtrede kayıt yok.</p>}</div>}

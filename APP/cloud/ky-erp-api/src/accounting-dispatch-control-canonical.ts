@@ -1,6 +1,10 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { accountingAccess } from "./accounting-access-policy";
+import { transition } from "./isnet-test-draft-core";
+import { probeSoapTestEndpoints } from "./isnet-soap-probe";
+import { searchSoapTest } from "./isnet-soap-read";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -140,7 +144,132 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
 }
 
 function errorResponse(c:Context<AppEnv>,error:any){return c.json({ok:false,error:{code:text(error?.code)||"DISPATCH_CONTROL_FAILED",message:text(error?.message)||"İrsaliye/fatura kontrolü hazırlanamadı."}},Number(error?.status||500))}
+
+/** Read-only incoming customer -> explicitly linked outgoing dispatch preview.
+ * Absence of a relation is never official reconciliation. No reservation/write. */
+async function partialDispatchPreview(c:Context<AppEnv>){
+  const slug=await assertAccountingScope(c),id=text(c.req.param("id"));
+  const doc=await c.env.DB.prepare(`SELECT d.id,d.document_no,d.party_company_id,d.party_tax_no,d.direction,d.document_type,c.company_type,c.type AS company_legacy_type
+    FROM accounting_documents d JOIN companies c ON c.id=d.party_company_id AND c.main_company_slug=d.main_company_slug AND c.deleted_at IS NULL
+    WHERE d.id=? AND d.main_company_slug=? AND d.deleted_at IS NULL`).bind(id,slug).first<Row>();
+  if(!doc||upper(doc.direction)!=="INCOMING"||!isDispatch(doc.document_type)||upper(doc.company_type||doc.company_legacy_type)!=="CUSTOMER")
+    throw Object.assign(new Error("Doğrulanmış müşteri gelen irsaliyesi bulunamadı."),{status:404,code:"CUSTOMER_DISPATCH_REQUIRED"});
+  const readLines=async (docId:string)=>(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,docId).all<Row>()).results||[];
+  const linked=async (docId:string)=>(await c.env.DB.prepare(`SELECT DISTINCT d.id,d.document_no,d.direction,d.document_type,d.party_company_id,d.party_tax_no
+    FROM accounting_document_relations r JOIN accounting_documents d ON d.main_company_slug=r.main_company_slug AND d.deleted_at IS NULL AND d.id=CASE WHEN r.document_id=? THEN r.related_document_id ELSE r.document_id END
+    WHERE r.main_company_slug=? AND (r.document_id=? OR r.related_document_id=?) AND r.relation_type IN ('INVOICE_OF','DESPATCH_OF','DISPATCH_OF')`).bind(docId,slug,docId,docId).all<Row>()).results||[];
+  const original=await readLines(id),related=await linked(id),warnings:string[]=[];
+  const key=(l:Row)=>{const k=canonicalLineKey(l),u=canonicalUnit(l.unit_code);return k&&u?k+"|"+u:"";};
+  const used=new Map<string,number>(),keys=new Set<string>();let blocked=!original.length;
+  for(const line of original){const k=key(line);if(!k||keys.has(k)||!Number.isFinite(Number(line.quantity))||Number(line.quantity)<=0){blocked=true;}keys.add(k);}
+  if(blocked)warnings.push("Kaynak kalem kimliği, birimi veya miktarı belirsiz; satır eşleştirmesi gerekli.");
+  const dispatches=related.filter(d=>upper(d.direction)==="OUTGOING"&&isDispatch(d.document_type));
+  if(related.some(d=>isInvoice(d.document_type))){blocked=true;warnings.push("Doğrudan fatura bağlantısı var; önce sevk/fatura ilişkileri mutabakatı gerekli.");}
+  const sameParty=(d:Row)=>text(d.party_company_id)===text(doc.party_company_id)&&(!text(d.party_tax_no)||!text(doc.party_tax_no)||text(d.party_tax_no)===text(doc.party_tax_no));
+  for(const d of dispatches){
+    if(!sameParty(d)){blocked=true;warnings.push("Farklı cari bağlı sevk bulundu.");continue;}
+    const peers=await linked(text(d.id));
+    const sources=peers.filter(p=>upper(p.direction)==="INCOMING"&&isDispatch(p.document_type));
+    if(sources.length!==1||text(sources[0].id)!==id){blocked=true;warnings.push("Birden fazla kaynak irsaliye bağlantısı; kalem tahsisi gerekli.");continue;}
+    const child=await readLines(text(d.id));
+    if(!child.length){blocked=true;warnings.push("Bağlı sevk kalemleri eksik.");}
+    for(const l of child){const k=key(l),qty=Number(l.quantity);if(!k||!keys.has(k)||!Number.isFinite(qty)||qty<=0){blocked=true;warnings.push("Bağlı sevk kalem eşleşmesi eksik.");continue;}used.set(k,(used.get(k)||0)+qty);}
+  }
+  const lines=original.map(l=>{const quantity=num(l.quantity),linkedQuantity=used.get(key(l))||0;if(linkedQuantity>quantity){blocked=true;warnings.push("Bağlı sevk miktarı kaynak miktarı aşıyor.");}return{id:text(l.id),description:text(l.description)||text(l.product_code)||"Kalem",unit:canonicalUnit(l.unit_code),quantity,linked:linkedQuantity,remaining:Math.max(0,Number((quantity-linkedQuantity).toFixed(6)))};});
+  return{sourceId:id,sourceNo:text(doc.document_no),lines,blocked,warnings:[...new Set(warnings)],officialReconciled:false,readOnly:true};
+}
+
+
+const WORKFLOW_SCOPE="ISNET_BUSINESS_SETTINGS";
+const workflowKey=(slug:string)=>"workflow-defaults:"+slug;
+async function defaultsAccess(c:Context<AppEnv>,write=false){
+  const slug=await assertAccountingScope(c),user=await getAuthenticatedUser(c) as Row;
+  if(!accountingAccess(user,write?"PUT":"GET","/api/muhasebe/isnet-workflow-defaults"))throw Object.assign(new Error("Varsayılan ayar yetkiniz yok."),{status:403,code:"DEFAULTS_FORBIDDEN"});
+  return slug;
+}
+async function readWorkflowDefaults(c:Context<AppEnv>,slug:string){
+  const key=workflowKey(slug);
+  const row=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?").bind(key,WORKFLOW_SCOPE,slug,key).first<Row>();
+  const legacy=await c.env.DB.prepare("SELECT data FROM json_store WHERE scope=? AND main_company_slug=? AND file_name=? ORDER BY updated_at DESC LIMIT 1").bind(WORKFLOW_SCOPE,slug,slug).first<Row>();
+  const old=json(legacy?.data),stored=json(row?.data),carrier=json(old.carrier),sample=json(json(old.nonBillableRules).TEST_NUMUNESI);
+  const profiles=Array.isArray(stored.profiles)?stored.profiles:[];
+  const productIds=[...new Set(profiles.map(p=>text(p.sampleProductId)).filter(Boolean))].slice(0,50);
+  const productRows=productIds.length?(await c.env.DB.prepare("SELECT id,name FROM products WHERE main_company_slug=? AND id IN ("+productIds.map(()=>"?").join(",")+")").bind(slug,...productIds).all<Row>()).results||[]:[];
+  const names=new Map(productRows.map(p=>[text(p.id),text(p.name)]));
+  return{version:text(stored.version),profiles:profiles.map(p=>({...p,sampleProductName:names.get(text(p.sampleProductId))||""})),legacy:{driver:text(carrier.driverName),driverId:text(carrier.driverId),carrierTaxNo:text(carrier.taxNo),plate:text(carrier.vehiclePlate),carrierName:text(carrier.carrierName),trailerPlate:text(carrier.trailerPlate),deliveryMethod:text(carrier.deliveryMethod)||"ELDEN_TESLIM",deliveryAddress:text(carrier.deliveryAddress),sampleReason:text(sample.exemptionReason)||"Test numuneleri bedelsiz olarak elden teslim edilmiştir.",sampleCode:text(sample.exemptionCode),vat:20,scenario:"TICARI"}};
+}
+async function saveWorkflowDefaults(c:Context<AppEnv>,slug:string){
+  const body=await c.req.json(),key=workflowKey(slug);
+  if(!Array.isArray(body.profiles)||body.profiles.length>50||typeof body.version!=="string")throw Object.assign(new Error("Profil listesi veya sürümü geçersiz."),{status:400,code:"DEFAULTS_INVALID"});
+  const profiles:Row[]=[],ids=new Set<string>(),defaultScopes=new Set<string>();
+  for(const p of body.profiles){
+    const id=text(p.id),name=text(p.name).slice(0,100),companyId=text(p.companyId),vat=Number(p.vat);
+    if(!id||ids.has(id)||!name||p.vat===""||p.vat==null||!Number.isFinite(vat)||vat<0||vat>100||!["TICARI","TEMEL"].includes(p.scenario)||!["ELDEN_TESLIM","NAKLIYE","KARGO"].includes(p.deliveryMethod))throw Object.assign(new Error("Profil adı, KDV veya senaryo geçersiz."),{status:400,code:"DEFAULTS_INVALID"});
+    ids.add(id);
+    if(companyId&&!await c.env.DB.prepare("SELECT id FROM companies WHERE id=? AND main_company_slug=? AND deleted_at IS NULL").bind(companyId,slug).first())throw Object.assign(new Error("Cari bu firmada bulunamadı."),{status:400,code:"DEFAULTS_COMPANY_INVALID"});
+    if(p.isDefault===true){if(defaultScopes.has(companyId))throw Object.assign(new Error("Her cari için yalnız bir varsayılan profil seçilebilir."),{status:400,code:"DEFAULTS_DUPLICATE"});defaultScopes.add(companyId);}
+    const sampleProductId=text(p.sampleProductId);
+    if(sampleProductId&&!await c.env.DB.prepare("SELECT id FROM products WHERE id=? AND main_company_slug=?").bind(sampleProductId,slug).first())throw Object.assign(new Error("Numune ürünü mevcut firma ürün kartında bulunamadı."),{status:400,code:"DEFAULTS_PRODUCT_INVALID"});
+    const sampleQuantity=text(p.sampleQuantity);
+    if(sampleQuantity&&(!Number.isFinite(Number(sampleQuantity))||Number(sampleQuantity)<=0))throw Object.assign(new Error("Varsayılan numune miktarı pozitif olmalıdır."),{status:400,code:"DEFAULTS_QUANTITY_INVALID"});
+    const fields=Object.fromEntries(["driver","driverId","carrierTaxNo","plate","carrierName","trailerPlate","deliveryAddress","dispatchNote","invoiceNote","sampleReason","sampleCode"].map(k=>[k,text(p[k]).slice(0,1000)]));
+    profiles.push({id,name,companyId,isDefault:p.isDefault===true,vat,scenario:p.scenario,deliveryMethod:p.deliveryMethod,sampleProductId,sampleQuantity,...fields});
+  }
+  const current=await readWorkflowDefaults(c,slug);
+  if(current.version!==body.version)throw Object.assign(new Error("Ayarlar başka bir oturumda değişti; yenileyin."),{status:409,code:"DEFAULTS_CONFLICT"});
+  const version=crypto.randomUUID(),ts=new Date().toISOString(),payload=JSON.stringify({version,profiles});
+  const result=current.version?await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND json_extract(data,'$.version')=?").bind(payload,ts,key,WORKFLOW_SCOPE,slug,key,current.version).run():await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING").bind(key,WORKFLOW_SCOPE,slug,key,payload,ts,ts).run();
+  if(result.meta?.changes!==1)throw Object.assign(new Error("Ayarlar başka bir oturumda değişti; yenileyin."),{status:409,code:"DEFAULTS_CONFLICT"});
+  return await readWorkflowDefaults(c,slug);
+}
+
+
+const TEST_DRAFT_SCOPE="ISNET_TEST_DRAFT_WORKSPACE";
+const testDraftKey=(slug:string)=>"isnet-test-drafts:"+slug;
+async function loadTestDrafts(c:Context<AppEnv>,slug:string){
+ const key=testDraftKey(slug);
+ const row=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=? AND file_name=?").bind(key,TEST_DRAFT_SCOPE,slug,key).first<Row>();
+ if(!row)return{version:"",drafts:[]};
+ const data=JSON.parse(row.data);if(typeof data.version!=="string"||!Array.isArray(data.drafts))throw Error("Test taslakları okunamadı.");return data;
+}
+async function saveTestDrafts(c:Context<AppEnv>,slug:string){
+ const body=await c.req.json(),user=await getAuthenticatedUser(c) as Row;
+ const method=body.action?.kind==="CANCEL"?"DELETE":body.action?.id?"PUT":"POST";
+ if(!accountingAccess(user,method,"/api/muhasebe/isnet-test-drafts"))throw Object.assign(new Error("Test taslak işlem yetkiniz yok."),{status:403,code:"DRAFT_FORBIDDEN"});
+ const current=await loadTestDrafts(c,slug);
+ if(current.version!==body.version)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});
+ const version=crypto.randomUUID(),ts=new Date().toISOString(),key=testDraftKey(slug);
+ let next;try{next={...transition(current,body.action||{},crypto.randomUUID(),ts),version};}catch(e:any){throw Object.assign(e,{status:400,code:"DRAFT_INVALID"});}
+ const payload=JSON.stringify(next);
+ const result=current.version?await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND json_extract(data,'$.version')=?").bind(payload,ts,key,TEST_DRAFT_SCOPE,slug,key,current.version).run():await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING").bind(key,TEST_DRAFT_SCOPE,slug,key,payload,ts,ts).run();
+ if(result.meta?.changes!==1)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});return next;
+}
+
+// Only the two provider-issued sandbox company IDs are allowed, never a live VKN.
+// Store SHA-256 fingerprints rather than the supplied test identifiers.
+const ISNET_TEST_COMPANY_HASHES=new Set(["f3306c3496174ee9c78d01e972aea1eb980899e5aa846f8b8124b40e25aea7a8","3a306629b054cc57550db3937e31b0c42c0a287a4a68e3c2c04230070496de2b"]);
+async function readIsnetSoapTest(c:Context<AppEnv>){
+ await defaultsAccess(c);
+ const companyTaxCode=text(c.req.query("companyTaxCode"));
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(companyTaxCode))),n=>n.toString(16).padStart(2,"0")).join("");
+ if(!ISNET_TEST_COMPANY_HASHES.has(hash))throw Object.assign(new Error("Yalnız İşNet tarafından verilen iki TEST firma VKN'si kullanılabilir."),{status:403,code:"TEST_COMPANY_NOT_ALLOWED"});
+ const q={companyTaxCode,kind:c.req.query("kind"),direction:c.req.query("direction"),from:c.req.query("from"),to:c.req.query("to"),page:c.req.query("page")||1,ettn:c.req.query("ettn")||"",file:c.req.query("file")||""};
+ try{return await searchSoapTest(q);}catch(e:any){throw Object.assign(new Error("İşNet TEST belge erişimi başarısız: "+(e.code||"SOAP_UNAVAILABLE")),{status:502,code:e.code||"SOAP_UNAVAILABLE"});}
+}
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+ app.get("/api/muhasebe/isnet-soap-test-documents",async c=>{try{const data=await readIsnetSoapTest(c);c.header("Cache-Control","no-store");return c.json({ok:true,data});}catch(e:any){return errorResponse(c,e);}});
+
+ app.get("/api/muhasebe/isnet-soap-test-health",async c=>{try{await defaultsAccess(c);const services=await probeSoapTestEndpoints();return c.json({ok:true,data:{services,environment:"TEST",authenticated:false,sendEnabled:false}});}catch(e:any){return errorResponse(c,e);}});
+ app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await loadTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+ app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await saveTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+
+  app.get("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await readWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+  app.put("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c,true);return c.json({ok:true,data:await saveWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+  app.get("/api/muhasebe/isnet-workflow-defaults/products",async c=>{try{const slug=await defaultsAccess(c),q=text(c.req.query("q")).slice(0,100);const rows=(await c.env.DB.prepare("SELECT id,name,unit FROM products WHERE main_company_slug=? AND name LIKE ? ORDER BY name LIMIT 50").bind(slug,"%"+q+"%").all<Row>()).results||[];return c.json({ok:true,data:{rows}});}catch(e:any){return errorResponse(c,e);}});
+
+  app.get("/api/muhasebe/incoming-dispatches/:id/partial-preview",async c=>{
+    try{const data=await partialDispatchPreview(c);return c.json({ok:true,success:true,data});}catch(error:any){return errorResponse(c,error);}
+  });
   app.get("/api/muhasebe/incoming-dispatches/billing",async c=>{
     try{const data=await buildIncomingDispatchBilling(c);return c.json({ok:true,success:true,data});}
     catch(error:any){return errorResponse(c,error);}
