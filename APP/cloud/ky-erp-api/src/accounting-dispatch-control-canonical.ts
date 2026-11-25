@@ -3,6 +3,7 @@ import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { accountingAccess } from "./accounting-access-policy";
 import { transition } from "./isnet-test-draft-core";
+import { probeSoapTestEndpoints } from "./isnet-soap-probe";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -244,6 +245,7 @@ async function saveTestDrafts(c:Context<AppEnv>,slug:string){
 }
 
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+ app.get("/api/muhasebe/isnet-soap-test-health",async c=>{try{await defaultsAccess(c);const services=await probeSoapTestEndpoints();return c.json({ok:true,data:{services,environment:"TEST",authenticated:false,sendEnabled:false}});}catch(e:any){return errorResponse(c,e);}});
  app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await loadTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
  app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await saveTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
 

@@ -1,5 +1,8 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+- 25.11.2026 İşNet: TEST taslak çalışma alanına Worker çıkışından iki resmî TEST WSDL salt-okunur ağ tanısı eklendi. WSDL keşfi yetki veya gönderim kabulü değildir. Gönderim çekirdeği ayrı, resmî adapter/claim/parser/UBL ve gerçek erişim bekler. Canlı yayın yok.
+
+
 ## 25.11.2026 — İşNet TEST taslak kabulü
 - Mevcut İşNet işlem merkezinde sentetik 5.500 adet örnek kaynak, tam/kısmi irsaliye, sıfırdan irsaliye/fatura, bağlı fatura, düzenle/kaydet/önizle/iptal. Tenant ve yetki kontrollü json_store TEST scope, CAS; muhasebe tablolarına yazmaz, gönderim yok. Bağlı fatura adedi server-side kilitli, fazla rezervasyon ve çift fatura taslağı engelli. 12/12 sentetik state machine kontrolü başarılı; gerçek D1 ve UI/CI kabulü yok. Gerçek kaynak/çoklu kalem, WSDL/UBL ve resmî gönderim motoru ayrıca tamamlanacak. Kullanıcı gönderim özelliğini de istedi; gerçek belge gönderme izni olarak yorumlanmadı.
 
