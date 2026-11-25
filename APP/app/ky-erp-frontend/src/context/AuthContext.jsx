@@ -329,6 +329,7 @@ function authSnapshot(token, user) {
 function readStoredAuth() {
   try {
     cleanLegacyAuthStorage();
+    if (browserLogoutPending()) { removeStoredAuth(); return { token: "", user: null, permissions: [] }; }
 
     const sessionToken = String(window.sessionStorage.getItem(AUTH_TOKEN_KEY) || "");
     const sessionUser = parseStoredUser(window.sessionStorage.getItem(AUTH_USER_KEY));
@@ -339,6 +340,17 @@ function readStoredAuth() {
         if (!mobileOwnerResumeAllowed(sessionToken)) clearPersistentAuth();
         clearPendingRefresh();
         return authSnapshot(sessionToken, sessionUser);
+      }
+      const sharedToken = String(window.localStorage.getItem(AUTH_TOKEN_KEY) || "");
+      const sharedUser = parseStoredUser(window.localStorage.getItem(AUTH_USER_KEY));
+      const sharedPayload = parseJwtPayload(sharedToken), sessionPayload = parseJwtPayload(sessionToken);
+      if (sharedUser && isTokenUsable(sharedToken) && !isOwnerAuthPair(sharedToken,sharedUser) &&
+          String(sharedPayload?.sub) === String(sessionPayload?.sub) &&
+          String(sharedPayload?.sub) === String(sharedUser.id) &&
+          Number(sharedPayload?.iat || 0) >= Number(sessionPayload?.iat || 0)) {
+        window.sessionStorage.setItem(AUTH_TOKEN_KEY,sharedToken);
+        window.sessionStorage.setItem(AUTH_USER_KEY,JSON.stringify(sharedUser));
+        return authSnapshot(sharedToken,sharedUser);
       }
       window.localStorage.setItem(AUTH_TOKEN_KEY, sessionToken);
       window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(sessionUser));
@@ -380,7 +392,7 @@ export function AuthProvider({ children }) {
   const authMutationRef = useRef(new Map());
   const tabIdRef = useRef(stableTabId());
   const browserRestoreRef = useRef(async () => false);
-  const logoutRef = useRef(false);
+  const logoutRef = useRef(browserLogoutPending());
   authSnapshotRef.current = { user, permissions };
   tokenRef.current = token;
 
@@ -459,14 +471,15 @@ export function AuthProvider({ children }) {
     try {
       const response = await directAuthRequest("/auth/browser-session/restore", { credentials: "include", timeoutMs: 8000 });
       if (logoutRef.current || browserLogoutPending() || tokenRef.current !== candidate || !response?.token || !response?.user) return false;
-      const previousUser = authSnapshotRef.current.user;
-      if (candidate && previousUser?.id && response.user.id !== previousUser.id) return false;
+      const previousId = parseJwtPayload(candidate)?.sub;
+      if (candidate && previousId && String(response.user.id) !== String(previousId)) return false;
       return saveAuth(response.token, response.user, response.user?.permissions || []);
     } catch { return false; }
   }, [saveAuth]);
   useEffect(() => { browserRestoreRef.current = restoreBrowserSession; }, [restoreBrowserSession]);
-  const finalizeResponse = useCallback(async (response) => {
+  const finalizeResponse = useCallback(async (response, isRefresh = false) => {
     if (!response?.token || !response?.user) return response;
+    if (isRefresh && (logoutRef.current || browserLogoutPending())) return null;
     logoutRef.current = false;
     setBrowserLogoutPending(false);
     if (saveAuth(response.token, response.user, response.user?.permissions || response.permissions || [])) await bindBrowserSession(response.token, true);
@@ -474,7 +487,7 @@ export function AuthProvider({ children }) {
   }, [saveAuth, bindBrowserSession]);
 
   const commitPreparedRefresh = useCallback(async (prepared) => {
-    if (!prepared?.refreshId || !prepared?.refreshSecret || !prepared?.token) return null;
+    if (!prepared?.refreshId || !prepared?.refreshSecret || !prepared?.token || logoutRef.current || browserLogoutPending()) return null;
     let lastError = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
@@ -483,7 +496,7 @@ export function AuthProvider({ children }) {
           timeoutMs: 12000,
         });
         clearPendingRefresh();
-        return finalizeResponse({ ...prepared, stage: "AUTHENTICATED" });
+        return finalizeResponse({ ...prepared, stage: "AUTHENTICATED" }, true);
       } catch (error) {
         lastError = error;
         const status = Number(error?.status || 0);
@@ -512,7 +525,7 @@ export function AuthProvider({ children }) {
       const probe = await directAuthRequest("/auth/me", { method: "GET", token: prepared.token, timeoutMs: 6000 });
       if (probe?.user) {
         clearPendingRefresh();
-        return finalizeResponse({ ...prepared, user: probe.user, stage: "AUTHENTICATED" });
+        return finalizeResponse({ ...prepared, user: probe.user, stage: "AUTHENTICATED" }, true);
       }
     } catch { /* pending korunur */ }
     void lastError;
@@ -531,7 +544,7 @@ export function AuthProvider({ children }) {
     }
 
     const currentToken = tokenRef.current;
-    if (!currentToken || !isTokenUsable(currentToken)) return null;
+    if (!currentToken || !isTokenUsable(currentToken) || logoutRef.current || browserLogoutPending()) return null;
     try {
       const prepared = await directAuthRequest("/auth/refresh", {
         token: currentToken,
@@ -547,12 +560,13 @@ export function AuthProvider({ children }) {
         // Başka sekme tokenı tam bu anda yenilemiş olabilir. Storage olayına kısa bir
         // pencere ver; yeni token geldiyse logout yerine onu kullan.
         await wait(500);
+        if (tokenRef.current !== currentToken || logoutRef.current) return null;
         const stored = readStoredAuth();
         if (stored.token && stored.token !== currentToken && isTokenUsable(stored.token)) {
           saveAuth(stored.token, stored.user, stored.permissions);
           return { syncedFromOtherTab: true };
         }
-        clearAuth();
+        if (!(await browserRestoreRef.current(currentToken)) && tokenRef.current === currentToken) clearAuth();
       }
       return null;
     }
@@ -578,6 +592,7 @@ export function AuthProvider({ children }) {
     let cancelled = false;
     async function restoreSession() {
       const snapshot = authSnapshotRef.current;
+      if (browserLogoutPending()) { if (!cancelled) setLoading(false); return; }
       let pending = readPendingRefresh();
       if (isSuperAdmin(snapshot.user?.role) || isSuperAdmin(pending?.user?.role)) {
         clearPendingRefresh();
