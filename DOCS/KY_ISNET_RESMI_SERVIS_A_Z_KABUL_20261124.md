@@ -109,3 +109,7 @@ Kaynaklar (kamuya açık):
 | Mükellef, ürün, seri, yükleme ve roller | Resmî yardım kaynağı | Mevcut firma/ürün kartları ve yetkili entegrasyon ayarları |
 
 Güncel oturum arkasındaki menü ve alan sırası, zorunlu alanlar, gerçek servis çağrıları ve bedelsiz muafiyet kodu bağımsız doğrulanmadı. Kullanıcıya tüm ekranları tek tek anlattırma; test hesabı/servis sözleşmesi geldiğinde yalnız kalan ekran farklarını doğrula. Öncelikli test dört akış: sıfırdan irsaliye, gelenden tam ve kısmi irsaliye (5500→5000+500), gidenden ticari satış faturası, sıfırdan fatura; ayrıca bedelsiz numune. Gerçek üretim gönderimi yok. İşlem merkezi menü etiketleri bu kapsamla hizalandı; yeni resmi eylemler kapalı, mevcut gelen irsaliye önizlemesine yönlendirme var. Tam CI ve canlı yayın yapılmadı.
+
+
+## 25.11.2026 güncel durum
+Test daveti ve sekiz resmi PDF geldi; önceki 'doküman bekleniyor' durumu artık tarihî. [Yeni SOAP sözleşmesi ve test planı](KY_ISNET_SOAP_TEST_20261125.md) esas alınır. e-MM SOAP yok. Gerçek WSDL XML ve SOAP POST hâlâ kabul bekliyor; canlı yayın yok.

@@ -1,5 +1,11 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.11.2026 — İşNet SOAP test daveti ve resmî sözleşme
+
+- Sekiz PDF alındı, resmi operasyonlar ve IP-VKN modeli kayda alındı. e-MM SOAP yok. İki test URL'si sağlandı. [SOAP sözleşme ve test planı](KY_ISNET_SOAP_TEST_20261125.md).
+- Salt-okunur WSDL/GetTaxPayer Windows test aracı ve dokümana bağlı operasyon kataloğu hazırlık dalında. Doğrudan ağ DNS başarısız; web WCF tanıtım sayfası SOAP kabulü değil. Test gönderimi kullanıcı tarafından yetkilendirildi ama henüz gerçekleşmedi; tam CI, merge/deploy yok.
+
+
 ## 24.11.2026 — KYERP İşNet işlem merkezi / arayüz önceliği
 
 - Mevcut resmî entegrasyon hazırlık dalında dört belge görünümüne, belge havuzuna, arşive ve mevcut bağlantı/dosya kontrolüne tek merkezden erişim eklendi. Belge detayında doğrudan orijinal PDF/XML indirme; doğrulanmamış arşiv durumunda sahte PDF mevcut etiketi kaldırıldı.

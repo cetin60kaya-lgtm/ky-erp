@@ -13,7 +13,7 @@ const groups = [
   { title: "Belge oluştur", actions: ["Sıfırdan e-İrsaliye oluştur", "Sıfırdan e-Fatura oluştur", "Yeni e-Arşiv"], reason: "Belge türüne göre alıcı, seri, sevk veya vergi bilgileri; resmî servis kabulü bekleniyor." },
   { title: "İrsaliye işlemleri ve dönüşüm", actions: ["Giden irsaliyeyi faturaya çevir", "Kalan miktarı sevk et", "İrsaliye taslağı güncelle"], reason: "Gelenden oluşturma hazırlığı mevcut Gelen İrsaliyeler ekranında. Resmî dönüşüm, miktar rezervasyonu ve gönderim henüz kapalı." },
   { title: "Taslaklar ve gönderim", actions: ["İrsaliye taslakları", "Fatura taslakları", "Güncelle / kaydet", "Önizle", "Gönderim onayı", "Resmî gönder", "ETTN / GİB durum sorgula"], reason: "İki ayrı belge yaşam döngüsü; resmî taslak, şema doğrulama ve atomik gönderim servisi bekleniyor." },
-  { title: "Diğer belge aileleri", actions: ["e-Arşiv", "e-SMM", "e-Müstahsil", "e-Dekont"], reason: "Belge türü şeması, listeleme ve hizmet yetkileri doğrulanmalı." },
+  { title: "Diğer belge aileleri", actions: ["e-Arşiv", "e-SMM", "e-Döviz", "e-Müstahsil (SOAP yok)", "e-Dekont (sözleşme bekliyor)"], reason: "Resmî PDF sözleşmeleri alındı; e-MM SOAP desteklenmiyor. Diğer türlerin WSDL/servis yetkisi doğrulanmalı." },
   { title: "Belge yanıtları", actions: ["Ticari fatura kabul / ret", "İrsaliye kabul / kısmi kabul", "İptal / itiraz"], reason: "Resmî yanıt servisi ve işlem bazlı kullanıcı onayı gerekli." },
   { title: "Firma ve araçlar", actions: ["Firma / şube / seri", "Mükellef / adres defteri", "Ürün / hizmet", "Kullanıcı / rol", "Parametreler"], reason: "Sağlayıcının yetkili yönetim metotları bekleniyor; mevcut KYERP kartları korunur." },
   { title: "Raporlar ve finans", actions: ["İşNet raporları", "Kontör bakiyesi", "Tahsilat durumu"], reason: "Sağlayıcıdan doğrulanmış okuma servisi bekleniyor." },
@@ -24,7 +24,7 @@ export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenR
   return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
     <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet İşlem Merkezi</h3>
       <p>Günlük belgeler tek havuzda; resmî servis yetenekleri doğrulanmadan açılmaz.</p></div>
-      <span className="isow-state">{enabled ? "Resmî servis kabulü bekleniyor" : "Firma entegrasyonu pasif"}</span></header>
+      <span className="isow-state">{enabled ? "SOAP test sözleşmesi alındı · bağlantı kabulü bekliyor" : "Firma entegrasyonu pasif"}</span></header>
     <div className="isow-docs">{documents.map(([label, tabKey]) => <button type="button" key={tabKey} disabled={!openModule} onClick={() => navigate(tabKey)}>{label}<small>KYERP belge havuzu · XML / PDF</small></button>)}</div>
     <div className="isow-actions">
       <button type="button" disabled={!openModule} onClick={() => navigate("gelen-irsaliyeler")}>Gelenden irsaliye oluştur / kısmi sevk hazırlığı</button>
