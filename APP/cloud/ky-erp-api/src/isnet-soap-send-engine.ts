@@ -33,8 +33,9 @@ export async function submitVerifiedSoapTest({profile,draft,approval,binding,val
  if(!claimId)throw Error("SEND_CLAIM_CONFLICT");
  let status="UNKNOWN_REVIEW_REQUIRED";let providerResult=null;
  try{
-  const response=await fetcher(req.endpoint,{method:"POST",headers:req.headers,body:req.body,redirect:"error",signal:AbortSignal.timeout(30000)});
-  if(response.ok){const xml=await response.text();if(xml.length<=4000000&&!/<!DOCTYPE|<!ENTITY/i.test(xml)){providerResult=await parseResult(xml,binding);status=classifySendResult({...draft,status:"SUBMITTING"},providerResult);}}
+  const response=await fetcher(req.endpoint,{method:"POST",headers:req.headers,body:req.body,redirect:"manual",signal:AbortSignal.timeout(30000)});
+  // Never follow redirects with document contents. An unexpected response stays UNKNOWN.
+  if(response.status>=200&&response.status<300&&response.ok){const xml=await response.text();if(xml.length<=4000000&&!/<!DOCTYPE|<!ENTITY/i.test(xml)){providerResult=await parseResult(xml,binding);status=classifySendResult({...draft,status:"SUBMITTING"},providerResult);}}
  }catch{status="UNKNOWN_REVIEW_REQUIRED";}
  await settle({claimId,tenant:draft.tenant,draftId:draft.id,version:draft.version,ettn:draft.ettn,status,providerResult});
  return {status};
