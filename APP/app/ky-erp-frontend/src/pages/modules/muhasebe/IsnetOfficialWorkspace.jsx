@@ -1,52 +1,78 @@
 import { useState } from "react";
+import {apiGet} from "../../../utils/api";
 import "./isnetOfficialWorkspace.css";
 import IsnetTestDraftWorkspace from "./IsnetTestDraftWorkspace";
 import IsnetSoapReadWorkspace from "./IsnetSoapReadWorkspace";
 
-// Existing KYERP views remain the source of truth. No official write path is
-// enabled until a server-owned service capability and atomic send gate exist.
+// Operator uses the canonical KYERP document pool. Technical sandbox is opt-in.
+// The WSDL catalogue is read-only; a listed operation never grants send permission.
 const documents = [
-  ["Gelen Faturalar", "gelen-faturalar"],
-  ["Giden Faturalar", "giden-faturalar"],
-  ["Gelen İrsaliyeler", "gelen-irsaliyeler"],
-  ["Giden İrsaliyeler", "giden-irsaliyeler"],
+  ["Gelen Faturalar","gelen-faturalar","Alış belgeleri"],
+  ["Giden Faturalar","giden-faturalar","Satış belgeleri"],
+  ["Gelen İrsaliyeler","gelen-irsaliyeler","Müşteri / tedarikçi sevkleri"],
+  ["Giden İrsaliyeler","giden-irsaliyeler","Sevk ve fatura ilişkileri"],
 ];
 const groups = [
-  { title: "Belge oluştur", actions: ["Sıfırdan e-İrsaliye oluştur", "Sıfırdan e-Fatura oluştur", "Yeni e-Arşiv"], reason: "Belge türüne göre alıcı, seri, sevk veya vergi bilgileri; resmî servis kabulü bekleniyor." },
-  { title: "İrsaliye işlemleri ve dönüşüm", actions: ["Giden irsaliyeyi faturaya çevir", "Kalan miktarı sevk et", "İrsaliye taslağı güncelle"], reason: "Gelenden oluşturma hazırlığı mevcut Gelen İrsaliyeler ekranında. Resmî dönüşüm, miktar rezervasyonu ve gönderim henüz kapalı." },
-  { title: "Taslaklar ve gönderim", actions: ["İrsaliye taslakları", "Fatura taslakları", "Güncelle / kaydet", "Önizle", "Gönderim onayı", "Resmî gönder", "ETTN / GİB durum sorgula"], reason: "İki ayrı belge yaşam döngüsü; resmî taslak, şema doğrulama ve atomik gönderim servisi bekleniyor." },
-  { title: "Diğer belge aileleri", actions: ["e-Arşiv", "e-SMM", "e-Döviz", "e-Müstahsil (SOAP yok)", "e-Dekont (sözleşme bekliyor)"], reason: "Resmî PDF sözleşmeleri alındı; e-MM SOAP desteklenmiyor. Diğer türlerin WSDL/servis yetkisi doğrulanmalı." },
-  { title: "Belge yanıtları", actions: ["Ticari fatura kabul / ret", "İrsaliye kabul / kısmi kabul", "İptal / itiraz"], reason: "Resmî yanıt servisi ve işlem bazlı kullanıcı onayı gerekli." },
-  { title: "Firma ve araçlar", actions: ["Firma / şube / seri", "Mükellef / adres defteri", "Ürün / hizmet", "Kullanıcı / rol", "Parametreler"], reason: "Sağlayıcının yetkili yönetim metotları bekleniyor; mevcut KYERP kartları korunur." },
-  { title: "Raporlar ve finans", actions: ["İşNet raporları", "Kontör bakiyesi", "Tahsilat durumu"], reason: "Sağlayıcıdan doğrulanmış okuma servisi bekleniyor." },
+ {title:"e-Fatura",methods:["SearchInvoice","SearchAllInvoice","SearchExternalInvoice","GetDocumentViewerLink","SendInvoice","SendInvoiceXml","SendInvoiceXmlWithoutInvoiceNumber","SendInvoiceReply","UpdateInvoiceState","DirectInvoice","ArchiveInvoice","DeArchiveInvoice"]},
+ {title:"e-İrsaliye",methods:["SearchDespatchAdvice","SearchReceiptAdvice","SendDespatchAdvice","SendDespatchAdviceXML","SendDespatchAdviceXmlWithoutDespatchAdviceNumber","SendReceiptAdvice","SendReceiptAdviceXML","SendReceiptAdviceXmlWithoutReceiptAdviceNumber"]},
+ {title:"e-Arşiv",methods:["SearchArchiveInvoice","SearchArchiveInvoiceReport","SendArchiveInvoice","SendArchiveInvoiceXml","SendArchiveInvoiceXmlWithoutInvoiceNumber","CancelArchiveInvoice","SendArchiveInvoiceReport","SendArchiveInvoiceMail","GetDocumentViewerLink"]},
+ {title:"Mükellef ve adres defteri",methods:["GetAddressBook","GetTaxPayer","GetDespatchTaxPayer","GetReceiverInboxTags","GetSenderUnitTags","GetTaxOfficeList","GetCityList","GetTownList","GetAllBySearchTaxOfficeNameAndCityCode","SaveAddressBookEntry","DeleteAddressBookEntry"]},
+ {title:"Ürün ve firma",methods:["GetProduct","SaveProduct","DeleteProduct","GetCompanyBalance","GetCompanyVendor"]},
+ {title:"e-SMM / e-Döviz",methods:["SearchESMM","SendESMM","SendESMMXml","CancelESMM","SendCurrencyInvoice"]},
 ];
-export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenRules, onOpenTest, enabled, slug }) {
-  const [expanded, setExpanded] = useState(null);
-  const [testDrafts,setTestDrafts]=useState(false);
-  const [testRead,setTestRead]=useState(true);
-  const navigate = tabKey => openModule?.("e-belge", { tabKey });
-  return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
-    <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet · Seri Belge İşlem Merkezi</h3>
-      <p>Kaynak irsaliye → miktar / birim fiyat → taslak → kontrol. Resmî gönderim ayrı kabul kapısındadır.</p></div>
-      <span className="isow-state">{enabled ? "SOAP test sözleşmesi alındı · bağlantı kabulü bekliyor" : "Firma entegrasyonu pasif"}</span></header>
-    <div className="isow-docs">{documents.map(([label, tabKey]) => <button type="button" key={tabKey} disabled={!openModule} onClick={() => navigate(tabKey)}>{label}<small>KYERP belge havuzu · XML / PDF</small></button>)}</div>
-    <div className="isow-actions">
-      <button type="button" disabled={!slug} onClick={()=>{setTestRead(v=>!v);setTestDrafts(false);}}>{testRead?"TEST belge erişimini kapat":"TEST · Belgelere eriş"}</button>
-      <button type="button" disabled={!slug} onClick={()=>{setTestDrafts(v=>!v);setTestRead(false);}}>{testDrafts?"Test taslaklarını kapat":"TEST · Taslak hazırlama"}</button>
-      <button type="button" disabled={!openModule} onClick={() => navigate("gelen-irsaliyeler")}>Gelenden irsaliye oluştur / kısmi sevk hazırlığı</button>
-      <button type="button" disabled={!enabled} onClick={onOpenSync}>XML + PDF Al</button>
-      <button type="button" disabled={!openModule} onClick={() => navigate("belge-havuzu")}>Belge Yükle / Havuz</button>
-      <button type="button" disabled={!openModule} onClick={() => navigate("arsiv-cikti")}>Arşiv / Çıktı</button>
-      <button type="button" disabled={!openModule} onClick={() => navigate("onay-sorunlar")}>Muhasebe Onayları</button>
-      <button type="button" disabled={!enabled} onClick={onOpenRules}>Bağlantı ve İş Kuralları</button>
-      <button type="button" disabled={!enabled} onClick={onOpenTest}>Dosya Kontrolü</button>
-    </div>
-    {testRead&&slug&&<IsnetSoapReadWorkspace key={slug} slug={slug} onDrafts={()=>{setTestRead(false);setTestDrafts(true);}}/>}
-    {testDrafts&&slug&&<IsnetTestDraftWorkspace key={slug} slug={slug}/>}
-    <p className="isow-note" role="status">Mevcut belge okuma ve arşiv akışı kullanılabilir. Aşağıdaki resmî işlemler tasarım kapsamındadır; henüz sağlayıcıya çağrı yapmaz. Muhasebe onayı resmî gönderim onayı değildir.</p>
-    <div className="isow-groups">{groups.map((group, index) => <section key={group.title} className="isow-group">
-      <button type="button" className="isow-group-title" aria-expanded={expanded === index} onClick={() => setExpanded(current => current === index ? null : index)}>{group.title}<span>{expanded === index ? "−" : "+"}</span></button>
-      {expanded === index && <div className="isow-group-body"><p>{group.reason}</p><div className="isow-actions">{group.actions.map(action => <button type="button" disabled key={action}>{action}</button>)}</div></div>}
-    </section>)}</div>
-  </section>;
+const unwrap=v=>v?.data?.data??v?.data??v;
+export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRules,onOpenTest,enabled,slug}) {
+ const [technical,setTechnical]=useState(false);
+ const [technicalView,setTechnicalView]=useState("read");
+ const [catalog,setCatalog]=useState(null),[catalogBusy,setCatalogBusy]=useState(false),[catalogError,setCatalogError]=useState("");
+ const navigate=tabKey=>openModule?.("e-belge",{tabKey});
+ async function readContract(){
+  setCatalogBusy(true);setCatalogError("");setCatalog(null);
+  try{const data=unwrap(await apiGet("/muhasebe/isnet-provider-catalog",{mainCompanySlug:slug},{forceFresh:true,timeoutMs:45000}));
+   if(data?.source!=="ISNET_LIVE_WSDL"||data.environment!=="TEST"||!Array.isArray(data.services))throw Error("Servis sözleşmesi doğrulanamadı.");
+   setCatalog(data);
+  }catch(e){setCatalogError(e?.message||"Servis sözleşmesi alınamadı.");}finally{setCatalogBusy(false);}
+ }
+ const discovered=(catalog?.services||[]).filter(s=>s.status==="WSDL_DISCOVERED");
+ const hits=method=>discovered.flatMap(s=>(s.operations||[]).filter(op=>op.toLowerCase()===method.toLowerCase()).map(op=>s.service+" / "+op));
+ const mapped=new Set(groups.flatMap(g=>g.methods.map(m=>m.toLowerCase())));
+ return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
+  <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet · Belge İşlem Merkezi</h3><p>Gelen ve giden belgeler, sevk ilişkileri, muhasebe kontrolü ve orijinal dosyalar tek merkezde.</p></div><span className="isow-state">{enabled?"Firma entegrasyonu seçili · SOAP canlı kabulü bekliyor":"Firma entegrasyonu pasif"}</span></header>
+  <div className="isow-docs">{documents.map(([label,tabKey,detail])=><button type="button" key={tabKey} disabled={!openModule} onClick={()=>navigate(tabKey)}>{label}<small>{detail} · KYERP belge havuzu</small></button>)}</div>
+  <section className="isow-operator"><h4>Günlük işlemler</h4><div className="isow-actions">
+   <button type="button" className="isow-primary" disabled={!enabled||!onOpenSync} onClick={onOpenSync}>Belgeleri al · XML + PDF</button>
+   <button type="button" disabled={!openModule} onClick={()=>navigate("gelen-irsaliyeler")}>Kısmi sevk ve irsaliye kontrolü</button>
+   <button type="button" disabled={!openModule} onClick={()=>navigate("eslestirmeler")}>Belge eşleştirmeleri</button>
+   <button type="button" disabled={!openModule} onClick={()=>navigate("belge-havuzu")}>Belge yükle / havuz</button>
+   <button type="button" disabled={!openModule} onClick={()=>navigate("arsiv-cikti")}>Arşiv / çıktı</button>
+   <button type="button" disabled={!openModule} onClick={()=>navigate("onay-sorunlar")}>Muhasebe onayları</button>
+  </div></section>
+  <section className="isow-operator"><h4>Belge oluşturma ve gönderim</h4><p>Resmî e-Fatura, e-Arşiv, e-İrsaliye ve yanıt işlemleri sağlayıcı gönderim kabulü tamamlanana kadar kapalıdır. KYERP muhasebe onayı veya bir TEST taslağı resmî belge değildir.</p><div className="isow-actions">
+   {["Yeni e-Fatura","Yeni e-İrsaliye","Yeni e-Arşiv","İrsaliyeden fatura","Resmî belge yanıtları","Resmî gönderim / durum"].map(label=><button type="button" key={label} disabled title="Sağlayıcı gönderim kabulü bekliyor">{label}</button>)}
+  </div></section>
+  <section className="isow-operator"><h4>Ayarlar ve dosya kontrolü</h4><div className="isow-actions">
+   <button type="button" disabled={!enabled||!onOpenRules} onClick={onOpenRules}>Gelişmiş iş kuralları</button>
+   <button type="button" disabled={!enabled||!onOpenTest} onClick={onOpenTest}>Dosya kontrolü</button>
+   <button type="button" aria-expanded={technical} onClick={()=>setTechnical(v=>!v)}>{technical?"Teknik kabulü kapat":"Servis sözleşmesi ve teknik kabul"}</button>
+  </div></section>
+  {technical&&<section className="isow-technical" aria-label="İşNet teknik kabul alanı">
+   <h4>İşNet TEST · teknik kabul</h4><p>Günlük işlerden ayrı. Yalnız sağlayıcının izin verdiği TEST belgeleri ve sentetik taslaklar; resmî gönderim yapılmaz.</p>
+   <div className="isow-actions">
+    <button type="button" aria-pressed={technicalView==="read"} disabled={!enabled||!slug} onClick={()=>setTechnicalView("read")}>TEST belge erişimi</button>
+    <button type="button" aria-pressed={technicalView==="draft"} disabled={!enabled||!slug} onClick={()=>setTechnicalView("draft")}>TEST taslakları</button>
+    <button type="button" aria-pressed={technicalView==="contract"} disabled={!enabled||!slug} onClick={()=>setTechnicalView("contract")}>Servis metotları / senaryolar</button>
+   </div>
+   {enabled&&slug&&technicalView==="read"&&<IsnetSoapReadWorkspace key={slug} slug={slug} onDrafts={()=>setTechnicalView("draft")}/>}
+   {enabled&&slug&&technicalView==="draft"&&<IsnetTestDraftWorkspace key={slug} slug={slug}/>}
+   {enabled&&slug&&technicalView==="contract"&&<div>
+    <button type="button" disabled={catalogBusy} onClick={readContract}>{catalogBusy?"Sözleşme okunuyor…":"Güncel WSDL sözleşmesini oku"}</button>
+    {catalogError&&<p role="alert">{catalogError}</p>}
+    <p className="isow-note">Metot adı yalnız resmî sözleşme kapsamını gösterir. WSDL varlığı firma yetkisi, başarılı çağrı veya gönderim izni değildir. e-MM için SOAP bulunmuyor; e-Dekont sözleşmesi doğrulanmadı.</p>
+    {catalog&&<div>{(catalog.services||[]).map(s=><p key={s.service}>{s.service}: {s.status} · {(s.operations||[]).length} metot</p>)}
+     {groups.map(g=><details key={g.title}><summary>{g.title}</summary><table><thead><tr><th>Dokümandaki metot</th><th>Canlı WSDL eşleşmesi (TEST)</th></tr></thead><tbody>{g.methods.map(m=><tr key={m}><td>{m}</td><td>{hits(m).join(", ")||"Bu sorguda doğrulanmadı"}</td></tr>)}</tbody></table></details>)}
+     {discovered.map(s=><details key={s.service}><summary>{s.service} · tam metot ve enum listesi</summary><ul>{(s.operations||[]).map(op=><li key={op}>{op}{!mapped.has(op.toLowerCase())?" · ek sözleşme incelemesi gerekli":""}</li>)}</ul>{(s.enums||[]).map(e=><details key={e.namespace+"#"+e.name}><summary>{e.name} ({e.values.length})</summary><p>{e.values.join(" · ")}</p></details>)}</details>)}
+    </div>}
+   </div>}
+  </section>}
+ </section>;
 }
