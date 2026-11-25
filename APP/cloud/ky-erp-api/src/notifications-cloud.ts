@@ -190,7 +190,7 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
            FROM auth_login_approvals a
            LEFT JOIN auth_users u ON u.id=a.user_id
           WHERE UPPER(COALESCE(a.status,''))='PENDING'
-            AND a.expires_at>?
+            AND u.is_active=1 AND a.expires_at>?
           ORDER BY a.requested_at DESC
           LIMIT 30`,
       ).bind(now).all<AnyRow>()
@@ -201,7 +201,7 @@ async function collectLoginApprovals(c: any, current: AnyRow, tenant: string) {
            LEFT JOIN auth_users u ON u.id=a.user_id
            LEFT JOIN auth_user_security us ON us.user_id=a.user_id
           WHERE UPPER(COALESCE(a.status,''))='PENDING'
-            AND a.expires_at>?
+            AND u.is_active=1 AND a.expires_at>?
             AND COALESCE(NULLIF(TRIM(a.main_company_slug),''),?)=?
             AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')
           ORDER BY a.requested_at DESC
@@ -245,9 +245,12 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
     ? await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
               COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
               UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) AS trust_status
-         FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id ${trustJoin}
+         FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=s.user_id ${trustJoin}
         WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.created_at>?
-          AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
+          AND u.is_active=1 AND COALESCE(us.approval_required,0)=1
+          AND COALESCE(TRIM(s.approval_request_id),'')=''
+          AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')
+          AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING'))='PENDING'
         ORDER BY s.created_at DESC LIMIT 150`).bind(SECURITY_TRUST_SCOPE, now, notificationCutoff).all<AnyRow>()
     : await c.env.DB.prepare(`SELECT s.id,s.user_id,s.main_company_slug,s.device_label,s.ip_address,s.created_at,s.expires_at,
               COALESCE(NULLIF(TRIM(u.full_name),''),u.username,'Kullanıcı') AS user_name,
@@ -255,7 +258,10 @@ async function collectSessionTrustApprovals(c: any, current: AnyRow, tenant: str
          FROM auth_sessions s LEFT JOIN auth_users u ON u.id=s.user_id LEFT JOIN auth_user_security us ON us.user_id=s.user_id ${trustJoin}
         WHERE s.revoked_at IS NULL AND s.expires_at>? AND s.created_at>? AND s.main_company_slug=?
           AND (UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN') OR (?=1 AND s.user_id=?))
-          AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING')) NOT IN ('TRUSTED','REJECTED','SUSPICIOUS')
+          AND u.is_active=1 AND COALESCE(us.approval_required,0)=1
+          AND COALESCE(TRIM(s.approval_request_id),'')=''
+          AND UPPER(COALESCE(NULLIF(TRIM(us.role_override),''),NULLIF(TRIM(u.platform_role),''),NULLIF(TRIM(u.role),''),'VIEWER')) NOT IN ('SUPER_ADMIN','ADMIN','COMPANY_ADMIN')
+          AND UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING'))='PENDING'
         ORDER BY s.created_at DESC LIMIT 100`).bind(SECURITY_TRUST_SCOPE, now, notificationCutoff, tenant, companyOwner ? 1 : 0, text(current.id)).all<AnyRow>();
 
   const trustedRows = await c.env.DB.prepare("SELECT file_name,data FROM json_store WHERE scope=?").bind(SECURITY_TRUSTED_DEVICE_SCOPE).all<AnyRow>();
@@ -403,7 +409,7 @@ async function collectPaymentReminders(c: any, current: AnyRow, tenant: string) 
       title: overdue ? "Ödeme vadesi geçti" : "Ödeme zamanı geldi",
       detail: [text(row.counterparty_name), amount ? `${amount.toLocaleString("tr-TR")} ${text(row.currency) || "TRY"}` : "", dueAt].filter(Boolean).join(" · "),
       createdAt: toIso(row.reminder_at || row.due_date || row.planned_date || row.updated_at),
-      route: { moduleKey: "muhasebe", tabKey: "cek-odeme" },
+      route: { moduleKey: "muhasebe", tabKey: "finans-islemleri" },
       meta: { paymentPlanId: text(row.id), dueAt, status: text(row.status), priority: text(row.priority) },
     };
   });
@@ -486,7 +492,7 @@ export function registerNotificationRoutes(app: any) {
     const existing = await readState(c, current, stateTenant);
     for (const id of incoming) existing.add(id);
     const merged = [...existing].slice(-MAX_READ_IDS);
-    await writeState(c, current, stateTenant, merged);
+    if (!(await writeState(c, current, stateTenant, merged))) return c.json({ ok: false, error: { code: "NOTIFICATION_STATE_UNAVAILABLE", message: "Okundu kaydı saklanamadı." } }, 503);
     return c.json({ ok: true, data: { readCount: incoming.length } });
   });
 
@@ -504,7 +510,7 @@ export function registerNotificationRoutes(app: any) {
     const existing = await dismissedState(c, current, stateTenant);
     for (const id of incoming) existing.add(id);
     const merged = [...existing].slice(-MAX_READ_IDS);
-    await writeDismissedState(c, current, stateTenant, merged);
+    if (!(await writeDismissedState(c, current, stateTenant, merged))) return c.json({ ok: false, error: { code: "NOTIFICATION_STATE_UNAVAILABLE", message: "Temizleme kaydı saklanamadı." } }, 503);
     return c.json({ ok: true, data: { dismissedCount: incoming.length } });
   });
 }

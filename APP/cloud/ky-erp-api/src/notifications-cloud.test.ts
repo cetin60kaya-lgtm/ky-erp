@@ -66,3 +66,11 @@ test("owner notification state remains system scoped while honoring legacy tenan
   assert.match(cloudSource, /legacyReadIds/);
   assert.match(cloudSource, /legacyDismissedIds/);
 });
+
+test("mail read/dismiss IDs persist and actual pending session policy excludes verified, exempt or already approved sessions",()=>{
+ assert.deepEqual(sanitizeNotificationReadIds(["mail-approval:1"]),["mail-approval:1"]);
+ assert.ok(cloudSource.includes("UPPER(COALESCE(json_extract(t.data,'$.status'),'PENDING'))='PENDING'"));
+ assert.ok(cloudSource.includes("COALESCE(us.approval_required,0)=1"));
+ assert.ok(cloudSource.includes("COALESCE(TRIM(s.approval_request_id),'')=''"));
+ assert.ok(cloudSource.includes("NOTIFICATION_STATE_UNAVAILABLE"));
+});
