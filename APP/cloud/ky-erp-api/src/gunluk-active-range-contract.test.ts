@@ -31,3 +31,9 @@ test("14–22 Kasım gibi 9 günlük özel dönem tek kayıtta korunur; otomatik
  assert.match(ui,/const weeklyFinancialReady = sharedRangeReady && sharedRangeConfigured/);
  assert.match(ui,/const rosterWriteBlocked = Boolean\(dailyWriteGate/);
 });
+
+test("stale nonzero version cannot initialize missing range and readback matches requested dates",()=>{
+ assert.match(worker,/SELECT \?,\?,\?,1,CURRENT_TIMESTAMP WHERE \?=0 OR EXISTS/);
+ assert.match(worker,/\.bind\(companyId,start,end,expected,companyId,expected,expected\)/);
+ assert.match(worker,/dateOnly\(saved\.start_date\)!==start \|\| dateOnly\(saved\.end_date\)!==end/);
+});
