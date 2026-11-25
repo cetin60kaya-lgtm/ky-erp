@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createBoyahaneLotMovement,
   createBoyahaneProduct,
@@ -96,6 +96,8 @@ export default function BoyahaneInventoryHubV3({ activeMainCompany }) {
   const [lotModal, setLotModal] = useState(false);
   const [movementLot, setMovementLot] = useState(null);
   const [busy, setBusy] = useState(false);
+  const movementAttempt = useRef(null);
+  const movementLock = useRef(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -393,17 +395,27 @@ export default function BoyahaneInventoryHubV3({ activeMainCompany }) {
   }
 
   async function saveMovement(form) {
-    if (!movementLot?.id) return;
+    if (!movementLot?.id || movementLock.current) return;
+    const signature=JSON.stringify([activeMainCompany?.slug || activeMainCompany?.id,movementLot.id,form]);
+    if(movementAttempt.current && movementAttempt.current.signature!==signature){
+      setError("Önce sonucu belirsiz stok hareketini aynı bilgilerle tekrar doğrulayın.");
+      return;
+    }
+    if(!movementAttempt.current) movementAttempt.current={signature,requestId:globalThis.crypto?.randomUUID?.() || String(Date.now())};
+    movementLock.current=true;
     setBusy(true);
     setError("");
     try {
-      await createBoyahaneLotMovement(activeMainCompany, movementLot.id, form);
+      await createBoyahaneLotMovement(activeMainCompany,movementLot.id,{...form,requestId:movementAttempt.current.requestId});
+      movementAttempt.current=null;
       setMovementLot(null);
       setMessage("Stok hareketi kaydedildi. Eski kayıt silinmedi.");
       await load();
     } catch (requestError) {
+      if ([400,403,404,422].includes(Number(requestError.status)) || ["INSUFFICIENT_STOCK","LOT_NOT_AVAILABLE","LOT_MOVEMENT_CONFLICT","INVALID_QUANTITY"].includes(requestError.code)) movementAttempt.current=null;
       setError(requestError.message);
     } finally {
+      movementLock.current=false;
       setBusy(false);
     }
   }

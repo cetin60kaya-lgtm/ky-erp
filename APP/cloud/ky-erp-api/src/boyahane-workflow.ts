@@ -19,6 +19,7 @@ const SCOPES = {
   lot: "BOYAHANE_LOT",
   movement: "BOYAHANE_STOCK_MOVEMENT",
   expense: "BOYAHANE_EXPENSE",
+  product: "BOYAHANE_APPROVED_PRODUCT",
 } as const;
 
 const text = (value: unknown) =>
@@ -721,7 +722,7 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     if (!lines.length) return c.json(errorBody("PRODUCTION_LINES_REQUIRED", "Üretim reçetesi boş olamaz."), 400);
     const db = c.env.DB;
     const productionId = await stableStoreId("BYP:",[slug,requestId]);
-    const payloadHash = await stableStoreId("",[text(body.jobId),text(body.jobColorId),multiplier,lines.map(line=>[line.productId,line.lotId,line.referenceGram]),text(body.recipeId),text(body.colorId),text(body.jobType),text(body.paintType),text(body.version),text(body.pantone),text(body.companyName),text(body.orderNo)]);
+    const payloadHash = await stableStoreId("",[text(body.jobId),text(body.jobColorId),multiplier,lines.map(line=>[line.productId,line.lotId,line.referenceGram]),text(body.recipeId),text(body.colorId),text(body.jobType),text(body.paintType),text(body.version),text(body.pantone),text(body.companyName),text(body.orderNo),objectOf(body.rf),objectOf(body.sampleDraft)]);
     const replay = async () => {
       const previous = await storeSnapshot(db,SCOPES.production,slug,productionId);
       if (!previous) return null;
@@ -747,11 +748,31 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const job = jobSnapshot.value, jobColor = colorSnapshot.value;
     if (text(jobColor.jobId || jobColor.dyehouseModelId) !== text(job.id)) return c.json(errorBody("JOB_COLOR_MISMATCH","Renk seçilen Boyahane işine ait değil."),409);
     if (["CANCELLED","COMPLETED"].includes(upper(job.status)) || upper(jobColor.status)==="CANCELLED") return c.json(errorBody("JOB_CLOSED","Kapanmış veya iptal edilmiş işte yeni sarf yapılamaz."),409);
+    const recipeId=text(body.recipeId || jobColor.recipeId);
+    const colorId=text(body.colorId || jobColor.registeredColorId);
+    const recipeSnapshot=await storeSnapshot(db,SCOPES.recipe,slug,recipeId);
+    if(!recipeSnapshot || !colorId || text(recipeSnapshot.value.registeredColorId)!==colorId ||
+      recipeSignature(recipeLines(recipeSnapshot.value.lines))!==recipeSignature(lines))
+      return c.json(errorBody("RECIPE_REVIEW_REQUIRED","Kayıtlı reçete/renk ve gönderilen bileşenler eşleşmiyor. Stok düşülmedi."),409);
+    const jobType=upper(job.jobType || job.workflowType || job.type || body.jobType || "PRODUCTION");
+    const rf=objectOf(body.rf);
+    const rfKg=num(rf.kg),rfTl=num(rf.tl);
+    const preparedKg=lines.reduce((sum,line)=>sum+num(line.referenceGram)*multiplier/1000,0);
+    if(rf.enabled===true && (["SAMPLE","TRIAL"].includes(jobType) || rfKg<=0 || rfKg>preparedKg+1e-9 || rfTl<0))
+      return c.json(errorBody("INVALID_RF_QUANTITY","RF kalan KG, hazırlanan toplam KG'yi aşamaz; numune için RF açılmaz."),400);
     const lotIds = [...new Set(lines.map(line=>line.lotId).filter(Boolean))];
     const snapshots = new Map<string,StoreSnapshot>();
     for (const id of lotIds) {
       const snapshot = await storeSnapshot(db,SCOPES.lot,slug,id);
       if (snapshot) snapshots.set(id,snapshot);
+    }
+    const rfProductSnapshots = new Map<string,StoreSnapshot>();
+    for(const snapshot of snapshots.values()){
+      if(upper(snapshot.value.source)==="RF_PREPARED"){
+        const productId=text(snapshot.value.productId || snapshot.value.inventoryId);
+        const product=await storeSnapshot(db,SCOPES.product,slug,productId);
+        if(product)rfProductSnapshots.set(productId,product);
+      }
     }
     const remainingByLot = new Map<string,number>();
     const validation:string[] = [];
@@ -764,12 +785,13 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
       if (!line.productId || !lot) validation.push(`${index+1}. satır: ürün veya firma kapsamındaki LOT bulunamadı.`);
       else if (text(lot.productId || lot.inventoryId)!==line.productId) validation.push(`${index+1}. satır: LOT seçilen ürüne ait değil.`);
       else if (!["AVAILABLE","ACTIVE"].includes(upper(lot.status))) validation.push(`${index+1}. satır: LOT kullanıma açık değil.`);
+      else if (upper(lot.source)==="RF_PREPARED" && (rfProductSnapshots.get(line.productId)?.value.approvalStatus!=="APPROVED" || rfProductSnapshots.get(line.productId)?.value.isActive===false)) validation.push(`${index+1}. satır: RF ürün onayı tamamlanmamış.`);
       else if (!["KG","KGM","KILOGRAM"].includes(upper(lot.unit || "KG"))) validation.push(`${index+1}. satır: KG dışındaki LOT birimi önce doğrulanmalıdır.`);
       else if (nextRemaining===null) validation.push(`${index+1}. satır: stok yetersiz. Gerekli ${requiredKg.toFixed(3)} KG, kalan ${remaining.toFixed(3)} KG.`);
       else {remainingByLot.set(line.lotId,nextRemaining);consumptions.push({line,lot,requiredKg,nextRemaining});}
     }
     if(validation.length) return c.json(errorBody("PRODUCTION_VALIDATION_FAILED","Üretim ve stok kontrolü başarısız.",validation),409);
-    const at = nowIso(), guards = [storeGuard(db,jobSnapshot),storeGuard(db,colorSnapshot)], writes:any[] = [];
+    const at = nowIso(), guards = [storeGuard(db,jobSnapshot),storeGuard(db,colorSnapshot),storeGuard(db,recipeSnapshot),...[...rfProductSnapshots.values()].map(row=>storeGuard(db,row))], writes:any[] = [];
     for (const [id,remaining] of remainingByLot) {
       const snapshot=snapshots.get(id)!;
       guards.push(storeGuard(db,snapshot));
@@ -778,8 +800,6 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     }
     const items:Row[] = [];
     const modelId=text(job.modelCardId || job.modelId || job.designId) || null;
-    const jobType=upper(job.jobType || job.workflowType || job.type || body.jobType || "PRODUCTION");
-    const recipeId=body.recipeId || jobColor.recipeId || null;
     let totalCost=0;
     for (const [index,consumption] of consumptions.entries()) {
       const {line,lot,requiredKg,nextRemaining}=consumption;
@@ -793,8 +813,21 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const colors=(await storeList(c,SCOPES.jobColor,slug)).filter(row=>text(row.jobId || row.dyehouseModelId)===text(job.id));
     const nextColor=colors.find(row=>text(row.id)!==text(jobColor.id)&&!["COMPLETED","CANCELLED"].includes(normalizedColorStatus(row.status)));
     const production:Row={id:productionId,requestId,payloadHash,jobId:job.id,jobColorId:jobColor.id,modelId,modelCardId:modelId,colorId:body.colorId || jobColor.registeredColorId || null,recipeId,modelName:job.modelName,companyName:job.companyName || body.companyName,orderNo:job.orderNo || body.orderNo,colorName:jobColor.colorName,pantoneSnapshot:body.pantone || jobColor.pantone,paintTypeSnapshot:body.paintType || jobColor.paintType,version:body.version || "V1",multiplier,jobType,totalReferenceGr:lines.reduce((sum,line)=>sum+num(line.referenceGram),0),totalPreparedKg:items.reduce((sum,item)=>sum+num(item.consumedKg),0),totalCost,items,nextColorId:nextColor?.id || null,createdAt:at,updatedAt:at};
+    if(rf.enabled===true){
+      const rfProductId=productionId+":RF-P",rfLotId=productionId+":RF-L",rfCode="RF-"+productionId.slice(-12);
+      const rfName=`RF - ${job.modelName || "Model"} - ${jobColor.colorName || "Renk"} - ${productionId.slice(-8)}`;
+      const unitCost=rfTl>0?rfTl/rfKg:preparedKg>0?totalCost/preparedKg:0;
+      const trace=items.map(item=>({productId:item.productId,lotId:item.lotId,consumedKg:item.consumedKg}));
+      // Internal prepared output is not an automatically approved purchased
+      // chemical. Keep product review policy; no new purchase/expense is made.
+      writes.push(storeInsert(db,SCOPES.product,slug,rfProductId,{productName:rfName,name:rfName,code:rfCode,dyeType:"RF BOYA",unit:"KG",supplierName:"HAKAN BASKI BOYAHANE",approvalStatus:"REVIEW_REQUIRED",isActive:true,currentPrice:unitCost,currency:"TRY",source:"RF_PREPARED",sourceProductionId:productionId,sourceMaterialLots:trace,documents:[],archiveStatus:"FILE_HUB_BINDING_PENDING",createdAt:at},at));
+      writes.push(storeInsert(db,SCOPES.lot,slug,rfLotId,{mainCompanySlug:slug,inventoryId:rfProductId,productId:rfProductId,productName:rfName,dyeType:"RF BOYA",lotNo:rfCode,entryKg:rfKg,quantity:rfKg,remainingKg:rfKg,remainingQuantity:rfKg,usedKg:0,unit:"KG",unitCost,source:"RF_PREPARED",sourceProductionId:productionId,sourceMaterialLots:trace,status:"AVAILABLE",isDefault:false,createdAt:at},at));
+      writes.push(storeInsert(db,SCOPES.movement,slug,productionId+":RF-M",{lotId:rfLotId,productId:rfProductId,type:"IN",movementType:"RF_PREPARED",quantity:rfKg,quantityKg:rfKg,unit:"KG",source:"RF_PREPARED",productionId,modelId,unitCostAtMovement:unitCost,costAmount:rfKg*unitCost,createdAt:at},at));
+      production.rf={productId:rfProductId,lotId:rfLotId,productName:rfName,kg:rfKg,reviewRequired:true};
+    }
     writes.push(storeInsert(db,SCOPES.production,slug,productionId,production,at));
-    writes.push(storeUpdate(db,colorSnapshot,{...jobColor,registeredColorId:body.colorId || jobColor.registeredColorId || null,recipeId,paintType:body.paintType || jobColor.paintType,status:"COMPLETED",completedAt:at,preparedKg:num(jobColor.preparedKg)+production.totalPreparedKg},at));
+    writes.push(storeUpdate(db,colorSnapshot,{...jobColor,registeredColorId:body.colorId || jobColor.registeredColorId || null,recipeId,paintType:body.paintType || jobColor.paintType,status:"COMPLETED",completedAt:at,preparedKg:num(jobColor.preparedKg)+production.totalPreparedKg,
+      ...(["SAMPLE","TRIAL"].includes(jobType)?{sampleApprovedAt:at,sampleDraft:body.sampleDraft || jobColor.sampleDraft}:{} )},at));
     writes.push(storeInsert(db,SCOPES.expense,slug,productionId+":E",{productionId,jobId:job.id,modelId,modelName:job.modelName,companyName:production.companyName,orderNo:production.orderNo,jobType,description:`${job.modelName || "Model"} Boyahane boya/kimyasal sarfı`,amount:totalCost,expenseDate:at.slice(0,10),source:"BOYAHANE_PRODUCTION",createdAt:at},at));
     writes.push(storeInsert(db,SCOPES.log,slug,productionId+":L",{mainCompanySlug:slug,module:"BOYAHANE",entityType:"DYE_PRODUCTION",entityId:productionId,action:"PRODUCTION_CREATED",actionType:"PRODUCTION_CREATED",description:`${job.modelName || "Model"} · ${jobColor.colorName || "Renk"} hazırlandı; stok, fiş ve gider birlikte kaydedildi.`,actor:"KY ERP",createdAt:at},at));
     try {

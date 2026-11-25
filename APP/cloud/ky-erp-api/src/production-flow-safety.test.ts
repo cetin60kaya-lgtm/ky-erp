@@ -39,12 +39,14 @@ test("three actual routes use the safety helpers", () => {
   const dye = read("./boyahane-workflow.ts");
   assert.match(production,/productionQuantityIssue\(grossQty/);
   assert.match(production,/committedByRegion\.set\(regionKey, alreadyCommitted \+ grossQty\)/);
-  assert.match(design,/designJobState\(currentJob, hasNewPendingColor\)/);
+  assert.match(design,/designJobState\(currentJob,\s*hasNewPendingColor\)/);
   assert.match(design,/isRemovedDesignColor\(old\.sourceChannelKey/);
   assert.match(design,/await commitStoreBatch\(db,guards,writes\)/);
   assert.match(dye,/JOB_COLOR_MISMATCH/);
   assert.match(dye,/remainingByLot\.set\(line\.lotId,nextRemaining\)/);
   assert.match(dye,/await commitStoreBatch\(db,guards,writes\)/);
+  assert.match(dye,/recipeSignature\(recipeLines\(recipeSnapshot.value.lines\)\)/);
+  assert.match(dye,/production\.rf=\{productId:rfProductId/);
   assert.match(read("./main.ts"),/registerBoyahaneLotMovementV2Routes\(app\)/);
   assert.match(read("./main.ts"),/shell\.use\("\/api\/boyahane\/\*", enforceBoyahaneTenant\)/);
 });

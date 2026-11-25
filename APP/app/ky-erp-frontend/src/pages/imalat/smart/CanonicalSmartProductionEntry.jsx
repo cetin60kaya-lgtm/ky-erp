@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CircleAlert,
   ClipboardCheck,
@@ -68,6 +68,9 @@ export default function CanonicalSmartProductionEntry({
   const [recent, setRecent] = useState([]);
   const [showIssuesOnly, setShowIssuesOnly] = useState(false);
   const [message, setMessage] = useState("");
+  const [saving,setSaving] = useState(false);
+  const saveLock=useRef(false);
+  const pendingBatch=useRef(null);
 
   const loadRecent = useCallback(
     () =>
@@ -209,6 +212,7 @@ export default function CanonicalSmartProductionEntry({
   }
 
   async function saveReadyRows() {
+    if(saveLock.current)return;
     const checked = validateProductionRows(rows);
     setRows(checked);
     const readyEntries = checked.filter((row) => row.status === "ready");
@@ -226,13 +230,22 @@ export default function CanonicalSmartProductionEntry({
       return;
     }
 
-    const entries = enrichWithOpenDispatch(readyEntries);
-    const requestId = crypto.randomUUID();
+    const entries = enrichWithOpenDispatch(readyEntries).map(row=>({...row,clientId:row.id}));
+    const signature=JSON.stringify([storageKey,entries]);
+    if(pendingBatch.current && pendingBatch.current.signature!==signature){
+      setMessage("Önce sonucu belirsiz önceki fiş grubunu aynı satırlarla doğrulayın.");
+      return;
+    }
+    if(!pendingBatch.current)pendingBatch.current={signature,requestId:crypto.randomUUID()};
+    const requestId=pendingBatch.current.requestId;
+    saveLock.current=true;
+    setSaving(true);
     try {
       const result = await bulkCreateProduction(activeMainCompany, {
         requestId,
         entries,
       });
+      pendingBatch.current=null;
       const successIds = new Set(
         (result?.success || []).map((item) => item.clientId),
       );
@@ -262,7 +275,11 @@ export default function CanonicalSmartProductionEntry({
       loadRecent();
       loadDictionaries();
     } catch (error) {
-      setMessage(error?.message || "Toplu üretim kaydı yapılamadı.");
+      if ([400,403,404,422].includes(Number(error?.status))) pendingBatch.current=null;
+      setMessage((error?.message || "Toplu üretim kaydı yapılamadı.")+(pendingBatch.current?" Aynı satırlarla tekrar Kaydet mevcut işlem kimliğini kullanır.":""));
+    } finally {
+      saveLock.current=false;
+      setSaving(false);
     }
   }
 
@@ -431,6 +448,7 @@ export default function CanonicalSmartProductionEntry({
                 className="iw-btn primary"
                 type="button"
                 onClick={saveReadyRows}
+                disabled={saving}
               >
                 <Save size={16} /> Hazırları Kaydet
               </button>

@@ -1094,7 +1094,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
 
   for (const [sourceIndex, source] of sourceEntries.entries()) {
     const entry = objectValue(source);
-    const clientId = sourceEntries.length === 1 ? "0" : text(entry.clientId || entry.id) || String(sourceIndex);
+    const clientId = text(entry.clientId) || (sourceEntries.length === 1 ? "0" : text(entry.id) || String(sourceIndex));
     const modelId = text(entry.modelId || entry.modelKaydiId);
     const card = cardsById.get(modelId);
     const grossQty = numberValue(first(entry.quantity, entry.adet, entry.uretimAdedi));
