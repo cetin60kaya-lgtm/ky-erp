@@ -30,10 +30,10 @@ export const SOAP_DOCUMENTED_OPERATIONS={
     ],
     "write": [
       "SendDespatchAdvice",
-      "SendDespatchAdviceXML",
+      "SendDespatchAdviceXml",
       "SendDespatchAdviceXmlWithoutDespatchAdviceNumber",
       "SendReceiptAdvice",
-      "SendReceiptAdviceXML",
+      "SendReceiptAdviceXml",
       "SendReceiptAdviceXmlWithoutReceiptAdviceNumber"
     ]
   },
