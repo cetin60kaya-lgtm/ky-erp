@@ -1,3 +1,4 @@
+import {testProductCatalog,resolveTestProductAction} from "./isnet-test-product-catalog.ts";
 import {fetchSource,remainingLines} from "./isnet-provider-source.ts";
 import {readProviderCatalog} from "./isnet-provider-catalog.ts";
 // @ts-nocheck
@@ -242,7 +243,7 @@ async function saveTestDrafts(c:Context<AppEnv>,slug:string){
  if(current.version!==body.version)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});
  const version=crypto.randomUUID(),ts=new Date().toISOString(),key=testDraftKey(slug);
  let verified=null;if(body.action?.sourceRef&&!body.action?.id)verified=await verifiedSource(c,body.action.sourceRef);
- let next;try{next={...transition(current,body.action||{},crypto.randomUUID(),ts,verified),version};}catch(e:any){throw Object.assign(e,{status:400,code:"DRAFT_INVALID"});}
+ let next;try{next={...transition(current,resolveTestProductAction(current,body.action||{}),crypto.randomUUID(),ts,verified),version};}catch(e:any){throw Object.assign(e,{status:400,code:"DRAFT_INVALID"});}
  const payload=JSON.stringify(next);if(new TextEncoder().encode(payload).length>1500000)throw Object.assign(new Error("TEST taslak kapasitesi doldu; notlar kısaltılmadı."),{status:409,code:"DRAFT_STORAGE_LIMIT"});
  const result=current.version?await c.env.DB.prepare("UPDATE json_store SET data=?,updated_at=? WHERE id=? AND scope=? AND main_company_slug=? AND file_name=? AND json_extract(data,'$.version')=?").bind(payload,ts,key,TEST_DRAFT_SCOPE,slug,key,current.version).run():await c.env.DB.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO NOTHING").bind(key,TEST_DRAFT_SCOPE,slug,key,payload,ts,ts).run();
  if(result.meta?.changes!==1)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});return next;
@@ -270,8 +271,8 @@ export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
  app.get("/api/muhasebe/isnet-soap-test-source",async c=>{try{const slug=await defaultsAccess(c),source=await verifiedSource(c,c.req.query()),state=await loadTestDrafts(c,slug);c.header("Cache-Control","no-store");return c.json({ok:true,data:{source,lines:remainingLines(source,state.drafts),version:state.version,settings:state.settings||null,environment:"TEST"}});}catch(e:any){return errorResponse(c,e);}});
  app.get("/api/muhasebe/isnet-provider-catalog",async c=>{try{await defaultsAccess(c);c.header("Cache-Control","no-store");return c.json({ok:true,data:await readProviderCatalog()});}catch(e:any){return errorResponse(c,e);}});
  app.get("/api/muhasebe/isnet-soap-test-health",async c=>{try{await defaultsAccess(c);const services=await probeSoapTestEndpoints();return c.json({ok:true,data:{services,environment:"TEST",authenticated:false,sendEnabled:false}});}catch(e:any){return errorResponse(c,e);}});
- app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await loadTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
- app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await saveTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
+ app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:{...(await loadTestDrafts(c,slug)),productCatalog:testProductCatalog}});}catch(e:any){return errorResponse(c,e);}});
+ app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:{...(await saveTestDrafts(c,slug)),productCatalog:testProductCatalog}});}catch(e:any){return errorResponse(c,e);}});
 
   app.get("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await readWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
   app.put("/api/muhasebe/isnet-workflow-defaults",async c=>{try{const slug=await defaultsAccess(c,true);return c.json({ok:true,data:await saveWorkflowDefaults(c,slug)});}catch(e:any){return errorResponse(c,e);}});
