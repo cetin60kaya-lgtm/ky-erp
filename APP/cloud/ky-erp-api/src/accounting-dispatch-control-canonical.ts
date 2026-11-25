@@ -4,6 +4,7 @@ import { getAuthenticatedUser } from "./auth-cloud";
 import { accountingAccess } from "./accounting-access-policy";
 import { transition } from "./isnet-test-draft-core";
 import { probeSoapTestEndpoints } from "./isnet-soap-probe";
+import { searchSoapTest } from "./isnet-soap-read";
 
 type AppEnv={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -244,7 +245,20 @@ async function saveTestDrafts(c:Context<AppEnv>,slug:string){
  if(result.meta?.changes!==1)throw Object.assign(new Error("Taslaklar başka oturumda değişti. Yenileyin."),{status:409,code:"DRAFT_CONFLICT"});return next;
 }
 
+// Only the two provider-issued sandbox company IDs are allowed, never a live VKN.
+// Store SHA-256 fingerprints rather than the supplied test identifiers.
+const ISNET_TEST_COMPANY_HASHES=new Set(["f3306c3496174ee9c78d01e972aea1eb980899e5aa846f8b8124b40e25aea7a8","3a306629b054cc57550db3937e31b0c42c0a287a4a68e3c2c04230070496de2b"]);
+async function readIsnetSoapTest(c:Context<AppEnv>){
+ await defaultsAccess(c);
+ const companyTaxCode=text(c.req.query("companyTaxCode"));
+ const hash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(companyTaxCode))),n=>n.toString(16).padStart(2,"0")).join("");
+ if(!ISNET_TEST_COMPANY_HASHES.has(hash))throw Object.assign(new Error("Yalnız İşNet tarafından verilen iki TEST firma VKN'si kullanılabilir."),{status:403,code:"TEST_COMPANY_NOT_ALLOWED"});
+ const q={companyTaxCode,kind:c.req.query("kind"),direction:c.req.query("direction"),from:c.req.query("from"),to:c.req.query("to"),page:c.req.query("page")||1,ettn:c.req.query("ettn")||"",file:c.req.query("file")||""};
+ try{return await searchSoapTest(q);}catch(e:any){throw Object.assign(new Error("İşNet TEST belge erişimi başarısız: "+(e.code||"SOAP_UNAVAILABLE")),{status:502,code:e.code||"SOAP_UNAVAILABLE"});}
+}
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
+ app.get("/api/muhasebe/isnet-soap-test-documents",async c=>{try{const data=await readIsnetSoapTest(c);c.header("Cache-Control","no-store");return c.json({ok:true,data});}catch(e:any){return errorResponse(c,e);}});
+
  app.get("/api/muhasebe/isnet-soap-test-health",async c=>{try{await defaultsAccess(c);const services=await probeSoapTestEndpoints();return c.json({ok:true,data:{services,environment:"TEST",authenticated:false,sendEnabled:false}});}catch(e:any){return errorResponse(c,e);}});
  app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await loadTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
  app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await saveTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});

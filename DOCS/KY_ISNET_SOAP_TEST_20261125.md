@@ -17,3 +17,8 @@ Sıra: gerçek KYERP çıkışından WSDL ve sınırlı auth sorgusu → exact S
 - 25.11 tekrar iki TEST WSDL bağlantısı: doğrudan çalışma ortamı DNS çözümleyemedi (curl 6). Bu İşNet'in veya kullanıcının ağının arızalı olduğunu ispatlamaz. Gerçek SOAP POST, canlı yayın, CI yapılmadı. Kullanıcı gönderim özelliğini kurmayı istedi; gerçek gönderim yapılmadı.
 
 - TEST çalışma alanına Worker çıkışından iki sabit TEST URL için GET ?singleWsdl tanısı eklendi. Sınırlı XML okuma, DTD reddi, WSDL namespace ve operasyon listesi; sağlayıcı yetkisi veya SOAPAction doğrulaması sayılmaz. 5/5 sentetik WSDL sınıflandırma kontrolü başarılı; Worker'da çalıştırılmadı.
+
+## 25.11.2026 — Kullanıcı kabul sırası: önce gerçek belge okuma
+- TEST çalışma alanında önce SearchInvoice/SearchDespatchAdvice gelen/giden, tarih (en fazla 31 gün), 20 kayıt sayfalama, ETTN ile detay, özgün XML/PDF. Yalnız sağlayıcının iki test VKN'sinin SHA-256 allowlist'i; canlı VKN/URL, üretim kaydı, gönderim yok.
+- WSDL inline document/literal binding'den gerçek SOAPAction, wrapper, namespace, XSD sırası ve enum çözümlemeye çalışan fail-closed adapter. Harici schema/policy, eksik veya farklı kontrat kabul edilmez. PDF s.12–14/33/44 ve irsaliye s.8–9/24/27/31 doğrultusunda alanlar. XML UBL türü/UUID, PDF imzası, sayfa ve ETTN kontrolü; PDF içerik kimliği bağımsız doğrulanmış sayılmaz. Başarı yalnız gerçek sağlayıcı yanıtı; sentetik test ayrı.
+- Ekran ve API hazırlık dalında. Doğrudan DNS yeniden başarısız, canlı WSDL/ SOAP kabulü, CI ve yayın yok. Test belge erişimi tamamlanmadan resmî oluşturma/gönderim açılmaz.
