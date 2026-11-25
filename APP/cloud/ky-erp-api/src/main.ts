@@ -1,3 +1,4 @@
+import { registerBrowserSessionRoutes } from "./auth-browser-session";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import app from "./index";
@@ -477,6 +478,8 @@ shell.get("/api/auth/status", (c) => c.json({
     mfaSeconds: MFA_SESSION_SECONDS,
     ownerRollingSeconds: OWNER_ROLLING_SESSION_SECONDS,
     ownerPersistentBrowserSession: false,
+    browserResumeWithinSession: true,
+    browserResumeTransport: "HTTP_ONLY_ORIGIN_SCOPED",
     ownerAutomaticRefresh: false,
   },
 }));
@@ -494,6 +497,7 @@ shell.get("/api/auth/me", async (c) => {
 registerAuthRecoveryCodeFallbackRoutes(shell);
 registerAuthOwnerGuardRoutes(shell);
 registerAuthSessionRefreshRoutes(shell);
+registerBrowserSessionRoutes(shell, sanitizeNonOwnerUser);
 registerAuthPushRoutes(shell);
 registerAuthPolicyRoutes(shell);
 registerSecurityActionRoutes(shell);

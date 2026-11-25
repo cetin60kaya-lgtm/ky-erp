@@ -235,8 +235,8 @@ function bearerToken(c: any) {
   const match = text(c.req.header("Authorization")).match(/^Bearer\s+(.+)$/i);
   return match ? match[1].trim() : "";
 }
-export async function getAuthenticatedUser(c: any) {
-  const token = bearerToken(c);
+export async function getAuthenticatedUser(c: any, explicitToken?: string) {
+  const token = explicitToken === undefined ? bearerToken(c) : text(explicitToken);
   if (!token) return null;
   const payload = await parseSignedToken(c, token);
   if (!payload) return null;
