@@ -1,13 +1,11 @@
 import ModelFilesPanel from "../../../components/shared/ModelFilesPanel";
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   addBoyahaneJobColor,
   compareColorRecipe,
   completeBoyahaneJob,
-  createBoyahaneProduct,
   createBoyahaneProduction,
-  createBoyahaneWorkflowLot,
   createColorRecipeVersion,
   createRegisteredColor,
   getBoyahaneJob,
@@ -271,6 +269,8 @@ function ColorWorkspace({
   const [error, setError] = useState("");
   const [recipeWarning, setRecipeWarning] = useState("");
   const [rf, setRf] = useState({ enabled: false, kg: "", tl: "" });
+  const pendingProduction = useRef(null);
+  const finalLock = useRef(false);
 
   const productMap = useMemo(
     () => new Map(products.map((row) => [String(row.id), row])),
@@ -529,43 +529,6 @@ function ColorWorkspace({
     return created.id;
   }
 
-  async function saveRfProduct(recipe) {
-    if (mode !== "production" || !rf.enabled) return null;
-    const kg = Number(rf.kg || 0);
-    if (kg <= 0) throw new Error("RF ürün kaydı için kalan kilogramı girin.");
-    const now = new Date();
-    const stamp = `${String(now.getDate()).padStart(2, "0")}${String(
-      now.getMonth() + 1,
-    ).padStart(2, "0")}${String(now.getFullYear()).slice(-2)}-${String(
-      now.getHours(),
-    ).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
-    const product = await createBoyahaneProduct(activeMainCompany, {
-      productName: `RF - ${job.modelName} - ${colorName} - ${stamp}`,
-      tradeName: `${pantone} · ${paintType} · ${recipe?.version || "V1"}`,
-      code: `RF-${normalized(job.modelName).slice(0, 10)}-${stamp}`,
-      supplierName: "HAKAN BASKI BOYAHANE",
-      dyeType: "RF BOYA",
-      unit: "KG",
-      currentPrice: Number(rf.tl || 0) > 0 ? Number(rf.tl) / kg : 0,
-      currency: "TRY",
-      approvalStatus: "APPROVED",
-      source: "RF_PREPARED",
-      note: `${job.modelName} / ${colorName} / ${pantone}. Bileşen lotları ilk hazırlama kaydına bağlıdır.`,
-    });
-    const lot = await createBoyahaneWorkflowLot(activeMainCompany, {
-      inventoryId: product.id,
-      productId: product.id,
-      lotNo: `RF-${stamp}`,
-      entryKg: kg,
-      quantity: kg,
-      supplierName: "HAKAN BASKI BOYAHANE",
-      isDefault: true,
-      source: "RF_PREPARED",
-      status: "AVAILABLE",
-    });
-    return { product, lot };
-  }
-
   async function saveDraft() {
     setBusy(true);
     setError("");
@@ -602,93 +565,59 @@ function ColorWorkspace({
   }
 
   async function saveFinal() {
-    if (
-      mode === "sample" &&
-      !window.confirm(
-        "Numune fiziksel olarak hazırlandı ve onaylandı mı? Gerçek lot sarfları oluşacaktır.",
-      )
-    )
-      return;
-
+    if (finalLock.current) return;
+    if (mode === "sample" && !pendingProduction.current &&
+      !window.confirm("Numune fiziksel olarak hazırlandı ve onaylandı mı? Gerçek lot sarfları oluşacaktır.")) return;
+    finalLock.current = true;
     setBusy(true);
     setError("");
     setMessage("");
     try {
-      validate();
-      const colorId = await ensureColor();
-      let recipe;
-      if (mode === "sample") {
-        recipe = await createColorRecipeVersion(activeMainCompany, colorId, {
-          paintType,
-          jobId: job.id,
-          jobColorId: color.id,
-          lines: lines(),
-        });
-      } else {
-        const compared = await compareColorRecipe(activeMainCompany, colorId, {
-          paintType,
-          lines: lines(),
-        });
-        recipe = compared?.exactMatch
-          ? compared.recipe
-          : await createColorRecipeVersion(activeMainCompany, colorId, {
-              paintType,
-              jobId: job.id,
-              jobColorId: color.id,
-              lines: lines(),
-            });
+      const scope = JSON.stringify([activeMainCompany?.slug || activeMainCompany?.id,job.id,color.id,mode]);
+      if (pendingProduction.current && pendingProduction.current.scope !== scope)
+        throw new Error("Önce sonucu belirsiz önceki üretim kaydını kendi model/renk ekranında doğrulayın.");
+      if (!pendingProduction.current) {
+        validate();
+        const productionLines=lines();
+        const copies=Number(multiplier || 1);
+        const totalKg=productionLines.reduce((sum,line)=>sum+Number(line.referenceGram || 0)*copies/1000,0);
+        if(rf.enabled && (mode!=="production" || !Number.isFinite(Number(rf.kg)) || Number(rf.kg)<=0 || Number(rf.kg)>totalKg+1e-9 || Number(rf.tl || 0)<0))
+          throw new Error("RF kalan KG sıfırdan büyük ve hazırlanan toplam KG'den küçük/eşit olmalıdır.");
+        const colorId = await ensureColor();
+        let recipe;
+        if (mode === "sample") {
+          recipe = await createColorRecipeVersion(activeMainCompany,colorId,{paintType,jobId:job.id,jobColorId:color.id,lines:productionLines});
+        } else {
+          const compared=await compareColorRecipe(activeMainCompany,colorId,{paintType,lines:productionLines});
+          recipe=compared?.exactMatch?compared.recipe:await createColorRecipeVersion(activeMainCompany,colorId,{paintType,jobId:job.id,jobColorId:color.id,lines:productionLines});
+        }
+        pendingProduction.current={scope,payload:{
+          requestId:globalThis.crypto?.randomUUID?.() || `${mode}-${Date.now()}`,
+          jobId:job.id,jobColorId:color.id,colorId,recipeId:recipe.id,pantone,colorName,paintType,version:recipe.version,multiplier:copies,
+          jobType:mode==="sample"?"SAMPLE":"PRODUCTION",companyName:job.companyName,orderNo:job.orderNo,lines:productionLines,
+          rf:{enabled:mode==="production"&&rf.enabled,kg:Number(rf.kg || 0),tl:Number(rf.tl || 0)},
+          ...(mode==="sample"?{sampleDraft:{rows,trialCount,copies,paintType,pantone,colorName,registeredColorId:colorId}}:{})
+        }};
       }
-
-      const response = await createBoyahaneProduction(activeMainCompany, {
-        requestId:
-          globalThis.crypto?.randomUUID?.() || `${mode}-${Date.now()}`,
-        jobId: job.id,
-        jobColorId: color.id,
-        colorId,
-        recipeId: recipe.id,
-        pantone,
-        colorName,
-        paintType,
-        version: recipe.version,
-        multiplier: Number(multiplier || 1),
-        jobType: mode === "sample" ? "SAMPLE" : "PRODUCTION",
-        companyName: job.companyName,
-        orderNo: job.orderNo,
-        lines: lines(),
-      });
-
-      const rfRow = await saveRfProduct(recipe);
-      await patchBoyahaneJobColor(activeMainCompany, color.id, {
-        status: "COMPLETED",
-        registeredColorId: colorId,
-        recipeId: recipe.id,
-        paintType,
-        ...(mode === "sample"
-          ? {
-              sampleApprovedAt: new Date().toISOString(),
-              sampleDraft: {
-                rows,
-                trialCount,
-                copies: Number(multiplier || 1),
-                paintType,
-                pantone,
-                colorName,
-                registeredColorId: colorId,
-              },
-            }
-          : {}),
-      });
-
-      setMessage(
-        rfRow
-          ? `Renk hazırlandı; ${rfRow.product.productName} ürün ve lot olarak kaydedildi.`
-          : `${recipe.version} kaydedildi ve bileşen lot sarfları işlendi.`,
-      );
+      // An unknown response is retried using precisely the same requestId
+      // and recipe; do not create a second RF product or deduct components twice.
+      const attempt=pendingProduction.current;
+      const response=attempt.response || await createBoyahaneProduction(activeMainCompany,attempt.payload);
+      attempt.response=response;
+      setMessage(response?.rf
+        ? `Renk hazırlandı; ${response.rf.productName} RF ürünü ve LOT kaydedildi. Ürün kullanım onayı bekliyor.`
+        : `${attempt.payload.version} kaydedildi ve bileşen lot sarfları işlendi.`);
       await onSaved?.(response?.nextColorId);
+      pendingProduction.current=null;
       onNext?.();
     } catch (requestError) {
-      setError(requestError.message);
+      if (pendingProduction.current && !pendingProduction.current.response &&
+          [400,403,404,422].includes(Number(requestError.status))) pendingProduction.current=null;
+      else if (pendingProduction.current && requestError.code === "PRODUCTION_VALIDATION_FAILED") pendingProduction.current=null;
+      else if (pendingProduction.current && requestError.code === "PRODUCTION_ATOMIC_CONFLICT") pendingProduction.current=null;
+      setError(requestError.message + (pendingProduction.current ? " Tekrar Kaydet aynı işlem kimliğiyle önceki sonucu doğrular." : ""));
     } finally {
+      finalLock.current=false;
       setBusy(false);
     }
   }

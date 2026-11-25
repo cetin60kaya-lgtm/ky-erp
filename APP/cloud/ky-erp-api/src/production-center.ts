@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 import { isHistoricalProduction, matchesProductionPool, PRODUCTION_POOL_CONTRACT } from "./production-pool-classification.ts";
 import { productionIdentity, writeProductionEntryAtomic } from "./production-idempotency";
+import { productionQuantityIssue } from "./production-flow-safety.ts";
 
 type AppEnv = {
   Bindings: Cloudflare.Env;
@@ -1078,16 +1079,22 @@ function filterCards(cards: Row[], query: Row): Row[] {
 async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   const slug = companySlug(c, body);
   const requestId = text(body.requestId) || crypto.randomUUID();
+  // Count before the center snapshot. A concurrent insert invalidates the
+  // write inside the same D1 transaction, even when requestIds differ.
+  const initialCount = await c.env.DB.prepare("SELECT COUNT(*) n FROM production_records WHERE main_company_slug=?").bind(slug).first<{n:number}>();
+  let expectedRecordCount = Number(initialCount?.n);
+  if (!Number.isSafeInteger(expectedRecordCount)) throw Error("PRODUCTION_SNAPSHOT_FAILED");
   const center = await buildCenter(c, slug);
   const cardsById = new Map(center.cards.map((card) => [text(card.id), card]));
   const sourceEntries = Array.isArray(body.entries) ? body.entries : [body];
   const success: Row[] = [];
   const failed: Row[] = [];
   const seenThisBatch = new Set<string>();
+  const committedByRegion = new Map<string, number>();
 
   for (const [sourceIndex, source] of sourceEntries.entries()) {
     const entry = objectValue(source);
-    const clientId = sourceEntries.length === 1 ? "0" : text(entry.clientId || entry.id) || String(sourceIndex);
+    const clientId = text(entry.clientId) || (sourceEntries.length === 1 ? "0" : text(entry.id) || String(sourceIndex));
     const modelId = text(entry.modelId || entry.modelKaydiId);
     const card = cardsById.get(modelId);
     const grossQty = numberValue(first(entry.quantity, entry.adet, entry.uretimAdedi));
@@ -1100,21 +1107,23 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       normalized(entry.machineId || entry.machineName || entry.makineNo),
       normalized(entry.operatorName || entry.operatorId || entry.makinaci)].join("|");
     const errors: string[] = [];
-    if (seenThisBatch.has(clientId)) errors.push("Aynı toplu istekte aynı clientId ikinci kez kullanılamaz.");
+    if (seenThisBatch.has(clientId)) {
+      failed.push({clientId, code:"PRODUCTION_VALIDATION_FAILED", error:"Aynı toplu istekte aynı clientId ikinci kez kullanılamaz."});
+      continue;
+    }
+    const regionKey = JSON.stringify([modelId, normalized(printArea)]);
+    const alreadyCommitted = committedByRegion.get(regionKey) || 0;
     if (!card || card.isVirtual) errors.push("Kayıtlı tek merkez model seçilmelidir.");
-    if (!(grossQty > 0)) errors.push("Brüt üretim adedi sıfırdan büyük olmalıdır.");
-    if (printDefectQty + fabricDefectQty + testQty > grossQty) {
-      errors.push("Sakat ve test toplamı brüt üretimi aşamaz.");
-    }
     if (!printArea && body.historicalImport !== true) errors.push("Baskı bölgesi zorunludur.");
-    if (card && card.incomingQty > 0 && !body.allowOverProduction) {
-      const operation = (card.operationRows || []).find(
-        (row: Row) => normalized(row.region) === normalized(printArea),
-      );
-      if (numberValue(operation?.producedQty) + grossQty > numberValue(card.incomingQty)) {
-        errors.push("Bu kayıt baskı bölgesi üretimini gelen irsaliye adedinin üzerine çıkarır.");
-      }
-    }
+    const existingQty = (card?.operationRows || [])
+      .filter((row: Row) => normalized(row.region) === normalized(printArea))
+      .reduce((sum: number, row: Row) => sum + numberValue(row.producedQty), 0);
+    if (expectedRecordCount >= 10000 && numberValue(card?.incomingQty) > 0 && body.allowOverProduction !== true)
+      errors.push("Üretim okuma sınırı aşıldı; eksik kapasiteyle yeni kayıt yapılamaz.");
+    const quantityIssue = productionQuantityIssue(grossQty,
+      [printDefectQty, fabricDefectQty, testQty], numberValue(card?.incomingQty),
+      existingQty, alreadyCommitted, body.allowOverProduction === true);
+    if (quantityIssue) errors.push(quantityIssue);
     // Replay is checked against persistent DB identity before any capacity validation.
     seenThisBatch.add(clientId);
     const now = new Date().toISOString();
@@ -1173,9 +1182,16 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       production_date: date + "T12:00:00.000Z", note: raw.note, raw, created_at: now, updated_at: now,
     };
     try {
-      success.push(await writeProductionEntryAtomic(
-        c.env.DB,slug,requestId,clientId,rawPayload,record,{model_id:modelId},
-      ));
+      const saved = await writeProductionEntryAtomic(
+        c.env.DB,slug,requestId,clientId,rawPayload,record,{model_id:modelId},expectedRecordCount,
+      );
+      success.push(saved);
+      // A newly committed row consumes the same region's remaining capacity
+      // for all following rows in this request. A replay is already in the snapshot.
+      if (!saved.idempotent) {
+        committedByRegion.set(regionKey, alreadyCommitted + grossQty);
+        expectedRecordCount += 1;
+      }
     } catch (error: any) {
       failed.push({clientId,code:text(error?.code)||"PRODUCTION_ATOMIC_WRITE_FAILED",
         error:text(error?.message)||"Üretim kaydı ve model bağlantısı birlikte kaydedilemedi."});
@@ -1565,7 +1581,7 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
     await next();
   };
   for (const pattern of ["/api/production-center", "/api/production-center/*", "/api/model-flow/*",
-    "/api/production/*", "/api/imalat/kayitlar", "/api/uretim/seri/*"]) {
+    "/api/production/*", "/api/imalat/kayitlar", "/api/imalat/*", "/api/uretim/seri/*"]) {
     app.use(pattern, requireProductionTenant);
   }
   app.get("/api/production-center", async (c) => {
@@ -1714,6 +1730,30 @@ export function registerProductionCenterRoutes(app: Hono<AppEnv>) {
   });
 
   app.delete("/api/production-center/entries/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await maintainProductionEntry(c, c.req.param("id"), body, "ARCHIVE");
+      return "code" in result
+        ? c.json(jsonError(String(result.code || "PRODUCTION_MAINTENANCE_REJECTED"), String(result.message || "İşlem reddedildi.")), result.status as 400 | 404 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_ARCHIVE_FAILED", error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+
+  app.patch("/api/imalat/kayitlar/:id", async (c) => {
+    const body = await requestBody(c);
+    try {
+      const result = await maintainProductionEntry(c, c.req.param("id"), body, "UPDATE");
+      return "code" in result
+        ? c.json(jsonError(String(result.code || "PRODUCTION_MAINTENANCE_REJECTED"), String(result.message || "İşlem reddedildi.")), result.status as 400 | 404 | 409)
+        : c.json({ ok: true, success: true, data: result.data }, 200);
+    } catch (error) {
+      return c.json(jsonError("PRODUCTION_EDIT_FAILED", error instanceof Error ? error.message : String(error)), 500);
+    }
+  });
+
+  app.delete("/api/imalat/kayitlar/:id", async (c) => {
     const body = await requestBody(c);
     try {
       const result = await maintainProductionEntry(c, c.req.param("id"), body, "ARCHIVE");

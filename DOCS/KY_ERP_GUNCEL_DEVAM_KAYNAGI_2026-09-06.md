@@ -1,5 +1,13 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 25.11.2026 — İmalat / Desen / Boyahane bütünleşik stabilizasyon (PR #659, canlı kabul açık)
+
+- İmalat: kümülatif irsaliye/bölge kapasite kontrolü, negatif sakat/test reddi, istemci işlem kilidi ve aynı işlem kimliğiyle retry; D1 fiş+model bağlantısı transaction ve farklı isteklerin aynı kayıt sayısı snapshot yarışı koruması. Eski PATCH/DELETE alias rotaları canonical bakım işlemlerine bağlandı. Arşivli model kimliği yeniden açılmaz.
+- Desen → Boyahane: iş/renk senkronu tek D1 batch; mevcut statü/öncelik, manuel ve tamamlanmış renk korunur. Yeni renk tamamlanan işi yeniden beklemeye alır. Modelin sipariş, firma ve görsel alanları korunur; tamamlanmış renk reçetesi sessiz değiştirilmez.
+- Boyahane: stok, hareket, üretim, renk, gider ve log aynı transaction; LOT kümülatif bakiye, gerçek reçete/iş/renk doğrulama, deterministik işlem kimliği. Gerçek movements-v2 ve ters kayıt rotaları kayıtlı; bağlı üretim/belge hareketi tek başına iptal edilmez. Reçete sürümü kendi boya türünde atomik değişir; kullanılmış/arşivli reçete kilitli. RF ürün+LOT+giriş üretimle aynı transaction, ikinci sarf yok; ürün REVIEW_REQUIRED, onaysız RF çıkışı reddedilir. Firma yetki kapısı eklendi, eski tenant NULL kayıtlar için ayrıca uzlaştırma gerekir.
+- Kanıt: kod commit `ca47207303bac38d10b82560ee1ecf8a6388524c`; yerelde GitHub blob SHA eşleşmeli Node SQLite 15/15 test PASS, dört saf yardımcı senaryo PASS, 12 gerçek kaynak bağlama kontrolü PASS. Bunlar tam frontend/Worker derleme veya gerçek Cloudflare D1 kabulü değildir. Son kod CI sorgusunda PR workflow bulunmadı, AppVeyor birleşik durum failure; güvenli yayın kapısı açık. Bu dal yayınlanmadı.
+- Açık: tam CI/typecheck/build, canlı tenant ve RF onay/LOT kabulü, Desen merkez model yazısının ayrı transaction olması, İmalat kapasite snapshot'ında sayı değiştirmeyen eşzamanlı düzenleme ve 10.000 kayıt sınırı, eski NULL tenant kayıtları ve fiziksel LOT entegrasyon uzlaştırması. D1 migration, canlı kayıt/stoğa müdahale, PC işlemi ve resmi belge gönderimi yapılmadı.
+
 ## 25.11.2026 — KYERP SECURITY PRO / PR #658
 
 - PR #658 merge `aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf`; son kaynak `e3f94b18f554`; CI [#45558145529](https://github.com/cetin60kaya-lgtm/ky-erp/actions/runs/45558145529) frontend + Worker SUCCESS.

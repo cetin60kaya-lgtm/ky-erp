@@ -32,6 +32,7 @@ async function preparedInsert(db: any, table: string, values: Record<string,unkn
 export async function writeProductionEntryAtomic(
   db: any, tenant: string, requestId: string, clientId: string,
   rawPayload: Record<string,unknown>, record: Record<string,unknown>, link: Record<string,unknown>,
+  expectedRecordCount?: number,
 ) {
   const identity=await productionIdentity(tenant,requestId,clientId,rawPayload);
   const existing=async()=>db.prepare("SELECT id,raw FROM production_records WHERE id=? AND main_company_slug=? LIMIT 1").bind(identity.id,tenant).first();
@@ -60,11 +61,18 @@ export async function writeProductionEntryAtomic(
   ]);
   try {
     // D1 batch is one SQLite transaction; if the link fails the record rolls back.
-    await db.batch(statements);
+    const guard=expectedRecordCount===undefined?[]:[db.prepare(
+      "SELECT CASE WHEN (SELECT COUNT(*) FROM production_records WHERE main_company_slug=?)=? THEN 1 ELSE abs(-9223372036854775808) END AS ok"
+    ).bind(tenant,expectedRecordCount)];
+    await db.batch([...guard,...statements]);
   } catch(error:any) {
     // A competing identical request may have committed while this one was preparing.
     const winner=await existing();
     if(winner)return resolveExisting(winner);
+    if(expectedRecordCount!==undefined){
+      const latest=await db.prepare("SELECT COUNT(*) n FROM production_records WHERE main_company_slug=?").bind(tenant).first();
+      if(Number(latest?.n)!==expectedRecordCount)throw Object.assign(new Error("Üretim kayıtları başka oturumda değişti. Yenileyip tekrar deneyin."),{code:"PRODUCTION_SNAPSHOT_CONFLICT"});
+    }
     throw Object.assign(new Error("Üretim fişi ve model bağlantısı birlikte kaydedilemedi; kayıt oluşmadı."),{code:"PRODUCTION_ATOMIC_WRITE_FAILED"});
   }
   return { id:identity.id,storage:"production_records",idempotent:false,clientId };

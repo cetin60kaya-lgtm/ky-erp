@@ -1,6 +1,7 @@
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
+import { storeSnapshot, storeGuard, storeUpdate, storeInsert, stableStoreId, commitStoreBatch } from "./atomic-json-store.ts";
 
 type Bindings = Cloudflare.Env;
 type Variables = { requestId: string };
@@ -150,6 +151,15 @@ async function storePut(
   const payload = { ...data, updatedAt: now };
 
   if (existing?.storeId) {
+    if (scope === LOT_SCOPE) {
+      const snapshot = await storeSnapshot(c.env.DB, scope, slug, fileName);
+      if (!snapshot) throw Error("LOT_TENANT_REVIEW");
+      // All remaining callers here only clear a prior default marker. Never
+      // replace a stock or status snapshot from an earlier read.
+      const next = {...snapshot.value,isDefault:payload.isDefault};
+      await commitStoreBatch(c.env.DB,[storeGuard(c.env.DB,snapshot)],[storeUpdate(c.env.DB,snapshot,next,now)]);
+      return {...next,updatedAt:now,storeId:snapshot.id,fileName};
+    }
     await c.env.DB.prepare(
       `UPDATE json_store
           SET data = ?, updated_at = ?
@@ -610,6 +620,7 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
     }
 
     const id = text(body.id || crypto.randomUUID());
+    if (await storeGet(c,LOT_SCOPE,id,slug)) return c.json(jsonError("LOT_EXISTS","Bu LOT kimliği zaten kayıtlı."),409);
     const now = new Date().toISOString();
     if (body.isDefault === true) {
       for (const row of existingLots) {
@@ -625,11 +636,7 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
       }
     }
 
-    const lot = await storePut(
-      c,
-      LOT_SCOPE,
-      id,
-      {
+    const lot = {
         id,
         mainCompanySlug: slug,
         inventoryId,
@@ -652,28 +659,15 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
         status: text(body.status || "AVAILABLE"),
         source: text(body.source || "MANUAL"),
         createdAt: now,
-      },
-      slug,
-    );
-
-    const movementId = crypto.randomUUID();
-    await storePut(
-      c,
-      MOVEMENT_SCOPE,
-      movementId,
-      {
-        id: movementId,
-        lotId: id,
-        productId: inventoryId,
-        type: "IN",
-        quantity: entryKg,
-        unit: lot.unit,
-        documentNo: lot.documentNo,
-        note: "Manuel Boyahane lot girişi",
-        createdAt: now,
-      },
-      slug,
-    );
+      };
+    const movementId=await stableStoreId("BYL-IN:",[slug,id]);
+    const db=c.env.DB;
+    try{
+      await commitStoreBatch(db,[],[
+        storeInsert(db,LOT_SCOPE,slug,id,lot,now),
+        storeInsert(db,MOVEMENT_SCOPE,slug,movementId,{lotId:id,productId:inventoryId,type:"IN",quantity:entryKg,unit:lot.unit,documentNo:lot.documentNo,note:"Manuel Boyahane lot girişi",createdAt:now},now),
+      ]);
+    }catch{return c.json(jsonError("LOT_CREATE_CONFLICT","LOT ve ilk stok hareketi birlikte kaydedilemedi; kayıtları yenileyin."),409);}
 
     return c.json({
       ok: true,
@@ -683,139 +677,64 @@ export function registerBoyahaneInventoryRoutes(app: Hono<AppEnv>) {
   });
 
   app.post("/api/boyahane/workflow/lots/:id/movements", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const id = c.req.param("id");
-    const lot = await storeGet(c, LOT_SCOPE, id, slug);
-    if (!lot) return c.json(jsonError("NOT_FOUND", "Lot bulunamadı."), 404);
-
-    const type = normalize(body.type || "OUT");
-    const quantity = numberValue(body.quantity);
-    const remaining = numberValue(
-      lot.remainingKg ?? lot.remainingQuantity ?? lot.entryKg ?? lot.quantity,
-    );
-    if (!/IN|OUT|ADJUSTMENT IN|ADJUSTMENT OUT/.test(type) || quantity <= 0) {
-      return c.json(
-        jsonError(
-          "INVALID_MOVEMENT",
-          "Geçerli hareket türü ve sıfırdan büyük miktar zorunludur.",
-        ),
-        400,
-      );
+    const body=await bodyOf(c),slug=slugOf(c,body),id=c.req.param("id"),db=c.env.DB;
+    const type=normalize(body.type || "OUT");
+    const quantity=numberValue(body.quantity);
+    if (!["IN","OUT","ADJUSTMENT IN","ADJUSTMENT OUT"].includes(type) || quantity<=0)
+      return c.json(jsonError("INVALID_MOVEMENT","Geçerli hareket türü ve pozitif miktar zorunludur."),400);
+    const movementId=body.requestId || body.id ? await stableStoreId("BYM:",[slug,text(body.requestId || body.id)]) : crypto.randomUUID();
+    const payloadHash=await stableStoreId("",[id,type,quantity,text(body.recipeId),text(body.productionId),text(body.note)]);
+    const duplicate=async()=>storeSnapshot(db,MOVEMENT_SCOPE,slug,movementId);
+    const previous=await duplicate();
+    if(previous && previous.value.payloadHash!==payloadHash) return c.json(jsonError("MOVEMENT_REQUEST_CONFLICT","Aynı hareket kimliği farklı içerikle kullanıldı."),409);
+    const snapshot=await storeSnapshot(db,LOT_SCOPE,slug,id);
+    if(!snapshot)return c.json(jsonError("NOT_FOUND","Firma kapsamındaki LOT bulunamadı."),404);
+    const lot=snapshot.value;
+    if(previous)return c.json({ok:true,success:true,data:lot,idempotent:true});
+    const incoming=/(^| )IN$/.test(type);
+    const rfProduct=!incoming && normalize(lot.source)==="RF PREPARED"?await storeSnapshot(db,PRODUCT_SCOPE,slug,text(lot.productId || lot.inventoryId)):null;
+    if(!incoming && normalize(lot.source)==="RF PREPARED" && (rfProduct?.value.approvalStatus!=="APPROVED" || rfProduct.value.isActive===false))return c.json(jsonError("RF_APPROVAL_REQUIRED","RF ürün onayı tamamlanmamış."),409);
+    const remaining=numberValue(lot.remainingKg ?? lot.remainingQuantity ?? lot.entryKg ?? lot.quantity);
+    if(!incoming && (quantity>remaining || !["AVAILABLE","ACTIVE"].includes(normalize(lot.status))))
+      return c.json(jsonError("INSUFFICIENT_STOCK","LOT bakiyesi yetersiz veya LOT kullanıma açık değil."),409);
+    const at=new Date().toISOString(),entry=numberValue(lot.entryKg || lot.quantity)+(incoming?quantity:0),nextRemaining=remaining+(incoming?quantity:-quantity);
+    const nextLot={...lot,entryKg:entry,quantity:entry,remainingKg:nextRemaining,remainingQuantity:nextRemaining,usedKg:Math.max(0,entry-nextRemaining),status:nextRemaining<=0?"DEPLETED":normalize(lot.status)==="QUARANTINE"?"QUARANTINE":normalize(lot.status)==="INACTIVE"?"INACTIVE":"AVAILABLE",updatedAt:at};
+    const movement={payloadHash,lotId:id,productId:lot.productId || lot.inventoryId,type:incoming?"IN":"OUT",movementType:type,quantity,unit:lot.unit || "KG",recipeId:body.recipeId || null,productionId:body.productionId || null,note:text(body.note || "Boyahane stok hareketi"),createdAt:at};
+    try {await commitStoreBatch(db,[storeGuard(db,snapshot),...(rfProduct?[storeGuard(db,rfProduct)]:[])],[storeUpdate(db,snapshot,nextLot,at),storeInsert(db,MOVEMENT_SCOPE,slug,movementId,movement,at)]);}
+    catch {
+      const winner=await duplicate();
+      if(winner?.value.payloadHash===payloadHash) return c.json({ok:true,success:true,data:(await storeSnapshot(db,LOT_SCOPE,slug,id))?.value,idempotent:true});
+      return c.json(jsonError("LOT_MOVEMENT_CONFLICT","LOT değişti veya hareket kaydedilemedi; kayıtları yenileyin."),409);
     }
-
-    const incoming = /(^| )IN$/.test(type);
-    if (!incoming && quantity > remaining) {
-      return c.json(
-        jsonError("INSUFFICIENT_STOCK", "Lot bakiyesi hareket miktarından düşük.", {
-          remaining,
-          requested: quantity,
-        }),
-        409,
-      );
-    }
-
-    const nextRemaining = incoming ? remaining + quantity : remaining - quantity;
-    const entryKg = numberValue(lot.entryKg || lot.quantity);
-    const nextLot = await storePut(c, LOT_SCOPE, id, {
-      ...lot,
-      entryKg: incoming ? entryKg + quantity : entryKg,
-      quantity: incoming ? entryKg + quantity : entryKg,
-      remainingKg: nextRemaining,
-      remainingQuantity: nextRemaining,
-      usedKg: Math.max(0, (incoming ? entryKg + quantity : entryKg) - nextRemaining),
-      status: nextRemaining <= 0 ? "DEPLETED" : "AVAILABLE",
-    }, slug);
-
-    const movementId = crypto.randomUUID();
-    await storePut(c, MOVEMENT_SCOPE, movementId, {
-      id: movementId,
-      lotId: id,
-      productId: lot.productId || lot.inventoryId,
-      type: incoming ? "IN" : "OUT",
-      movementType: type,
-      quantity,
-      unit: lot.unit || "KG",
-      recipeId: body.recipeId || null,
-      productionId: body.productionId || null,
-      note: text(body.note || "Boyahane stok hareketi"),
-      createdAt: new Date().toISOString(),
-    }, slug);
-
-    return c.json({ ok: true, success: true, data: nextLot });
+    return c.json({ok:true,success:true,data:nextLot});
   });
 
-  app.post("/api/boyahane/workflow/lots/:id/action", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const id = c.req.param("id");
-    const lot = await storeGet(c, LOT_SCOPE, id, slug);
-    if (!lot) return c.json(jsonError("NOT_FOUND", "Lot bulunamadı."), 404);
-    const action = normalize(body.action);
-    const remaining = numberValue(
-      lot.remainingKg ?? lot.remainingQuantity ?? lot.entryKg ?? lot.quantity,
-    );
-
-    if (action === "SET DEFAULT") {
-      const rows = await storeRows(c, LOT_SCOPE, slug);
-      for (const row of rows) {
-        if (
-          text(row.productId || row.inventoryId) ===
-            text(lot.productId || lot.inventoryId) &&
-          text(row.id || row.fileName) !== id &&
-          row.isDefault === true
-        ) {
-          await storePut(c, LOT_SCOPE, text(row.id || row.fileName), {
-            ...row,
-            isDefault: false,
-          }, slug);
-        }
+  app.post("/api/boyahane/workflow/lots/:id/action", async(c)=>{
+    const body=await bodyOf(c),slug=slugOf(c,body),id=c.req.param("id"),db=c.env.DB;
+    const snapshot=await storeSnapshot(db,LOT_SCOPE,slug,id);
+    if(!snapshot)return c.json(jsonError("NOT_FOUND","Firma kapsamındaki LOT bulunamadı."),404);
+    const lot=snapshot.value,action=normalize(body.action),at=new Date().toISOString();
+    const remaining=numberValue(lot.remainingKg ?? lot.remainingQuantity ?? lot.entryKg ?? lot.quantity);
+    let next={...lot};
+    const guards=[storeGuard(db,snapshot)],writes=[];
+    if(action==="SET DEFAULT"){
+      if(!["AVAILABLE","ACTIVE"].includes(normalize(lot.status)))return c.json(jsonError("LOT_NOT_AVAILABLE","Pasif LOT varsayılan seçilemez."),409);
+      for(const row of await storeRows(c,LOT_SCOPE,slug)){
+        if(text(row.id || row.fileName)===id || text(row.productId || row.inventoryId)!==text(lot.productId || lot.inventoryId) || row.isDefault!==true)continue;
+        const other=await storeSnapshot(db,LOT_SCOPE,slug,text(row.id || row.fileName));
+        if(!other)return c.json(jsonError("LOT_TENANT_REVIEW","Eski varsayılan LOT firma eşleştirmesi gerektiriyor."),409);
+        guards.push(storeGuard(db,other));writes.push(storeUpdate(db,other,{...other.value,isDefault:false},at));
       }
-      const data = await storePut(c, LOT_SCOPE, id, {
-        ...lot,
-        isDefault: true,
-      }, slug);
-      return c.json({ ok: true, success: true, data });
-    }
-
-    if (action === "FINISH") {
-      if (remaining > 0) {
-        return c.json(
-          jsonError(
-            "LOT_HAS_STOCK",
-            "Kalan stok sıfırlanmadan lot bitti olarak kapatılamaz.",
-            { remaining },
-          ),
-          409,
-        );
-      }
-      const data = await storePut(c, LOT_SCOPE, id, {
-        ...lot,
-        status: "DEPLETED",
-        isDefault: false,
-      }, slug);
-      return c.json({ ok: true, success: true, data });
-    }
-
-    if (action === "DEACTIVATE") {
-      const data = await storePut(c, LOT_SCOPE, id, {
-        ...lot,
-        status: "INACTIVE",
-        isDefault: false,
-      }, slug);
-      return c.json({ ok: true, success: true, data });
-    }
-
-    if (action === "QUARANTINE") {
-      const data = await storePut(c, LOT_SCOPE, id, {
-        ...lot,
-        status: "QUARANTINE",
-        isDefault: false,
-      }, slug);
-      return c.json({ ok: true, success: true, data });
-    }
-
-    return c.json(jsonError("INVALID_ACTION", "Lot işlemi tanınmadı."), 400);
+      next.isDefault=true;
+    }else if(action==="FINISH"){
+      if(remaining>0)return c.json(jsonError("LOT_HAS_STOCK","Kalan stok sıfırlanmadan LOT kapatılamaz.",{remaining}),409);
+      next={...next,status:"DEPLETED",isDefault:false};
+    }else if(action==="DEACTIVATE")next={...next,status:"INACTIVE",isDefault:false};
+    else if(action==="QUARANTINE")next={...next,status:"QUARANTINE",isDefault:false};
+    else return c.json(jsonError("INVALID_ACTION","LOT işlemi tanınmadı."),400);
+    writes.push(storeUpdate(db,snapshot,next,at));
+    try{await commitStoreBatch(db,guards,writes);}catch{return c.json(jsonError("LOT_ACTION_CONFLICT","LOT başka oturumda değişti; yenileyin."),409);}
+    return c.json({ok:true,success:true,data:{...next,updatedAt:at}});
   });
 
   app.get("/api/boyahane/stock/summary", async (c) => {
