@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { reserveLotKg } from "./production-flow-safety.ts";
 import {getAuthenticatedUser} from "./auth-cloud";
 import {accountingTenantReadAllowed} from "./accounting-access-policy";
 
@@ -725,7 +726,10 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     if (!job || !jobColor) {
       return c.json(errorBody("JOB_OR_COLOR_NOT_FOUND", "Boyahane işi veya renk kaydı bulunamadı."), 404);
     }
-    const multiplier = num(body.multiplier || 1);
+    if (text(jobColor.jobId || jobColor.dyehouseModelId) !== text(job.id)) {
+      return c.json(errorBody("JOB_COLOR_MISMATCH", "Renk seçilen Boyahane işine ait değil."), 409);
+    }
+    const multiplier = num(body.multiplier ?? 1);
     if (multiplier <= 0) {
       return c.json(errorBody("INVALID_MULTIPLIER", "Çarpan sıfırdan büyük olmalıdır."), 400);
     }
@@ -736,22 +740,27 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const lots = await storeList(c, SCOPES.lot, slug);
     const consumptions: Row[] = [];
     const validation: string[] = [];
+    const remainingByLot = new Map<string, number>();
     for (const [index, line] of lines.entries()) {
       const lot = lots.find((row) => text(row.id || row.fileName) === line.lotId);
       const requiredKg = (num(line.referenceGram) * multiplier) / 1000;
-      const remainingKg = num(lot?.remainingKg ?? lot?.remainingQuantity ?? lot?.quantity);
+      const lotKey = text(lot?.id || lot?.fileName);
+      const remainingKg = remainingByLot.get(lotKey) ?? num(lot?.remainingKg ?? lot?.remainingQuantity ?? lot?.quantity);
+      const nextRemaining = reserveLotKg(remainingKg, requiredKg);
       if (!line.productId) validation.push(`${index + 1}. satır: ürün seçilmedi.`);
       if (!lot) validation.push(`${index + 1}. satır: lot bulunamadı.`);
       else if (text(lot.productId || lot.inventoryId) !== line.productId) {
         validation.push(`${index + 1}. satır: lot seçilen ürüne ait değil.`);
-      } else if (!/AVAILABLE|ACTIVE/.test(upper(lot.status))) {
+      } else if (!["AVAILABLE", "ACTIVE"].includes(upper(lot.status))) {
         validation.push(`${index + 1}. satır: lot kullanıma açık değil.`);
-      } else if (requiredKg <= 0 || requiredKg > remainingKg) {
+      } else if (nextRemaining === null) {
         validation.push(
           `${index + 1}. satır: stok yetersiz. Gerekli ${requiredKg.toFixed(3)} KG, kalan ${remainingKg.toFixed(3)} KG.`,
         );
+      } else {
+        remainingByLot.set(lotKey, nextRemaining);
       }
-      consumptions.push({ line, lot, requiredKg, remainingKg });
+      consumptions.push({ line, lot, requiredKg, nextRemaining });
     }
     if (validation.length) {
       return c.json(
@@ -764,7 +773,7 @@ export function registerBoyahaneWorkflowRoutes(app: Hono<AppEnv>) {
     const items: Row[] = [];
     let totalCost = 0;
     for (const consumption of consumptions) {
-      const nextRemaining = consumption.remainingKg - consumption.requiredKg;
+      const nextRemaining = consumption.nextRemaining as number;
       const lot = consumption.lot as Row;
       const entryKg = num(lot.entryKg || lot.quantity);
       await storePut(

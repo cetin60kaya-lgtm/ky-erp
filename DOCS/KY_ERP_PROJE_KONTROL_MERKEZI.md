@@ -1,5 +1,13 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 25.11.2026 — İmalat / Desen / Boyahane stabilizasyonu (kod dalı, canlı kabul açık)
+
+- İmalat: tek bulk isteğinde başarılı yeni satırlar model + baskı bölgesi bazında kalan irsaliye kapasitesini tüketir; negatif sakat/test ve aynı clientId tekrarları reddedilir. Canonical route önceliği, mevcut idempotent D1 kayıt ve model ilişkisi korunur. Farklı eşzamanlı isteklerin kapasite yarışı ayrı test konusudur.
+- Desen → Boyahane: tekrar sync mevcut işin statüsünü, önceliğini ve zamanlarını korur; tamamlanan iş yalnız yeni renk geldiğinde WAITING'e döner. Manuel renkler desen kaynak listesinde bulunmadığı için iptal edilmez; tamamlanmış eski renkler korunur.
+- Boyahane: renk seçilen işe ait olmalıdır; sıfır çarpan kabul edilmez; aynı LOT'ta birden çok reçete satırı kümülatif miktarla doğrulanır ve yazılır. INACTIVE gibi kısmi statü eşleşmeleri kabul edilmez. LOT/hareket/üretim/gider işlemlerinin atomik ve eşzamanlı güvenliği ayrıca tamamlanmalıdır.
+- Dört yardımcı mantık için toplam 10 izole sentetik kontrol PASS; repo testleri eklendi. Tam Worker test/typecheck/build ve gerçek canlı kabul henüz yapılmadı. D1 migration, stok veya iş kayıtlarına canlı müdahale, PC komutu ve resmî belge gönderimi yok. Ayrı ortak API/muhasebe ön paketini bu dala karıştırmadık.
+
+
 ## 24.11.2026 — Muhasebe firma belge detayları, ortak sıralama ve Arşiv & Çıktı, PR #656
 
 - **Kaynak kullanıcı kabulü:** TAHA mükerrer güvenli birleştirme kullanıcı tarafından başarılı bildirildi; 13 aktif firma kartı görüntülendi. Gelir/gider faturaları firma bazında görünüyordu ancak henüz POSTED olmayan belgeler cari hareket olmadığı için cari hareket listesi boştu. Arşiv & Çıktı `HISTORY` yalnız `POSTED` kayıtları gösterdiği için 107 canonical belgenin hiçbirini görüntülemiyordu.

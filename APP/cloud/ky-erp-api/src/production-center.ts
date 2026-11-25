@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 import { isHistoricalProduction, matchesProductionPool, PRODUCTION_POOL_CONTRACT } from "./production-pool-classification.ts";
 import { productionIdentity, writeProductionEntryAtomic } from "./production-idempotency";
+import { productionQuantityIssue } from "./production-flow-safety.ts";
 
 type AppEnv = {
   Bindings: Cloudflare.Env;
@@ -1084,6 +1085,7 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
   const success: Row[] = [];
   const failed: Row[] = [];
   const seenThisBatch = new Set<string>();
+  const committedByRegion = new Map<string, number>();
 
   for (const [sourceIndex, source] of sourceEntries.entries()) {
     const entry = objectValue(source);
@@ -1100,21 +1102,21 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       normalized(entry.machineId || entry.machineName || entry.makineNo),
       normalized(entry.operatorName || entry.operatorId || entry.makinaci)].join("|");
     const errors: string[] = [];
-    if (seenThisBatch.has(clientId)) errors.push("Aynı toplu istekte aynı clientId ikinci kez kullanılamaz.");
+    if (seenThisBatch.has(clientId)) {
+      failed.push({clientId, code:"PRODUCTION_VALIDATION_FAILED", error:"Aynı toplu istekte aynı clientId ikinci kez kullanılamaz."});
+      continue;
+    }
+    const regionKey = JSON.stringify([modelId, normalized(printArea)]);
+    const alreadyCommitted = committedByRegion.get(regionKey) || 0;
     if (!card || card.isVirtual) errors.push("Kayıtlı tek merkez model seçilmelidir.");
-    if (!(grossQty > 0)) errors.push("Brüt üretim adedi sıfırdan büyük olmalıdır.");
-    if (printDefectQty + fabricDefectQty + testQty > grossQty) {
-      errors.push("Sakat ve test toplamı brüt üretimi aşamaz.");
-    }
     if (!printArea && body.historicalImport !== true) errors.push("Baskı bölgesi zorunludur.");
-    if (card && card.incomingQty > 0 && !body.allowOverProduction) {
-      const operation = (card.operationRows || []).find(
-        (row: Row) => normalized(row.region) === normalized(printArea),
-      );
-      if (numberValue(operation?.producedQty) + grossQty > numberValue(card.incomingQty)) {
-        errors.push("Bu kayıt baskı bölgesi üretimini gelen irsaliye adedinin üzerine çıkarır.");
-      }
-    }
+    const existingQty = (card?.operationRows || [])
+      .filter((row: Row) => normalized(row.region) === normalized(printArea))
+      .reduce((sum: number, row: Row) => sum + numberValue(row.producedQty), 0);
+    const quantityIssue = productionQuantityIssue(grossQty,
+      [printDefectQty, fabricDefectQty, testQty], numberValue(card?.incomingQty),
+      existingQty, alreadyCommitted, Boolean(body.allowOverProduction));
+    if (quantityIssue) errors.push(quantityIssue);
     // Replay is checked against persistent DB identity before any capacity validation.
     seenThisBatch.add(clientId);
     const now = new Date().toISOString();
@@ -1173,9 +1175,13 @@ async function saveProductionBatch(c: Context<AppEnv>, body: Row) {
       production_date: date + "T12:00:00.000Z", note: raw.note, raw, created_at: now, updated_at: now,
     };
     try {
-      success.push(await writeProductionEntryAtomic(
+      const saved = await writeProductionEntryAtomic(
         c.env.DB,slug,requestId,clientId,rawPayload,record,{model_id:modelId},
-      ));
+      );
+      success.push(saved);
+      // A newly committed row consumes the same region's remaining capacity
+      // for all following rows in this request. A replay is already in the snapshot.
+      if (!saved.idempotent) committedByRegion.set(regionKey, alreadyCommitted + grossQty);
     } catch (error: any) {
       failed.push({clientId,code:text(error?.code)||"PRODUCTION_ATOMIC_WRITE_FAILED",
         error:text(error?.message)||"Üretim kaydı ve model bağlantısı birlikte kaydedilemedi."});

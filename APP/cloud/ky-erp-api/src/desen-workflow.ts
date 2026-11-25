@@ -1,4 +1,5 @@
 import type { Context, Hono } from "hono";
+import { designJobState, isRemovedDesignColor } from "./production-flow-safety.ts";
 import { analyzeDesignWithAi, needsAiAnalysis } from "./desen-ai";
 import { ensureCanonicalModel } from "./canonical-model-identity.ts";
 
@@ -899,11 +900,21 @@ async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
       colorSources.push({ ...group, printRegion: operation.printAreaName }),
     );
   }
+  const currentJob = await storeGet(c, BOYAHANE_JOB_SCOPE, jobId, slug);
+  const existingColors = (await storeList(c, BOYAHANE_COLOR_SCOPE, slug)).filter(
+    (row) => text(row.jobId || row.dyehouseModelId) === jobId,
+  );
+  const hasNewPendingColor = colorSources.some((source: Row) => {
+    const key = text(source.id || source.groupKey || stableId(JSON.stringify(source)));
+    const id = `design-color-${stableId(`${model.id}:${key}`).slice(4)}`;
+    return !existingColors.some(row => text(row.sourceChannelKey) === `design:${key}` || text(row.id) === id);
+  });
   const job = await storePut(
     c,
     BOYAHANE_JOB_SCOPE,
     jobId,
     {
+      ...currentJob,
       id: jobId,
       designId: model.id,
       modelCardId: model.id,
@@ -917,15 +928,11 @@ async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
       uniqueColorCount: model.totals.uniqueColorCount,
       moldCount: model.totals.totalMoldCount,
       imageUrl: model.mainImage?.thumbnailUrl || model.mainImage?.previewUrl || "",
-      status: "WAITING",
-      priority: "NORMAL",
+      ...designJobState(currentJob, hasNewPendingColor),
       source: "DESEN_WORKFLOW",
-      createdAt: nowIso(),
+      createdAt: currentJob?.createdAt || nowIso(),
     },
     slug,
-  );
-  const existingColors = (await storeList(c, BOYAHANE_COLOR_SCOPE, slug)).filter(
-    (row) => text(row.jobId || row.dyehouseModelId) === jobId,
   );
   const activeKeys = new Set<string>();
   for (const source of colorSources) {
@@ -960,8 +967,7 @@ async function syncDyehouse(c: Context<AppEnv>, model: Row, slug: string) {
     );
   }
   for (const old of existingColors) {
-    const key = text(old.sourceChannelKey).replace(/^design:/, "");
-    if (key && !activeKeys.has(key) && !["COMPLETED", "CANCELLED"].includes(upper(old.status))) {
+    if (isRemovedDesignColor(old.sourceChannelKey, activeKeys, old.status)) {
       await storePut(c, BOYAHANE_COLOR_SCOPE, text(old.id), { ...old, status: "CANCELLED" }, slug);
     }
   }
