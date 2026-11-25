@@ -63,7 +63,12 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
  app.get("/api/e-belge/adapters",async c=>{
   const access=await permit(c,"GET");
   if(!access.ok)return c.json(error("FORBIDDEN","Bu firma için entegrasyon kataloğuna erişim yetkiniz yok."),403);
-  const selection=await selections(c,access.tenant);
+  let selection:Awaited<ReturnType<typeof selections>>;
+  try{selection=await selections(c,access.tenant);}catch{
+   console.warn(JSON.stringify({level:"warn",requestId:c.get("requestId"),path:"/api/e-belge/adapters",code:"ADAPTER_LIST_UNAVAILABLE"}));
+   return c.json({ok:false,error:{code:"ADAPTER_LIST_UNAVAILABLE",message:"Firma entegrasyon listesi geçici olarak okunamadı.",details:{requestId:c.get("requestId")}}},503);
+  }
+  c.header("Cache-Control","no-store");
   const selected=selection.selected;
   return c.json({ok:true,data:{
    mainCompanySlug:access.tenant,

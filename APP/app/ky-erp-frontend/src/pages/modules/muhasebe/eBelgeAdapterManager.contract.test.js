@@ -95,3 +95,5 @@ test("Ortak belge testinde onaylı firma + tür şablonu otomatik seçilir",()=>
  assert.match(sharedTest,/renderUblOutput\(rawXml,approved\?\.layout\|\|\{\},"PDF"\)/);
  assert.match(ui,/gorsel-sablonlar/);
 });
+
+test("geçici hata kayıtlı seçimi boş listeye çevirmez; yetki kaybında ekran kapanır",()=>{assert.match(ui,/current.mainCompanySlug===tenant\?current/);assert.match(ui,/const verified=data.mainCompanySlug===tenant&&!loading&&!error/);assert.match(ui,/\[401,403\]\.includes/);assert.match(ui,/Entegrasyon listesi doğrulanamadı/);assert.match(ui,/verified\?installed.length:"—"/);});

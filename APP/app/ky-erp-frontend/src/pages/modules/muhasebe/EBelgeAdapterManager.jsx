@@ -8,6 +8,12 @@ import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
 import IsnetOfficialWorkspace from "./IsnetOfficialWorkspace";
 import "./eBelgeAdapterManager.css";
 
+const integrationError=e=>{
+ const status=Number(e?.status||0),code=String(e?.code||"");
+ const id=String(e?.payload?.error?.details?.requestId||e?.payload?.error?.requestId||"");
+ const message=[401,403].includes(status)?"Oturum veya firma erişim yetkisi doğrulanamadı.":code==="AUTH_SESSION_CHANGED"?"Oturum yenilendi; entegrasyon listesini yeniden doğrulayın.":[500,502,503,504].includes(status)||["NETWORK_ERROR","REQUEST_TIMEOUT"].includes(code)?"Entegrasyon listesi geçici olarak alınamadı. Kayıtlar silinmedi; Yenile ile yeniden doğrulayın.":e?.message||"Firma entegrasyonları alınamadı.";
+ return message+(id?" · İstek: "+id:"");
+};
 const connectionStatus=(adapter,provider,entry)=>{
  if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Portal oturumu ve firma seçimi Belgeleri Al ekranından doğrulanır";
  if(adapter.driver===null)return "Bağlayıcı henüz hazır değil";
@@ -43,7 +49,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
 
  const load=useCallback(async()=>{
   const seq=++requestSeq.current;
-  setData({mainCompanySlug:tenant,systemCatalog:[],companyAdapters:[]});
+  setData(current=>current.mainCompanySlug===tenant?current:{mainCompanySlug:"",systemCatalog:[],companyAdapters:[]});
   if(!tenant){setLoading(false);return}
   setLoading(true);setError("");
   try{
@@ -51,11 +57,15 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
    if(seq!==requestSeq.current)return;
    if(String(result.mainCompanySlug||"").toLowerCase()!==String(tenant).toLowerCase())
     throw new Error("Firma entegrasyon yanıtının şirket kapsamı eşleşmiyor.");
-   const companyAdapters=result.companyAdapters||[];
+   if(!Array.isArray(result.companyAdapters)||!Array.isArray(result.systemCatalog))throw new Error("Entegrasyon listesi geçersiz yanıt verdi.");
+   const companyAdapters=result.companyAdapters;
    setData({mainCompanySlug:tenant,systemCatalog:result.systemCatalog||[],companyAdapters});
    setSelected(current=>companyAdapters.some(x=>x.key===current&&x.selected)
     ?current:companyAdapters.find(x=>x.key==="ISNET"&&x.selected)?.key||companyAdapters.find(x=>x.selected)?.key||"");
-  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firma entegrasyonları alınamadı.")}
+  }catch(e){if(seq===requestSeq.current){
+   if([401,403].includes(Number(e?.status))||e?.code==="AUTH_SESSION_CHANGED"){setData({mainCompanySlug:"",systemCatalog:[],companyAdapters:[]});setSelected("");}
+   setError(integrationError(e));
+  }}
   finally{if(seq===requestSeq.current)setLoading(false)}
  },[tenant,owner]);
  useEffect(()=>{setSelected("");setShowCatalog(false);setQuery("");setNotice("");setBusy("");setRemoveKey("");void load();return()=>{requestSeq.current+=1}},[load]);
@@ -70,7 +80,8 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const provider=adapter=>providerStatuses.find(x=>String(x.key||"").toUpperCase()===adapter.key);
  const status=adapter=>connectionStatus(adapter,provider(adapter),choice(adapter.key));
  const connected=installed.filter(x=>x.key==="ISNET"&&choice(x.key)?.enabled!==false&&provider(x)?.connected===true).length;
- const canEdit=!busy&&!loading&&!error;
+ const verified=data.mainCompanySlug===tenant&&!loading&&!error;
+ const canEdit=Boolean(verified&&!busy);
  useEffect(()=>{
   let live=true;
   setProfile(null);setProfileError("");
@@ -81,7 +92,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  },[owner,selected,tenant]);
 
  const change=async(adapter,add,activate=true)=>{
-  if(busy)return;
+  if(!canEdit)return;
   const seq=++requestSeq.current,operationTenant=tenant;
   setBusy(adapter.key);setError("");setNotice("");
   try{
@@ -100,7 +111,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
    });
    if(!add)setNotice("Entegrasyon yalnız bu firmanın listesinden kaldırıldı. Belgeler ve ayarlar korunur.");
    else setNotice(activate?"Entegrasyon firma için etkinleştirildi; gerçek bağlantısı ayrıca doğrulanacaktır.":"Entegrasyon firma için pasife alındı; geçmiş ve ayarlar korunur.");
-  }catch(e){if(seq===requestSeq.current)setError(e?.message||"Firma entegrasyonu güncellenemedi.")}
+  }catch(e){if(seq===requestSeq.current){if([401,403].includes(Number(e?.status))||e?.code==="AUTH_SESSION_CHANGED"){setData({mainCompanySlug:"",systemCatalog:[],companyAdapters:[]});setSelected("");}setError(integrationError(e));}}
   finally{if(seq===requestSeq.current)setBusy("")}
  };
  const refresh=async()=>{await load();if(typeof onRefreshStatuses==="function")try{await onRefreshStatuses()}catch{/* Parent page handles its own errors. */}};
@@ -118,7 +129,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     <div className="eam-select-wrap">
      <Layers3 size={17}/>
      <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setPanel(e.target.value==="ISNET"?"sync":"test");setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
-      <option value="">{loading?"Entegrasyonlar yükleniyor...":installed.length?"Entegrasyon seçin":"Henüz entegrasyon seçilmemiş"}</option>
+      <option value="">{loading?"Entegrasyonlar yükleniyor...":error?"Liste doğrulanamadı":installed.length?"Entegrasyon seçin":"Henüz entegrasyon seçilmemiş"}</option>
       {installed.map(adapter=><option key={adapter.key} value={adapter.key}>{adapter.label}{choice(adapter.key)?.enabled===false?" (Pasif)":""}</option>)}
      </select><ChevronDown size={16}/>
     </div>
@@ -138,14 +149,14 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     </section>}
    </div>
    <div className="eam-summary" aria-label="Firma entegrasyon özeti">
-    <span><b>{installed.length}</b> seçili</span><span><b>{activeCount}</b> etkin</span>
-    <span><Activity size={15}/><b>{connected}</b> API oturumu</span>
+    <span><b>{verified?installed.length:"—"}</b> seçili</span><span><b>{verified?activeCount:"—"}</b> etkin</span>
+    <span><Activity size={15}/><b>{verified&&providerStatuses.length?connected:"—"}</b> API oturumu</span>
    </div>
   </div>
   {error&&<div className="eam-alert" role="alert"><AlertTriangle size={16}/>{error}</div>}
   {notice&&<div className="eam-ok" role="status"><CheckCircle2 size={16}/>{notice}</div>}
   <section className="eam-detail-pane" aria-label="Seçili entegrasyon ayarları">
-   {active?<><div className="eam-detail">
+   {!verified?<div className="eam-detail-placeholder" role="status"><Settings2 size={28}/><h3>{loading?"Entegrasyonlar doğrulanıyor":"Entegrasyon listesi doğrulanamadı"}</h3><p>{loading?"Firma bağlantıları okunuyor.":data.mainCompanySlug===tenant?"Son okunan firma seçimi korunuyor; işlem yapmak için listeyi yenileyin.":"Kayıtlı entegrasyon olup olmadığı henüz bilinmiyor. Yeniden bağlantı eklemeyin."}</p></div>:active?<><div className="eam-detail">
      <div><small>ENTEGRASYON AYARLARI · {active.key}</small><h3>{profile?.displayName||active.label}</h3><p>{status(active)}</p></div>
      <div className="eam-detail-actions">
       <button type="button" disabled={!canEdit} onClick={()=>void change(active,true,choice(active.key)?.enabled===false)}>

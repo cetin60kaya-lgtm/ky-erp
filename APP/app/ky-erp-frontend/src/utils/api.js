@@ -14,6 +14,7 @@ const ACTIVE_COMPANY_STORAGE_KEY = "kyerp.activeCompany";
 const COMPANY_PARAM_NAME = "mainCompanySlug";
 const apiGetCache = new Map();
 const apiGetInFlight = new Map();
+let apiGetGeneration = 0;
 let activeMainCompany = null;
 let authTokenGetter = () => "";
 let onUnauthorized = () => {};
@@ -390,6 +391,8 @@ export async function apiGet(path, params, options = {}) {
   const timeoutMs = Number(options.timeoutMs || 0) > 0 ? Number(options.timeoutMs) : undefined;
   const forceFresh = options.forceFresh === true || options.cache === false;
   const url = buildApiUrl(path, params);
+  const generation = apiGetGeneration;
+  const requestToken = String(authTokenGetter?.() || "").trim();
   const inFlightKey = forceFresh ? `${url}::force-fresh` : url;
   const now = Date.now();
   const cached = apiGetCache.get(url);
@@ -404,10 +407,12 @@ export async function apiGet(path, params, options = {}) {
           params,
           ...(timeoutMs ? { timeoutMs } : {}),
         });
-        apiGetCache.set(url, { timestamp: Date.now(), payload });
+        if (requestToken !== String(authTokenGetter?.() || "").trim()) throw createRequestError("Oturum yenilendi. Veriyi yeniden okuyun.", {code:"AUTH_SESSION_CHANGED",status:409});
+        if (generation === apiGetGeneration) apiGetCache.set(url, { timestamp: Date.now(), payload });
         return payload;
       } catch (error) {
         lastError = error;
+        if (requestToken !== String(authTokenGetter?.() || "").trim()) throw createRequestError("Oturum yenilendi. Veriyi yeniden okuyun.", {code:"AUTH_SESSION_CHANGED",status:409});
         const status = Number(error?.status || 0);
         const transient = [0, 500, 502, 503, 504].includes(status) ||
           ["NETWORK_ERROR", "REQUEST_TIMEOUT"].includes(String(error?.code || ""));
@@ -422,11 +427,12 @@ export async function apiGet(path, params, options = {}) {
   try {
     return await requestPromise;
   } finally {
-    apiGetInFlight.delete(inFlightKey);
+    if (apiGetInFlight.get(inFlightKey) === requestPromise) apiGetInFlight.delete(inFlightKey);
   }
 }
 
 export function clearApiGetCache() {
+  apiGetGeneration += 1;
   apiGetCache.clear();
   apiGetInFlight.clear();
 }

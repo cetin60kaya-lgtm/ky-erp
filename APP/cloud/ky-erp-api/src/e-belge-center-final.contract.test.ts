@@ -24,3 +24,5 @@ test("e-Belge havuzu gelen ve giden belgeleri server tarafinda yon + tenant kosu
   assert.match(source, /"d\.main_company_slug=\?"/);
   assert.match(source, /OFFSET \?/);
 });
+
+test("İşNet oturum kontrolünün başarısızlığı entegrasyon durumunu çökertmez",()=>{assert.match(source,/verifyIsnetReadOnlySession\(c,slug\)\.catch/);assert.match(source,/status:"CHECK_UNAVAILABLE",connected:false/);});
