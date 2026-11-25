@@ -24,7 +24,7 @@ function normalizeLines(a,dispatch){
 }
 const freeKinds=["TEST_NUMUNESI","KUMAS_SAKATI","BASKI_SAKATI"];
 export const defaultSettings={driver:"TEST Şoför",plate:"TEST PLAKA",dispatchNote:"",invoiceNote:"",scenario:"TICARI",vatRate:20,carrierName:"",trailerPlate:"",deliveryAddress:""};
-export function transition(state,a,id,now,verified=null){
+export function transition(state,a,id,now,verified:ReturnType<typeof import("./isnet-provider-source.ts").extractSource>|null=null){
  const settings={...defaultSettings,...state.settings};
  const pack=drafts=>({...state,settings,drafts});
  if(a.kind==="SAVE_SETTINGS"){const p={...defaultSettings};for(const k of ["driver","plate","dispatchNote","invoiceNote","carrierName","trailerPlate","deliveryAddress"])p[k]=txt(a.settings?.[k],k.endsWith("Note")?1000:250);if(!p.driver||!p.plate||!["TICARI","TEMEL"].includes(a.settings?.scenario))fail("TEST varsayılanları eksik.");p.scenario=a.settings.scenario;p.vatRate=num(a.settings.vatRate,0,100);return {...state,settings:p};}

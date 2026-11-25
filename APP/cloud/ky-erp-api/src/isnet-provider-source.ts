@@ -28,6 +28,6 @@ export async function fetchSource(q,hash,fetcher=fetch){
  const r=await searchSoapTest({...q,kind:"DISPATCH",page:1,file:"XML"},fetcher);if(r.rows.length!==1||!r.file?.base64)throw Error("SOURCE_NOT_FOUND");
  return extractSource(new TextDecoder("utf-8",{fatal:true}).decode(Uint8Array.from(atob(r.file.base64),c=>c.charCodeAt(0))),r.rows[0],q,hash);
 }
-export function remainingLines(source,drafts,exclude){
+export function remainingLines(source,drafts,exclude=""){
  return source.lines.map(l=>({...l,remaining:Math.max(0,Number((l.quantity-drafts.filter(d=>d.id!==exclude&&d.status==="DRAFT"&&d.providerSource?.key===source.key&&d.type===(source.direction==="INCOMING"?"DISPATCH":"INVOICE")).flatMap(d=>d.lines||[]).filter(x=>x.sourceLineId===l.id).reduce((n,x)=>n+Number(x.quantity),0)).toFixed(6)))}));
 }
