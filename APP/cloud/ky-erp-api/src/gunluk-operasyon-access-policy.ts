@@ -10,7 +10,9 @@ export const isOwner = (role: unknown) => ["SUPER_ADMIN","ADMIN"].includes(upper
 const granted = (value: unknown) => value === true || Number(value || 0) === 1;
 function permission(user: Row) {
   const list = Array.isArray(user.permissions) ? user.permissions : [];
-  return list.find((item: Row) => ["IK","GUNLUK-OPERASYON","GUNLUK_OPERASYON"].includes(upper(item.moduleKey || item.module_key))) || null;
+  const key = (item: Row) => upper(item.moduleKey || item.module_key).replace(/-/g, "_");
+  return list.find((item: Row) => key(item) === "GUNLUK_OPERASYON")
+    || list.find((item: Row) => key(item) === "IK") || null;
 }
 export function dailyAuthorized(user: Row, method: string, path: string) {
   if (["DENETIM","PERSONNEL"].includes(upper(user?.role))) return false;
