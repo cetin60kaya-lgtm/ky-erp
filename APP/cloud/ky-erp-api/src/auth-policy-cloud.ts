@@ -677,8 +677,8 @@ async function beginPolicyLogin(c: any, user: AnyRow, source: AnyRow = {}, optio
   // Telefon onayı kayıtlı güvenilir cihaz varsa her normal girişte ilk denenir.
   // Böylece eski/taşınmış MFA kolonları kullanıcıyı istemeden Google'a göndermez.
   // BOTH_MFA özel politikası iki ayrı Authenticator kanalı istediği için korunur.
-  const phoneFactorAllowed = isSuper(role) || isCompanyAdmin(role) || Boolean(refreshed?.approval_required);
-  // Personel ve onayi kapatilmis muhasebe kullanicisi her giriste KY Guvenlik telefonuna dusmez.
+  const phoneFactorAllowed = isSuper(role) || isCompanyAdmin(role) || policy !== "PASSWORD_ONLY" || Boolean(refreshed?.approval_required);
+  // Kendi telefonuyla MFA ve firma yöneticisi onayı ayrı kararlardır. BOTH_MFA aşağıdaki kapıda korunur.
   if (!options.skipPhone && phoneFactorAllowed && policy !== "BOTH_MFA") {
     const phoneApproval = await startPhoneApprovalChallenge(c, refreshed || user, source);
     if (phoneApproval) return phoneApproval;

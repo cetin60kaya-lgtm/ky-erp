@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useActiveCompany } from "../context/ActiveCompanyContext";
 import { useAuth } from "../context/AuthContext";
-import { getMainCompanies, getUserPermissions, listUsers } from "../services/adminApi";
+import { activateUser, deactivateUser, getMainCompanies, getUserPermissions, listUsers, revokeAllUserSessions, listSecurityAuditLog } from "../services/adminApi";
 import { listSecurityCapabilityGrants, listSecurityCenterAudit } from "../services/securityCenterApi";
 import { MODULES, getVisibleModuleTabs } from "../app/moduleRegistry";
 import "./ProCompanyCenter.css";
@@ -49,6 +49,9 @@ export default function ProCompanyCenter({ onOpenModule, onClose }) {
   const [permissions, setPermissions] = useState(null);
   const [permissionError, setPermissionError] = useState("");
   const [permissionLoading, setPermissionLoading] = useState(false);
+  const [actionBusy, setActionBusy] = useState(false);
+  const [actionMessage, setActionMessage] = useState("");
+  const [auditVersion, setAuditVersion] = useState(0);
 
   const load = useCallback(async () => {
     if (!isOwner) return;
@@ -101,7 +104,7 @@ export default function ProCompanyCenter({ onOpenModule, onClose }) {
       .then((result) => { if (active) setAudit(rows(result)); })
       .catch((error) => { if (active) setAuditError(error?.message || "Güvenlik hareketleri alınamadı."); });
     return () => { active = false; };
-  }, [selectedSlug, isOwner]);
+  }, [selectedSlug, isOwner, auditVersion]);
 
   const choose = (row) => {
     setSelectedSlug(row.slug);
@@ -124,6 +127,28 @@ export default function ProCompanyCenter({ onOpenModule, onClose }) {
     finally { setPermissionLoading(false); }
   };
 
+  const changeAccount = async (row, action) => {
+    if (!isOwner || actionBusy || !selected || codeOf(row.mainCompanySlug) !== selected.slug || OWNER_ROLES.has(String(row.role || "").toUpperCase()) || row.id === user?.id) return;
+    const label = action === "activate" ? "Etkinleştir" : action === "deactivate" ? "Devre dışı bırak ve oturumlarını kapat" : "Tüm oturumlarını kapat";
+    if (!window.confirm(`${row.fullName || row.username} · ${selected.name}\n${label}? Firma verileri silinmez.`)) return;
+    const startedAt = Date.now();
+    setActionBusy(true); setActionMessage("");
+    try {
+      if (action === "activate") await activateUser(row.id);
+      else if (action === "deactivate") await deactivateUser(row.id);
+      else await revokeAllUserSessions(row.id);
+      const actual = rows(await listUsers());
+      setUsers(actual);
+      const target = actual.find(item => item.id === row.id);
+      if (!target || (action === "activate" && target.isActive !== true) || (action === "deactivate" && target.isActive !== false)) throw new Error("Hesap durumu yeniden okumada doğrulanamadı.");
+      const expected = action === "activate" ? "USER_ACTIVATED" : action === "deactivate" ? "USER_DEACTIVATED" : "ALL_SESSIONS_REVOKED";
+      const events = rows(await listSecurityAuditLog(250));
+      const logged = events.some(event => event.action === expected && event.targetUserId === row.id && event.actorUserId === user.id && Date.parse(event.createdAt) >= startedAt - 5000);
+      setActionMessage(logged ? `${label}: sunucu kaydı ve işlem geçmişi doğrulandı.` : `${label}: sunucu yanıtı alındı; yeni denetim kaydı henüz doğrulanamadı.`);
+    } catch (error) { setActionMessage(error?.message || "İşlem sonucu doğrulanamadı. Tekrar denemeden önce kullanıcı durumunu kontrol edin."); }
+    finally { setAuditVersion(v => v + 1); setActionBusy(false); }
+  };
+
   if (!isOwner) return <main className="ky-pro-firm-center"><h2>Firma yönetimi</h2><p>Bu bölüm yalnız Süper Yöneticiye açıktır.</p></main>;
 
   return <main className="ky-pro-firm-center" aria-label="KY ERP PRO Firma Merkezi">
@@ -131,10 +156,11 @@ export default function ProCompanyCenter({ onOpenModule, onClose }) {
       <div><small>KY ERP PRO · SİSTEM YÖNETİMİ</small><h1>Firmalarım</h1>
         <p>Firma sahibi, kullanıcılar, modüller, izinler ve güvenlik hareketleri tek ekranda.</p></div>
       <div className="ky-pro-firm-actions">
-        <button type="button" onClick={load} disabled={loading}>{loading ? "Yükleniyor" : "Yenile"}</button>
+        <button type="button" onClick={load} disabled={loading || actionBusy}>{loading ? "Yükleniyor" : "Yenile"}</button>
         <button type="button" onClick={onClose}>Kapat</button>
       </div>
     </header>
+    {actionMessage ? <p className="ky-pro-firm-notice" role="status">{actionMessage}</p> : null}
     {sourceErrors.map((error) => <p className="ky-pro-firm-error" role="alert" key={error}>{error} Eksik veri sıfır kabul edilmedi.</p>)}
     <section className="ky-pro-firm-list" aria-label="Ana firmalar">
       <div className="ky-pro-firm-row"><h2>Firma seç</h2><span>{companies === null ? "Tam liste doğrulanmadı" : String(normalized.length) + " firma"}</span></div>
@@ -183,8 +209,13 @@ export default function ProCompanyCenter({ onOpenModule, onClose }) {
           companyUsers.length ? <div className="ky-pro-firm-users">{companyUsers.map((row) =>
             <div className="ky-pro-firm-user" key={row.id}>
               <div><strong>{row.fullName || row.username}</strong><small>{roleText(row.role)} · {row.isActive === false ? "Pasif" : "Aktif"}</small></div>
-              <button type="button" disabled={permissionLoading} onClick={() => showPermissions(row)}>
-                {permissionUser?.id === row.id ? "Kapat" : "Yetkileri Gör"}</button>
+              <div className="ky-pro-firm-actions ky-pro-account-actions">
+                <button type="button" disabled={permissionLoading || actionBusy} onClick={() => showPermissions(row)}>{permissionUser?.id === row.id ? "Kapat" : "Yetkileri Gör"}</button>
+                {typeof row.isActive === "boolean" && !OWNER_ROLES.has(String(row.role || "").toUpperCase()) && row.id !== user?.id ? <>
+                  <button type="button" disabled={actionBusy} className={row.isActive ? "ky-pro-account-danger" : ""} onClick={() => changeAccount(row, row.isActive ? "deactivate" : "activate")}>{row.isActive ? "Devre Dışı Bırak" : "Etkinleştir"}</button>
+                  {row.isActive ? <button type="button" disabled={actionBusy} onClick={() => changeAccount(row, "revoke")}>Oturumları Kapat</button> : null}
+                </> : null}
+              </div>
               {permissionUser?.id === row.id ? <div className="ky-pro-firm-permissions">
                 {permissionLoading ? <p>Sunucu izinleri okunuyor...</p> : permissionError ? <p className="ky-pro-firm-error">{permissionError}</p>
                   : permissions?.length ? permissions.map((permission) =>

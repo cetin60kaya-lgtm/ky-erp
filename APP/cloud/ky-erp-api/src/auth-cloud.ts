@@ -456,8 +456,10 @@ export function registerAuthManagementRoutes(app: any) {
     const current = await adminCurrent(c);
     const target = current ? await targetUserWithSecurity(c, c.req.param("id")) : null;
     if (!current || !target || (!isSuper(current.role) && !adminCanManage(current, target))) return c.json(jsonError("FORBIDDEN", "Bu işlem için yetkiniz bulunmuyor."), 403);
+    // Re-activation must not revive a challenge issued before suspension.
+    if (!Boolean(target.is_active)) await invalidateUserLoginArtifacts(c, target.id, current.id);
     await c.env.DB.prepare("UPDATE auth_users SET is_active=1,updated_at=? WHERE id=?").bind(nowIso(), target.id).run();
-    await audit(c, "USER_ACTIVATED", current.id, target.id, target.mainCompanySlug);
+    await audit(c, "USER_ACTIVATED", current.id, target.id, target.mainCompanySlug, "", { oldActive: Boolean(target.is_active), newActive: true });
     return c.json({ ok: true });
   });
 
@@ -466,8 +468,8 @@ export function registerAuthManagementRoutes(app: any) {
     const target = current ? await targetUserWithSecurity(c, c.req.param("id")) : null;
     if (!current || !target || (!isSuper(current.role) && !adminCanManage(current, target))) return c.json(jsonError("FORBIDDEN", "Bu işlem için yetkiniz bulunmuyor."), 403);
     await c.env.DB.prepare("UPDATE auth_users SET is_active=0,updated_at=? WHERE id=?").bind(nowIso(), target.id).run();
-    await revokeUserSessions(c, target.id, current.id);
-    await audit(c, "USER_DEACTIVATED", current.id, target.id, target.mainCompanySlug);
+    await invalidateUserLoginArtifacts(c, target.id, current.id);
+    await audit(c, "USER_DEACTIVATED", current.id, target.id, target.mainCompanySlug, "", { oldActive: Boolean(target.is_active), newActive: false });
     return c.json({ ok: true });
   });
 
