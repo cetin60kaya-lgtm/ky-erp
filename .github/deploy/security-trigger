@@ -1,7 +1,7 @@
-deploy: kyerp-browser-session-stability-20261125
-pr: 662
-merge: becc7fd7fe430bc616e0b10432ad3eb1ebdc33fd
-scope: bounded browser session resume, multi-tab stability and logout, all canonical roles; API and Security Host
+deploy: kyerp-notification-center-20261125
+pr: 664
+merge: d0e087579b88b7388b58c2aefcd397c5113df5a4
+scope: notification center, pending session policy and canonical home links
 release: Existing KY Security Canonical Final Deploy
 migration: NONE
 production_data_mutation: NONE
