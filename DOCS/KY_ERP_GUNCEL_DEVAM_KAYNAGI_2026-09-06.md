@@ -1,6 +1,10 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
 
+## 25.11.2026 — Kayıtlı ürün kalemleri ve seri TEST yön seçimi
+- Kullanıcı canlı İşNet TEST giden irsaliyesinden 3 adet × 50 TL, %20 KDV, toplam 180 TL fatura taslağı, A4 önizleme, kaynak notu gösterimi ve TEST kontrol kaydını ekranla kabul etti. #666 Pages/Worker SUCCESS (`0c44e55ce3f107eec01265e9e97a4ce7ed694007`); tekrarlı hata kabulü ayrı. Sıfırdan TEST faturada serbest ürün alanı yerine dört sabit sentetik ürün kimliği; birim ve bedelsiz türü sunucudan, eski kayıtlar korunur. Gerçek KYERP ürün arama API'si mevcut ama üretim kartları TEST'e kopyalanmaz; gerçek ürün ve İşNet ürün kodu eşlemesi üretim akışında açık. Aktif belge yönü koyu mavi, başlık yönü gösterir, geçerli filtre ile yön değişince otomatik sorgu. C62 yalnız görünümde ADET. Resmî gönderim yok; CI/canlı kabul ayrı.
+
+
 ## 25.11.2026 — Entegrasyon ilk yükleme/oturum dayanıklılığı
 - PR #663 merge `94a8ec378c620f30331749a17e7cfcc1c0dab196`, CI #45605889215 SUCCESS, Cloudflare Pages/Worker SUCCESS. Kullanıcı yeni seri merkezi gördü; hemen önce genel 500 ve boş seçim görünümü oluştu, tekrar açınca düzeldi. O anki requestId/Worker log yok; kesin kök sebep kanıtlanmadı. Kodda yenileme öncesi seçim sıfırlama, sağlayıcı sağlık hatasının dışarı taşması ve token/önbellek invalidasyonu sonrası geç GET yanıtı yazılması bulundu. Seçim doğrulanmadan sayı/işlem gösterilmez; aynı firma seçimi korunur, 401/403 veya oturum değişimi kapatır. Sağlık hatası CHECK_UNAVAILABLE; adapter D1 okuma hatası 503 + requestId. GET cache nesli ve token geçişi koruması; MFA/TTL/politika değişmedi. Yeni CI/yayın ve tekrarlı canlı kabul gerekir. Resmî gönderim yok.
 
