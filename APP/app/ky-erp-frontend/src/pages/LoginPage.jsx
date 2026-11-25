@@ -118,6 +118,11 @@ function loadTurnstileScript() {
       document.head.appendChild(script);
     }
   });
+  turnstileScriptPromise = turnstileScriptPromise.catch((error) => {
+    document.querySelector('script[data-kyerp-turnstile="1"]')?.remove();
+    turnstileScriptPromise = null;
+    throw error;
+  });
   return turnstileScriptPromise;
 }
 
@@ -153,11 +158,17 @@ export default function LoginPage({ onClose }) {
   const [turnstileConfig, setTurnstileConfig] = useState({ enabled: false, siteKey: "", loaded: false, failed: false });
   const [turnstileToken, setTurnstileToken] = useState("");
   const [turnstileError, setTurnstileError] = useState("");
+  const [turnstileReload, setTurnstileReload] = useState(0);
+  const turnstileTokenRef = useRef("");
+  const loginBusyRef = useRef(false);
+  const loginAliveRef = useRef(true);
   const qrRef = useRef(null);
   const phoneApprovalCheckRef = useRef({ busy: false, settled: false, id: "" });
   const turnstileRef = useRef(null);
   const turnstileWidgetRef = useRef(null);
   const otpUri = useMemo(() => compatibleOtpUri(flow.otpauthUri), [flow.otpauthUri]);
+
+  useEffect(() => { loginAliveRef.current = true; return () => { loginAliveRef.current = false; }; }, []);
 
   useEffect(() => {
     document.title = "KY ERP | Güvenli Giriş";
@@ -171,6 +182,7 @@ export default function LoginPage({ onClose }) {
     getTurnstileConfig()
       .then((response) => {
         if (cancelled) return;
+        if (response?.required && (!response?.enabled || !response?.siteKey)) throw new Error("Turnstile ayarı eksik.");
         setTurnstileConfig({
           enabled: Boolean(response?.enabled),
           siteKey: String(response?.siteKey || ""),
@@ -181,10 +193,10 @@ export default function LoginPage({ onClose }) {
       .catch(() => {
         if (cancelled) return;
         setTurnstileConfig({ enabled: true, siteKey: "", loaded: true, failed: true });
-        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Güvenli giriş için sayfayı yenileyip tekrar deneyin.");
+        setTurnstileError("Güvenlik doğrulama ayarı alınamadı. Aşağıdaki yenileme düğmesini kullanın.");
       });
     return () => { cancelled = true; };
-  }, [getTurnstileConfig]);
+  }, [getTurnstileConfig, turnstileReload]);
 
   useEffect(() => {
     if (flow.stage !== "CREDENTIALS" || !turnstileConfig.loaded || !turnstileConfig.enabled || !turnstileConfig.siteKey) return undefined;
@@ -198,19 +210,26 @@ export default function LoginPage({ onClose }) {
           sitekey: turnstileConfig.siteKey,
           theme: "light",
           size: "flexible",
+          "refresh-expired": "auto",
+          "refresh-timeout": "auto",
+          retry: "auto",
           callback: (token) => {
+            if (cancelled) return;
+            turnstileTokenRef.current = String(token || "");
             setTurnstileToken(String(token || ""));
             setTurnstileError("");
           },
-          "expired-callback": () => setTurnstileToken(""),
-          "timeout-callback": () => setTurnstileToken(""),
+          "expired-callback": () => { if (!cancelled) { turnstileTokenRef.current = ""; setTurnstileToken(""); } },
+          "timeout-callback": () => { if (!cancelled) { turnstileTokenRef.current = ""; setTurnstileToken(""); } },
           "error-callback": () => {
+            if (cancelled) return;
+            turnstileTokenRef.current = "";
             setTurnstileToken("");
             setTurnstileError("Güvenlik doğrulaması yüklenemedi. Yeniden deneyin.");
           },
         });
       })
-      .catch(() => setTurnstileError("Güvenlik doğrulaması yüklenemedi. Sayfayı yenileyin."));
+      .catch(() => { if (!cancelled) setTurnstileError("Güvenlik doğrulaması yüklenemedi. Aşağıdaki yenileme düğmesini kullanın."); });
 
     return () => {
       cancelled = true;
@@ -218,6 +237,7 @@ export default function LoginPage({ onClose }) {
         try { window.turnstile.remove(turnstileWidgetRef.current); } catch { /* noop */ }
       }
       turnstileWidgetRef.current = null;
+      turnstileTokenRef.current = "";
       setTurnstileToken("");
     };
   }, [flow.stage, turnstileConfig]);
@@ -273,28 +293,68 @@ export default function LoginPage({ onClose }) {
       setError("Kullanıcı adı/e-posta ve şifre zorunludur.");
       return;
     }
+    if (loginBusyRef.current) return;
     if (!turnstileConfig.loaded) {
       setError("Güvenlik doğrulaması hazırlanıyor. Birkaç saniye sonra tekrar deneyin.");
       return;
     }
-    if (turnstileConfig.enabled && !turnstileToken) {
+    if (turnstileConfig.failed || (turnstileConfig.enabled && !turnstileTokenRef.current)) {
       setError("Güvenlik doğrulamasını tamamlayın.");
       return;
     }
+    loginBusyRef.current = true;
+    let submittedToken = turnstileTokenRef.current;
+    let completed = false;
+    const resetChallenge = () => {
+      turnstileTokenRef.current = "";
+      setTurnstileToken("");
+      if (turnstileWidgetRef.current !== null && window.turnstile) {
+        try { window.turnstile.reset(turnstileWidgetRef.current); } catch { /* manual reload remains available */ }
+      }
+    };
     try {
       setLoading(true);
       setError("");
-      // Cihaz bilgisi auth isteğinin JSON gövdesine özel header ekletmemek için
-      // burada boş bırakılır. Session güvenliği sunucu JWT/policy motoruyla yürür.
-      applyResponse(await login(identity, rawPassword, "", turnstileToken));
-    } catch (requestError) {
-      setError(requestError?.message || "Giriş yapılamadı.");
-    } finally {
-      if (turnstileConfig.enabled && turnstileWidgetRef.current !== null && window.turnstile) {
-        try { window.turnstile.reset(turnstileWidgetRef.current); } catch { /* noop */ }
+      // Consume locally before the POST; a transport error never reuses this token.
+      turnstileTokenRef.current = "";
+      setTurnstileToken("");
+      try {
+        const response = await login(identity, rawPassword, "", submittedToken);
+        if (loginAliveRef.current) applyResponse(response);
+        completed = true;
+      } catch (firstError) {
+        // Only an explicit server rejection before password/MFA may auto-resubmit.
+        // Ambiguous network loss can already have created a login challenge.
+        const retryable = ["TURNSTILE_TOKEN_EXPIRED","TURNSTILE_TOKEN_REQUIRED","TURNSTILE_VERIFY_UNAVAILABLE"].includes(String(firstError?.code || ""));
+        if (!turnstileConfig.enabled || !retryable || !loginAliveRef.current) throw firstError;
+        setError("Güvenlik doğrulaması yenileniyor…");
+        resetChallenge();
+        const deadline = Date.now() + 15000;
+        while (loginAliveRef.current && Date.now() < deadline && (!turnstileTokenRef.current || turnstileTokenRef.current === submittedToken)) {
+          await new Promise(resolve => window.setTimeout(resolve, 200));
+        }
+        if (!loginAliveRef.current) return;
+        const freshToken = turnstileTokenRef.current;
+        if (!freshToken || freshToken === submittedToken) throw firstError;
+        submittedToken = freshToken;
+        turnstileTokenRef.current = "";
         setTurnstileToken("");
+        setError("");
+        const response = await login(identity, rawPassword, "", freshToken);
+        if (loginAliveRef.current) applyResponse(response);
+        completed = true;
       }
-      setLoading(false);
+    } catch (requestError) {
+      if (loginAliveRef.current) {
+        const diagnostic = [requestError?.code, requestError?.requestId].filter(Boolean).join(" · ");
+        setError((requestError?.message || "Giriş yapılamadı.") + (diagnostic ? " [" + diagnostic + "]" : ""));
+      }
+    } finally {
+      loginBusyRef.current = false;
+      if (loginAliveRef.current) {
+        if (!completed && turnstileConfig.enabled) resetChallenge();
+        setLoading(false);
+      }
     }
   }
 
@@ -659,6 +719,7 @@ export default function LoginPage({ onClose }) {
                   <div className="auth-turnstile-shell">
                     <div className="auth-turnstile" ref={turnstileRef} />
                     <ErrorBox message={turnstileError} />
+                    {(turnstileError || turnstileConfig.failed) ? <button type="button" className="auth-primary" disabled={loading} onClick={() => { turnstileTokenRef.current = ""; setTurnstileToken(""); setTurnstileError(""); setTurnstileConfig({ enabled: true, siteKey: "", loaded: false, failed: false }); setTurnstileReload(value => value + 1); }}>Güvenlik doğrulamasını yenile</button> : null}
                   </div>
                 ) : null}
                 <ErrorBox message={error} />
