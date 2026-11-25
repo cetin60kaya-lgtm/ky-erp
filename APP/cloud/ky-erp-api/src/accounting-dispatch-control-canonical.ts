@@ -1,3 +1,4 @@
+import {readProviderCatalog} from "./isnet-provider-catalog.ts";
 // @ts-nocheck
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
@@ -259,6 +260,7 @@ async function readIsnetSoapTest(c:Context<AppEnv>){
 export function registerCanonicalDispatchControlRoutes(app:Hono<AppEnv>){
  app.get("/api/muhasebe/isnet-soap-test-documents",async c=>{try{const data=await readIsnetSoapTest(c);c.header("Cache-Control","no-store");return c.json({ok:true,data});}catch(e:any){return errorResponse(c,e);}});
 
+ app.get("/api/muhasebe/isnet-provider-catalog",async c=>{try{await defaultsAccess(c);c.header("Cache-Control","no-store");return c.json({ok:true,data:await readProviderCatalog()});}catch(e:any){return errorResponse(c,e);}});
  app.get("/api/muhasebe/isnet-soap-test-health",async c=>{try{await defaultsAccess(c);const services=await probeSoapTestEndpoints();return c.json({ok:true,data:{services,environment:"TEST",authenticated:false,sendEnabled:false}});}catch(e:any){return errorResponse(c,e);}});
  app.get("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await loadTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
  app.post("/api/muhasebe/isnet-test-drafts",async c=>{try{const slug=await defaultsAccess(c);return c.json({ok:true,data:await saveTestDrafts(c,slug)});}catch(e:any){return errorResponse(c,e);}});
