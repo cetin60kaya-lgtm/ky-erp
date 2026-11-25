@@ -12,7 +12,7 @@ test("login page renders Cloudflare Turnstile and requires a token when enabled"
   assert.match(loginPage, /challenges\.cloudflare\.com\/turnstile\/v0\/api\.js\?render=explicit/);
   assert.match(loginPage, /turnstile\.render/);
   assert.match(loginPage, /Güvenlik doğrulamasını tamamlayın/);
-  assert.match(loginPage, /login\(identity, rawPassword, "", turnstileToken\)/);
+  assert.match(loginPage, /login\(identity, rawPassword, "", submittedToken\)/);
 });
 
 test("auth context sends turnstileToken to the canonical login endpoint", () => {
@@ -38,3 +38,5 @@ test("login page final corporate security UX is enforced", () => {
   assert.doesNotMatch(loginPage, /showRecoveryCode/);
 });
 
+
+test("fresh challenge retry never resends the consumed token and is bounded",()=>{assert.match(loginPage,/freshToken === submittedToken/);assert.match(loginPage,/login\(identity, rawPassword, "", freshToken\)/);assert.match(loginPage,/Date\.now\(\) \+ 15000/);assert.match(loginPage,/TURNSTILE_TOKEN_EXPIRED/);assert.match(loginPage,/loginBusyRef\.current/);assert.match(loginPage,/response\?\.required &&/);assert.match(loginPage,/Güvenlik doğrulamasını yenile/);});

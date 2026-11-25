@@ -44,7 +44,7 @@ export function turnstilePublicConfig(c: any) {
   };
 }
 
-export async function verifyTurnstileForLogin(c: any, responseToken: unknown) {
+export async function verifyTurnstileForLogin(c: any, responseToken: unknown, fetcher = fetch) {
   const origin = text(c.req.header("Origin"));
   const required = turnstileRequiredForOrigin(origin);
   if (!required) {
@@ -62,41 +62,50 @@ export async function verifyTurnstileForLogin(c: any, responseToken: unknown) {
     return { required: true, ok: false, status: 403, code: "TURNSTILE_TOKEN_REQUIRED" };
   }
 
+  if (token.length > 2048) return { required: true, ok: false, status: 403, code: "TURNSTILE_VERIFICATION_FAILED" };
   const form = new URLSearchParams({
     secret,
     response: token,
+    idempotency_key: crypto.randomUUID(),
   });
   const ip = clientIp(c);
   if (ip) form.set("remoteip", ip);
 
-  let response: Response;
-  try {
-    response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
-    });
-  } catch {
-    return { required: true, ok: false, status: 503, code: "TURNSTILE_VERIFY_UNAVAILABLE" };
-  }
-
+  // Retry only Siteverify transport/provider failures, never the whole login.
+  // Reuse this request's idempotency UUID so Cloudflare can safely replay its result.
   let payload: any = {};
-  try {
-    payload = await response.json();
-  } catch {
-    payload = {};
-  }
-
-  if (!response.ok) {
-    return { required: true, ok: false, status: 503, code: "TURNSTILE_VERIFY_UNAVAILABLE" };
+  const knownCodes = new Set(["missing-input-secret","invalid-input-secret","missing-input-response","invalid-input-response","bad-request","timeout-or-duplicate","internal-error"]);
+  let errorCodes: string[] = [];
+  let attempts = 0;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    attempts = attempt + 1;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 4500);
+    let temporary = false;
+    try {
+      const response = await fetcher("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+        method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: form.toString(), signal: controller.signal,
+      });
+      if (!response.ok) temporary = response.status >= 500 || response.status === 429;
+      else {
+        payload = await response.json();
+        if (typeof payload?.success !== "boolean") temporary = true;
+        errorCodes = Array.isArray(payload?.["error-codes"]) ? payload["error-codes"].filter((code: unknown) => knownCodes.has(String(code))).slice(0, 8) : [];
+        if (!payload?.success && errorCodes.includes("internal-error")) temporary = true;
+        if (!temporary) break;
+      }
+      if (!response.ok && !temporary) return { required: true, ok: false, status: 503, code: "TURNSTILE_VERIFY_UNAVAILABLE", attempts };
+    } catch { temporary = true; }
+    finally { clearTimeout(timer); }
+    if (temporary && attempt === 1) return { required: true, ok: false, status: 503, code: "TURNSTILE_VERIFY_UNAVAILABLE", errorCodes, attempts };
   }
   if (!payload?.success) {
+    const invalidConfig = errorCodes.some(code => ["missing-input-secret","invalid-input-secret","bad-request"].includes(code));
     return {
-      required: true,
-      ok: false,
-      status: 403,
-      code: "TURNSTILE_VERIFICATION_FAILED",
-      errorCodes: Array.isArray(payload?.["error-codes"]) ? payload["error-codes"].slice(0, 8) : [],
+      required: true, ok: false, status: invalidConfig ? 503 : 403,
+      code: invalidConfig ? "TURNSTILE_NOT_CONFIGURED" : errorCodes.includes("timeout-or-duplicate") ? "TURNSTILE_TOKEN_EXPIRED" : "TURNSTILE_VERIFICATION_FAILED",
+      errorCodes, attempts,
     };
   }
   if (!turnstileHostnameAllowed(payload?.hostname)) {
@@ -114,5 +123,6 @@ export async function verifyTurnstileForLogin(c: any, responseToken: unknown) {
     status: 200,
     code: "TURNSTILE_VERIFIED",
     hostname: text(payload.hostname).toLowerCase(),
+    attempts,
   };
 }

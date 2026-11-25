@@ -27,10 +27,11 @@ test("auth mutations are de-duplicated so double click does not create parallel 
   assert.match(source, /runAuthOnce\("SESSION_REFRESH"/);
 });
 
-test("only the first password login transport gets one automatic network retry", () => {
+test("only password login without a single-use Turnstile token gets one transport retry", () => {
   assert.match(source, /loginTransportRetry/);
   assert.match(source, /normalizedPath === "\/auth\/login"/);
   assert.match(source, /maxAttempts = loginTransportRetry \? 2 : 1/);
+  assert.match(source, /!body\?\.turnstileToken/);
   assert.match(source, /await wait\(250\)/);
 });
 

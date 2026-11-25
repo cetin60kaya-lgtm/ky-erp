@@ -4,6 +4,7 @@ import {
   turnstileHostnameAllowed,
   turnstilePublicConfig,
   turnstileRequiredForOrigin,
+  verifyTurnstileForLogin,
 } from "./turnstile-cloud.ts";
 
 test("Turnstile is required only for canonical KY ERP browser origins", () => {
@@ -42,4 +43,28 @@ test("Turnstile public config stays enabled on production but is disabled on Pag
     siteKey: "",
     required: false,
   });
+});
+
+const verificationContext = {env:{TURNSTILE_SITE_KEY:"synthetic-site",TURNSTILE_SECRET_KEY:"synthetic-secret"},req:{header:(name:string)=>name==="Origin"?"https://kyerp.net":""}};
+const valid = () => Response.json({success:true,hostname:"kyerp.net"});
+test("Siteverify retries transient network loss with the same idempotency key",async()=>{
+ const ids:string[]=[];
+ const result=await verifyTurnstileForLogin(verificationContext,"synthetic-token",async(_url:unknown,init:any)=>{ids.push(new URLSearchParams(init.body).get("idempotency_key")||"");if(ids.length===1)throw new Error("synthetic transport loss");return valid()});
+ assert.equal(result.ok,true);assert.equal(ids.length,2);assert.ok(ids[0]);assert.equal(ids[0],ids[1]);
+});
+test("expired or used token rejected without provider retry",async()=>{
+ let calls=0;const result=await verifyTurnstileForLogin(verificationContext,"synthetic-token",async()=>{calls++;return Response.json({success:false,"error-codes":["timeout-or-duplicate"]})});
+ assert.equal(result.ok,false);assert.equal(result.code,"TURNSTILE_TOKEN_EXPIRED");assert.equal(calls,1);
+});
+test("provider internal-error retried at most once and failure remains closed",async()=>{
+ let calls=0;const result=await verifyTurnstileForLogin(verificationContext,"synthetic-token",async()=>{calls++;return Response.json({success:false,"error-codes":["internal-error"]})});
+ assert.equal(result.ok,false);assert.equal(result.status,503);assert.equal(calls,2);
+});
+test("hostname mismatch never grants login and never retries",async()=>{
+ let calls=0;const result=await verifyTurnstileForLogin(verificationContext,"synthetic-token",async()=>{calls++;return Response.json({success:true,hostname:"invalid.example"})});
+ assert.equal(result.ok,false);assert.equal(result.code,"TURNSTILE_HOSTNAME_MISMATCH");assert.equal(calls,1);
+});
+test("invalid provider JSON and invalid config fail closed",async()=>{
+ let calls=0;const result=await verifyTurnstileForLogin(verificationContext,"synthetic-token",async()=>{calls++;return new Response("invalid json")});assert.equal(result.ok,false);assert.equal(result.status,503);assert.equal(calls,2);
+ const invalid=await verifyTurnstileForLogin(verificationContext,"synthetic-token",async()=>Response.json({success:false,"error-codes":["invalid-input-secret"]}));assert.equal(invalid.code,"TURNSTILE_NOT_CONFIGURED");assert.equal(invalid.ok,false);
 });

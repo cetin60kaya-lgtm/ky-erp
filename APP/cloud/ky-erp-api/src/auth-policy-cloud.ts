@@ -855,6 +855,9 @@ export function registerAuthPolicyRoutes(app: any) {
       await audit(c, "TURNSTILE_LOGIN_REJECTED", "", "", "", "", {
         identity: identity.slice(0, 80),
         code: turnstile.code,
+        providerErrorCodes: turnstile.errorCodes || [],
+        attempts: turnstile.attempts || 0,
+        requestId: text(c.get?.("requestId")),
       });
       const unavailable = Number(turnstile.status || 0) >= 500;
       return c.json(
@@ -862,7 +865,9 @@ export function registerAuthPolicyRoutes(app: any) {
           turnstile.code,
           unavailable
             ? "Güvenlik doğrulama servisi geçici olarak kullanılamıyor. Kısa süre sonra tekrar deneyin."
-            : "Güvenlik doğrulaması tamamlanamadı. Turnstile kontrolünü yenileyip tekrar deneyin.",
+            : turnstile.code === "TURNSTILE_TOKEN_EXPIRED"
+              ? "Güvenlik doğrulamasının süresi doldu veya daha önce kullanıldı. Yeni doğrulama hazırlanıyor."
+              : "Güvenlik doğrulaması tamamlanamadı. Turnstile kontrolünü yenileyip tekrar deneyin.",
         ),
         unavailable ? 503 : 403,
       );

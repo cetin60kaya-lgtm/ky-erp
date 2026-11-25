@@ -193,7 +193,8 @@ async function directAuthRequest(path, options = {}) {
   const { method = "POST", body, token = "", timeoutMs = 20000, credentials = "omit" } = options;
   const normalizedPath = String(path || "").startsWith("/") ? String(path || "") : `/${String(path || "")}`;
   const requestUrl = `${API_BASE}${normalizedPath}`;
-  const loginTransportRetry = normalizedPath === "/auth/login" && String(method).toUpperCase() === "POST" && !token;
+  // A Turnstile token is single-use. Never replay a credential request carrying it.
+  const loginTransportRetry = normalizedPath === "/auth/login" && String(method).toUpperCase() === "POST" && !token && !body?.turnstileToken;
   const maxAttempts = loginTransportRetry ? 2 : 1;
   let lastTransportError = null;
 
