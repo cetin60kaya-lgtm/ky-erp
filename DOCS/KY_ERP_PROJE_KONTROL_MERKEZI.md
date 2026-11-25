@@ -1,6 +1,10 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
 
+## 25.11.2026 — Entegrasyon ilk yükleme/oturum dayanıklılığı
+- PR #663 merge `94a8ec378c620f30331749a17e7cfcc1c0dab196`, CI #45605889215 SUCCESS, Cloudflare Pages/Worker SUCCESS. Kullanıcı yeni seri merkezi gördü; hemen önce genel 500 ve boş seçim görünümü oluştu, tekrar açınca düzeldi. O anki requestId/Worker log yok; kesin kök sebep kanıtlanmadı. Kodda yenileme öncesi seçim sıfırlama, sağlayıcı sağlık hatasının dışarı taşması ve token/önbellek invalidasyonu sonrası geç GET yanıtı yazılması bulundu. Seçim doğrulanmadan sayı/işlem gösterilmez; aynı firma seçimi korunur, 401/403 veya oturum değişimi kapatır. Sağlık hatası CHECK_UNAVAILABLE; adapter D1 okuma hatası 503 + requestId. GET cache nesli ve token geçişi koruması; MFA/TTL/politika değişmedi. Yeni CI/yayın ve tekrarlı canlı kabul gerekir. Resmî gönderim yok.
+
+
 ## 25.11.2026 — İşNet seri belge merkezi / PR #663
 - Drive fatura örneklerinden normal Ticari/Satış ve ayrı 0 TL/%0 bedelsiz kalem, 351 aday açıklaması düzeni doğrulandı (PDF; XML eşleri bulunmadı). Hızlı kaynak irsaliye miktarı/fiyatı → TEST taslak → A4 kontrol; orijinal belge/kalem notları korunur. TEST rezervasyon ve kaynak kimliği kontrolü, varsayılanlar. Resmî gönderim, harici mutabakat, vergi kabulü, UBL/şematron ve gerçek cari profilleri açık. CI/yayın ayrı kabul. Ayrıntı: `DOCS/KY_ISNET_SOAP_TEST_20261125.md`.
 

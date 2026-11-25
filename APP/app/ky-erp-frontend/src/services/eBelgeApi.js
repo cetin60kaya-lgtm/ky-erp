@@ -165,8 +165,8 @@ export const updateEBelgeLine = (documentId, lineId, payload) =>
 export const saveEBelgeProductAlias = (productId, alias, documentId = "") =>
   apiPost(`/e-belge/products/${encodeURIComponent(productId)}/aliases`, { alias, documentId }).then(unwrap);
 
-export const getEBelgeIntegrations = () =>
-  apiGet("/e-belge/integrations", undefined, { timeoutMs: 30_000 }).then(unwrap);
+export const getEBelgeIntegrations = (mainCompanySlug) =>
+  apiGet("/e-belge/integrations", mainCompanySlug?{mainCompanySlug}:undefined, { timeoutMs: 30_000, forceFresh:true }).then(unwrap);
 
 export const getEBelgeFilePreview = async (fileId) => {
   const blob = await apiFetch(`/file-hub/files/${encodeURIComponent(fileId)}/preview`, {

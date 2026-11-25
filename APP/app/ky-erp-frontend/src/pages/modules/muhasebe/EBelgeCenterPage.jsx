@@ -618,7 +618,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [sortDirection, setSortDirection] = useState("DESC");
   const poolRequestSeq = useRef(0);
   const [dashboard, setDashboard] = useState({ summary: {}, recent: [] });
-  const [integrations, setIntegrations] = useState({ providers: [], archive: [], fileHub: [] });
+  const [integrations, setIntegrations] = useState({ mainCompanySlug:"", providers: [], archive: [], fileHub: [] });
+  const integrationRequestSeq = useRef(0);
+  const [integrationError,setIntegrationError]=useState("");
   const [lastUpload, setLastUpload] = useState(null);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
@@ -701,9 +703,21 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   }, []);
 
   const loadIntegrations = useCallback(async () => {
-    const data = await getEBelgeIntegrations();
-    setIntegrations(data || { providers: [], archive: [], fileHub: [] });
-  }, []);
+    const seq=++integrationRequestSeq.current;
+    if(!mainCompanySlug)return;
+    setIntegrationError("");
+    try{
+      const data = await getEBelgeIntegrations(mainCompanySlug);
+      if(seq!==integrationRequestSeq.current)return;
+      if(String(data?.mainCompanySlug||"")!==String(mainCompanySlug)||!Array.isArray(data.providers))throw new Error("Entegrasyon durumunun firma kapsamı doğrulanamadı.");
+      setIntegrations({...data,mainCompanySlug});
+      if(data.providers.some(p=>p.status==="CHECK_UNAVAILABLE"))setIntegrationError("İşNet oturum durumu geçici olarak doğrulanamadı. Entegrasyon seçimi bundan bağımsızdır.");
+    }catch(e){if(seq===integrationRequestSeq.current){
+      setIntegrations({mainCompanySlug:"",providers:[],archive:[],fileHub:[]});
+      const id=e?.payload?.error?.details?.requestId||"";
+      setIntegrationError("Entegrasyon durumu okunamadı; firma bağlantı listesi ayrı doğrulanıyor."+(id?" · İstek: "+id:""));
+    }}
+  }, [mainCompanySlug]);
 
   const refreshCurrent = useCallback(async () => {
     if (!activeMainCompany?.slug && !activeMainCompany?.id) {
@@ -739,6 +753,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => {
     poolRequestSeq.current += 1;
+    integrationRequestSeq.current += 1;
+    setIntegrationError("");
     setPool({ items: [], stats: {}, total: 0 });
     setDashboard({ summary: {}, recent: [] });
     setIntegrations({ providers: [], archive: [], fileHub: [] });
@@ -820,7 +836,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   }, [pool.items, view]);
   const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Ana firma seçilmedi";
   const summary = dashboard.summary || {};
-  const providers = [...(integrations.providers || [])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
+  const providers = [...(integrations.mainCompanySlug===mainCompanySlug?(integrations.providers || []):[])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
     overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
     incoming: ["Gelen Belgeler", "Tedarikçi faturaları ve müşteri/tedarikçi irsaliyelerini tek canonical havuzdan yönetin."],
@@ -904,6 +920,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     </div>}
 
     {error && <div className="eb-error"><AlertTriangle size={18} />{error}</div>}
+    {view==="integrations"&&integrationError&&<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{integrationError}</span></div>}
     {notice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Kontrol tamamlandı</strong><span>{notice}</span></div></div>}
 
     {view === "overview" && <>
