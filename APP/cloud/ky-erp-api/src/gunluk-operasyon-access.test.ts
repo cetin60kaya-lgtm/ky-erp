@@ -21,3 +21,13 @@ test("payment or period approval needs approve or update; deletion needs delete"
   assert.equal(dailyAuthorized(user,"DELETE","/api/gunluk-operasyon/employees/e1"),false);
   assert.equal(dailyAuthorized({...user,role:"SUPER_ADMIN",permissions:[]},"DELETE","/api/gunluk-operasyon/employees/e1"),true);
 });
+
+test("explicit daily grants override IK regardless of ordering, including denial",()=>{
+ const ik={moduleKey:"IK",canView:true,canUpdate:true};
+ const denied={moduleKey:"GUNLUK_OPERASYON",canView:false,canUpdate:false};
+ for(const permissions of [[ik,denied],[denied,ik]]) {
+ assert.equal(dailyAuthorized({role:"MUHASEBE",permissions},"GET","/api/gunluk-operasyon/records"),false);
+ assert.equal(dailyAuthorized({role:"MUHASEBE",permissions},"POST","/api/gunluk-operasyon/records"),false);
+ }
+ assert.equal(dailyAuthorized({role:"MUHASEBE",permissions:[{...ik,canView:false},{...denied,canView:true}]},"GET","/api/gunluk-operasyon/records"),true);
+});
