@@ -26,8 +26,8 @@ export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenR
   const [testRead,setTestRead]=useState(true);
   const navigate = tabKey => openModule?.("e-belge", { tabKey });
   return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
-    <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet İşlem Merkezi</h3>
-      <p>Günlük belgeler tek havuzda; resmî servis yetenekleri doğrulanmadan açılmaz.</p></div>
+    <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet · Seri Belge İşlem Merkezi</h3>
+      <p>Kaynak irsaliye → miktar / birim fiyat → taslak → kontrol. Resmî gönderim ayrı kabul kapısındadır.</p></div>
       <span className="isow-state">{enabled ? "SOAP test sözleşmesi alındı · bağlantı kabulü bekliyor" : "Firma entegrasyonu pasif"}</span></header>
     <div className="isow-docs">{documents.map(([label, tabKey]) => <button type="button" key={tabKey} disabled={!openModule} onClick={() => navigate(tabKey)}>{label}<small>KYERP belge havuzu · XML / PDF</small></button>)}</div>
     <div className="isow-actions">
@@ -41,7 +41,7 @@ export default function IsnetOfficialWorkspace({ openModule, onOpenSync, onOpenR
       <button type="button" disabled={!enabled} onClick={onOpenRules}>Bağlantı ve İş Kuralları</button>
       <button type="button" disabled={!enabled} onClick={onOpenTest}>Dosya Kontrolü</button>
     </div>
-    {testRead&&slug&&<IsnetSoapReadWorkspace key={slug} slug={slug}/>}
+    {testRead&&slug&&<IsnetSoapReadWorkspace key={slug} slug={slug} onDrafts={()=>{setTestRead(false);setTestDrafts(true);}}/>}
     {testDrafts&&slug&&<IsnetTestDraftWorkspace key={slug} slug={slug}/>}
     <p className="isow-note" role="status">Mevcut belge okuma ve arşiv akışı kullanılabilir. Aşağıdaki resmî işlemler tasarım kapsamındadır; henüz sağlayıcıya çağrı yapmaz. Muhasebe onayı resmî gönderim onayı değildir.</p>
     <div className="isow-groups">{groups.map((group, index) => <section key={group.title} className="isow-group">
