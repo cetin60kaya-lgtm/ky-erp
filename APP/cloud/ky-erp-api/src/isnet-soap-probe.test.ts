@@ -11,3 +11,5 @@ test("real health method shape, no metadata request",async()=>{
  assert.equal(safeNetworkStatus({name:"TimeoutError"}),"TIMEOUT");
  assert.equal(safeNetworkStatus(new Error("DNS lookup failed")),"DNS_ERROR");
 });
+
+test("health probe uses Cloudflare manual redirect and fails closed on 3xx",async()=>{let calls=0;const result=await probeInvoiceHealth(async(_url,opts)=>{calls++;assert.equal(opts.redirect,"manual");return new Response("",{status:302,headers:{Location:"https://example.invalid/"}})});assert.equal(result.status,"REDIRECT_REJECTED");assert.equal(calls,1);});

@@ -25,7 +25,8 @@ export async function probeInvoiceHealth(fetcher=fetch){
  const service="InvoiceService",check="SOAP_HEALTHCHECK";
  try{
   const env="http://schemas.xmlsoap.org/soap/envelope/",ns="http://tempuri.org/";
-  const res=await fetcher(SOAP_TEST_ENDPOINTS.InvoiceService,{method:"POST",redirect:"error",signal:AbortSignal.timeout(20000),headers:{"Content-Type":"text/xml; charset=utf-8",SOAPAction:'"http://tempuri.org/IInvoiceService/HealthCheck"'},body:'<s:Envelope xmlns:s="'+env+'"><s:Body><HealthCheck xmlns="'+ns+'"/></s:Body></s:Envelope>'});
+  const res=await fetcher(SOAP_TEST_ENDPOINTS.InvoiceService,{method:"POST",redirect:"manual",signal:AbortSignal.timeout(20000),headers:{"Content-Type":"text/xml; charset=utf-8",SOAPAction:'"http://tempuri.org/IInvoiceService/HealthCheck"'},body:'<s:Envelope xmlns:s="'+env+'"><s:Body><HealthCheck xmlns="'+ns+'"/></s:Body></s:Envelope>'});
+  if(res.status>=300&&res.status<400)return {service,check,status:"REDIRECT_REJECTED",httpStatus:res.status,operations:[]};
   if(!res.ok)return {service,check,status:"HTTP_ERROR",httpStatus:res.status,operations:[]};
   const reader=res.body?.getReader();if(!reader)return {service,check,status:"EMPTY",operations:[]};
   let size=0,xml="",decoder=new TextDecoder();
@@ -42,7 +43,8 @@ export async function probeSoapTestEndpoints(fetcher=fetch){
  return Promise.all(Object.entries(SOAP_TEST_ENDPOINTS).map(async ([service,endpoint])=>{
   if(service==="InvoiceService")return probeInvoiceHealth(fetcher);
   try{
-   const res=await fetcher(endpoint+"?singleWsdl",{method:"GET",redirect:"error",signal:AbortSignal.timeout(12000),headers:{Accept:"application/xml,text/xml"}});
+   const res=await fetcher(endpoint+"?singleWsdl",{method:"GET",redirect:"manual",signal:AbortSignal.timeout(12000),headers:{Accept:"application/xml,text/xml"}});
+   if(res.status>=300&&res.status<400)return{service,check:"WSDL",status:"REDIRECT_REJECTED",httpStatus:res.status,operations:[]};
    if(!res.ok)return{service,status:"HTTP_ERROR",httpStatus:res.status,operations:[]};
    const reader=res.body?.getReader();if(!reader)return{service,status:"EMPTY",operations:[]};
    let count=0,xml="";const decoder=new TextDecoder();try{while(true){const item=await reader.read();if(item.done)break;count+=item.value.byteLength;if(count>4000000){await reader.cancel();return{service,status:"SIZE_LIMIT",operations:[]};}xml+=decoder.decode(item.value,{stream:true});}xml+=decoder.decode();}finally{reader.releaseLock();}

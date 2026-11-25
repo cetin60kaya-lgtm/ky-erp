@@ -102,7 +102,8 @@ export function readSearchResponse(xml,request,q){
 async function boundedText(response,limit){const reader=response.body?.getReader();if(!reader)fail("RESPONSE_EMPTY");let size=0,s="",d=new TextDecoder();try{while(true){const r=await reader.read();if(r.done)break;size+=r.value.byteLength;if(size>limit){await reader.cancel();fail("RESPONSE_LIMIT")}s+=d.decode(r.value,{stream:true})}return s+d.decode()}finally{reader.releaseLock()}}
 export async function searchSoapTest(q,fetcher=fetch){
  const req=buildVerifiedTestReadRequest(q),ep=req.endpoint;
- let response;try{response=await fetcher(ep,{method:"POST",headers:req.headers,body:req.body,redirect:"error",signal:AbortSignal.timeout(25000)})}catch(e){fail(e?.name==="TimeoutError"||e?.name==="AbortError"?"SOAP_TIMEOUT":"SOAP_NETWORK_UNAVAILABLE")}
+ let response;try{response=await fetcher(ep,{method:"POST",headers:req.headers,body:req.body,redirect:"manual",signal:AbortSignal.timeout(25000)})}catch(e){fail(e?.name==="TimeoutError"||e?.name==="AbortError"?"SOAP_TIMEOUT":"SOAP_NETWORK_UNAVAILABLE")}
+ if(response.status>=300&&response.status<400)fail("SOAP_REDIRECT_REJECTED");
  if(!response.ok)fail("SOAP_HTTP_"+response.status);
  return readSearchResponse(await boundedText(response,12000000),req,q);
 }

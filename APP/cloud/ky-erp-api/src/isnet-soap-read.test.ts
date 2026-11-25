@@ -25,3 +25,5 @@ test("read transport does one POST, never downloads WSDL or sends documents",asy
  const result=await searchSoapTest(q,async(url,opts)=>{calls.push([url,opts.method]);return new Response(fixture)});
  assert.equal(result.rows[0].number,"TEST01");assert.equal(result.officialSent,false);assert.equal(calls.length,1);assert.equal(calls[0][1],"POST");assert.ok(calls[0][0].endsWith(".svc"));
 });
+
+test("Cloudflare-compatible manual redirect never follows provider redirection",async()=>{let calls=0;await assert.rejects(()=>searchSoapTest(q,async(_url,opts)=>{calls++;assert.equal(opts.redirect,"manual");return new Response("",{status:302,headers:{Location:"https://example.invalid/"}})}),/SOAP_REDIRECT_REJECTED/);assert.equal(calls,1);});
