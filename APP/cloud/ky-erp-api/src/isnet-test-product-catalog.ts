@@ -10,7 +10,7 @@ export function resolveTestProductAction(state:Row,a:Row){
  if(!["SAVE_DISPATCH","SAVE_INVOICE"].includes(a.kind))return a;
  const old=state.drafts.find((d:Row)=>d.id===a.id);
  // Source documents and linked dispatch lines keep their own identity.
- if(old?.providerSource||old?.dispatchId||(!old&&(a.sourceRef||a.dispatchId))||(old?.source||a.source)==="DEMO_INCOMING")return a;
+ if(old?.providerSource||old?.dispatchId||(!old&&(a.sourceRef||a.dispatchId))||((old?.source||a.source)==="DEMO_INCOMING"&&a.kind==="SAVE_DISPATCH"))return a;
  const raw=a.lines;
  if(!Array.isArray(raw)||!raw.length||raw.length>50)throw Error("Kayıtlı TEST ürün kalemini seçin.");
  const previous=old?.lines?.length?old.lines:old?[old]:[];
