@@ -1,7 +1,7 @@
-deploy: kyerp-security-pro-canonical-20261125
-pr: 658
-merge: aa3ef34f26001b4f782aab7b29d4b17ff2bdbfdf
-scope: canonical phone MFA, account management and atomic audit; authorized mobile ERP; API and Security Host
+deploy: kyerp-browser-session-stability-20261125
+pr: 662
+merge: becc7fd7fe430bc616e0b10432ad3eb1ebdc33fd
+scope: bounded browser session resume, multi-tab stability and logout, all canonical roles; API and Security Host
 release: Existing KY Security Canonical Final Deploy
 migration: NONE
 production_data_mutation: NONE
