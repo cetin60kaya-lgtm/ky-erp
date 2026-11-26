@@ -8,3 +8,13 @@ test("extract only one labelled ETTN, not an unrelated UUID",()=>{assert.equal(e
 test("mail PDF and official XML same issuer, recipient, direction, date and ETTN",()=>{assert.equal(compareIncomingDispatchIdentity(pdf,xml),"SAME_ETTN");assert.equal(compareIncomingDispatchIdentity(pdf,{...xml,tenant:"other"}),"DIFFERENT_SCOPE");assert.equal(compareIncomingDispatchIdentity(pdf,{...xml,issuerTax:"2222222222"}),"IDENTITY_CONFLICT");assert.equal(compareIncomingDispatchIdentity(pdf,{...xml,ettn:"00000000-0000-4000-8000-000000000001"}),"IDENTITY_CONFLICT")});
 test("manual number-only match requires review, not an automatic duplicate",()=>{assert.equal(compareIncomingDispatchIdentity({...pdf,ettn:""},xml),"SAME_NUMBER_REVIEW");assert.equal(compareIncomingDispatchIdentity({...pdf,issuerTax:""},xml),"REVIEW_REQUIRED");assert.equal(compareIncomingDispatchIdentity(pdf,{...xml,direction:"OUTGOING"}),"DIFFERENT_SCOPE")});
 test("history infers unknown role, preserves card and flags contradictory or dual role",()=>{assert.deepEqual(dispatchPartyRole("",3,0),{group:"CUSTOMER",source:"VERIFIED_SALES_HISTORY"});assert.equal(dispatchPartyRole("",0,3).group,"SUPPLIER");assert.equal(dispatchPartyRole("",0,0).group,"UNCLASSIFIED");assert.equal(dispatchPartyRole("SUPPLIER",1,0).group,"BOTH");assert.equal(dispatchPartyRole("CUSTOMER",1,1).group,"BOTH");assert.equal(dispatchPartyRole("CUSTOMER",0,0).group,"CUSTOMER")});
+
+import {equalSourceLines} from "./e-belge-incoming-dispatch-identity.ts";
+test("PDF/XML exact line comparison preserves colour, unit, individual quantity",()=>{
+ const line={productCode:"fixture",description:"Model X Red",unitCode:"ADET",quantity:8373};
+ assert.equal(equalSourceLines([line],[{product_code:"fixture",description:"model x red",unit_code:"C62",quantity:8373}]),true);
+ assert.equal(equalSourceLines([line],[{...line,quantity:8372}]),false);
+ assert.equal(equalSourceLines([line],[{...line,description:"Model X Blue"}]),false);
+ assert.equal(equalSourceLines([],[]),false);
+ assert.equal(equalSourceLines([line],[{...line,quantity:4000},{...line,quantity:4373}]),false);
+});

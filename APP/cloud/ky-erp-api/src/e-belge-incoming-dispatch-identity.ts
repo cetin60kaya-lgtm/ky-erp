@@ -44,3 +44,23 @@ export function dispatchPartyRole(card:unknown,sales:unknown,purchases:unknown){
  if(buy)return {group:"SUPPLIER",source:"VERIFIED_PURCHASE_HISTORY"};
  return {group:"UNCLASSIFIED",source:"INSUFFICIENT_EVIDENCE"};
 }
+
+/** Match every line independently. Never aggregate different model/colour/size by total. */
+type SourceLine=Record<string,unknown>;
+export function sourceLineSignature(lines:unknown){
+ if(!Array.isArray(lines)||!lines.length)return null;
+ const norm=(v:unknown)=>str(v).toLocaleUpperCase("tr-TR").normalize("NFC").replace(/\s+/g," ");
+ const unit=(v:unknown)=>{const s=norm(v);return ["ADET","AD","C62","PCS","PCE"].includes(s)?"C62":s};
+ const signatures:string[]=[];
+ for(const l of lines as SourceLine[]){
+  const code=norm(l.productCode||l.product_code||l.supplierProductCode||l.supplier_product_code);
+  const description=norm(l.description);
+  const quantity=Number(l.quantity),u=unit(l.unitCode||l.unit_code);
+  if(!description||!u||!Number.isFinite(quantity)||quantity<=0||quantity>1e9)return null;
+  signatures.push(JSON.stringify([code,description,u,quantity]));
+ }
+ return JSON.stringify(signatures.sort());
+}
+export function equalSourceLines(a:unknown,b:unknown){
+ const x=sourceLineSignature(a),y=sourceLineSignature(b);return x!==null&&x===y;
+}
