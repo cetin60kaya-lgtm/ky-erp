@@ -36,3 +36,10 @@ CREATE TABLE IF NOT EXISTS ebelge_command_defaults (
  CHECK(valid_from<=valid_until), PRIMARY KEY(main_company_slug,id,version)
 );
 CREATE INDEX IF NOT EXISTS idx_ebelge_command_defaults ON ebelge_command_defaults(main_company_slug,party_company_id,catalog_id,kind,valid_from,valid_until);
+
+-- Optional Workers AI interpretation; OFF by default, never grants provider send.
+CREATE TABLE IF NOT EXISTS ebelge_operator_policy (
+ main_company_slug TEXT PRIMARY KEY, version INTEGER NOT NULL CHECK(version>0),
+ ai_enabled INTEGER NOT NULL DEFAULT 0 CHECK(ai_enabled IN (0,1)),
+ updated_by TEXT NOT NULL, updated_at TEXT NOT NULL
+);

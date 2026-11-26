@@ -10,3 +10,6 @@ Mevcut ISNET_BUSINESS_SETTINGS workflow-defaults kayıtlarındaki seçili firma/
 
 ## Mobil / tablet / PC paritesi ve taslak yaşam döngüsü
 Mevcut tek AppV3 ve PRO PWA korunur; yeni uygulama/oturum veya API yok. Root manifest ID sabit, e-Belge kısayolu güncellendi, PRO hızlı modül listesine e-Belge eklendi. 44px dokunmatik hedef, 16px form, kart görünümü, sayfalama ve belge detayları aynı kaynakta; A4 çalışma taslağı PDF (pdfmake, resmi belge değildir), taslak iptal/çoğaltma ve sürüm kontrolü. 0063 henüz üretime uygulanmadı; CANCELLED eklemeli şemada. İptal yalnız taslağı etkiler, resmî belge iptali veya kaynak rezervasyonu değil. Gerçek cihaz/PWA ve son CI ayrı kabul. Son önceki CI #45784497448 SUCCESS.
+
+## Workers AI öneri bağlantısı
+Firma yöneticisinin sürüm kontrollü opt-in politikası; ilk durum kapalı. Mevcut Workers AI ve Gateway, cache/log kapalı ve firma kullanım ledger'ı; yalnız kullanıcının girdiği komut, DB kaydı/credential/dosya gönderilmez. AI çıktısı dar JSON, kaynak ve sayısal alan doğrulaması, kullanıcı incelemesi; sadece normal komut alanına alınır, asla doğrudan write/send yok. Gerçek AI çağrısı/cihaz kabulü yapılmadı. Önceki mobil/A4/yaşam döngüsü commit 1b33106835ae9b317ed8c843d0c66f2872a59d79 CI #45800024015 frontend ve Worker SUCCESS. Son AI paketi için CI ayrı.

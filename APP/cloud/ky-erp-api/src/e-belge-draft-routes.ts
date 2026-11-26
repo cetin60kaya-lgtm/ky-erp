@@ -4,6 +4,8 @@ import {accountingAccess,accountingTenantReadAllowed} from "./accounting-access-
 import {selections} from "./e-belge-adapter-company-routes";
 import {searchRegisteredItems,resolveRegisteredItemIds} from "./isnet-registered-items";
 import {parseDirectCommand,resolveDirectFields,storedWorkflowFields} from "./e-belge-command-core";
+import {checkCompanyAiAllowance,recordCompanyAiUsage} from "./company-billing-cloud";
+import {validateInterpretation} from "./e-belge-ai-intent";
 import {normalizeDraft,type DraftKind} from "./e-belge-draft-core";
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -15,7 +17,7 @@ export async function operatorAccess(c:Context<Env>,method:string,body:Row={}){
   const all=[c.req.query("mainCompanySlug"),c.req.query("mainCompanyId"),c.req.header("X-KYERP-Tenant-Slug"),body.mainCompanySlug,body.main_company_slug,body.mainCompanyId].map(v=>clean(v).toLowerCase()).filter(Boolean);
   const tenants=[...new Set(all)],user=await getAuthenticatedUser(c);
   if(tenants.length!==1||!user?.id||!accountingTenantReadAllowed(user,tenants[0])||!accountingAccess(user,method,c.req.path))return null;
-  return {tenant:tenants[0],userId:clean(user.id)};
+  return {tenant:tenants[0],userId:clean(user.id),role:clean(user.role).toUpperCase()};
 }
 const select="id,kind,provider_key,party_company_id,payload,version,state,created_at,updated_at,creation_context";
 const unpack=(row:Row):Row=>({...row,payload:JSON.parse(row.payload),creation_context:JSON.parse(row.creation_context||"{}")});
@@ -48,7 +50,54 @@ async function persistNewDraft(c:Context<Env>,a:{tenant:string;userId:string},id
 export async function operatorReadReady(c:Context<Env>){
  return Boolean(await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='accounting_document_read_state'").first());
 }
+const aiModel="@cf/meta/llama-3.3-70b-instruct-fp8-fast";
+const canManagePolicy=(role:string)=>["ADMIN","SUPER_ADMIN","COMPANY_ADMIN"].includes(role);
+async function aiPolicy(c:Context<Env>,tenant:string){
+ const ready=Boolean(await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ebelge_operator_policy'").first());
+ const row=ready?await c.env.DB.prepare("SELECT version,ai_enabled,updated_at FROM ebelge_operator_policy WHERE main_company_slug=?").bind(tenant).first<Row>():null;
+ return {ready,version:Number(row?.version||0),aiEnabled:Number(row?.ai_enabled||0)===1,updatedAt:row?.updated_at||"",sendEnabled:false};
+}
 export function registerEBelgeDraftRoutes(app:Hono<Env>){
+  app.get("/api/e-belge/operator-policy",async c=>{
+    const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma erişimi gerekli."),403);
+    c.header("Cache-Control","no-store");return c.json({ok:true,data:{mainCompanySlug:a.tenant,...await aiPolicy(c,a.tenant),canManage:canManagePolicy(a.role)}});
+  });
+  app.put("/api/e-belge/operator-policy",async c=>{
+    const body=await c.req.json<Row>().catch(()=>null);
+    if(!body)return c.json(err("INVALID_BODY","Politika gerekli."),400);
+    const a=await operatorAccess(c,"PUT",body);if(!a||!canManagePolicy(a.role))return c.json(err("FORBIDDEN","Firma yönetimi yetkisi gerekli."),403);
+    const current=await aiPolicy(c,a.tenant);
+    if(!current.ready)return c.json(err("SCHEMA_REQUIRED","Politika şeması henüz uygulanmadı."),503);
+    if(typeof body.aiEnabled!=="boolean"||!Number.isSafeInteger(body.version)||body.version!==current.version)return c.json(err("POLICY_CONFLICT","Ayarlar değişti veya sürüm geçersiz. Yenileyin."),409);
+    const now=new Date().toISOString();
+    const result=current.version?await c.env.DB.prepare("UPDATE ebelge_operator_policy SET version=version+1,ai_enabled=?,updated_by=?,updated_at=? WHERE main_company_slug=? AND version=?").bind(body.aiEnabled?1:0,a.userId,now,a.tenant,current.version).run():await c.env.DB.prepare("INSERT INTO ebelge_operator_policy(main_company_slug,version,ai_enabled,updated_by,updated_at) VALUES(?,1,?,?,?) ON CONFLICT(main_company_slug) DO NOTHING").bind(a.tenant,body.aiEnabled?1:0,a.userId,now).run();
+    const saved=await aiPolicy(c,a.tenant);
+    if(result.meta.changes!==1||saved.version!==current.version+1||saved.aiEnabled!==body.aiEnabled)return c.json(err("POLICY_CONFLICT","Politika kayıt sonucu doğrulanamadı."),409);
+    return c.json({ok:true,data:{mainCompanySlug:a.tenant,...saved,canManage:true}});
+  });
+  app.post("/api/e-belge/operator-command/interpret",async c=>{
+    const body=await c.req.json<Row>().catch(()=>null);
+    if(!body||body.allowAi!==true||typeof body.command!=="string"||!body.command.trim()||body.command.length>500)return c.json(err("INVALID_COMMAND","En fazla 500 karakter ve açık AI yorumlama isteği gerekli."),400);
+    const a=await operatorAccess(c,"POST",body);if(!a)return c.json(err("FORBIDDEN","Firma/işlem yetkisi gerekli."),403);
+    const policy=await aiPolicy(c,a.tenant);
+    if(!policy.ready||!policy.aiEnabled)return c.json(err("AI_POLICY_DISABLED","Firma AI komut yorumlama politikasını açmadı."),403);
+    const allowance=await checkCompanyAiAllowance(c.env.DB,a.tenant);
+    if(!allowance.allowed||!allowance.metered)return c.json(err("AI_ALLOWANCE_REQUIRED","Firma AI kullanım/ölçüm yapılandırması doğrulanamadı."),403);
+    if(!c.env.AI)return c.json(err("AI_UNAVAILABLE","Workers AI bağlantısı hazır değil."),503);
+    // Data minimization: send only the text deliberately entered by this user. No database rows,
+    // source documents, credentials, files, SQL or executable tools are sent to the model.
+    const binding=c.env.AI as unknown as {run:(model:string,input:Record<string,unknown>,options:Record<string,unknown>)=>Promise<unknown>};
+    let result:unknown;
+    try{result=await binding.run(aiModel,{messages:[{role:"system",content:"Türkçe e-Belge komutunu yalnız doğrudan fatura veya doğrudan irsaliye taslağı için biçimlendir. JSON dışında çıktı verme. Şema: {command: string, question: string}. Biçim: Cari için Model 100 adet 10 TL’den doğrudan fatura oluştur. Cari, model, miktar, birim ve açık fiyat yalnız kullanıcı metninden aynen; fiyat belirtilmediyse ekleme. Kaynak irsaliye, özel vergi, indirim, iptal, gönderim veya belirsizlikte command boş, question kısa olsun. İşlem yapma, yeni değer uydurma."},{role:"user",content:body.command}],temperature:0,max_tokens:280},{gateway:{id:clean((c.env as unknown as Row).AI_GATEWAY_ID)||"default",skipCache:true,collectLog:false,metadata:{app:"KYERP",tenant:a.tenant,module:"EBELGE_INTENT",requestId:clean(c.get("requestId"))}}});}catch{return c.json(err("AI_UNAVAILABLE","AI komutu yorumlayamadı. Kural tabanlı işlem veya editör kullanılabilir."),502)}
+    const output=result as Row;
+    try{
+      const ledger=await recordCompanyAiUsage(c.env.DB,{mainCompanySlug:a.tenant,usage:output?.usage,sourceRef:clean(c.get("requestId"))||crypto.randomUUID(),actorUserId:a.userId,model:aiModel,note:"e-Belge intent önerisi"});
+      if(!ledger.recorded)return c.json(err("AI_USAGE_UNVERIFIED","AI kullanım kaydı doğrulanamadı; öneri uygulanmadı."),503);
+      const suggestion=validateInterpretation(body.command,typeof result==="string"?result:output?.response);
+      const after=await aiPolicy(c,a.tenant);if(!after.aiEnabled||after.version!==policy.version)return c.json(err("AI_POLICY_CHANGED","AI politikası değişti; öneri uygulanmadı."),409);
+      c.header("Cache-Control","no-store");return c.json({ok:true,data:{mainCompanySlug:a.tenant,...suggestion,requiresReview:true,sendAllowed:false}});
+    }catch{return c.json(err("AI_REVIEW_REQUIRED","Komut güvenli biçimde doğrulanamadı. Doğrudan komut veya ortak editör kullanılabilir."),422)}
+  });
   app.get("/api/e-belge/operator-catalog",async c=>{
     const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma yetkisi doğrulanamadı."),403);
     const items=await searchRegisteredItems(c,a.tenant,clean(c.req.query("q")));
