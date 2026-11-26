@@ -1,8 +1,8 @@
-deploy: kyerp-ebelge-rev3-canonical-20261126
-pr: 673
-merge: 1aaee116f56fafaa1b4a2c1f32ae75291094ba1d
-ci: 45871066056 SUCCESS
-scope: API Worker and existing PRO PWA; canonical e-Belge workspace and read-only/guarded automation
+deploy: kyerp-ebelge-dashboard-hotfix-20261126
+pr: 679
+merge: c9b76db21bc2c93daa08b929e2ec1a0018f29267
+ci: 45875195444 SUCCESS
+scope: dashboard read scope, verified result and error diagnostics; API and existing PRO PWA
 release: Existing KY Security Canonical Final Deploy
 migration: NONE
 production_data_mutation: NONE
