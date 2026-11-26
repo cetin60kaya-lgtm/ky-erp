@@ -220,11 +220,11 @@ function withOperationalGroups(module) {
       ...module,
       label: "e-Belge Merkezi",
       groups: [
-        { label: "Operasyon", tabs: [["genel-bakis", "Genel Bakış", "dashboard"], ["belgeleri-al", "Belgeleri Al", "upload"], ["belge-havuzu", "Belge Havuzu", "upload"]] },
-        { label: "Faturalar", tabs: [["gelen-faturalar", "Gelen Faturalar", "dosya"], ["okunmamis-faturalar", "Okunmamış Faturalar", "dosya"], ["giden-faturalar", "Giden Faturalar", "dosya"], ["fatura-taslaklari", "Fatura Taslakları", "dosya"]] },
-        { label: "İrsaliyeler", tabs: [["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"], ["okunmamis-irsaliyeler", "Okunmamış İrsaliyeler", "dosya"], ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"], ["irsaliye-taslaklari", "İrsaliye Taslakları", "dosya"]] },
-        { label: "Kontrol & Eşleştirme", tabs: [["eslestirmeler", "Eşleştirmeler", "file-check"], ["onay-sorunlar", "Onay & Sorunlar", "uyari"], ["is-akislari", "İş Akışları", "file-check"]] },
-        { label: "Arşiv & Sistem", tabs: [["arsiv-cikti", "Arşiv & Çıktı", "dosya"], ["gorsel-sablonlar", "Görsel Şablonlar", "dosya"], ["entegrasyonlar", "Entegrasyonlar", "ayarlar"]] },
+        { label: "Genel", tabs: [["genel-bakis", "Genel Bakış", "dashboard"]] },
+        { label: "Fatura İşlemleri", tabs: [["gelen-faturalar", "Gelen Faturalar", "dosya"], ["okunmamis-faturalar", "Okunmamış Faturalar", "dosya"], ["giden-faturalar", "Giden Faturalar", "dosya"], ["fatura-taslaklari", "Fatura Taslakları", "dosya"]] },
+        { label: "İrsaliye İşlemleri", tabs: [["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"], ["okunmamis-irsaliyeler", "Okunmamış İrsaliyeler", "dosya"], ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"], ["irsaliye-taslaklari", "İrsaliye Taslakları", "dosya"]] },
+        { label: "Belge Yönetimi", tabs: [["belgeleri-al", "Belge Aktarımı", "upload"], ["belge-havuzu", "Belge Havuzu", "upload"], ["eslestirmeler", "Belge Eşleştirme", "file-check"], ["onay-sorunlar", "Belge Kontrol ve Onay", "uyari"], ["is-akislari", "Sevk ve Faturalandırma", "file-check"]] },
+        { label: "Arşiv ve Ayarlar", tabs: [["arsiv-cikti", "Belge Arşivi ve Çıktılar", "dosya"], ["gorsel-sablonlar", "Belge Şablonları", "dosya"], ["entegrasyonlar", "Entegrasyon Yönetimi", "ayarlar"]] },
       ],
     };
   }

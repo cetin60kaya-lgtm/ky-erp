@@ -817,7 +817,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       const checked = Number(result?.total || 0);
       const responses = Array.isArray(result?.results) ? result.results : [];
       const failed = responses.filter((row) => row?.status === "ERROR" || row?.ok === false || Boolean(row?.error)).length;
-      setNotice(`${checked} uygun belge eşleştirme kontrolünden geçirildi.${failed ? ` ${failed} belgede hata oluştu; Onay & Sorunlar ekranından kontrol edin.` : " Sonuçlar belge havuzunda görülebilir."}`);
+      setNotice(`${checked} uygun belge eşleştirme kontrolünden geçirildi.${failed ? ` ${failed} belgede hata oluştu; Belge Kontrol ve Onay ekranından kontrol edin.` : " Sonuçlar belge havuzunda görülebilir."}`);
       setMatchingConfirmOpen(false);
       setMatchingApproved(false);
       await loadPool();
@@ -848,7 +848,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const summary = dashboard.summary || {};
   const providers = [...(integrations.mainCompanySlug===mainCompanySlug?(integrations.providers || []):[])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
-    receive: ["Belgeleri Al", "Firmanın etkin sağlayıcısından veya orijinal XML/PDF dosyasından belge alın."],
+    receive: ["Belge Aktarımı", "Entegrasyon kaynaklarından belge aktarın veya orijinal XML/PDF dosyalarını Belge Havuzu üzerinden yükleyin."],
     "invoice-drafts": ["Fatura Taslakları", "Tek veri girişi · kaydet · kontrol et. Resmî gönderim ayrı kabul gerektirir."],
     "dispatch-drafts": ["İrsaliye Taslakları", "Sevk kalemleri ve teslim bilgilerini hazırlayın."],
     overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
@@ -861,12 +861,12 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     "outgoing-invoices":["Giden Faturalar","Satış faturalarını, ilgili irsaliyeyi ve Outlook işlemlerini izleyin."],
     outgoing: ["Giden Belgeler", "Bizim faturalarımızı ve irsaliyelerimizi kaynak sağlayıcıdan bağımsız tek listede izleyin."],
     pool: ["Belge Havuzu", "XML, PDF ve görselleri yükleyin; belgeyi, firmayı, kalemleri ve dosyaları tek canonical kayıt üzerinden yönetin."],
-    matching: ["Eşleştirmeler", "Fatura–irsaliye, firma, ürün ve LOT eşleşmesi bekleyen kayıtları sonuçlandırın."],
-    issues: ["Onay & Sorunlar", "Gerçek hata, eksik eşleşme ve son onay bekleyen belgeleri tek yerde çözün."],
-    workflow: ["İş Akışları", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
-    archive: ["Arşiv & Çıktı", "Gelen/giden fatura ve irsaliyeleri seçin; orijinal PDF’leri sıra ile açın ve çıktı durumlarını izleyin."],
-    integrations: ["Entegrasyonlar", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
-    "visual-templates": ["Görsel Şablonlar", "Düzenleyen VKN/TCKN ve belge türüne göre XML + orijinal PDF örneğini tanıtın; şablonu düzenleyip sonraki XML'lere uygulayın."],
+    matching: ["Belge Eşleştirme", "Fatura–irsaliye, firma, ürün ve LOT eşleşmesi bekleyen kayıtları sonuçlandırın."],
+    issues: ["Belge Kontrol ve Onay", "Gerçek hata, eksik eşleşme ve son onay bekleyen belgeleri tek yerde çözün."],
+    workflow: ["Sevk ve Faturalandırma", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
+    archive: ["Belge Arşivi ve Çıktılar", "Gelen/giden fatura ve irsaliyeleri seçin; orijinal PDF’leri sıra ile açın ve çıktı durumlarını izleyin."],
+    integrations: ["Entegrasyon Yönetimi", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
+    "visual-templates": ["Belge Şablonları", "Düzenleyen VKN/TCKN ve belge türüne göre XML + orijinal PDF örneğini tanıtın; şablonu düzenleyip sonraki XML'lere uygulayın."],
   }[view];
   const poolTitle = viewMeta[0];
   const poolHint = viewMeta[1];
@@ -902,21 +902,21 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
     {view !== "integrations" && <div className="eb-hero">
       <div>
-        <span className="eb-kicker">e-Belge · Tek Canonical Havuz</span>
+        <span className="eb-kicker">KYERP · e-Belge Yönetimi</span>
         <h2>{viewMeta[0]}</h2>
         <p>{viewMeta[1]}</p>
       </div>
       <div className="eb-hero-actions">
-        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belgeleri Al</button>}
-        {(view === "overview" || view === "outgoing-invoices") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("fatura-taslaklari")}>+ Fatura Hazırla</button>}
-        {(view === "overview" || view === "outgoing-dispatches") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("irsaliye-taslaklari")}>+ İrsaliye Hazırla</button>}
+        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
+        {(view === "overview" || view === "outgoing-invoices") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("fatura-taslaklari")}>+ Yeni Fatura</button>}
+        {(view === "overview" || view === "outgoing-dispatches") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("irsaliye-taslaklari")}>+ Yeni İrsaliye</button>}
         {view === "overview" && <>
           <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
           <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
             {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
           </button>
 
-          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Sorunları Aç</button>
+          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Kontrol ve Onay</button>
         </>}
         {showPool && <>
       <nav className="eb-four-document-nav" aria-label="Dört belge işlem ekranı">
@@ -964,7 +964,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "pool" && <>
       <UploadPanel onUploaded={handleUploaded} />
       <div className="eb-section-title"><div><strong>PDF Görünüm Şablonu</strong><span>Firma bazlı bir kez tanıtılır, sonraki belgelerde tekrar kullanılabilir.</span></div>
-        <button type="button" onClick={() => openEBelgeTab("gorsel-sablonlar")}>Görsel Şablonlar'ı Aç</button></div>
+        <button type="button" onClick={() => openEBelgeTab("gorsel-sablonlar")}>Belge Şablonlarını Aç</button></div>
       {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div></div>}
     </>}
 

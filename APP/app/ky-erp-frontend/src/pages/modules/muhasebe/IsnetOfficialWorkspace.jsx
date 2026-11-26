@@ -40,11 +40,11 @@ export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRule
   <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>{technicalOnly?"İşNet · Teknik Kabul":"İşNet · Belge İşlem Merkezi"}</h3><p>{technicalOnly?"Servis sözleşmesi, TEST ortamı ve teknik kabul. Günlük belge işlemleri ortak e-Belge merkezindedir.":"Gelen ve giden belgeler, sevk ilişkileri, muhasebe kontrolü ve orijinal dosyalar tek merkezde."}</p></div><span className="isow-state">{enabled?"Firma entegrasyonu seçili · SOAP canlı kabulü bekliyor":"Firma entegrasyonu pasif"}</span></header>
   {!technicalOnly&&<><div className="isow-docs">{documents.map(([label,tabKey,detail])=><button type="button" key={tabKey} disabled={!openModule} onClick={()=>navigate(tabKey)}>{label}<small>{detail} · KYERP belge havuzu</small></button>)}</div>
   <section className="isow-operator"><h4>Günlük işlemler</h4><div className="isow-actions">
-   <button type="button" className="isow-primary" disabled={!enabled||!onOpenSync} onClick={onOpenSync}>Belgeleri al · XML + PDF</button>
+   <button type="button" className="isow-primary" disabled={!enabled||!onOpenSync} onClick={onOpenSync}>Belge Aktarımı</button>
    <button type="button" disabled={!openModule} onClick={()=>navigate("gelen-irsaliyeler")}>Kısmi sevk ve irsaliye kontrolü</button>
    <button type="button" disabled={!openModule} onClick={()=>navigate("eslestirmeler")}>Belge eşleştirmeleri</button>
    <button type="button" disabled={!openModule} onClick={()=>navigate("belge-havuzu")}>Belge yükle / havuz</button>
-   <button type="button" disabled={!openModule} onClick={()=>navigate("arsiv-cikti")}>Arşiv / çıktı</button>
+   <button type="button" disabled={!openModule} onClick={()=>navigate("arsiv-cikti")}>Belge Arşivi ve Çıktılar</button>
    <button type="button" disabled={!openModule} onClick={()=>navigate("onay-sorunlar")}>Muhasebe onayları</button>
   </div></section>
   <section className="isow-operator"><h4>Belge oluşturma ve gönderim</h4><p>Resmî e-Fatura, e-Arşiv, e-İrsaliye ve yanıt işlemleri sağlayıcı gönderim kabulü tamamlanana kadar kapalıdır. KYERP muhasebe onayı veya bir TEST taslağı resmî belge değildir.</p><div className="isow-actions">

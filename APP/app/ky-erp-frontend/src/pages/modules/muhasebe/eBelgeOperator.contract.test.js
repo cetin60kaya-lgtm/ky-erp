@@ -16,3 +16,13 @@ test("Gerçek taslak ekranında TEST veya resmî gönderim çağrısı yok",()=>
  assert.match(draft,/disabled title="UBL/);
  assert.doesNotMatch(draft,/isnet-test|SendInvoice|SendDespatch/);
 });
+
+// Corporate labels: preserve existing route keys and align base, active registry, and page title.
+test("e-Belge kurumsal menü adları iki kayıt katmanında ve çalışma ekranında tutarlıdır",()=>{
+ const nav=read("../../../app/moduleRegistry.js"),base=read("../../../app/moduleRegistryBase.js"),center=read("./EBelgeCenterPage.jsx");
+ for(const [key,label] of [["genel-bakis","Genel Bakış"],["gelen-faturalar","Gelen Faturalar"],["okunmamis-faturalar","Okunmamış Faturalar"],["giden-faturalar","Giden Faturalar"],["fatura-taslaklari","Fatura Taslakları"],["gelen-irsaliyeler","Gelen İrsaliyeler"],["okunmamis-irsaliyeler","Okunmamış İrsaliyeler"],["giden-irsaliyeler","Giden İrsaliyeler"],["irsaliye-taslaklari","İrsaliye Taslakları"],["belgeleri-al","Belge Aktarımı"],["belge-havuzu","Belge Havuzu"],["eslestirmeler","Belge Eşleştirme"],["onay-sorunlar","Belge Kontrol ve Onay"],["is-akislari","Sevk ve Faturalandırma"],["arsiv-cikti","Belge Arşivi ve Çıktılar"],["gorsel-sablonlar","Belge Şablonları"],["entegrasyonlar","Entegrasyon Yönetimi"]]){
+  for(const source of [nav,base])assert.ok(source.includes(JSON.stringify(key)+", "+JSON.stringify(label)),key);
+  assert.ok(center.includes(JSON.stringify(label)),label);
+ }
+ assert.doesNotMatch(center,/> Belgeleri Al<\/button>/);
+});

@@ -111,7 +111,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
     setPdfUrl(URL.createObjectURL(output.blob));
     setMessage(approved?
       "Onaylı düzenleyen firma + belge türü şablonuyla kontrol PDF'i üretildi. Yeni XML verileri kullanıldı; resmî imzalı PDF eşdeğeri değildir.":
-      "Onaylı firma şablonu bulunamadı; varsayılan kontrol PDF'i üretildi. Firma şablonunu Görsel Şablonlar'da tanıtın.");
+      "Onaylı firma şablonu bulunamadı; varsayılan kontrol PDF'i üretildi. Firma şablonunu Belge Şablonları ekranında tanıtın.");
    }
   }catch(e){setMessage(e?.message||"PDF önizlemesi oluşturulamadı.");}
   finally{setBusy("")}
@@ -119,16 +119,16 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
  const testEnabled=profile?.workflow!=="DISABLED";
  return <section className="itc" aria-label="Belge Test Merkezi">
   <header><div><small>ORTAK TEST ORTAMI / {adapter?.label}</small><h3>Belge Test Merkezi</h3>
-    <p>XML ve PDF dosyalarını burada yalnız kontrol edin. İşNet&#39;ten otomatik alma ve orijinal arşiv için <b>Belgeleri Al</b> ekranını kullanın.</p></div><FileSearch size={24}/></header>
+    <p>XML ve PDF dosyalarını burada yalnız kontrol edin. İşNet&#39;ten otomatik alma ve orijinal arşiv için <b>Belge Aktarımı</b> ekranını kullanın.</p></div><FileSearch size={24}/></header>
   <div className="itc-categories">{TYPES.map(x=><button key={x.key} type="button" className={type===x.key?"active":""}
    onClick={()=>{setType(x.key);reset()}}>{x.name}</button>)}</div>
   {key==="ISNET"&&chromeMode&&<div className="itc-chrome" role="status">
     <div><strong>Chrome oturumu üzerinden belge testi</strong>
-      <p>Bu alan yerel XML/PDF dosyasını güvenli şekilde önizlemek içindir. İşNet'ten doğrudan belge almak için ana <b>Belgeleri Al · XML + PDF</b> ekranını kullanın.</p>
+      <p>Bu alan yerel XML/PDF dosyasını güvenli şekilde önizlemek içindir. İşNet'ten doğrudan belge almak için ana <b>Belge Aktarımı</b> ekranını kullanın.</p>
       <p>İsterseniz NetteFatura'dan indirdiğiniz dosyayı aşağıdan seçerek belge türünü, XML alanlarını ve PDF önizlemesini de kontrol edebilirsiniz.</p>
     </div>
     <a href="https://nettefatura.isnet.net.tr/" target="_blank" rel="noopener noreferrer">NetteFatura'yı Chrome'da Aç</a>
-    {onOpenSync&&<button type="button" onClick={onOpenSync}>KY ERP İşNet Belgeleri Al Ekranı</button>}
+    {onOpenSync&&<button type="button" onClick={onOpenSync}>Belge Aktarımı Ekranını Aç</button>}
     <small>Bu alan, bilgisayarınızdan seçtiğiniz dosyaları inceler. Gerçek portal giriş testi ve XML/PDF arşivleme ayrı ana işlemde yapılır.</small>
   </div>}
   {key==="ISNET"&&!chromeMode&&<div className="itc-remote">
@@ -181,7 +181,7 @@ export default function EBelgeIntegrationTestCenter({adapter,activeMainCompany,p
   {onOpenVisualStudio&&<details className="itc-advanced">
     <summary>İleri araçlar · Görsel şablon (isteğe bağlı)</summary>
     <p>Yalnız orijinal PDF'si bulunmayan XML dosyaları için özel kontrol görünümü gerekiyorsa kullanın. Şablon, İşNet'ten alınan orijinal belgeyi değiştirmez.</p>
-    <button type="button" className="itc-visual-link" onClick={onOpenVisualStudio}>Görsel Şablonları Düzenle</button>
+    <button type="button" className="itc-visual-link" onClick={onOpenVisualStudio}>Belge Şablonlarını Düzenle</button>
   </details>}
   {showXml&&rawXml&&<pre className="itc-xml" aria-label="XML içeriği">{rawXml.slice(0,12000)}{rawXml.length>12000?"\n... [Önizleme 12.000 karakterle sınırlı]":""}</pre>}
   {pdfUrl&&<iframe className="itc-pdf" src={pdfUrl} title="Belge kontrol PDF önizlemesi" />}

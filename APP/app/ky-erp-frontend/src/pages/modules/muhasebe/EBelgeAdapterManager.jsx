@@ -14,7 +14,7 @@ const integrationError=e=>{
  return message+(id?" · İstek: "+id:"");
 };
 const connectionStatus=(adapter,provider,entry)=>{
- if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Portal oturumu ve firma seçimi Belgeleri Al ekranından doğrulanır";
+ if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Portal oturumu ve firma seçimi Belge Aktarımı ekranından doğrulanır";
  if(adapter.driver===null)return "Bağlayıcı henüz hazır değil";
  if(entry?.enabled===false)return "Firma için pasif";
  if(adapter.key==="MANUAL")return "XML yükleme kullanılabilir";
@@ -119,7 +119,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
 
  return <main className="eam">
   <header className="eam-head">
-   <div><small>e-BELGE / ENTEGRASYONLAR</small><h2>Entegrasyon Merkezi</h2><p>Firmanın seçili entegrasyonunu açın, bağlantısını ve ayarlarını tek ekranda yönetin.</p></div>
+   <div><small>e-BELGE / ENTEGRASYON YÖNETİMİ</small><h2>Entegrasyon Yönetimi</h2><p>Firmanın seçili entegrasyonunu açın, bağlantısını ve ayarlarını tek ekranda yönetin.</p></div>
    <button type="button" disabled={Boolean(busy)||loading} onClick={()=>void refresh()}><RefreshCw size={16}/> Yenile</button>
   </header>
   <div className="eam-toolbar">
