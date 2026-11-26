@@ -1,8 +1,4 @@
-deploy: gunluk-operasyon-log-tarih-haftalik-ek-kesinti-20261105
-pr: 520
-merge: 16595364aaa518577540152c004174adf6d1fde4
-ci: 41975967565 SUCCESS
-scope: Pages daily-entry LOG, weekly summary and A4/Excel net financial reports
-reason: Same-date range scopes, exact D1 weekly net wage + additions - deductions, and no unverified financial export
+deploy: kyerp-ebelge-compact-overview-20261126
+scope: frontend-only compact overview; hide unsupported counters; preserve all routes and data
 migration: NONE
-production_mutation: NONE
+provider_submission: UNCHANGED

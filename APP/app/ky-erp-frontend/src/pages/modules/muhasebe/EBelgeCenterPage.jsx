@@ -936,7 +936,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   }, [mainCompanySlug, view, archiveType, query, from, to, statusFilter, page, sortBy, sortDirection]);
 
 
-  return <section className="eb-page">
+  return <section className={"eb-page"+(view==="overview"?" eb-overview-compact":"")}>
     <div className="eb-company-context" aria-label={`Belge sahibi: ${companyName}`}><span>Belge sahibi</span><strong>{companyName}</strong></div>
 
     {view !== "integrations" && <div className="eb-hero">
@@ -986,10 +986,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       {!dashboard.verified?<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{busy?"Belge özeti doğrulanıyor…":"Belge özeti okunamadı. Kayıt sayıları ve tutarlar doğrulanana kadar gösterilmiyor."}</span></div>:<>
       <EBelgeRev3Overview dashboard={dashboard} openModule={openModule}/>
       <section className="eb-pool eb-recent-pool eb-dashboard-recent">
-        <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("belge-havuzu")}>Belge Havuzunu Aç</button></div>
+        <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>Son 3 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("belge-havuzu")}>Belge Havuzunu Aç</button></div>
         {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-pool-table-scroll eb-dashboard-table-scroll"><div className="eb-table">
           <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Durum</span></div>
-          {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span data-label="Belge"><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span data-label="Cari"><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span><span data-label="Tarih">{dateText(row.issue_date)}</span><span data-label="Kaynak / Çıktı"><small>{sourceLabel(row.source_type)}</small></span><span data-label="Toplam"><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span data-label="Kontrol" className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>)}
+          {dashboard.recent.slice(0,3).map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span data-label="Belge"><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span data-label="Cari"><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span><span data-label="Tarih">{dateText(row.issue_date)}</span><span data-label="Kaynak / Çıktı"><small>{sourceLabel(row.source_type)}</small></span><span data-label="Toplam"><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span data-label="Kontrol" className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>)}
         </div></div> : <Empty title="Henüz belge yok" text="Belge Havuzu'ndan ilk dosyaları yükleyin." />}
       </section>
       </>}
