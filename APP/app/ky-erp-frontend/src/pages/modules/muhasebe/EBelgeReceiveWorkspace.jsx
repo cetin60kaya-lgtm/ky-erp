@@ -1,9 +1,10 @@
 import {useEffect,useState} from "react";
+import {canonicalCompanySlug} from "../../../utils/companyIdentity";
 import {getCompanyEBelgeAdapters} from "../../../services/eBelgeAdapterApi";
 import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
 import "./eBelgeOperator.css";
 export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
- const slug=activeMainCompany?.slug||activeMainCompany?.id||"";
+ const slug=canonicalCompanySlug(activeMainCompany);
  const [data,setData]=useState(null),[error,setError]=useState(""),[retry,setRetry]=useState(0),[show,setShow]=useState(false);
  useEffect(()=>{let live=true;if(!slug)return;getCompanyEBelgeAdapters({slug}).then(r=>{
   if(!live)return;if(String(r.mainCompanySlug).toLowerCase()!==String(slug).toLowerCase()||!Array.isArray(r.companyAdapters))throw Error("Firma kapsamı doğrulanamadı.");
@@ -14,7 +15,7 @@ export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
  return <section className="ebo-workspace">
   <h3>Belge Aktarım Kaynakları</h3>
   <div className="ebo-actions">
-   <button type="button" onClick={()=>nav("belge-havuzu")}>XML / PDF Yükleme</button>
+   <button type="button" onClick={()=>nav("dosya-kutusu")}>Dosya Kutusu</button><button type="button" onClick={()=>nav("belge-havuzu")}>XML / PDF Yükleme</button>
    <button type="button" onClick={()=>nav("entegrasyonlar")}>Entegrasyon Yönetimi</button>
    <button type="button" onClick={()=>{setData(null);setError("");setShow(false);setRetry(v=>v+1)}}>Yenile</button>
   </div>

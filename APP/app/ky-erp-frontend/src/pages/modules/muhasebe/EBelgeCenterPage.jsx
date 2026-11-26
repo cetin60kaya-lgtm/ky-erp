@@ -49,6 +49,9 @@ import "./eBelgeCenter.css";
 import EBelgeDraftWorkspace from "./EBelgeDraftWorkspace";
 import EBelgeSmartWorkspace,{EBelgeCreateHub} from "./EBelgeSmartWorkspace";
 import EBelgeReceiveWorkspace from "./EBelgeReceiveWorkspace";
+import EBelgeRev3Overview from "./EBelgeRev3Overview";
+import EBelgeFileInbox from "./EBelgeFileInbox";
+import EBelgeCapabilityWorkspace from "./EBelgeCapabilityWorkspace";
 
 const today = () => {
   const date = new Date();
@@ -67,7 +70,10 @@ const FOUR_DOCUMENT_FILTERS={
  "unread-dispatches":"INCOMING_DISPATCH",
  "incoming-dispatches":"INCOMING_DISPATCH",
  "outgoing-dispatches":"OUTGOING_DISPATCH",
- "outgoing-invoices":"OUTGOING_INVOICE",
+ "outgoing-invoices":"OUTGOING_EINVOICE",
+ "outgoing-archive":"OUTGOING_ARCHIVE",
+ "review-documents":"APPROVAL_WAIT",
+ "missing-originals":"MISSING_ORIGINAL",
 };
 const FILTERS = [
   ["ALL", "Tüm Belgeler"],
@@ -617,7 +623,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
 }
 
 export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule, moduleActionContext }) {
-  const allowedViews = ["overview", "incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "create-hub", "smart-center"];
+  const allowedViews = ["overview", "incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "archive-drafts", "file-inbox", "other-documents", "responses", "send-queue", "reports", "directory", "archive-cancel", "create-hub", "smart-center"];
   const view = allowedViews.includes(initialView) ? initialView : "overview";
   const poolViews = useMemo(() => ["incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
@@ -633,6 +639,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [statusFilter,setStatusFilter] = useState("ALL");
+  const [officialOnly,setOfficialOnly]=useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -659,9 +666,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
     mainCompanySlug,filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
+    ...(officialOnly?{officialOnly:true}:{}),
     ...(view.startsWith("unread-")?{readStatus:"UNREAD"}:{}),
     ...((view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[mainCompanySlug,direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
+  }),[mainCompanySlug,direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType,officialOnly]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
   const sortPoolBy = (column) => {
     if (sortBy === column) setSortDirection((old) => old === "ASC" ? "DESC" : "ASC");
@@ -751,7 +759,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
-    if (["workflow", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "create-hub", "smart-center"].includes(view)) return;
+    if (["workflow", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "archive-drafts", "file-inbox", "other-documents", "responses", "send-queue", "reports", "directory", "archive-cancel", "create-hub", "smart-center"].includes(view)) return;
     setBusy(true);
     setError("");
     try {
@@ -770,6 +778,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   useEffect(() => {
     setPage(1);
     setStatusFilter("ALL");
+    setFrom("");setTo("");setOfficialOnly(false);
     setMatchingConfirmOpen(false);
     setMatchingApproved(false);
   }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
@@ -790,6 +799,12 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     if (moduleActionContext?.targetModule !== "e-belge" || !moduleActionContext?.documentId) return;
     setSelectedId(String(moduleActionContext.documentId));
   }, [moduleActionContext?.nonce, moduleActionContext?.documentId, moduleActionContext?.targetModule]);
+
+  useEffect(()=>{
+    const targetByView={"incoming-invoices":"gelen-faturalar","unread-invoices":"okunmamis-faturalar","outgoing-invoices":"giden-faturalar","incoming-dispatches":"gelen-irsaliyeler","unread-dispatches":"okunmamis-irsaliyeler","outgoing-dispatches":"giden-irsaliyeler","outgoing-archive":"earchive-out","matching":"eslestirmeler","issues":"onay-sorunlar","review-documents":"muhasebe-onayi","missing-originals":"eksik-orijinaller"};
+    if(moduleActionContext?.targetModule!=="e-belge"||moduleActionContext?.dashboardMetric!==true||targetByView[view]!==moduleActionContext.targetTab)return;
+    setFrom(moduleActionContext.from||"");setTo(moduleActionContext.to||"");setOfficialOnly(true);setPage(1);setQuery("");setStatusFilter("ALL");setOnlyPrintPending(false);
+  },[moduleActionContext?.nonce,view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The click is the user's explicit approval. The backend still requires
   // authenticated tenant-scoped MUHASEBE create rights and validated UBL XML.
@@ -857,7 +872,6 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     return allRows;
   }, [pool.items, view]);
   const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Ana firma seçilmedi";
-  const summary = dashboard.summary || {};
   const providers = [...(integrations.mainCompanySlug===mainCompanySlug?(integrations.providers || []):[])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
     "create-hub": ["e-Belge Oluştur", "Tek editör · kaynak belge · firma ve sağlayıcı yeteneği."],
@@ -865,7 +879,18 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     receive: ["Belge Aktarımı", "Entegrasyon kaynaklarından belge aktarın veya orijinal XML/PDF dosyalarını Belge Havuzu üzerinden yükleyin."],
     "invoice-drafts": ["Fatura Taslakları", "Tek veri girişi · kaydet · kontrol et. Resmî gönderim ayrı kabul gerektirir."],
     "dispatch-drafts": ["İrsaliye Taslakları", "Sevk kalemleri ve teslim bilgilerini hazırlayın."],
-    overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
+    overview: ["Genel Bakış", "Günlük e-Belge işlemleri ve muhasebe kontrol merkezi."],
+    "outgoing-archive":["Giden e-Arşiv","Mevcut kayıtlı e-Arşiv belgeleri · orijinal XML/PDF ve durum."],
+    "review-documents":["Muhasebe Onayı Bekleyenler","Onaya hazır kayıtlar · resmî gönderim durumu değildir."],
+    "missing-originals":["Eksik XML / PDF","Orijinal XML veya PDF ilişkisi bulunmayan kayıtlar."],
+    "archive-drafts":["e-Arşiv Taslakları","Ortak fatura motorundaki e-Arşiv taslakları."],
+    "file-inbox":["Dosya Kutusu","Firma dosya bağlantılarındaki girişler ve aktarım durumları."],
+    "other-documents":["Diğer e-Belgeler","Firma sağlayıcı yetenekleri."],
+    responses:["Belge Yanıtları","Resmî yanıt servisi kabulü."],
+    "send-queue":["Gönderim Takibi","Resmî gönderim ve sonuç servislerinin kabul durumu."],
+    reports:["Raporlar","Ortak belge kayıtları ve muhasebe raporları."],
+    directory:["Cari / Ürün / Adres","KYERP kayıtları ve sağlayıcı eşleştirme."],
+    "archive-cancel":["İptal ve İtirazlar","e-Arşiv resmî iptal ve itiraz servisi."],
     incoming: ["Gelen Belgeler", "Tedarikçi faturaları ve müşteri/tedarikçi irsaliyelerini tek canonical havuzdan yönetin."],
     "unread-invoices":["Okunmamış Faturalar","Kullanıcıya özel okunma durumu."],
     "unread-dispatches":["Okunmamış İrsaliyeler","Kullanıcıya özel okunma durumu."],
@@ -921,18 +946,14 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <p>{viewMeta[1]}</p>
       </div>
       <div className="eb-hero-actions">
-        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
-        {(view === "overview" || view === "outgoing-invoices") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("fatura-taslaklari")}>+ Yeni Fatura</button>}
-        {(view === "overview" || view === "outgoing-dispatches") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("irsaliye-taslaklari")}>+ Yeni İrsaliye</button>}
-        {view === "overview" && <>
+        {view==="overview"?<>
           <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("olustur")}>e-Belge Oluştur</button>
+          <button type="button" onClick={()=>openEBelgeTab("dosya-kutusu")}>Dosya Kutusu</button>
           <button type="button" onClick={()=>openEBelgeTab("ai-center")}>Akıllı İşlem Merkezi</button>
-          <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
-          <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
-            {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
-          </button>
-
-          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Kontrol ve Onay</button>
+        </>:<>
+          {showPool&&<button type="button" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
+          {["outgoing-invoices","outgoing-dispatches"].includes(view)&&<button type="button" className="eb-primary" onClick={()=>openModule?.("e-belge",{tabKey:view==="outgoing-invoices"?"fatura-taslaklari":"irsaliye-taslaklari",actionContext:{createDraft:true}})}>{view==="outgoing-invoices"?"+ Yeni Fatura":"+ Yeni İrsaliye"}</button>}
+          {["pool","issues"].includes(view)&&<button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile doğrulanan carileri eşleştir; kesin muhasebeleştirme yapma">{companyBatchBusy?<LoaderCircle className="eb-spin" size={17}/>:<Link2 size={17}/>} XML'den Carileri Eşleştir</button>}
         </>}
         {showPool && <>
       <nav className="eb-four-document-nav" aria-label="Dört belge işlem ekranı">
@@ -956,22 +977,14 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view==="integrations"&&integrationError&&<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{integrationError}</span></div>}
     {notice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Kontrol tamamlandı</strong><span>{notice}</span></div></div>}
 
+    {view === "file-inbox" && <EBelgeFileInbox key={mainCompanySlug} activeMainCompany={activeMainCompany} openModule={openModule} onOpenDocument={id=>setSelectedId(String(id))}/>}
+    {["other-documents","responses","send-queue","reports","directory","archive-cancel"].includes(view)&&<EBelgeCapabilityWorkspace key={mainCompanySlug+":"+view} activeMainCompany={activeMainCompany} view={view} openModule={openModule}/>}
     {view === "create-hub" && <EBelgeCreateHub openModule={openModule}/>}
     {view === "smart-center" && <EBelgeSmartWorkspace key={mainCompanySlug+":smart"} activeMainCompany={activeMainCompany} openModule={openModule}/>}
     {view === "overview" && <>
       <EBelgeSmartWorkspace compact key={mainCompanySlug+":quick"} activeMainCompany={activeMainCompany} openModule={openModule}/>
       {!dashboard.verified?<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{busy?"Belge özeti doğrulanıyor…":"Belge özeti okunamadı. Kayıt sayıları ve tutarlar doğrulanana kadar gösterilmiyor."}</span></div>:<>
-      <div className="eb-stats eb-dashboard-stats">
-        <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
-        <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />
-        <StatCard label="Bugün Giden" value={summary.todayOutgoing} hint="Düzenlediğimiz belgeler" />
-        <button type="button" className="eb-dashboard-stat-action" onClick={() => openEBelgeTab("onay-sorunlar")} title="Kontrol bekleyen belgeleri aç"><StatCard label="Kontrol Bekleyen" value={summary.attention} hint="Listeyi aç · uyarı / hata" /></button>
-        <button type="button" className="eb-dashboard-stat-action" onClick={() => openEBelgeTab("eslestirmeler")} title="Eşleşme bekleyen belgeleri aç"><StatCard label="Eşleşme Bekleyen" value={summary.matchingWait} hint="Listeyi aç · fatura – irsaliye" /></button>
-      </div>
-      <section className="eb-dashboard-periods">
-        <article className="eb-period-card current"><header><div><span>DÖNEM ÖZETİ</span><strong>Bu Ay</strong></div><b>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.monthStart || monthStart())} – Bugün</footer></article>
-        <article className="eb-period-card previous"><header><div><span>KARŞILAŞTIRMA</span><strong>Geçen Ay</strong></div><b>{Number(summary.previousMonthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.previousMonthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.previousMonthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.previousMonthStart)} – {dateText(dashboard.previousMonthEnd)}</footer></article>
-      </section>
+      <EBelgeRev3Overview dashboard={dashboard} openModule={openModule}/>
       <section className="eb-pool eb-recent-pool eb-dashboard-recent">
         <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("belge-havuzu")}>Belge Havuzunu Aç</button></div>
         {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-pool-table-scroll eb-dashboard-table-scroll"><div className="eb-table">
@@ -1078,7 +1091,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     </>}
 
     {view === "receive" && <EBelgeReceiveWorkspace key={mainCompanySlug} activeMainCompany={activeMainCompany} openModule={openModule} />}
-    {["invoice-drafts", "dispatch-drafts"].includes(view) && <EBelgeDraftWorkspace key={mainCompanySlug+":"+view} activeMainCompany={activeMainCompany} kind={view==="invoice-drafts"?"INVOICE":"DISPATCH"} />}
+    {["invoice-drafts", "dispatch-drafts", "archive-drafts"].includes(view) && <EBelgeDraftWorkspace key={mainCompanySlug+":"+view} activeMainCompany={activeMainCompany} kind={view==="dispatch-drafts"?"DISPATCH":"INVOICE"} family={view==="archive-drafts"?"ARCHIVE":view==="invoice-drafts"?"EINVOICE":"ALL"} actionContext={moduleActionContext} />}
     {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} onOpenDocument={(documentId) => { setAutoPdfDocumentId(String(documentId)); setSelectedId(String(documentId)); }} />}
     {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 

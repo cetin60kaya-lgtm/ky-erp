@@ -171,7 +171,9 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     const page=Math.min(100000,Math.max(1,Math.trunc(Number(c.req.query("page"))||1)));
     const state=clean(c.req.query("state")).toUpperCase()||"ACTIVE";
     if(!["ACTIVE","DRAFT","CHECKED","CANCELLED"].includes(state))return c.json(err("INVALID_STATE","Taslak durumu geçersiz."),400);
-    const clause=state==="ACTIVE"?"state IN ('DRAFT','CHECKED')":"state=?";
+    const family=clean(c.req.query("family")).toUpperCase()||"ALL";
+    if(!["ALL","EINVOICE","ARCHIVE"].includes(family)||(kind!=="INVOICE"&&family!=="ALL"))return c.json(err("INVALID_FAMILY","Taslak ailesi geçersiz."),400);
+    const clause=(state==="ACTIVE"?"state IN ('DRAFT','CHECKED')":"state=?")+(family==="ARCHIVE"?" AND json_extract(payload,'$.scenario')='EARSIVFATURA'":family==="EINVOICE"?" AND COALESCE(json_extract(payload,'$.scenario'),'')<>'EARSIVFATURA'":"");
     const args=state==="ACTIVE"?[a.tenant,kind]:[a.tenant,kind,state];
     const result=await c.env.DB.prepare("SELECT "+select+" FROM accounting_document_drafts WHERE main_company_slug=? AND kind=? AND "+clause+" ORDER BY updated_at DESC,id LIMIT 50 OFFSET ?").bind(...args,(page-1)*50).all<Row>();
     const count=await c.env.DB.prepare("SELECT COUNT(*) n FROM accounting_document_drafts WHERE main_company_slug=? AND kind=? AND "+clause).bind(...args).first<Row>();
