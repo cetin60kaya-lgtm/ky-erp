@@ -27,9 +27,10 @@ export const MODULES = [
       { label: "Genel", tabs: [["genel-bakis", "Genel Bakış", "dashboard"], ["olustur", "e-Belge Oluştur", "dosya"], ["ai-center", "Akıllı İşlem Merkezi", "dashboard"]] },
       { label: "Fatura İşlemleri", tabs: [["gelen-faturalar", "Gelen Faturalar", "dosya"], ["okunmamis-faturalar", "Okunmamış Faturalar", "dosya"], ["giden-faturalar", "Giden Faturalar", "dosya"], ["fatura-taslaklari", "Fatura Taslakları", "dosya"]] },
       { label: "İrsaliye İşlemleri", tabs: [["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"], ["okunmamis-irsaliyeler", "Okunmamış İrsaliyeler", "dosya"], ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"], ["irsaliye-taslaklari", "İrsaliye Taslakları", "dosya"]] },
-      { label: "e-Arşiv İşlemleri", tabs: [["earchive-out", "Giden e-Arşiv", "dosya"]] },
-        { label: "Belge Yönetimi", tabs: [["belgeleri-al", "Belge Aktarımı", "upload"], ["belge-havuzu", "Belge Havuzu", "upload"], ["eslestirmeler", "Belge Eşleştirme", "file-check"], ["onay-sorunlar", "Belge Kontrol ve Onay", "uyari"], ["muhasebe-onayi", "Muhasebe Onayı Bekleyenler", "file-check"], ["is-akislari", "Sevk ve Faturalandırma", "file-check"]] },
-      { label: "Arşiv ve Ayarlar", tabs: [["arsiv-cikti", "Belge Arşivi ve Çıktılar", "dosya"], ["gorsel-sablonlar", "Belge Şablonları", "dosya"], ["entegrasyonlar", "Entegrasyon Yönetimi", "ayarlar"]] },
+      { label: "e-Arşiv İşlemleri", tabs: [["earchive-out", "Giden e-Arşiv", "dosya"], ["earchive-drafts", "e-Arşiv Taslakları", "dosya"], ["earchive-cancel", "İptal ve İtirazlar", "uyari"]] },
+        { label: "Belge Yönetimi", tabs: [["dosya-kutusu", "Dosya Kutusu", "dosya"], ["belgeleri-al", "Belge Aktarımı", "upload"], ["belge-havuzu", "Belge Havuzu", "upload"], ["eslestirmeler", "Belge Eşleştirme", "file-check"], ["onay-sorunlar", "Belge Kontrol ve Onay", "uyari"], ["muhasebe-onayi", "Muhasebe Onayı Bekleyenler", "file-check"], ["eksik-orijinaller", "Eksik XML / PDF", "uyari"], ["is-akislari", "Sevk ve Faturalandırma", "file-check"]] },
+      { label: "Diğer İşlemler", tabs: [["other-docs", "Diğer e-Belgeler", "dosya"], ["responses", "Belge Yanıtları", "dosya"], ["send-queue", "Gönderim Takibi", "dosya"], ["reports", "Raporlar", "raporlar"], ["directory", "Cari / Ürün / Adres", "firma-kartlari"]] },
+        { label: "Arşiv ve Ayarlar", tabs: [["arsiv-cikti", "Belge Arşivi ve Çıktılar", "dosya"], ["gorsel-sablonlar", "Belge Şablonları", "dosya"], ["entegrasyonlar", "Entegrasyon Yönetimi", "ayarlar"]] },
     ],
   },
   {

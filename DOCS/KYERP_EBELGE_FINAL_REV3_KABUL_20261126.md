@@ -16,3 +16,6 @@ Firma yöneticisinin sürüm kontrollü opt-in politikası; ilk durum kapalı. M
 
 ## Yayın hazırlığı
 Son AI testindeki ERR_MODULE_NOT_FOUND: Node ESM import uzantısı düzeltildi. Miktar ve fiyatın rollerinin değişmemesi/atılmaması doğrulandı, regresyon testi eklendi. Güncel production 458d0b955c51b7b7a00710391be5213f56dd98ef ile birleştirilmiş test dalı; mevcut diğer İşNet değişiklikleri korunur. D1 migration ve resmî gönderim ayrı kapı, uygulanmadı.
+
+## 26.11.2026 — FINAL REV3 Genel Bakış / menü düzeni
+HTML'nin gerçek dashboard, groups ve uygulama notları yeniden okunarak dört panel, dönem ve gerçek filtreli drilldown, sade başlık, doğrudan ortak editör, ayrı e-Arşiv kayıtları ve taslak filtresi, mevcut tenant File Hub binding'lerine dayanan salt okunur Dosya Kutusu, eksik XML/PDF ilişkisi sayacı, muhasebe onayı ve sağlayıcı kabulü gerektiren menü sayfaları eklendi. Kullanılamayan sayaçlar —; gönderim, resmî yanıt/iptal ve diğer belge hizmetleri desteklenmediği sürece kapalı. Önceki dashboard başarılı canlı kullanıcı verisi korunur. D1 0063 uygulanmadı; fiyat sözleşmesi, kaynak satır rezervasyonu, gerçek UBL üretimi, mobil yerel bağlayıcı kabulü ve resmî gönderim zinciri açık. PR #680; ilk commit CI #45879455642 SUCCESS, bu commit için ayrı CI/production smoke gerekir.
