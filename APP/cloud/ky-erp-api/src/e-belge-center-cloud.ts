@@ -21,6 +21,7 @@ import { verifiedXmlPartyRecoveryDecision } from "./e-belge-xml-party-recovery";
 import { dispatchRequirement } from "./e-belge-dispatch-policy";
 import { eBelgePoolOrderBy } from "./e-belge-pool-sort";
 import { accountingAccess,accountingTenantReadAllowed } from "./accounting-access-policy";
+import { registerEBelgeDraftRoutes } from "./e-belge-draft-routes";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -692,6 +693,7 @@ const invoiceTypeSql="(d.document_type LIKE '%FATURA%' OR d.document_type LIKE '
 function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:`d.direction='INCOMING' AND ${invoiceTypeSql}`};if(f==="OUTGOING_INVOICE")return{sql:`d.direction='OUTGOING' AND ${invoiceTypeSql}`};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
 
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
+  registerEBelgeDraftRoutes(app);
   app.get("/api/e-belge/dashboard",async c=>{
     const slug=slugOf(c);
     const todayValue=text(c.req.query("today"))||new Date().toLocaleDateString("sv-SE",{timeZone:"Europe/Istanbul"});

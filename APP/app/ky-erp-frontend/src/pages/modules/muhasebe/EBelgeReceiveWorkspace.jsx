@@ -1,0 +1,28 @@
+import {useEffect,useState} from "react";
+import {getCompanyEBelgeAdapters} from "../../../services/eBelgeAdapterApi";
+import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
+import "./eBelgeOperator.css";
+export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
+ const slug=activeMainCompany?.slug||activeMainCompany?.id||"";
+ const [data,setData]=useState(null),[error,setError]=useState(""),[retry,setRetry]=useState(0),[show,setShow]=useState(false);
+ useEffect(()=>{let live=true;if(!slug)return;getCompanyEBelgeAdapters({slug}).then(r=>{
+  if(!live)return;if(String(r.mainCompanySlug).toLowerCase()!==String(slug).toLowerCase()||!Array.isArray(r.companyAdapters))throw Error("Firma kapsamı doğrulanamadı.");
+  setData(r);
+ }).catch(e=>{if(live)setError(e.message||"Entegrasyonlar okunamadı.");});return()=>{live=false;};},[slug,retry]);
+ const isnet=data?.companyAdapters.find(x=>x.key==="ISNET"&&x.selected===true&&x.enabled===true);
+ const nav=tabKey=>openModule?.("e-belge",{tabKey});
+ return <section className="ebo-workspace">
+  <h3>Belge kaynağı</h3>
+  <div className="ebo-actions">
+   <button type="button" onClick={()=>nav("belge-havuzu")}>XML / PDF yükle</button>
+   <button type="button" onClick={()=>nav("entegrasyonlar")}>Sağlayıcı ayarları</button>
+   <button type="button" onClick={()=>{setData(null);setError("");setShow(false);setRetry(v=>v+1)}}>Yenile</button>
+  </div>
+  {error?<p role="alert">{error}</p>:!data?<p role="status">Firma bağlantıları okunuyor…</p>:<div>
+   {(data.companyAdapters||[]).filter(x=>x.selected).map(x=><p key={x.key}><strong>{data.systemCatalog?.find(a=>a.key===x.key)?.label||x.key}</strong> · {x.enabled!==true?"Pasif":x.key==="ISNET"?"Yerel servis kontrolü gerekli":x.key==="MANUAL"?"Dosya yükleme":"Doğrulanmış belge alma motoru bekleniyor"}</p>)}
+   {isnet&&<><p>Yerel İşNet oturumu KYERP firma seçiminden bağımsızdır. Belgeleri almadan önce aynı firmanın yetkili portal hesabını ve arşivini doğrulayın.</p>
+   <button type="button" onClick={()=>setShow(v=>!v)}>{show?"Yerel paneli kapat":"İşNet yerel panelini aç"}</button></>}
+  </div>}
+  {isnet&&show&&<EBelgeIsnetPortalSync key={slug} activeMainCompany={activeMainCompany} openModule={openModule} enabled={true}/>}
+ </section>;
+}

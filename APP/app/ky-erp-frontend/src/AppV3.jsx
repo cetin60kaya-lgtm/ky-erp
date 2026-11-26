@@ -319,6 +319,9 @@ export default function AppV3() {
       "gelen-irsaliyeler": "incoming-dispatches",
       "giden-irsaliyeler": "outgoing-dispatches",
       "belge-havuzu": "pool",
+      "belgeleri-al": "receive",
+      "fatura-taslaklari": "invoice-drafts",
+      "irsaliye-taslaklari": "dispatch-drafts",
       "eslestirmeler": "matching",
       "onay-sorunlar": "issues",
       "is-akislari": "workflow",
@@ -326,7 +329,7 @@ export default function AppV3() {
       "gorsel-sablonlar": "visual-templates",
       "entegrasyonlar": "integrations",
     }[activeTab];
-    if (activeModule?.key === "e-belge" && eBelgeView) return <EBelgeCenterPage {...sharedProps} initialView={eBelgeView} />;
+    if (activeModule?.key === "e-belge" && eBelgeView) return <EBelgeCenterPage key={normalizedCompany?.slug || normalizedCompany?.id || "no-company"} {...sharedProps} initialView={eBelgeView} />;
 
     if (activeModule?.key === "desen") return <DesenPage activeTab={activeTab} {...sharedProps} />;
     if (activeModule?.key === "boyahane") return <BoyahanePage activeTab={activeTab} {...sharedProps} />;

@@ -1,0 +1,62 @@
+import {useEffect,useRef,useState} from "react";
+import {apiGet,apiPost,apiPatch} from "../../../utils/api";
+import {getCompanyEBelgeAdapters} from "../../../services/eBelgeAdapterApi";
+import "./eBelgeOperator.css";
+const base="/e-belge/operator-drafts",unwrap=v=>v?.ok===true?v.data:v;
+const localDate=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")};
+const blankLine=()=>({description:"",quantity:"1",unit:"C62",price:"0",vatRate:"",discountRate:"0",freeKind:"",note:""});
+const blank=kind=>({issueDate:localDate(),partyId:"",partyName:"",scenario:kind==="INVOICE"?"TEMELFATURA":"TEMELIRSALIYE",currency:"TRY",note:"",lines:[blankLine()],deliveryAddress:"",driver:"",plate:"",carrier:"",dispatchDate:localDate(),dispatchTime:""});
+const money=v=>v==null?"—":Number(v).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
+export default function EBelgeDraftWorkspace({activeMainCompany,kind}){
+ const slug=activeMainCompany?.slug||activeMainCompany?.id||"",invoice=kind==="INVOICE";
+ const [rows,setRows]=useState(null),[total,setTotal]=useState(null),[page,setPage]=useState(1),[refresh,setRefresh]=useState(0),[error,setError]=useState(""),[notice,setNotice]=useState("");
+ const [form,setForm]=useState(null),[saved,setSaved]=useState(null),[draftId,setDraftId]=useState(""),[provider,setProvider]=useState(""),[adapters,setAdapters]=useState([]),[partyQuery,setPartyQuery]=useState(""),[companies,setCompanies]=useState([]),[partyError,setPartyError]=useState(""),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[preview,setPreview]=useState(false);
+ const lock=useRef(false);
+ const validScope=r=>String(r?.mainCompanySlug||"").toLowerCase()===String(slug).toLowerCase();
+ useEffect(()=>{let live=true;if(!slug)return;apiGet(base,{mainCompanySlug:slug,kind,page},{forceFresh:true}).then(unwrap).then(r=>{if(!live)return;if(!validScope(r)||!Array.isArray(r.items))throw Error("Taslak firma kapsamı doğrulanamadı.");setRows(r.items);setTotal(r.total);}).catch(e=>{if(live){setError(e.message||"Taslaklar okunamadı.");setRows(null);setTotal(null)}});return()=>{live=false};},[slug,kind,page,refresh]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{let live=true;if(!slug)return;getCompanyEBelgeAdapters({slug}).then(r=>{if(live&&validScope(r))setAdapters(r.companyAdapters.filter(x=>x.selected===true&&x.enabled===true&&x.key!=="MANUAL"));}).catch(()=>{if(live)setAdapters([])});return()=>{live=false};},[slug]); // eslint-disable-line react-hooks/exhaustive-deps
+ useEffect(()=>{let live=true;if(!form||partyQuery.trim().length<2)return;const timer=setTimeout(()=>apiGet("/e-belge/company-suggestions",{mainCompanySlug:slug,q:partyQuery.trim()},{forceFresh:true}).then(unwrap).then(r=>{if(live){setCompanies(Array.isArray(r)?r:[]);setPartyError("")}}).catch(e=>{if(live){setCompanies([]);setPartyError(e.message||"Cari araması başarısız.")}}),250);return()=>{live=false;clearTimeout(timer)}},[slug,partyQuery,Boolean(form)]); // eslint-disable-line react-hooks/exhaustive-deps
+ const update=(key,value)=>{setForm(f=>({...f,[key]:value}));setDirty(true);setPreview(false)};
+ const changeLine=(i,key,value)=>{setForm(f=>({...f,lines:f.lines.map((l,j)=>j===i?{...l,[key]:value,...(key==="freeKind"&&value?{price:"0"}:{})}:l)}));setDirty(true);setPreview(false)};
+ const start=()=>{setForm(blank(kind));setSaved(null);setDraftId(crypto.randomUUID());setProvider(adapters.length===1?adapters[0].key:"");setPartyQuery("");setCompanies([]);setDirty(true);setPreview(false);setNotice("");setError("")};
+ const edit=d=>{setForm(d.payload);setSaved(d);setDraftId(d.id);setProvider(d.provider_key||"");setDirty(false);setPreview(false);setPartyQuery("");setCompanies([]);setNotice("");setError("")};
+ const close=()=>{if(dirty&&!window.confirm("Kaydedilmemiş değişikliklerden vazgeçilsin mi?"))return;setForm(null);setSaved(null);setDirty(false);setPreview(false);setNotice("");};
+ async function act(action){
+  if(lock.current||!form||!slug)return;lock.current=true;setBusy(true);setError("");setNotice("");
+  try{
+   const body={mainCompanySlug:slug,kind,id:draftId,providerKey:provider,payload:form,action,version:saved?.version};
+   const r=unwrap(saved?await apiPatch(base+"/"+encodeURIComponent(saved.id),body):await apiPost(base,body));
+   if(!validScope(r)||r.draft?.id!==draftId||!r.draft?.payload)throw Error("Taslak kayıt sonucu doğrulanamadı.");
+   setSaved(r.draft);setForm(r.draft.payload);setDirty(false);setNotice(action==="CHECK"?"İç alan kontrolü tamamlandı. Resmî onay/gönderim değildir.":"Taslak sunucuya kaydedildi.");setRefresh(v=>v+1);
+  }catch(e){setError((e.message||"İşlem tamamlanamadı.")+" Girilen bilgiler korunuyor. Tekrar işlemden önce kayıt listesini doğrulayın.");}finally{lock.current=false;setBusy(false)}
+ }
+ const field=(label,key,type="text")=><label>{label}<input type={type} value={form[key]||""} onChange={e=>update(key,e.target.value)}/></label>;
+ const lineField=(label,line,i,key,type="text")=><label>{label}<input type={type} value={line[key]??""} disabled={key==="price"&&Boolean(line.freeKind)} onChange={e=>changeLine(i,key,e.target.value)}/></label>;
+ return <section className="ebo-workspace">
+  <div className="ebo-heading"><div><h3>{invoice?"Fatura":"İrsaliye"} taslakları</h3><small>Giden belge hazırlığı · {total==null?"—":total} kayıt</small></div><div className="ebo-actions"><button type="button" disabled={busy||Boolean(form)||rows===null} onClick={start}>+ {invoice?"Yeni Fatura":"Yeni İrsaliye"}</button><button type="button" disabled={busy} onClick={()=>{setError("");setRows(null);setRefresh(v=>v+1)}}>Listeyi Yenile</button></div></div>
+  {error&&<p role="alert" className="ebo-error">{error}</p>}{notice&&<p role="status">{notice}</p>}
+  {!form&&<><div className="ebo-table-scroll"><table><thead><tr><th>Tarih</th><th>Cari</th><th>Sağlayıcı</th><th>İç durum</th><th>Toplam</th><th>İşlem</th></tr></thead><tbody>{rows?.map(d=><tr key={d.id}><td>{d.payload.issueDate}</td><td>{d.payload.partyName}</td><td>{d.provider_key||"Seçilmedi"}</td><td>{d.state==="CHECKED"?"Alanları kontrol edildi":"Taslak"}</td><td>{invoice?money(d.payload.total)+" "+d.payload.currency:"—"}</td><td><button type="button" onClick={()=>edit(d)}>Aç</button></td></tr>)}</tbody></table></div>{rows?.length===0&&<p>Henüz taslak yok.</p>}{rows===null&&!error&&<p role="status">Taslaklar okunuyor…</p>}<div className="ebo-actions"><button type="button" disabled={page<=1} onClick={()=>setPage(v=>v-1)}>Önceki</button><span>{page}. sayfa</span><button type="button" disabled={total==null||page*50>=total} onClick={()=>setPage(v=>v+1)}>Sonraki</button></div></>}
+  {form&&<><fieldset disabled={busy} className="ebo-form"><legend>{saved?"Taslak · sürüm "+saved.version:"Yeni taslak"}</legend>
+   <div className="ebo-grid">
+   <label>Cari ara (ünvan / VKN)<input value={partyQuery} onChange={e=>{setPartyQuery(e.target.value);setCompanies([]);setPartyError("")}} placeholder="En az iki karakter"/></label>
+   <label>Kayıtlı cari<input readOnly value={form.partyName||""} placeholder="Listeden seçin"/></label>
+   {partyError&&<p role="alert">{partyError}</p>}{companies.length>0&&<div className="ebo-picker">{companies.map(c=><button type="button" key={c.id} onClick={()=>{setForm(f=>({...f,partyId:c.id,partyName:c.name,partyTaxNo:c.tax_no||""}));setDirty(true);setPreview(false);setPartyQuery("");setCompanies([])}}>{c.name} · {c.tax_no||"VKN yok"}</button>)}</div>}
+   {field("Belge tarihi","issueDate","date")}
+   <label>Belge senaryosu<select value={form.scenario} onChange={e=>update("scenario",e.target.value)}>{(invoice?["TEMELFATURA","TICARIFATURA","EARSIVFATURA"]:["TEMELIRSALIYE"]).map(s=><option key={s}>{s}</option>)}</select></label>
+   <label>Sağlayıcı (taslak bağlantısı)<select value={provider} disabled={Boolean(saved)} onChange={e=>{setProvider(e.target.value);setDirty(true)}}><option value="">Sonra doğrulanacak</option>{provider&&!adapters.some(a=>a.key===provider)&&<option>{provider}</option>}{adapters.map(a=><option key={a.key}>{a.key}</option>)}</select></label>
+   {invoice?<label>Para birimi<select value={form.currency} onChange={e=>update("currency",e.target.value)}>{["TRY","USD","EUR","GBP"].map(c=><option key={c}>{c}</option>)}</select></label>:<>{field("Fiili sevk tarihi","dispatchDate","date")}{field("Sevk saati","dispatchTime","time")}{field("Teslim adresi","deliveryAddress")}{field("Taşıyıcı","carrier")}{field("Sürücü","driver")}{field("Plaka","plate")}</>}
+   </div>
+   <h4>Mal / hizmet kalemleri</h4>
+   {form.lines.map((l,i)=><div key={i} className="ebo-line"><strong>{i+1}.</strong>{lineField("Açıklama",l,i,"description")}{lineField("Miktar",l,i,"quantity")}<label>Birim<select value={l.unit} onChange={e=>changeLine(i,"unit",e.target.value)}>{[["C62","ADET"],["KGM","KG"],["MTR","METRE"],["MTK","M²"]].map(([k,v])=><option key={k} value={k}>{v}</option>)}</select></label>
+   {invoice&&<>{lineField("Birim fiyat",l,i,"price")}{lineField("İndirim %",l,i,"discountRate")}{lineField("KDV %",l,i,"vatRate")}<label>Bedelsiz türü<select value={l.freeKind||""} onChange={e=>changeLine(i,"freeKind",e.target.value)}><option value="">Ücretli</option><option value="SAMPLE">Test numunesi</option><option value="FABRIC_DEFECT">Kumaş sakatı</option><option value="PRINT_DEFECT">Baskı sakatı</option></select></label></>}
+   {lineField("Kalem notu",l,i,"note")}<button type="button" disabled={form.lines.length===1} onClick={()=>update("lines",form.lines.filter((_,j)=>j!==i))}>Kaldır</button></div>)}
+   <button type="button" disabled={form.lines.length>=200} onClick={()=>update("lines",[...form.lines,blankLine()])}>+ Kalem ekle</button>
+   <label>Belge notu<textarea value={form.note||""} onChange={e=>update("note",e.target.value)}/></label>
+   </fieldset>
+   {saved&&!dirty&&<><div className="ebo-totals">{invoice&&<><span>Matrah <b>{money(form.net)}</b></span><span>KDV <b>{money(form.vat)}</b></span><span>Toplam <b>{money(form.total)} {form.currency}</b></span></>}</div>{(form.warnings||[]).map(w=><p key={w} role="alert">{w}</p>)}</>}
+   {dirty&&<p>Sunucu tutarları kaydetme sırasında yeniden hesaplanır.</p>}
+   <div className="ebo-actions ebo-footer"><button type="button" disabled={busy} onClick={close}>Listeye dön</button><button type="button" disabled={busy||!dirty} onClick={()=>void act("SAVE")}>Taslağı Kaydet</button><button type="button" disabled={busy||dirty||!saved} onClick={()=>setPreview(v=>!v)}>Önizleme</button><button type="button" disabled={busy||dirty||!saved||saved.state==="CHECKED"} onClick={()=>void act("CHECK")}>İç Kontrol</button><button type="button" disabled title="UBL, mükellef, gönderim ve sağlayıcı kabulü tamamlanmadı.">Onayla ve Gönder</button></div>
+   {preview&&saved&&!dirty&&<article className="ebo-preview"><h3>TASLAK · RESMÎ BELGE DEĞİLDİR</h3><p>{form.partyName} · {form.issueDate}</p><p>{form.scenario}</p>{form.lines.map((l,i)=><p key={i}>{l.description} — {l.quantity} {l.unit}{invoice?" · "+money(l.net)+" "+form.currency:""}</p>)}{invoice&&<strong>Toplam: {money(form.total)} {form.currency}</strong>}<p>{form.note}</p></article>}
+  </>}
+ </section>
+}
