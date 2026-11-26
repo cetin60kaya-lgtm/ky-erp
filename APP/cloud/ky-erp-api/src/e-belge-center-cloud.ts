@@ -21,7 +21,7 @@ import { verifiedXmlPartyRecoveryDecision } from "./e-belge-xml-party-recovery";
 import { dispatchRequirement } from "./e-belge-dispatch-policy";
 import { eBelgePoolOrderBy } from "./e-belge-pool-sort";
 import { accountingAccess,accountingTenantReadAllowed } from "./accounting-access-policy";
-import { registerEBelgeDraftRoutes } from "./e-belge-draft-routes";
+import { registerEBelgeDraftRoutes, operatorAccess, operatorReadReady } from "./e-belge-draft-routes";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -724,6 +724,12 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     return c.json({ok:true,data:{today:todayValue,monthStart,previousMonthStart,previousMonthEnd,summary:{...summary,attention:numberValue(attention?.n),matchingWait:numberValue(matching?.n)},recent:recent.results||[]}});
   });
   app.get("/api/e-belge/pool",async c=>{const slug=slugOf(c),page=safePageInt(c.req.query("page"),1,1000000),pageSize=safePageInt(c.req.query("pageSize"),50,100),q=text(c.req.query("q")),from=text(c.req.query("from")),to=text(c.req.query("to")),status=upper(c.req.query("status")),direction=upper(c.req.query("direction")),filter=poolFilter(text(c.req.query("filter"))),printStatus=upper(c.req.query("printStatus")),where=["d.main_company_slug=?","d.deleted_at IS NULL",filter.sql],args:any[]=[slug];if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))return c.json(error("INVALID_DATE_RANGE","Geçerli bir başlangıç ve bitiş tarihi seçin; bitiş başlangıçtan önce olamaz."),400);if(direction==="INCOMING"||direction==="OUTGOING"){where.push("d.direction=?");args.push(direction)}if(status&&status!=="ALL"){where.push("UPPER(COALESCE(d.status,''))=?");args.push(status)}if(q){where.push("(UPPER(COALESCE(d.document_no,'')) LIKE UPPER(?) OR UPPER(COALESCE(d.party_name,'')) LIKE UPPER(?) OR COALESCE(d.party_tax_no,'') LIKE ?)");args.push(`%${q}%`,`%${q}%`,`%${q}%`)}if(from){where.push("COALESCE(d.issue_date,d.created_at)>=?");args.push(from)}if(to){where.push("COALESCE(d.issue_date,d.created_at)<=?");args.push(`${to}T23:59:59`)}
+  if(upper(c.req.query("readStatus"))==="UNREAD"){
+    const a=await operatorAccess(c,"GET");if(!a||a.tenant!==slug)return c.json(error("FORBIDDEN","Firma yetkisi doğrulanamadı."),403);
+    if(!["INCOMING_INVOICE","INCOMING_DISPATCH"].includes(upper(c.req.query("filter"))))return c.json(error("INVALID_READ_FILTER","Okunmamış filtresi gelen belgeler içindir."),400);
+    if(!await operatorReadReady(c))return c.json(error("READ_SCHEMA_REQUIRED","Okunma durumu şeması henüz uygulanmadı."),503);
+    where.push("COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL'","NOT EXISTS(SELECT 1 FROM accounting_document_read_state r WHERE r.main_company_slug=d.main_company_slug AND r.document_id=d.id AND r.user_id=?)");args.push(a.userId);
+  }
   if(printStatus){
     if(printStatus!=="PENDING"||upper(c.req.query("filter"))!=="INCOMING_INVOICE")
       return c.json(error("INVALID_PRINT_STATUS_FILTER","Muhasebe çıktısı bekleyen filtresi yalnız gelen faturalara uygulanır."),400);

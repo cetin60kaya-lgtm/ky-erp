@@ -2,7 +2,7 @@
 export type DraftKind = "INVOICE" | "DISPATCH";
 const clean = (v:unknown,max=500) => typeof v==="string" ? v.trim().slice(0,max) : "";
 const digits = (v:unknown,scale:number,maxWhole:number):bigint => {
-  const s=String(v??"").trim();
+  const s=String(v??"").trim().replace(",",".");
   if(!new RegExp("^\\d{1,"+maxWhole+"}(?:\\.\\d{1,"+scale+"})?$").test(s)) throw new Error("Geçersiz veya fazla hassas sayısal alan.");
   const [whole,fraction=""]=s.split(".");
   return BigInt(whole+fraction.padEnd(scale,"0"));
@@ -38,7 +38,9 @@ export function normalizeDraft(value:unknown,kind:DraftKind) {
     const lineNet=gross-round(gross*discount,10000n);
     const lineVat=round(lineNet*rate,10000n);
     net+=lineNet;vat+=lineVat;
-    return {description,unit,quantity:decimal(quantity,3),price:decimal(price,4),vatRate:decimal(rate,2),discountRate:decimal(discount,2),freeKind,note:clean(raw.note,500),net:decimal(lineNet,2),vat:decimal(lineVat,2)};
+    const catalogId=clean(raw.catalogId,150);
+    if(catalogId&&!/^(MODEL|PRODUCT|HISTORY):.+$/.test(catalogId))throw Error("Geçersiz katalog kimliği.");
+    return {catalogId,description,unit,quantity:decimal(quantity,3),price:decimal(price,4),vatRate:decimal(rate,2),discountRate:decimal(discount,2),freeKind,note:clean(raw.note,500),net:decimal(lineNet,2),vat:decimal(lineVat,2)};
   });
   const deliveryAddress=clean(x.deliveryAddress,500),driver=clean(x.driver,160),plate=clean(x.plate,32),carrier=clean(x.carrier,160),dispatchDate=invoice?"":date(x.dispatchDate),dispatchTime=invoice?"":clean(x.dispatchTime,5);
   if(!invoice&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dispatchTime)||!deliveryAddress))throw new Error("Sevk saati ve teslim adresi gerekli.");

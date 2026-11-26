@@ -315,6 +315,8 @@ export default function AppV3() {
       "gelen-belgeler": "incoming",
       "giden-belgeler": "outgoing",
       "gelen-faturalar": "incoming-invoices",
+      "okunmamis-faturalar": "unread-invoices",
+      "okunmamis-irsaliyeler": "unread-dispatches",
       "giden-faturalar": "outgoing-invoices",
       "gelen-irsaliyeler": "incoming-dispatches",
       "giden-irsaliyeler": "outgoing-dispatches",

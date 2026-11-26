@@ -17,3 +17,11 @@ CREATE TABLE IF NOT EXISTS accounting_document_drafts (
 );
 CREATE INDEX IF NOT EXISTS idx_ebelge_operator_drafts_list
  ON accounting_document_drafts(main_company_slug,kind,updated_at DESC,id);
+
+CREATE TABLE IF NOT EXISTS accounting_document_read_state (
+  main_company_slug TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  document_id TEXT NOT NULL,
+  read_at TEXT NOT NULL,
+  PRIMARY KEY(main_company_slug,user_id,document_id)
+);

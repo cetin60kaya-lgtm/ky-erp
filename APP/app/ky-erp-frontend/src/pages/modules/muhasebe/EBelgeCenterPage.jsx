@@ -1,3 +1,4 @@
+import {apiPatch} from "../../../utils/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -60,6 +61,8 @@ const FOUR_DOCUMENT_VIEWS = [
 ];
 const FOUR_DOCUMENT_FILTERS={
  "incoming-invoices":"INCOMING_INVOICE",
+ "unread-invoices":"INCOMING_INVOICE",
+ "unread-dispatches":"INCOMING_DISPATCH",
  "incoming-dispatches":"INCOMING_DISPATCH",
  "outgoing-dispatches":"OUTGOING_DISPATCH",
  "outgoing-invoices":"OUTGOING_INVOICE",
@@ -482,6 +485,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
         <EBelgeAccountingPrint detail={detail} mainCompanySlug={mainCompanySlug}
           onPdf={()=>void openSupplierAccountingPdf()} onChanged={onChanged}/>
         <section className="eb-document-toolbar">
+          {detail.direction==="INCOMING"&&["READ","UNREAD"].map(state=><button key={state} type="button" disabled={Boolean(busy)} onClick={()=>action("read-state",()=>apiPatch("/e-belge/documents/"+encodeURIComponent(id)+"/read-state",{mainCompanySlug,state}))}>{state==="READ"?"Okundu İşaretle":"Okunmadı İşaretle"}</button>)}
           {detail.direction==="OUTGOING"&&<button type="button" onClick={()=>onOpenMailDrafts?.(detail)}>
              Fatura / İrsaliye Mail Merkezi
            </button>}
@@ -653,6 +657,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
     mainCompanySlug,filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
+    ...(view.startsWith("unread-")?{readStatus:"UNREAD"}:{}),
     ...((view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&onlyPrintPending?{printStatus:"PENDING"}:{})
   }),[mainCompanySlug,direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
@@ -848,6 +853,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     "dispatch-drafts": ["İrsaliye Taslakları", "Sevk kalemleri ve teslim bilgilerini hazırlayın."],
     overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
     incoming: ["Gelen Belgeler", "Tedarikçi faturaları ve müşteri/tedarikçi irsaliyelerini tek canonical havuzdan yönetin."],
+    "unread-invoices":["Okunmamış Faturalar","Kullanıcıya özel okunma durumu."],
+    "unread-dispatches":["Okunmamış İrsaliyeler","Kullanıcıya özel okunma durumu."],
     "incoming-invoices":["Gelen Faturalar","Tedarikçi faturaları · gider kalemleri · muhasebe tek çıktı kontrolü."],
     "incoming-dispatches":["Gelen İrsaliyeler","Müşteriden gelen irsaliyeler ve model bağlantılarını takip edin."],
     "outgoing-dispatches":["Giden İrsaliyeler","Üretim ve model bazında giden irsaliyeleri izleyin."],

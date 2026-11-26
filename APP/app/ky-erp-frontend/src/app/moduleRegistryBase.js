@@ -31,6 +31,8 @@ export const MODULES = [
         ["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"],
         ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"],
         ["giden-faturalar", "Giden Faturalar", "dosya"],
+        ["okunmamis-faturalar", "Okunmamış Faturalar", "dosya"],
+        ["okunmamis-irsaliyeler", "Okunmamış İrsaliyeler", "dosya"],
         ["fatura-taslaklari", "Fatura Taslakları", "dosya"],
         ["irsaliye-taslaklari", "İrsaliye Taslakları", "dosya"],
         ["belgeleri-al", "Belgeleri Al", "upload"],
