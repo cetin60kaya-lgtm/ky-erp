@@ -1,8 +1,10 @@
-deploy: kyerp-turnstile-login-stability-20261125
-pr: 665
-merge: 948ac7f3f05903c0bc0c36f52633721e5cdbefa0
-scope: canonical login and Siteverify retry stability; no session policy change
+deploy: kyerp-ebelge-rev3-canonical-20261126
+pr: 673
+merge: 1aaee116f56fafaa1b4a2c1f32ae75291094ba1d
+ci: 45871066056 SUCCESS
+scope: API Worker and existing PRO PWA; canonical e-Belge workspace and read-only/guarded automation
 release: Existing KY Security Canonical Final Deploy
 migration: NONE
 production_data_mutation: NONE
 secret_rotation: NONE
+provider_submission: DISABLED
