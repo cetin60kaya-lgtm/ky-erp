@@ -13,3 +13,6 @@ Mevcut tek AppV3 ve PRO PWA korunur; yeni uygulama/oturum veya API yok. Root man
 
 ## Workers AI öneri bağlantısı
 Firma yöneticisinin sürüm kontrollü opt-in politikası; ilk durum kapalı. Mevcut Workers AI ve Gateway, cache/log kapalı ve firma kullanım ledger'ı; yalnız kullanıcının girdiği komut, DB kaydı/credential/dosya gönderilmez. AI çıktısı dar JSON, kaynak ve sayısal alan doğrulaması, kullanıcı incelemesi; sadece normal komut alanına alınır, asla doğrudan write/send yok. Gerçek AI çağrısı/cihaz kabulü yapılmadı. Önceki mobil/A4/yaşam döngüsü commit 1b33106835ae9b317ed8c843d0c66f2872a59d79 CI #45800024015 frontend ve Worker SUCCESS. Son AI paketi için CI ayrı.
+
+## Yayın hazırlığı
+Son AI testindeki ERR_MODULE_NOT_FOUND: Node ESM import uzantısı düzeltildi. Miktar ve fiyatın rollerinin değişmemesi/atılmaması doğrulandı, regresyon testi eklendi. Güncel production 458d0b955c51b7b7a00710391be5213f56dd98ef ile birleştirilmiş test dalı; mevcut diğer İşNet değişiklikleri korunur. D1 migration ve resmî gönderim ayrı kapı, uygulanmadı.
