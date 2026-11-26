@@ -1,8 +1,9 @@
-deploy: kyerp-ebelge-customer-dispatch-tracking-20261126
-pr: 681
-merge: 124f2516cc9ca57c18121b6c2d64f0f3f2d09002
-ci: 45883726832 SUCCESS
-scope: canonical customer dispatch tracking; daily draft and unread shortcuts; API and PRO PWA
+deploy: kyerp-ebelge-early-source-outlook-ai-20261126
+pr: 683
+merge: 3fa14a7f9fc248c743d750f2aaa4c111fe71d5a2
+ci: 45890692497 SUCCESS
+scope: incoming dispatch source reconciliation, Outlook opt-in attachment queue, mandatory draft AI review, UI
+release: Existing KY Security Canonical Final Deploy
 migration: NONE
 production_data_mutation: NONE
-provider_submission: UNCHANGED
+provider_submission: DISABLED
