@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from "react";
+import {canonicalCompanySlug} from "../../../utils/companyIdentity";
 import {apiGet,apiPost,apiPatch} from "../../../utils/api";
 import {getCompanyEBelgeAdapters} from "../../../services/eBelgeAdapterApi";
 import "./eBelgeOperator.css";
@@ -8,8 +9,8 @@ const localDate=()=>{const d=new Date();return d.getFullYear()+"-"+String(d.getM
 const blankLine=()=>({catalogId:"",description:"",quantity:"1",unit:"C62",price:"0",vatRate:"",discountRate:"0",freeKind:"",note:""});
 const blank=kind=>({issueDate:localDate(),partyId:"",partyName:"",scenario:kind==="INVOICE"?"TEMELFATURA":"TEMELIRSALIYE",currency:"TRY",note:"",lines:[blankLine()],deliveryAddress:"",driver:"",plate:"",carrier:"",dispatchDate:localDate(),dispatchTime:""});
 const money=v=>v==null?"—":Number(v).toLocaleString("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2});
-export default function EBelgeDraftWorkspace({activeMainCompany,kind}){
- const slug=activeMainCompany?.slug||activeMainCompany?.id||"",invoice=kind==="INVOICE";
+export default function EBelgeDraftWorkspace({activeMainCompany,kind,actionContext}){
+ const slug=canonicalCompanySlug(activeMainCompany),invoice=kind==="INVOICE";
  const [rows,setRows]=useState(null),[total,setTotal]=useState(null),[page,setPage]=useState(1),[stateFilter,setStateFilter]=useState("ACTIVE"),[refresh,setRefresh]=useState(0),[error,setError]=useState(""),[notice,setNotice]=useState("");
  const [form,setForm]=useState(null),[saved,setSaved]=useState(null),[draftId,setDraftId]=useState(""),[provider,setProvider]=useState(""),[adapters,setAdapters]=useState([]),[partyQuery,setPartyQuery]=useState(""),[companies,setCompanies]=useState([]),[partyError,setPartyError]=useState(""),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[preview,setPreview]=useState(false);
  const lock=useRef(false);
@@ -23,6 +24,8 @@ export default function EBelgeDraftWorkspace({activeMainCompany,kind}){
  const update=(key,value)=>{setForm(f=>({...f,[key]:value}));setDirty(true);setPreview(false)};
  const changeLine=(i,key,value)=>{setForm(f=>({...f,lines:f.lines.map((l,j)=>j===i?{...l,[key]:value,...(key==="description"?{catalogId:""}:{}),...(key==="freeKind"&&value?{price:"0",vatRate:"0",discountRate:"0"}:{})}:l)}));setDirty(true);setPreview(false)};
  const start=()=>{resetCatalog();setForm(blank(kind));setSaved(null);setDraftId(crypto.randomUUID());setProvider(adapters.length===1?adapters[0].key:"");setPartyQuery("");setCompanies([]);setDirty(true);setPreview(false);setNotice("");setError("")};
+ const consumedAction=useRef("");
+ useEffect(()=>{const nonce=actionContext?.nonce;if(!nonce||actionContext?.targetModule!=="e-belge"||consumedAction.current===nonce||rows===null||busy||form)return;consumedAction.current=nonce;if(actionContext.createDraft)start();else if(["ACTIVE","CHECKED","CANCELLED"].includes(actionContext.draftState)){setStateFilter(actionContext.draftState);setPage(1)}},[actionContext?.nonce,rows,busy,form]); // eslint-disable-line react-hooks/exhaustive-deps
  const edit=d=>{if(d.state==="CANCELLED")return;resetCatalog();setForm(d.payload);setSaved(d);setDraftId(d.id);setProvider(d.provider_key||"");setDirty(false);setPreview(false);setPartyQuery("");setCompanies([]);setNotice("");setError("")};
  const duplicate=d=>{resetCatalog();setForm({...d.payload,issueDate:localDate(),...(invoice?{}:{dispatchDate:localDate(),dispatchTime:""})});setSaved(null);setDraftId(crypto.randomUUID());setProvider(d.provider_key||"");setPartyQuery("");setCompanies([]);setDirty(true);setPreview(false);setNotice("Yeni taslak · kaynak kayıt değişmedi.");setError("")};
  const close=()=>{if(dirty&&!window.confirm("Kaydedilmemiş değişikliklerden vazgeçilsin mi?"))return;resetCatalog();setForm(null);setSaved(null);setDirty(false);setPreview(false);setNotice("");};

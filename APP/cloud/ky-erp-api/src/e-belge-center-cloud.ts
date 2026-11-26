@@ -690,7 +690,7 @@ async function routePhysicalJournal(c:Context<AppEnv>,slug:string,doc:Row,lines:
 }
 
 const invoiceTypeSql="(d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%ARSIV%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%IADE%')";
-function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:`d.direction='INCOMING' AND ${invoiceTypeSql}`};if(f==="OUTGOING_INVOICE")return{sql:`d.direction='OUTGOING' AND ${invoiceTypeSql}`};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
+function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOICE")return{sql:`d.direction='INCOMING' AND ${invoiceTypeSql}`};if(f==="OUTGOING_INVOICE")return{sql:`d.direction='OUTGOING' AND ${invoiceTypeSql}`};if(f==="OUTGOING_EINVOICE")return{sql:`d.direction='OUTGOING' AND ${invoiceTypeSql} AND d.document_type NOT LIKE '%ARSIV%'`};if(f==="OUTGOING_ARCHIVE")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%ARSIV%'"};if(f==="INCOMING_DISPATCH")return{sql:"d.direction='INCOMING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="OUTGOING_DISPATCH")return{sql:"d.direction='OUTGOING' AND d.document_type LIKE '%IRSALIYE%'"};if(f==="MATCHING_WAIT")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%')"};if(f==="ISSUE")return{sql:"EXISTS(SELECT 1 FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR'))"};if(f==="REVIEW")return{sql:"d.status IN ('INGESTED','REVIEW_REQUIRED','READY_FOR_APPROVAL','APPROVED')"};if(f==="HISTORY")return{sql:"d.status='POSTED'"};return{sql:"1=1"}}
 
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   registerEBelgeDraftRoutes(app);
@@ -727,8 +727,38 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     const matching=await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%'`).bind(slug).first<Row>();
     stage="RECENT";
     const recent=await c.env.DB.prepare(`SELECT d.id,d.document_no,d.document_type,d.direction,d.party_name,d.issue_date,d.payable_total,d.currency,d.status,d.source_type,d.created_at,(SELECT COUNT(*) FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')) issue_count FROM accounting_documents d WHERE d.main_company_slug=? AND d.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 10`).bind(slug).all<Row>();
+    // Independent read-only REV3 metric families. A missing optional table never
+    // breaks the existing overview. Unknown is null, not a fabricated zero.
+    const metrics:Row={all:{},month:{},drafts:{}};
+    try{
+      const keys=["INCOMING_INVOICE","OUTGOING_EINVOICE","INCOMING_DISPATCH","OUTGOING_DISPATCH","OUTGOING_ARCHIVE","MATCHING_WAIT","ISSUE","REVIEW"];
+      const dateSql="date(COALESCE(d.issue_date,d.created_at)) BETWEEN ? AND ?";
+      const columns=keys.flatMap((k,i)=>[
+        "COUNT(CASE WHEN "+poolFilter(k).sql+" THEN 1 END) a"+i,
+        "COUNT(CASE WHEN ("+poolFilter(k).sql+") AND "+dateSql+" THEN 1 END) m"+i
+      ]).join(",");
+      const values=keys.flatMap(()=>[monthStart,todayValue]);
+      const row=await c.env.DB.prepare("SELECT "+columns+" FROM accounting_documents d WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL'").bind(...values,slug).first<Row>();
+      if(row)keys.forEach((k,i)=>{metrics.all[k]=numberValue(row["a"+i]);metrics.month[k]=numberValue(row["m"+i])});
+    }catch(e){console.error("EBELGE_REV3_METRICS_UNAVAILABLE",e instanceof Error?e.message:String(e))}
+    try{
+      const a=await operatorAccess(c,"GET");
+      if(a&&a.tenant===slug&&await operatorReadReady(c)){
+        for(const key of ["INCOMING_INVOICE","INCOMING_DISPATCH"]){
+          const row=await c.env.DB.prepare("SELECT COUNT(*) n,COUNT(CASE WHEN date(COALESCE(d.issue_date,d.created_at)) BETWEEN ? AND ? THEN 1 END) m FROM accounting_documents d WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL' AND ("+poolFilter(key).sql+") AND NOT EXISTS(SELECT 1 FROM accounting_document_read_state r WHERE r.main_company_slug=d.main_company_slug AND r.document_id=d.id AND r.user_id=?)").bind(monthStart,todayValue,slug,a.userId).first<Row>();
+          if(row){metrics.all[key+"_UNREAD"]=numberValue(row.n);metrics.month[key+"_UNREAD"]=numberValue(row.m)}
+        }
+      }
+    }catch(e){console.error("EBELGE_REV3_UNREAD_UNAVAILABLE",e instanceof Error?e.message:String(e))}
+    try{
+      const ready=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='accounting_document_drafts'").first();
+      if(ready){
+        const result=await c.env.DB.prepare("SELECT kind,state,COUNT(*) n FROM accounting_document_drafts WHERE main_company_slug=? GROUP BY kind,state").bind(slug).all<Row>();
+        for(const kind of ["INVOICE","DISPATCH"]){const rows=(result.results||[]).filter(x=>x.kind===kind);metrics.drafts[kind]={active:rows.filter(x=>x.state!=="CANCELLED").reduce((n,x)=>n+numberValue(x.n),0),checked:rows.filter(x=>x.state==="CHECKED").reduce((n,x)=>n+numberValue(x.n),0),cancelled:rows.filter(x=>x.state==="CANCELLED").reduce((n,x)=>n+numberValue(x.n),0)}}
+      }
+    }catch(e){console.error("EBELGE_REV3_DRAFT_METRICS_UNAVAILABLE",e instanceof Error?e.message:String(e))}
     c.header("Cache-Control","no-store");
-    return c.json({ok:true,data:{mainCompanySlug:slug,today:todayValue,monthStart,previousMonthStart,previousMonthEnd,summary:{...summary,attention:numberValue(attention?.n),matchingWait:numberValue(matching?.n)},recent:recent.results||[]}});
+    return c.json({ok:true,data:{mainCompanySlug:slug,today:todayValue,monthStart,previousMonthStart,previousMonthEnd,metrics,summary:{...summary,attention:numberValue(attention?.n),matchingWait:numberValue(matching?.n)},recent:recent.results||[]}});
     }catch(e){
       const requestId=c.get("requestId")||crypto.randomUUID();
       console.error(JSON.stringify({code:"EBELGE_DASHBOARD_READ_FAILED",stage,requestId,message:e instanceof Error?e.message:String(e)}));
@@ -736,6 +766,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     }
   });
   app.get("/api/e-belge/pool",async c=>{const slug=slugOf(c),page=safePageInt(c.req.query("page"),1,1000000),pageSize=safePageInt(c.req.query("pageSize"),50,100),q=text(c.req.query("q")),from=text(c.req.query("from")),to=text(c.req.query("to")),status=upper(c.req.query("status")),direction=upper(c.req.query("direction")),filter=poolFilter(text(c.req.query("filter"))),printStatus=upper(c.req.query("printStatus")),where=["d.main_company_slug=?","d.deleted_at IS NULL",filter.sql],args:any[]=[slug];if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))return c.json(error("INVALID_DATE_RANGE","Geçerli bir başlangıç ve bitiş tarihi seçin; bitiş başlangıçtan önce olamaz."),400);if(direction==="INCOMING"||direction==="OUTGOING"){where.push("d.direction=?");args.push(direction)}if(status&&status!=="ALL"){where.push("UPPER(COALESCE(d.status,''))=?");args.push(status)}if(q){where.push("(UPPER(COALESCE(d.document_no,'')) LIKE UPPER(?) OR UPPER(COALESCE(d.party_name,'')) LIKE UPPER(?) OR COALESCE(d.party_tax_no,'') LIKE ?)");args.push(`%${q}%`,`%${q}%`,`%${q}%`)}if(from){where.push("COALESCE(d.issue_date,d.created_at)>=?");args.push(from)}if(to){where.push("COALESCE(d.issue_date,d.created_at)<=?");args.push(`${to}T23:59:59`)}
+  if(c.req.query("officialOnly")==="true")where.push("COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL'");
   if(upper(c.req.query("readStatus"))==="UNREAD"){
     const a=await operatorAccess(c,"GET");if(!a||a.tenant!==slug)return c.json(error("FORBIDDEN","Firma yetkisi doğrulanamadı."),403);
     if(!["INCOMING_INVOICE","INCOMING_DISPATCH"].includes(upper(c.req.query("filter"))))return c.json(error("INVALID_READ_FILTER","Okunmamış filtresi gelen belgeler içindir."),400);

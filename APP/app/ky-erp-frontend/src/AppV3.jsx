@@ -320,6 +320,8 @@ export default function AppV3() {
       "okunmamis-faturalar": "unread-invoices",
       "okunmamis-irsaliyeler": "unread-dispatches",
       "giden-faturalar": "outgoing-invoices",
+      "earchive-out": "outgoing-archive",
+      "muhasebe-onayi": "review-documents",
       "gelen-irsaliyeler": "incoming-dispatches",
       "giden-irsaliyeler": "outgoing-dispatches",
       "belge-havuzu": "pool",

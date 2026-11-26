@@ -49,6 +49,7 @@ import "./eBelgeCenter.css";
 import EBelgeDraftWorkspace from "./EBelgeDraftWorkspace";
 import EBelgeSmartWorkspace,{EBelgeCreateHub} from "./EBelgeSmartWorkspace";
 import EBelgeReceiveWorkspace from "./EBelgeReceiveWorkspace";
+import EBelgeRev3Overview from "./EBelgeRev3Overview";
 
 const today = () => {
   const date = new Date();
@@ -67,7 +68,9 @@ const FOUR_DOCUMENT_FILTERS={
  "unread-dispatches":"INCOMING_DISPATCH",
  "incoming-dispatches":"INCOMING_DISPATCH",
  "outgoing-dispatches":"OUTGOING_DISPATCH",
- "outgoing-invoices":"OUTGOING_INVOICE",
+ "outgoing-invoices":"OUTGOING_EINVOICE",
+ "outgoing-archive":"OUTGOING_ARCHIVE",
+ "review-documents":"REVIEW",
 };
 const FILTERS = [
   ["ALL", "Tüm Belgeler"],
@@ -633,6 +636,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("ALL");
   const [statusFilter,setStatusFilter] = useState("ALL");
+  const [officialOnly,setOfficialOnly]=useState(false);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [busy, setBusy] = useState(false);
@@ -659,9 +663,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
     mainCompanySlug,filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
+    ...(officialOnly?{officialOnly:true}:{}),
     ...(view.startsWith("unread-")?{readStatus:"UNREAD"}:{}),
     ...((view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[mainCompanySlug,direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
+  }),[mainCompanySlug,direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType,officialOnly]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
   const sortPoolBy = (column) => {
     if (sortBy === column) setSortDirection((old) => old === "ASC" ? "DESC" : "ASC");
@@ -770,6 +775,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   useEffect(() => {
     setPage(1);
     setStatusFilter("ALL");
+    setFrom("");setTo("");setOfficialOnly(false);
     setMatchingConfirmOpen(false);
     setMatchingApproved(false);
   }, [view, activeMainCompany?.slug, activeMainCompany?.id]);
@@ -790,6 +796,11 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     if (moduleActionContext?.targetModule !== "e-belge" || !moduleActionContext?.documentId) return;
     setSelectedId(String(moduleActionContext.documentId));
   }, [moduleActionContext?.nonce, moduleActionContext?.documentId, moduleActionContext?.targetModule]);
+
+  useEffect(()=>{
+    if(moduleActionContext?.targetModule!=="e-belge"||moduleActionContext?.dashboardMetric!==true)return;
+    setFrom(moduleActionContext.from||"");setTo(moduleActionContext.to||"");setOfficialOnly(true);setPage(1);setQuery("");setStatusFilter("ALL");setOnlyPrintPending(false);
+  },[moduleActionContext?.nonce,view]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The click is the user's explicit approval. The backend still requires
   // authenticated tenant-scoped MUHASEBE create rights and validated UBL XML.
@@ -857,7 +868,6 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     return allRows;
   }, [pool.items, view]);
   const companyName = activeMainCompany?.name || activeMainCompany?.title || activeMainCompany?.slug || "Ana firma seçilmedi";
-  const summary = dashboard.summary || {};
   const providers = [...(integrations.mainCompanySlug===mainCompanySlug?(integrations.providers || []):[])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
     "create-hub": ["e-Belge Oluştur", "Tek editör · kaynak belge · firma ve sağlayıcı yeteneği."],
@@ -865,7 +875,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     receive: ["Belge Aktarımı", "Entegrasyon kaynaklarından belge aktarın veya orijinal XML/PDF dosyalarını Belge Havuzu üzerinden yükleyin."],
     "invoice-drafts": ["Fatura Taslakları", "Tek veri girişi · kaydet · kontrol et. Resmî gönderim ayrı kabul gerektirir."],
     "dispatch-drafts": ["İrsaliye Taslakları", "Sevk kalemleri ve teslim bilgilerini hazırlayın."],
-    overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
+    overview: ["Genel Bakış", "Günlük e-Belge işlemleri ve muhasebe kontrol merkezi."],
+    "outgoing-archive":["Giden e-Arşiv","Mevcut kayıtlı e-Arşiv belgeleri · orijinal XML/PDF ve durum."],
+    "review-documents":["Muhasebe Onayı Bekleyenler","Muhasebe iş akışındaki kayıtlar · resmî gönderim durumu değildir."],
     incoming: ["Gelen Belgeler", "Tedarikçi faturaları ve müşteri/tedarikçi irsaliyelerini tek canonical havuzdan yönetin."],
     "unread-invoices":["Okunmamış Faturalar","Kullanıcıya özel okunma durumu."],
     "unread-dispatches":["Okunmamış İrsaliyeler","Kullanıcıya özel okunma durumu."],
@@ -921,18 +933,14 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <p>{viewMeta[1]}</p>
       </div>
       <div className="eb-hero-actions">
-        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
-        {(view === "overview" || view === "outgoing-invoices") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("fatura-taslaklari")}>+ Yeni Fatura</button>}
-        {(view === "overview" || view === "outgoing-dispatches") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("irsaliye-taslaklari")}>+ Yeni İrsaliye</button>}
-        {view === "overview" && <>
+        {view==="overview"?<>
           <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("olustur")}>e-Belge Oluştur</button>
+          <button type="button" onClick={()=>openEBelgeTab("belge-havuzu")}>Belge Havuzu</button>
           <button type="button" onClick={()=>openEBelgeTab("ai-center")}>Akıllı İşlem Merkezi</button>
-          <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
-          <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
-            {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
-          </button>
-
-          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Kontrol ve Onay</button>
+        </>:<>
+          {showPool&&<button type="button" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
+          {["outgoing-invoices","outgoing-dispatches"].includes(view)&&<button type="button" className="eb-primary" onClick={()=>openModule?.("e-belge",{tabKey:view==="outgoing-invoices"?"fatura-taslaklari":"irsaliye-taslaklari",actionContext:{createDraft:true}})}>{view==="outgoing-invoices"?"+ Yeni Fatura":"+ Yeni İrsaliye"}</button>}
+          {["pool","issues"].includes(view)&&<button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile doğrulanan carileri eşleştir; kesin muhasebeleştirme yapma">{companyBatchBusy?<LoaderCircle className="eb-spin" size={17}/>:<Link2 size={17}/>} XML'den Carileri Eşleştir</button>}
         </>}
         {showPool && <>
       <nav className="eb-four-document-nav" aria-label="Dört belge işlem ekranı">
@@ -961,17 +969,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "overview" && <>
       <EBelgeSmartWorkspace compact key={mainCompanySlug+":quick"} activeMainCompany={activeMainCompany} openModule={openModule}/>
       {!dashboard.verified?<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{busy?"Belge özeti doğrulanıyor…":"Belge özeti okunamadı. Kayıt sayıları ve tutarlar doğrulanana kadar gösterilmiyor."}</span></div>:<>
-      <div className="eb-stats eb-dashboard-stats">
-        <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
-        <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />
-        <StatCard label="Bugün Giden" value={summary.todayOutgoing} hint="Düzenlediğimiz belgeler" />
-        <button type="button" className="eb-dashboard-stat-action" onClick={() => openEBelgeTab("onay-sorunlar")} title="Kontrol bekleyen belgeleri aç"><StatCard label="Kontrol Bekleyen" value={summary.attention} hint="Listeyi aç · uyarı / hata" /></button>
-        <button type="button" className="eb-dashboard-stat-action" onClick={() => openEBelgeTab("eslestirmeler")} title="Eşleşme bekleyen belgeleri aç"><StatCard label="Eşleşme Bekleyen" value={summary.matchingWait} hint="Listeyi aç · fatura – irsaliye" /></button>
-      </div>
-      <section className="eb-dashboard-periods">
-        <article className="eb-period-card current"><header><div><span>DÖNEM ÖZETİ</span><strong>Bu Ay</strong></div><b>{Number(summary.monthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.monthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.monthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.monthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.monthStart || monthStart())} – Bugün</footer></article>
-        <article className="eb-period-card previous"><header><div><span>KARŞILAŞTIRMA</span><strong>Geçen Ay</strong></div><b>{Number(summary.previousMonthTotal || 0).toLocaleString("tr-TR")} belge</b></header><div className="eb-period-flow"><div><span>Gelen</span><strong>{Number(summary.previousMonthIncoming || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthIncomingAmount)}</small></div><div><span>Giden</span><strong>{Number(summary.previousMonthOutgoing || 0).toLocaleString("tr-TR")}</strong><small>{money(summary.previousMonthOutgoingAmount)}</small></div></div><footer>{dateText(dashboard.previousMonthStart)} – {dateText(dashboard.previousMonthEnd)}</footer></article>
-      </section>
+      <EBelgeRev3Overview dashboard={dashboard} openModule={openModule}/>
       <section className="eb-pool eb-recent-pool eb-dashboard-recent">
         <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("belge-havuzu")}>Belge Havuzunu Aç</button></div>
         {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-pool-table-scroll eb-dashboard-table-scroll"><div className="eb-table">
@@ -1078,7 +1076,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     </>}
 
     {view === "receive" && <EBelgeReceiveWorkspace key={mainCompanySlug} activeMainCompany={activeMainCompany} openModule={openModule} />}
-    {["invoice-drafts", "dispatch-drafts"].includes(view) && <EBelgeDraftWorkspace key={mainCompanySlug+":"+view} activeMainCompany={activeMainCompany} kind={view==="invoice-drafts"?"INVOICE":"DISPATCH"} />}
+    {["invoice-drafts", "dispatch-drafts"].includes(view) && <EBelgeDraftWorkspace key={mainCompanySlug+":"+view} activeMainCompany={activeMainCompany} kind={view==="invoice-drafts"?"INVOICE":"DISPATCH"} actionContext={moduleActionContext} />}
     {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} onOpenDocument={(documentId) => { setAutoPdfDocumentId(String(documentId)); setSelectedId(String(documentId)); }} />}
     {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 
