@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS accounting_document_drafts (
   payload TEXT NOT NULL CHECK(json_valid(payload)),
   creation_context TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(creation_context)),
   version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
-  state TEXT NOT NULL DEFAULT 'DRAFT' CHECK(state IN ('DRAFT','CHECKED')),
+  state TEXT NOT NULL DEFAULT 'DRAFT' CHECK(state IN ('DRAFT','CHECKED','CANCELLED')),
   created_by TEXT NOT NULL,
   updated_by TEXT NOT NULL,
   created_at TEXT NOT NULL,

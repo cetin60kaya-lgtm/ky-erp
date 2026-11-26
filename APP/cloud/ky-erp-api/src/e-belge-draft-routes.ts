@@ -120,8 +120,12 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     if(!await readiness(c))return c.json(err("DRAFT_SCHEMA_REQUIRED","Taslak veri şeması henüz onaylanıp uygulanmadı."),503);
     const kind=kindOf(c.req.query("kind"));if(!kind)return c.json(err("INVALID_KIND","Belge türü seçin."),400);
     const page=Math.min(100000,Math.max(1,Math.trunc(Number(c.req.query("page"))||1)));
-    const result=await c.env.DB.prepare("SELECT "+select+" FROM accounting_document_drafts WHERE main_company_slug=? AND kind=? ORDER BY updated_at DESC,id LIMIT 50 OFFSET ?").bind(a.tenant,kind,(page-1)*50).all<Row>();
-    const count=await c.env.DB.prepare("SELECT COUNT(*) n FROM accounting_document_drafts WHERE main_company_slug=? AND kind=?").bind(a.tenant,kind).first<Row>();
+    const state=clean(c.req.query("state")).toUpperCase()||"ACTIVE";
+    if(!["ACTIVE","DRAFT","CHECKED","CANCELLED"].includes(state))return c.json(err("INVALID_STATE","Taslak durumu geçersiz."),400);
+    const clause=state==="ACTIVE"?"state IN ('DRAFT','CHECKED')":"state=?";
+    const args=state==="ACTIVE"?[a.tenant,kind]:[a.tenant,kind,state];
+    const result=await c.env.DB.prepare("SELECT "+select+" FROM accounting_document_drafts WHERE main_company_slug=? AND kind=? AND "+clause+" ORDER BY updated_at DESC,id LIMIT 50 OFFSET ?").bind(...args,(page-1)*50).all<Row>();
+    const count=await c.env.DB.prepare("SELECT COUNT(*) n FROM accounting_document_drafts WHERE main_company_slug=? AND kind=? AND "+clause).bind(...args).first<Row>();
     c.header("Cache-Control","no-store");
     return c.json({ok:true,data:{mainCompanySlug:a.tenant,items:(result.results||[]).map(unpack),total:Number(count?.n||0),page,pageSize:50}});
   });
@@ -153,7 +157,17 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     if(!idOk(id)||!Number.isSafeInteger(version)||version<1)return c.json(err("INVALID_VERSION","Geçerli kayıt sürümü gerekli."),400);
     const old=await read(c,a.tenant,id);if(!old)return c.json(err("NOT_FOUND","Taslak bulunamadı."),404);
     if(old.version!==version)return c.json(err("DRAFT_CONFLICT","Taslak değişti. Listeyi yenileyin; eski veri üzerine yazılmadı."),409);
-    if(!["SAVE","CHECK"].includes(body.action))return c.json(err("INVALID_ACTION","Kaydet veya kontrol et seçin."),400);
+    if(!["SAVE","CHECK","CANCEL"].includes(body.action))return c.json(err("INVALID_ACTION","Kaydet, kontrol et veya iptal seçin."),400);
+    if(old.state==="CANCELLED")return c.json(err("DRAFT_CANCELLED","İptal edilmiş taslak değiştirilemez."),409);
+    if(body.action==="CANCEL"){
+      const deleteAccess=await operatorAccess(c,"DELETE",body);
+      if(!deleteAccess)return c.json(err("FORBIDDEN","Taslak iptal yetkisi gerekli."),403);
+      const changed=await c.env.DB.prepare("UPDATE accounting_document_drafts SET state='CANCELLED',version=version+1,updated_by=?,updated_at=? WHERE main_company_slug=? AND id=? AND version=? AND state IN ('DRAFT','CHECKED')").bind(a.userId,new Date().toISOString(),a.tenant,id,version).run();
+      if(changed.meta.changes!==1)return c.json(err("DRAFT_CONFLICT","Taslak başka bir oturumda değişti."),409);
+      const saved=await read(c,a.tenant,id);
+      if(!saved||saved.version!==version+1||saved.state!=="CANCELLED")return c.json(err("DRAFT_CONFLICT","İptal sonucu doğrulanamadı."),409);
+      return c.json({ok:true,data:{mainCompanySlug:a.tenant,draft:saved}});
+    }
     let data;try{data=await verifiedDraft(c,a.tenant,body.action==="CHECK"?old.payload:body.payload,old.kind)}catch(e){return c.json(err("INVALID_DRAFT",(e as Error).message),400)}
     const company=await party(c,a.tenant,data.partyId);if(!company)return c.json(err("INVALID_PARTY","Cari kaydı artık geçerli değil."),400);
     if(body.action==="CHECK"&&data.warnings.length)return c.json(err("CONTROL_REQUIRED",data.warnings.join(" ")),409);

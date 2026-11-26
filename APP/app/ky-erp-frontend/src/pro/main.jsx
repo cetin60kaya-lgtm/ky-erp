@@ -80,7 +80,7 @@ function ProHome({onSecurity,onCompanies}){
  const allowed=MODULES.filter(m=>owner||Boolean(hasModule(m.permissionKey||m.key.toUpperCase())));
  const visible=allowed.filter(m=>String(m.label||"").toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR")));
  const fullCount=allowed.reduce((sum,m)=>sum+getVisibleModuleTabs(m).length,0);
- const preferredKeys=["muhasebe","gunluk-operasyon","ik","imalat","desen","boyahane","pdks"];
+ const preferredKeys=["muhasebe","e-belge","gunluk-operasyon","ik","imalat","desen","boyahane","pdks"];
  const quickModules=preferredKeys.map(key=>allowed.find(m=>m.key===key)).filter(Boolean);
  return <main className="ky-pro-home" aria-label="KY ERP PRO ana sayfa">
    <section className="ky-pro-home-hero">

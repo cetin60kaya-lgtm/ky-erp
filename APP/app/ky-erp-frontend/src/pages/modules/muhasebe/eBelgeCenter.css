@@ -165,3 +165,28 @@
   .eb-archive-select-row { grid-template-columns:29px minmax(0,1fr); }
   .eb-archive-heading { margin-left:29px; }
 }
+
+/* REV 3 touch parity: existing list data and actions; no second mobile route or API. */
+@media(max-width:900px),(pointer:coarse){
+ .eb-page :is(.eb-hero-actions,.eb-pool-toolbar,.eb-pool-pagination,.eb-document-toolbar,.eb-drawer-actions,.eb-original-file-actions,.eb-archive-queue-tools) button,.eb-page .eb-sort-header,.eb-document-modal button,.eb-inline-pdf-panel button{min-height:44px}
+ .eb-page :is(input:not([type=checkbox]):not([type=radio]),select,textarea),.eb-document-modal :is(input:not([type=checkbox]):not([type=radio]),select,textarea){font-size:16px;scroll-margin-block:72px 100px}
+ .eb-archive-queue-tools input[type=checkbox],.eb-archive-select-row input[type=checkbox]{width:24px;height:24px}
+ .eb-archive-select-row>label{min-width:44px;min-height:44px}
+}
+@media(max-width:720px){
+ .eb-page .eb-pool-table-scroll{max-height:none;min-height:0;overflow:visible;scrollbar-gutter:auto}
+ .eb-page .eb-pool-table-scroll .eb-table{min-width:0;width:100%;display:grid;gap:8px;padding:8px}
+ .eb-page .eb-pool-table-scroll .eb-th{display:flex;position:static;flex-wrap:wrap;gap:6px;padding:4px;min-width:0;grid-template-columns:none}
+ .eb-page .eb-pool-table-scroll .eb-th .eb-sort-header{flex:1 1 105px;width:auto;min-width:0;padding:6px;white-space:normal;justify-content:flex-start;border:1px solid #dfe6ed;border-radius:6px}
+ .eb-page .eb-pool-table-scroll button.eb-tr{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;width:100%;min-width:0;min-height:44px;text-align:left;white-space:normal;padding:10px;border:1px solid #dfe6ed;border-radius:8px;align-items:start}
+ .eb-page .eb-pool-table-scroll button.eb-tr>span{min-width:0;white-space:normal;overflow-wrap:anywhere;max-width:100%;height:auto}
+ .eb-page .eb-pool-table-scroll button.eb-tr>span[data-label]::before{content:attr(data-label);display:block;font-size:10px;font-weight:650;color:var(--text-secondary,#637488);margin-bottom:3px}
+ .eb-page .eb-pool-table-scroll button.eb-tr>span.eb-chip{justify-self:start;align-self:start;white-space:normal}
+ .eb-page .eb-archive-select-row{grid-template-columns:44px minmax(0,1fr)}
+ .eb-page .eb-archive-heading{margin-left:0}
+ .eb-document-modal{width:100%;max-width:100%;height:100dvh;max-height:100dvh;border-radius:0}
+ .eb-modal-backdrop{padding:0}
+ .eb-document-toolbar{flex-wrap:wrap;overflow-x:visible}
+ .eb-document-toolbar button{flex:1 1 125px;white-space:normal}
+ .eb-inline-pdf-panel>footer{padding-bottom:max(12px,env(safe-area-inset-bottom))}
+}

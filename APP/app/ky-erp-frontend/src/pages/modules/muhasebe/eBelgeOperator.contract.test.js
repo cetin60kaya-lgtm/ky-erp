@@ -28,3 +28,10 @@ test("e-Belge kurumsal menü adları iki kayıt katmanında ve çalışma ekran�
 });
 
 test("REV3 quick command and create hub use canonical routes, never provider send",()=>{const app=read("../../../AppV3.jsx"),nav=read("../../../app/moduleRegistry.js"),center=read("./EBelgeCenterPage.jsx"),smart=read("./EBelgeSmartWorkspace.jsx");for(const k of ["olustur","ai-center"]){assert.ok(app.includes(k));assert.ok(nav.includes(k));assert.ok(center.includes(k))}assert.match(smart,/operator-command\/prepare/);assert.match(smart,/saveDraft:save,id:key/);assert.doesNotMatch(smart,/SendInvoice|SendDespatch|\/send\b/);});
+
+test("REV3 mobile shares existing routes, draft actions and protected output",()=>{
+ const manifest=JSON.parse(read("../../../../public/manifest.webmanifest")),pro=read("../../../pro/main.jsx"),css=read("./eBelgeOperator.css"),centerCss=read("./eBelgeCenter.css"),draft=read("./EBelgeDraftWorkspace.jsx");
+ assert.equal(manifest.id,"/");assert.ok(manifest.shortcuts.some(x=>x.url==="/e-belge/genel-bakis"));assert.match(pro,/preferredKeys=\["muhasebe","e-belge"/);
+ assert.match(css,/min-height:44px/);assert.match(css,/font-size:16px/);assert.match(css,/ebo-draft-table/);
+ assert.match(centerCss,/span\[data-label\]::before/);assert.match(draft,/Taslak PDF İndir/);assert.match(draft,/action:"CANCEL"/);assert.match(draft,/Çoğalt/);
+});
