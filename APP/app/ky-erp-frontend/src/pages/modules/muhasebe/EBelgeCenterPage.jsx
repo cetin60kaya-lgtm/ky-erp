@@ -1002,8 +1002,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div></div>}
     </>}
 
-    {view === "incoming-dispatches" && <IncomingDispatchBillingWorkspace
-      activeMainCompany={activeMainCompany}
+    {view === "incoming-dispatches" && <IncomingDispatchBillingWorkspace key={mainCompanySlug}
+      activeMainCompany={activeMainCompany} actionContext={moduleActionContext}
       onOpenDocument={documentId => {setAutoPdfDocumentId(String(documentId));setSelectedId(String(documentId));}} />}
 
     {showPool && <>

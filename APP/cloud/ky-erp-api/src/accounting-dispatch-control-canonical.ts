@@ -82,69 +82,84 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
     FROM accounting_documents d
     LEFT JOIN companies c ON c.id=d.party_company_id AND c.main_company_slug=d.main_company_slug
       AND c.deleted_at IS NULL
-    WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND d.direction='INCOMING'
+    WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL' AND d.direction='INCOMING'
       AND (d.document_type LIKE '%IRSALIYE%' OR d.document_type LIKE '%DISPATCH%'
         OR d.document_type LIKE '%DESPATCH%')
     ORDER BY COALESCE(d.issue_date,d.created_at) DESC,d.created_at DESC LIMIT 2001
   `).bind(slug).all<Row>()).results||[];
   const truncated=records.length>2000,selected=records.slice(0,2000),ids=selected.map(row=>text(row.id));
-  const relations:Row[]=[];
-  for(let offset=0;offset<ids.length;offset+=150){
-    const part=ids.slice(offset,offset+150),placeholders=part.map(()=>"?").join(",");
-    const result=await c.env.DB.prepare(`
-      SELECT r.document_id,r.related_document_id,r.relation_type,
-        a.id AS a_id,a.document_no AS a_no,a.document_type AS a_type,
-        a.direction AS a_direction,a.party_company_id AS a_party,a.party_tax_no AS a_tax,
-        b.id AS b_id,b.document_no AS b_no,b.document_type AS b_type,
-        b.direction AS b_direction,b.party_company_id AS b_party,b.party_tax_no AS b_tax
-      FROM accounting_document_relations r
-      JOIN accounting_documents a ON a.id=r.document_id AND a.main_company_slug=r.main_company_slug
-        AND a.deleted_at IS NULL
-      JOIN accounting_documents b ON b.id=r.related_document_id AND b.main_company_slug=r.main_company_slug
-        AND b.deleted_at IS NULL
-      WHERE r.main_company_slug=? AND r.relation_type IN ('INVOICE_OF','DESPATCH_OF','DISPATCH_OF')
-      AND (r.document_id IN (${placeholders}) OR r.related_document_id IN (${placeholders}))
-    `).bind(slug,...part,...part).all<Row>();
-    relations.push(...(result.results||[]));
-  }
-  const byDocument=new Map<string,Row[]>();
-  for(const relation of relations){
-    for(const id of [text(relation.a_id),text(relation.b_id)]){
-      if(!ids.includes(id))continue;
-      if(!byDocument.has(id))byDocument.set(id,[]);
-      byDocument.get(id)!.push(relation);
+  // Read existing official relations only. JSON ID lists avoid D1's 100 bind parameter limit.
+  const readRelations=async (requested:string[])=>{
+    const result:Row[]=[];
+    for(let offset=0;offset<requested.length;offset+=250){
+      const part=JSON.stringify(requested.slice(offset,offset+250));
+      const rows=await c.env.DB.prepare(`
+        SELECT r.document_id,r.related_document_id,r.relation_type,
+          a.id AS a_id,a.document_no AS a_no,a.document_type AS a_type,
+          a.direction AS a_direction,a.party_company_id AS a_party,a.party_tax_no AS a_tax,
+          b.id AS b_id,b.document_no AS b_no,b.document_type AS b_type,
+          b.direction AS b_direction,b.party_company_id AS b_party,b.party_tax_no AS b_tax
+        FROM accounting_document_relations r
+        JOIN accounting_documents a ON a.id=r.document_id AND a.main_company_slug=r.main_company_slug
+          AND a.deleted_at IS NULL AND COALESCE(a.record_scope,'OFFICIAL')='OFFICIAL'
+        JOIN accounting_documents b ON b.id=r.related_document_id AND b.main_company_slug=r.main_company_slug
+          AND b.deleted_at IS NULL AND COALESCE(b.record_scope,'OFFICIAL')='OFFICIAL'
+        WHERE r.main_company_slug=? AND r.relation_type IN ('INVOICE_OF','DESPATCH_OF','DISPATCH_OF')
+        AND (r.document_id IN (SELECT value FROM json_each(?)) OR r.related_document_id IN (SELECT value FROM json_each(?)))
+      `).bind(slug,part,part).all<Row>();
+      result.push(...(rows.results||[]));
     }
+    return result;
+  };
+  const direct=await readRelations(ids);
+  const candidate=(r:Row,id:string)=>text(r.a_id)===id?
+    {id:text(r.b_id),no:text(r.b_no),type:r.b_type,direction:r.b_direction,party:text(r.b_party),tax:text(r.b_tax)}:
+    {id:text(r.a_id),no:text(r.a_no),type:r.a_type,direction:r.a_direction,party:text(r.a_party),tax:text(r.a_tax)};
+  const sourceIds=new Set(ids);
+  const outgoingIds=new Set<string>();
+  for(const rel of direct)for(const id of [text(rel.a_id),text(rel.b_id)]){
+    if(!sourceIds.has(id))continue;
+    const d=candidate(rel,id);
+    if(upper(d.direction)==="OUTGOING"&&isDispatch(d.type)&&["DESPATCH_OF","DISPATCH_OF"].includes(upper(rel.relation_type)))outgoingIds.add(d.id);
+  }
+  const relations=[...direct,...await readRelations([...outgoingIds])];
+  const byDocument=new Map<string,Row[]>();
+  for(const rel of relations)for(const id of [text(rel.a_id),text(rel.b_id)]){
+    if(!byDocument.has(id))byDocument.set(id,[]);
+    byDocument.get(id)!.push(rel);
   }
   const result=selected.map(doc=>{
     const role=upper(doc.company_type||doc.company_legacy_type);
     const group=role==="CUSTOMER"?"CUSTOMER":role==="SUPPLIER"?"SUPPLIER":
       role==="BOTH"?"BOTH":"UNCLASSIFIED";
     const expectedDirection=group==="CUSTOMER"?"OUTGOING":group==="SUPPLIER"?"INCOMING":"";
-    const matches=(byDocument.get(text(doc.id))||[]).flatMap(r=>{
-      const candidate=text(r.a_id)===text(doc.id)?
-        {id:text(r.b_id),no:text(r.b_no),type:r.b_type,direction:r.b_direction,
-          party:text(r.b_party),tax:text(r.b_tax)}:
-        {id:text(r.a_id),no:text(r.a_no),type:r.a_type,direction:r.a_direction,
-          party:text(r.a_party),tax:text(r.a_tax)};
-      if(!isInvoice(candidate.type)||upper(candidate.direction)!==expectedDirection)return[];
-      const sameCompany=text(doc.party_company_id)&&candidate.party===text(doc.party_company_id);
-      const sameTax=text(doc.party_tax_no)&&candidate.tax===text(doc.party_tax_no);
-      return sameCompany||sameTax?[{id:candidate.id,documentNo:candidate.no}]:[];
-    });
-    const unique=[...new Map(matches.map(invoice=>[invoice.id,invoice])).values()];
+    const sameParty=(d:ReturnType<typeof candidate>)=>{
+      const company=text(doc.party_company_id),tax=text(doc.party_tax_no);
+      const sameCompany=company&&d.party===company,sameTax=tax&&d.tax===tax;
+      const conflict=(company&&d.party&&company!==d.party)||(tax&&d.tax&&tax!==d.tax);
+      return !conflict&&Boolean(sameCompany||sameTax);
+    };
+    const peers=(id:string)=> (byDocument.get(id)||[]).map(r=>({relation:upper(r.relation_type),...candidate(r,id)}));
+    const uniqueDocs=(rows:ReturnType<typeof peers>)=>[...new Map(rows.map(d=>[d.id,d])).values()];
+    const dispatches=group==="CUSTOMER"?uniqueDocs(peers(text(doc.id)).filter(d=>
+      upper(d.direction)==="OUTGOING"&&isDispatch(d.type)&&sameParty(d)&&["DESPATCH_OF","DISPATCH_OF"].includes(d.relation))):[];
+    const invoicePeer=(d:ReturnType<typeof peers>[number])=>isInvoice(d.type)&&upper(d.direction)===expectedDirection&&sameParty(d);
+    const directInvoices=peers(text(doc.id)).filter(invoicePeer);
+    const viaDispatch=dispatches.flatMap(d=>peers(d.id).filter(invoicePeer));
+    const unique=uniqueDocs([...directInvoices,...viaDispatch]);
     const status=group==="UNCLASSIFIED"||group==="BOTH"?"ROLE_REVIEW":
       unique.length?"INVOICE_LINKED":"INVOICE_LINK_MISSING";
-    return{id:text(doc.id),dispatchNo:text(doc.document_no),issueDate:text(doc.issue_date),
+    return{id:text(doc.id),dispatchNo:text(doc.document_no),issueDate:text(doc.issue_date||doc.created_at),
       companyName:text(doc.party_name),companyId:text(doc.party_company_id),
       companyType:group,status,invoiceIds:unique.map(v=>v.id),
-      invoiceNumbers:unique.map(v=>v.documentNo).filter(Boolean)};
+      invoiceNumbers:unique.map(v=>v.no).filter(Boolean),dispatchLinkStatus:group!=="CUSTOMER"?"NOT_APPLICABLE":dispatches.length?"DISPATCH_LINKED":"DISPATCH_LINK_MISSING",outgoingDispatchIds:dispatches.map(v=>v.id),outgoingDispatchNumbers:dispatches.map(v=>v.no).filter(Boolean)};
   });
-  const totals={customerLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINK_MISSING").length,
+  const totals={customerDispatchLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.dispatchLinkStatus==="DISPATCH_LINK_MISSING").length,customerLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINK_MISSING").length,
     customerLinked:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINKED").length,
     supplier:result.filter(x=>x.companyType==="SUPPLIER").length,
     roleReview:result.filter(x=>x.status==="ROLE_REVIEW").length};
-  return {rows:result,summary:totals,total:result.length,truncated,
-    readModel:"READ_ONLY_EXPLICIT_RELATIONS",note:"Fatura bağı bulunmaması resmî faturanın kesilmediğini kanıtlamaz."};
+  return {mainCompanySlug:slug,rows:result,summary:totals,total:result.length,truncated,
+    readModel:"READ_ONLY_EXPLICIT_RELATIONS",note:"Sevk veya fatura bağı bulunmaması resmî belgenin düzenlenmediğini kanıtlamaz. Bağlı belge de tüm miktarın tamamlandığını göstermez."};
 }
 
 function errorResponse(c:Context<AppEnv>,error:any){const status=Number(error?.status||500);const safeStatus=status===400||status===401||status===403||status===404||status===409||status===422||status===429||status===502||status===503?status:500;return c.json({ok:false,error:{code:text(error?.code)||"DISPATCH_CONTROL_FAILED",message:text(error?.message)||"İrsaliye/fatura kontrolü hazırlanamadı."}},safeStatus)}
