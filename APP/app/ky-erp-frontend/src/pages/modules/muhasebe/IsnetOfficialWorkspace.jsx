@@ -21,8 +21,8 @@ const groups = [
  {title:"e-SMM / e-Döviz",methods:["SearchESMM","SendESMM","SendESMMXml","CancelESMM","SendCurrencyInvoice"]},
 ];
 const unwrap=v=>v?.data?.data??v?.data??v;
-export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRules,onOpenTest,enabled,slug}) {
- const [technical,setTechnical]=useState(false);
+export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRules,onOpenTest,enabled,slug,technicalOnly=false}) {
+ const [technical,setTechnical]=useState(technicalOnly);
  const [technicalView,setTechnicalView]=useState("read");
  const [catalog,setCatalog]=useState(null),[catalogBusy,setCatalogBusy]=useState(false),[catalogError,setCatalogError]=useState("");
  const navigate=tabKey=>openModule?.("e-belge",{tabKey});
@@ -37,8 +37,8 @@ export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRule
  const hits=method=>discovered.flatMap(s=>(s.operations||[]).filter(op=>op===method).map(op=>s.service+" / "+op));
  const mapped=new Set(groups.flatMap(g=>g.methods));
  return <section className="isow" aria-label="KYERP İşNet işlem merkezi">
-  <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>İşNet · Belge İşlem Merkezi</h3><p>Gelen ve giden belgeler, sevk ilişkileri, muhasebe kontrolü ve orijinal dosyalar tek merkezde.</p></div><span className="isow-state">{enabled?"Firma entegrasyonu seçili · SOAP canlı kabulü bekliyor":"Firma entegrasyonu pasif"}</span></header>
-  <div className="isow-docs">{documents.map(([label,tabKey,detail])=><button type="button" key={tabKey} disabled={!openModule} onClick={()=>navigate(tabKey)}>{label}<small>{detail} · KYERP belge havuzu</small></button>)}</div>
+  <header className="isow-head"><div><small>KYERP / e-BELGE / İŞNET</small><h3>{technicalOnly?"İşNet · Teknik Kabul":"İşNet · Belge İşlem Merkezi"}</h3><p>{technicalOnly?"Servis sözleşmesi, TEST ortamı ve teknik kabul. Günlük belge işlemleri ortak e-Belge merkezindedir.":"Gelen ve giden belgeler, sevk ilişkileri, muhasebe kontrolü ve orijinal dosyalar tek merkezde."}</p></div><span className="isow-state">{enabled?"Firma entegrasyonu seçili · SOAP canlı kabulü bekliyor":"Firma entegrasyonu pasif"}</span></header>
+  {!technicalOnly&&<><div className="isow-docs">{documents.map(([label,tabKey,detail])=><button type="button" key={tabKey} disabled={!openModule} onClick={()=>navigate(tabKey)}>{label}<small>{detail} · KYERP belge havuzu</small></button>)}</div>
   <section className="isow-operator"><h4>Günlük işlemler</h4><div className="isow-actions">
    <button type="button" className="isow-primary" disabled={!enabled||!onOpenSync} onClick={onOpenSync}>Belgeleri al · XML + PDF</button>
    <button type="button" disabled={!openModule} onClick={()=>navigate("gelen-irsaliyeler")}>Kısmi sevk ve irsaliye kontrolü</button>
@@ -50,6 +50,7 @@ export default function IsnetOfficialWorkspace({openModule,onOpenSync,onOpenRule
   <section className="isow-operator"><h4>Belge oluşturma ve gönderim</h4><p>Resmî e-Fatura, e-Arşiv, e-İrsaliye ve yanıt işlemleri sağlayıcı gönderim kabulü tamamlanana kadar kapalıdır. KYERP muhasebe onayı veya bir TEST taslağı resmî belge değildir.</p><div className="isow-actions">
    {["Yeni e-Fatura","Yeni e-İrsaliye","Yeni e-Arşiv","İrsaliyeden fatura","Resmî belge yanıtları","Resmî gönderim / durum"].map(label=><button type="button" key={label} disabled title="Sağlayıcı gönderim kabulü bekliyor">{label}</button>)}
   </div></section>
+  </>}
   <section className="isow-operator"><h4>Ayarlar ve dosya kontrolü</h4><div className="isow-actions">
    <button type="button" disabled={!enabled||!onOpenRules} onClick={onOpenRules}>Gelişmiş iş kuralları</button>
    <button type="button" disabled={!enabled||!onOpenTest} onClick={onOpenTest}>Dosya kontrolü</button>
