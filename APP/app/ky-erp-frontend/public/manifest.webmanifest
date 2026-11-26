@@ -1,6 +1,6 @@
 {
-  "name": "KY ERP",
-  "short_name": "KY ERP",
+  "name": "KYERP",
+  "short_name": "KYERP",
   "id": "/",
   "description": "KY ERP kurumsal yönetim, muhasebe, İK, PDKS ve üretim uygulaması",
   "lang": "tr",
@@ -82,10 +82,10 @@
       ]
     },
     {
-      "name": "İşNet Yönetim Merkezi",
-      "short_name": "İşNet",
-      "description": "İşNet yönetim merkezini aç",
-      "url": "/isnet/yonetim-merkezi",
+      "name": "e-Belge Merkezi",
+      "short_name": "e-Belge",
+      "description": "Fatura, irsaliye ve akıllı işlem merkezini aç",
+      "url": "/e-belge/genel-bakis",
       "icons": [
         {
           "src": "/kyerp-icon.svg",

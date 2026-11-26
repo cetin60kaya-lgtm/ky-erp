@@ -65,7 +65,7 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
     <header className="eis-local-head">
       <div>
         <span className="eis-local-kicker"><ShieldCheck size={15}/> İŞNET · TEK EKRAN</span>
-        <h3>İşNet Belge ve Senkronizasyon Merkezi</h3>
+        <h3>İşNet Belge Aktarımı</h3>
         <p>Tek yerel servisle dört yöndeki XML/PDF arşivi. Portal şifresi yalnız yetkili Windows oturumunda kalır.</p>
       </div>
       <span className="eis-local-tag"><HardDrive size={15}/> Tek Drive / yerel arşiv</span>
@@ -106,8 +106,8 @@ export default function EBelgeIsnetPortalSync({ activeMainCompany, openModule, e
     </div>}
 
     <div className="eis-local-actions">
-      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}><FolderOpen size={16}/> Belge Havuzunu Gör</button>
-      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "eslestirmeler" })}><Link2 size={16}/> Fatura–İrsaliye Eşleşmeleri</button>
+      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "belge-havuzu" })}><FolderOpen size={16}/> Belge Havuzunu Aç</button>
+      <button type="button" onClick={() => openModule?.("e-belge", { tabKey: "eslestirmeler" })}><Link2 size={16}/> Belge Eşleştirme</button>
     </div>
     <div className="eis-local-warning"><LockKeyhole size={17}/><span>Yerel arşiv kaydı, Google Drive bulut eşitlemesi ve KY ERP D1 belge kabulü ayrı doğrulanır. Dosyanın indirilmesi otomatik kesin mali kayıt veya resmî gönderim değildir.</span></div>
     {activeMainCompany?.name && <small className="eis-local-footer">Seçili ana firma: {activeMainCompany.name}</small>}

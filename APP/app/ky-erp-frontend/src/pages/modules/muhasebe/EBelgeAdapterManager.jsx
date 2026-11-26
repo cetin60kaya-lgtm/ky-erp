@@ -4,7 +4,6 @@ import {getCompanyEBelgeAdapters,setCompanyEBelgeAdapter,getCompanyEBelgeAdapter
 import EBelgeIntegrationTestCenter from "./EBelgeIntegrationTestCenter";
 import EBelgeIntegrationProfileEditor from "./EBelgeIntegrationProfileEditor";
 import EBelgeIntegrationsWorkspace from "./EBelgeIntegrationsWorkspace";
-import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
 import IsnetOfficialWorkspace from "./IsnetOfficialWorkspace";
 import "./eBelgeAdapterManager.css";
 
@@ -15,7 +14,7 @@ const integrationError=e=>{
  return message+(id?" · İstek: "+id:"");
 };
 const connectionStatus=(adapter,provider,entry)=>{
- if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Portal oturumu ve firma seçimi Belgeleri Al ekranından doğrulanır";
+ if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Portal oturumu ve firma seçimi Belge Aktarımı ekranından doğrulanır";
  if(adapter.driver===null)return "Bağlayıcı henüz hazır değil";
  if(entry?.enabled===false)return "Firma için pasif";
  if(adapter.key==="MANUAL")return "XML yükleme kullanılabilir";
@@ -35,7 +34,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const owner=useMemo(()=>({slug:tenant}),[tenant]);
  const [data,setData]=useState({mainCompanySlug:"",systemCatalog:[],companyAdapters:[]});
  const [selected,setSelected]=useState("");
- const [panel,setPanel]=useState("sync");
+ const [panel,setPanel]=useState("profile");
  const [profile,setProfile]=useState(null);
  const [profileError,setProfileError]=useState("");
  const [showCatalog,setShowCatalog]=useState(false);
@@ -120,7 +119,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
 
  return <main className="eam">
   <header className="eam-head">
-   <div><small>e-BELGE / ENTEGRASYONLAR</small><h2>Entegrasyon Merkezi</h2><p>Firmanın seçili entegrasyonunu açın, bağlantısını ve ayarlarını tek ekranda yönetin.</p></div>
+   <div><small>e-BELGE / ENTEGRASYON YÖNETİMİ</small><h2>Entegrasyon Yönetimi</h2><p>Firmanın seçili entegrasyonunu açın, bağlantısını ve ayarlarını tek ekranda yönetin.</p></div>
    <button type="button" disabled={Boolean(busy)||loading} onClick={()=>void refresh()}><RefreshCw size={16}/> Yenile</button>
   </header>
   <div className="eam-toolbar">
@@ -128,7 +127,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     <label htmlFor="eam-company-integration">Firma Entegrasyonları</label>
     <div className="eam-select-wrap">
      <Layers3 size={17}/>
-     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setPanel(e.target.value==="ISNET"?"sync":"test");setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
+     <select id="eam-company-integration" aria-label="Bu Firmanın Entegrasyonları" value={active?.key||""} onChange={e=>{setSelected(e.target.value);setPanel("profile");setRemoveKey("");setShowCatalog(false)}} disabled={loading||Boolean(error)}>
       <option value="">{loading?"Entegrasyonlar yükleniyor...":error?"Liste doğrulanamadı":installed.length?"Entegrasyon seçin":"Henüz entegrasyon seçilmemiş"}</option>
       {installed.map(adapter=><option key={adapter.key} value={adapter.key}>{adapter.label}{choice(adapter.key)?.enabled===false?" (Pasif)":""}</option>)}
      </select><ChevronDown size={16}/>
@@ -176,16 +175,14 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
      {active.key!=="ISNET"&&profile?.serviceUrl&&<code>{profile.serviceUrl}</code>}
      <p>{providerService(active.key).description}</p></div></div>
     <div className="eam-tabs" role="tablist" aria-label="Entegrasyon çalışma alanları">
-     {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="official"} className={panel==="official"?"active":""} onClick={()=>setPanel("official")}>İşNet İşlem Merkezi</button>}
-     {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="sync"} className={panel==="sync"?"active":""} onClick={()=>setPanel("sync")}>Belgeleri Al · XML + PDF</button>}
+     {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="official"} className={panel==="official"?"active":""} onClick={()=>setPanel("official")}>İşNet Teknik Kabul</button>}
      <button type="button" role="tab" aria-selected={panel==="connection"} className={panel==="connection"?"active":""} onClick={()=>setPanel("connection")}>Gelişmiş İş Kuralları</button>
      <button type="button" role="tab" aria-selected={panel==="test"} className={panel==="test"?"active":""} onClick={()=>setPanel("test")}>{active.key==="ISNET"?"Dosya Kontrolü":"Belge Test Merkezi"}</button>
      <button type="button" role="tab" aria-selected={panel==="profile"} className={panel==="profile"?"active":""} onClick={()=>setPanel("profile")}>Entegrasyonu Düzenle</button>
     </div>
     {profileError&&<div className="eam-alert" role="alert">{profileError}</div>}
-    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace slug={tenant} key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onOpenSync={()=>setPanel("sync")} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")}/>:
-     panel==="sync"&&active.key==="ISNET"?<EBelgeIsnetPortalSync key={tenant+":sync"} activeMainCompany={activeMainCompany} openModule={openModule} enabled={choice(active.key)?.enabled!==false} onSynced={refresh}/>:
-     panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenSync={()=>setPanel("sync")} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
+    {panel==="official"&&active.key==="ISNET"?<IsnetOfficialWorkspace slug={tenant} key={tenant+":official"} openModule={openModule} enabled={choice(active.key)?.enabled!==false} technicalOnly onOpenSync={()=>openModule?.("e-belge",{tabKey:"belgeleri-al"})} onOpenRules={()=>setPanel("connection")} onOpenTest={()=>setPanel("test")}/>:
+     panel==="test"?<EBelgeIntegrationTestCenter key={tenant+":"+active.key} adapter={active} activeMainCompany={activeMainCompany} profile={profile} onOpenSync={()=>openModule?.("e-belge",{tabKey:"belgeleri-al"})} onOpenVisualStudio={()=>openModule?.("e-belge",{tabKey:"gorsel-sablonlar"})}/>:
      panel==="profile"?<EBelgeIntegrationProfileEditor key={tenant+":"+active.key} adapter={active} company={owner} profile={profile} onSaved={setProfile}/>:
      active.key==="ISNET"?<div className="eam-detail-content"><EBelgeIntegrationsWorkspace key={tenant} activeMainCompany={activeMainCompany} openModule={openModule} onOpenDocumentTest={()=>setPanel("test")} hideConnection/></div>:
      active.key==="MANUAL"?<div className="eam-detail-body"><div className="eam-instruction"><FileCode2 size={23}/><div><strong>Manuel XML / PDF Belge Havuzu</strong><p>UBL-TR XML asıl kaynaktır. PDF/JPEG/PNG görüntü ve kontrol içindir.</p></div></div>

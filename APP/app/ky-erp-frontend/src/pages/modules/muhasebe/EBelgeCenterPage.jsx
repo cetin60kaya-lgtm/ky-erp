@@ -1,3 +1,4 @@
+import {apiPatch} from "../../../utils/api";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -44,6 +45,9 @@ import EBelgeAdapterManager from "./EBelgeAdapterManager";
 import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import IncomingDispatchBillingWorkspace from "./IncomingDispatchBillingWorkspace";
 import "./eBelgeCenter.css";
+import EBelgeDraftWorkspace from "./EBelgeDraftWorkspace";
+import EBelgeSmartWorkspace,{EBelgeCreateHub} from "./EBelgeSmartWorkspace";
+import EBelgeReceiveWorkspace from "./EBelgeReceiveWorkspace";
 
 const today = () => {
   const date = new Date();
@@ -58,6 +62,8 @@ const FOUR_DOCUMENT_VIEWS = [
 ];
 const FOUR_DOCUMENT_FILTERS={
  "incoming-invoices":"INCOMING_INVOICE",
+ "unread-invoices":"INCOMING_INVOICE",
+ "unread-dispatches":"INCOMING_DISPATCH",
  "incoming-dispatches":"INCOMING_DISPATCH",
  "outgoing-dispatches":"OUTGOING_DISPATCH",
  "outgoing-invoices":"OUTGOING_INVOICE",
@@ -480,6 +486,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
         <EBelgeAccountingPrint detail={detail} mainCompanySlug={mainCompanySlug}
           onPdf={()=>void openSupplierAccountingPdf()} onChanged={onChanged}/>
         <section className="eb-document-toolbar">
+          {detail.direction==="INCOMING"&&["READ","UNREAD"].map(state=><button key={state} type="button" disabled={Boolean(busy)} onClick={()=>action("read-state",()=>apiPatch("/e-belge/documents/"+encodeURIComponent(id)+"/read-state",{mainCompanySlug,state}))}>{state==="READ"?"Okundu İşaretle":"Okunmadı İşaretle"}</button>)}
           {detail.direction==="OUTGOING"&&<button type="button" onClick={()=>onOpenMailDrafts?.(detail)}>
              Fatura / İrsaliye Mail Merkezi
            </button>}
@@ -609,7 +616,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
 }
 
 export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule, moduleActionContext }) {
-  const allowedViews = ["overview", "incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates"];
+  const allowedViews = ["overview", "incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "create-hub", "smart-center"];
   const view = allowedViews.includes(initialView) ? initialView : "overview";
   const poolViews = useMemo(() => ["incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
@@ -650,9 +657,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
    view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?archiveType:view==="pool"?filter:"ALL");
   const direction = view === "incoming" ? "INCOMING" : view === "outgoing" ? "OUTGOING" : undefined;
   const params = useMemo(()=>({
-    filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
+    mainCompanySlug,filter:effectiveFilter,direction,q:query,from,to,status:statusFilter,page,pageSize:50,sortBy,sortDirection,
+    ...(view.startsWith("unread-")?{readStatus:"UNREAD"}:{}),
     ...((view==="incoming-invoices"||(view==="archive"&&archiveType==="INCOMING_INVOICE"))&&onlyPrintPending?{printStatus:"PENDING"}:{})
-  }),[direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
+  }),[mainCompanySlug,direction,effectiveFilter,from,onlyPrintPending,page,query,to,view,statusFilter,sortBy,sortDirection,archiveType]);
   const openEBelgeTab = useCallback((tabKey) => openModule?.("e-belge", { tabKey }), [openModule]);
   const sortPoolBy = (column) => {
     if (sortBy === column) setSortDirection((old) => old === "ASC" ? "DESC" : "ASC");
@@ -697,10 +705,13 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     }
   }, [page, params, mainCompanySlug, view]);
 
+  const dashboardRequestSeq = useRef(0);
   const loadDashboard = useCallback(async () => {
-    const data = await getEBelgeDashboard({ today: today(), monthStart: monthStart() });
+    const seq = ++dashboardRequestSeq.current;
+    const data = await getEBelgeDashboard({ mainCompanySlug, today: today(), monthStart: monthStart() });
+    if (seq !== dashboardRequestSeq.current) return;
     setDashboard(data || { summary: {}, recent: [] });
-  }, []);
+  }, [mainCompanySlug]);
 
   const loadIntegrations = useCallback(async () => {
     const seq=++integrationRequestSeq.current;
@@ -731,7 +742,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
-    if (view === "workflow" || view === "visual-templates") return;
+    if (["workflow", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "create-hub", "smart-center"].includes(view)) return;
     setBusy(true);
     setError("");
     try {
@@ -763,7 +774,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setLastUpload(null);
     setQuery("");
   }, [activeMainCompany?.slug, activeMainCompany?.id]);
-  useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; dashboardRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => {
     if (moduleActionContext?.targetModule !== "e-belge" || !moduleActionContext?.documentId) return;
     setSelectedId(String(moduleActionContext.documentId));
@@ -807,7 +818,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       const checked = Number(result?.total || 0);
       const responses = Array.isArray(result?.results) ? result.results : [];
       const failed = responses.filter((row) => row?.status === "ERROR" || row?.ok === false || Boolean(row?.error)).length;
-      setNotice(`${checked} uygun belge eşleştirme kontrolünden geçirildi.${failed ? ` ${failed} belgede hata oluştu; Onay & Sorunlar ekranından kontrol edin.` : " Sonuçlar belge havuzunda görülebilir."}`);
+      setNotice(`${checked} uygun belge eşleştirme kontrolünden geçirildi.${failed ? ` ${failed} belgede hata oluştu; Belge Kontrol ve Onay ekranından kontrol edin.` : " Sonuçlar belge havuzunda görülebilir."}`);
       setMatchingConfirmOpen(false);
       setMatchingApproved(false);
       await loadPool();
@@ -838,20 +849,27 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const summary = dashboard.summary || {};
   const providers = [...(integrations.mainCompanySlug===mainCompanySlug?(integrations.providers || []):[])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
+    "create-hub": ["e-Belge Oluştur", "Tek editör · kaynak belge · firma ve sağlayıcı yeteneği."],
+    "smart-center": ["Akıllı İşlem Merkezi", "Komuttan taslağa · kayıtlı bilgiler ve istisnalar."],
+    receive: ["Belge Aktarımı", "Entegrasyon kaynaklarından belge aktarın veya orijinal XML/PDF dosyalarını Belge Havuzu üzerinden yükleyin."],
+    "invoice-drafts": ["Fatura Taslakları", "Tek veri girişi · kaydet · kontrol et. Resmî gönderim ayrı kabul gerektirir."],
+    "dispatch-drafts": ["İrsaliye Taslakları", "Sevk kalemleri ve teslim bilgilerini hazırlayın."],
     overview: ["Genel Bakış", "Bugün ve bu ay gelen-giden belgeleri, sorunları ve son hareketleri tek bakışta görün."],
     incoming: ["Gelen Belgeler", "Tedarikçi faturaları ve müşteri/tedarikçi irsaliyelerini tek canonical havuzdan yönetin."],
+    "unread-invoices":["Okunmamış Faturalar","Kullanıcıya özel okunma durumu."],
+    "unread-dispatches":["Okunmamış İrsaliyeler","Kullanıcıya özel okunma durumu."],
     "incoming-invoices":["Gelen Faturalar","Tedarikçi faturaları · gider kalemleri · muhasebe tek çıktı kontrolü."],
     "incoming-dispatches":["Gelen İrsaliyeler","Müşteriden gelen irsaliyeler ve model bağlantılarını takip edin."],
     "outgoing-dispatches":["Giden İrsaliyeler","Üretim ve model bazında giden irsaliyeleri izleyin."],
     "outgoing-invoices":["Giden Faturalar","Satış faturalarını, ilgili irsaliyeyi ve Outlook işlemlerini izleyin."],
     outgoing: ["Giden Belgeler", "Bizim faturalarımızı ve irsaliyelerimizi kaynak sağlayıcıdan bağımsız tek listede izleyin."],
     pool: ["Belge Havuzu", "XML, PDF ve görselleri yükleyin; belgeyi, firmayı, kalemleri ve dosyaları tek canonical kayıt üzerinden yönetin."],
-    matching: ["Eşleştirmeler", "Fatura–irsaliye, firma, ürün ve LOT eşleşmesi bekleyen kayıtları sonuçlandırın."],
-    issues: ["Onay & Sorunlar", "Gerçek hata, eksik eşleşme ve son onay bekleyen belgeleri tek yerde çözün."],
-    workflow: ["İş Akışları", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
-    archive: ["Arşiv & Çıktı", "Gelen/giden fatura ve irsaliyeleri seçin; orijinal PDF’leri sıra ile açın ve çıktı durumlarını izleyin."],
-    integrations: ["Entegrasyonlar", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
-    "visual-templates": ["Görsel Şablonlar", "Düzenleyen VKN/TCKN ve belge türüne göre XML + orijinal PDF örneğini tanıtın; şablonu düzenleyip sonraki XML'lere uygulayın."],
+    matching: ["Belge Eşleştirme", "Fatura–irsaliye, firma, ürün ve LOT eşleşmesi bekleyen kayıtları sonuçlandırın."],
+    issues: ["Belge Kontrol ve Onay", "Gerçek hata, eksik eşleşme ve son onay bekleyen belgeleri tek yerde çözün."],
+    workflow: ["Sevk ve Faturalandırma", "Müşteri irsaliyesi → model → bizim irsaliye → fatura zincirini canonical belgeler üzerinden izleyin."],
+    archive: ["Belge Arşivi ve Çıktılar", "Gelen/giden fatura ve irsaliyeleri seçin; orijinal PDF’leri sıra ile açın ve çıktı durumlarını izleyin."],
+    integrations: ["Entegrasyon Yönetimi", "İşNet ve diğer sağlayıcı bağlantılarını e-Belge adaptörü olarak yönetin; ana belge gerçeği sağlayıcıdan bağımsız kalsın."],
+    "visual-templates": ["Belge Şablonları", "Düzenleyen VKN/TCKN ve belge türüne göre XML + orijinal PDF örneğini tanıtın; şablonu düzenleyip sonraki XML'lere uygulayın."],
   }[view];
   const poolTitle = viewMeta[0];
   const poolHint = viewMeta[1];
@@ -887,19 +905,23 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
 
     {view !== "integrations" && <div className="eb-hero">
       <div>
-        <span className="eb-kicker">e-Belge · Tek Canonical Havuz</span>
+        <span className="eb-kicker">KYERP · e-Belge Yönetimi</span>
         <h2>{viewMeta[0]}</h2>
         <p>{viewMeta[1]}</p>
       </div>
       <div className="eb-hero-actions">
-        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("entegrasyonlar")}><RefreshCw size={17}/> İşNet XML + PDF Al</button>}
+        {(view==="overview"||showPool)&&<button type="button" className="eb-primary" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
+        {(view === "overview" || view === "outgoing-invoices") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("fatura-taslaklari")}>+ Yeni Fatura</button>}
+        {(view === "overview" || view === "outgoing-dispatches") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("irsaliye-taslaklari")}>+ Yeni İrsaliye</button>}
         {view === "overview" && <>
+          <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("olustur")}>e-Belge Oluştur</button>
+          <button type="button" onClick={()=>openEBelgeTab("ai-center")}>Akıllı İşlem Merkezi</button>
           <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
           <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
             {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
           </button>
 
-          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Sorunları Aç</button>
+          <button type="button" className="eb-primary" onClick={() => openEBelgeTab("onay-sorunlar")}><FileCheck2 size={17} /> Kontrol ve Onay</button>
         </>}
         {showPool && <>
       <nav className="eb-four-document-nav" aria-label="Dört belge işlem ekranı">
@@ -923,7 +945,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view==="integrations"&&integrationError&&<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{integrationError}</span></div>}
     {notice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Kontrol tamamlandı</strong><span>{notice}</span></div></div>}
 
+    {view === "create-hub" && <EBelgeCreateHub openModule={openModule}/>}
+    {view === "smart-center" && <EBelgeSmartWorkspace key={mainCompanySlug+":smart"} activeMainCompany={activeMainCompany} openModule={openModule}/>}
     {view === "overview" && <>
+      <EBelgeSmartWorkspace compact key={mainCompanySlug+":quick"} activeMainCompany={activeMainCompany} openModule={openModule}/>
       <div className="eb-stats eb-dashboard-stats">
         <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
         <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />
@@ -939,7 +964,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         <div className="eb-section-title"><div><strong>Son İşlemler</strong><span>En son havuza alınan 10 belge ve kontrol durumu</span></div><button type="button" onClick={() => openEBelgeTab("belge-havuzu")}>Belge Havuzunu Aç</button></div>
         {busy && !dashboard.recent?.length ? <div className="eb-loading"><LoaderCircle className="eb-spin" /> Özet yükleniyor</div> : dashboard.recent?.length ? <div className="eb-pool-table-scroll eb-dashboard-table-scroll"><div className="eb-table">
           <div className="eb-tr eb-th"><span>Belge</span><span>Firma / Cari</span><span>Tarih</span><span>Kaynak</span><span>Toplam</span><span>Durum</span></div>
-          {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span><span>{dateText(row.issue_date)}</span><span><small>{sourceLabel(row.source_type)}</small></span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>)}
+          {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span data-label="Belge"><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span data-label="Cari"><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span><span data-label="Tarih">{dateText(row.issue_date)}</span><span data-label="Kaynak / Çıktı"><small>{sourceLabel(row.source_type)}</small></span><span data-label="Toplam"><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span data-label="Kontrol" className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>)}
         </div></div> : <Empty title="Henüz belge yok" text="Belge Havuzu'ndan ilk dosyaları yükleyin." />}
       </section>
     </>}
@@ -947,7 +972,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "pool" && <>
       <UploadPanel onUploaded={handleUploaded} />
       <div className="eb-section-title"><div><strong>PDF Görünüm Şablonu</strong><span>Firma bazlı bir kez tanıtılır, sonraki belgelerde tekrar kullanılabilir.</span></div>
-        <button type="button" onClick={() => openEBelgeTab("gorsel-sablonlar")}>Görsel Şablonlar'ı Aç</button></div>
+        <button type="button" onClick={() => openEBelgeTab("gorsel-sablonlar")}>Belge Şablonlarını Aç</button></div>
       {lastUpload && <div className="eb-upload-result"><CheckCircle2 size={20} /><div><strong>Yükleme tamamlandı</strong><span>{lastUpload.items?.length || 0} belge havuza alındı. {lastUpload.errors?.length ? `${lastUpload.errors.length} dosya ayrıca kontrol istiyor.` : "Kayıtlar Belge Havuzu'nda hazır."}</span></div></div>}
     </>}
 
@@ -1009,7 +1034,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           {rows.map((row) => {
             const hasIssue = Number(row.issue_count || 0) > 0;
             const posted = String(row.status || "").toUpperCase() === "POSTED";
-            const content = <button type="button" className="eb-tr" key={row.id} onClick={() => {setArchiveQueue({items:[],index:0});setAutoPdfDocumentId("");setSelectedId(row.id);}}><span><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span><span>{dateText(row.issue_date)}</span><span>{view==="incoming-invoices"?
+            const content = <button type="button" className="eb-tr" key={row.id} onClick={() => {setArchiveQueue({items:[],index:0});setAutoPdfDocumentId("");setSelectedId(row.id);}}><span data-label="Belge"><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span data-label="Cari"><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.party_tax_no || ""}</small></span><span data-label="Tarih">{dateText(row.issue_date)}</span><span data-label="Kaynak / Çıktı">{view==="incoming-invoices"?
                  (printStatusError?<small>Durum okunamadı</small>:
                   printStatuses[row.id]?.status==="PRINTED"?
                    <strong className="eb-print-mark-yes">Çıktı Alındı</strong>:
@@ -1019,7 +1044,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
                  <><small>{sourceLabel(row.source_type)}</small><em>{view==="archive"&&isIncomingAccountingInvoice(row)
                   ? (printStatusError ? "Çıktı durumu okunamadı" : printStatuses[row.id]?.status==="PRINTED" ? "Çıktı alındı" : printStatuses[row.id]?.status==="PENDING" ? "Çıktı bekliyor" : "Durum yükleniyor")
                   : (row.archive_status || "Arşiv durumunu belgede kontrol et")}</em></>}
-                 </span><span><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
+                 </span><span data-label="Toplam"><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span data-label="Kontrol" className={`eb-chip ${hasIssue ? "review_required" : posted ? "posted" : "ready"}`}>{hasIssue ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>;
             return view==="archive" ? <div className="eb-archive-select-row" key={row.id}>
               <label aria-label={`${row.document_no||"Belge"} seç`}>
                 <input type="checkbox" checked={archiveSelectedIds.includes(row.id)}
@@ -1039,6 +1064,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       </section>
     </>}
 
+    {view === "receive" && <EBelgeReceiveWorkspace key={mainCompanySlug} activeMainCompany={activeMainCompany} openModule={openModule} />}
+    {["invoice-drafts", "dispatch-drafts"].includes(view) && <EBelgeDraftWorkspace key={mainCompanySlug+":"+view} activeMainCompany={activeMainCompany} kind={view==="invoice-drafts"?"INVOICE":"DISPATCH"} />}
     {view === "workflow" && <InvoiceDispatchControlWorkspace activeMainCompany={activeMainCompany} onOpenDocument={(documentId) => { setAutoPdfDocumentId(String(documentId)); setSelectedId(String(documentId)); }} />}
     {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 

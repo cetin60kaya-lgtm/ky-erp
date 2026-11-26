@@ -1,0 +1,12 @@
+import {test} from "node:test";
+import assert from "node:assert/strict";
+import {parseDirectCommand,resolveDirectFields,storedWorkflowFields} from "./e-belge-command-core.ts";
+const command="Test Cari için Model A 100 adet 10 TL’den doğrudan fatura oluştur";
+const item={partyId:"fixture",description:"Model A",catalogId:"MODEL:fixture",unit:"C62"};
+test("strict Turkish direct command",()=>{const a=parseDirectCommand(command);assert.equal(a.price,"10");assert.equal(a.quantity,"100");assert.equal(a.item,"Model A");assert.equal(a.kind,"INVOICE")});
+test("no ambiguous or linked commands",()=>{for(const s of ["bu irsaliyeden 400 adet kes",command+" ve gönder",command.replace("100","-100"),command.replace("100","0")])assert.throws(()=>parseDirectCommand(s))});
+test("only missing fields requested, no guessed VAT or currency",()=>{const r=resolveDirectFields(parseDirectCommand(command),item,{},{},"2026-11-26");assert.deepEqual(r.missing.map(x=>x.field),["vatRate","scenario"]);assert.equal(r.payload.lines[0].price,"10")});
+test("approved defaults, explicit price provenance and unit mismatch",()=>{const defaults={price:"11",vatRate:"20",scenario:"TICARIFATURA",currency:"TRY"};const r=resolveDirectFields(parseDirectCommand(command),item,defaults,{},"2026-11-26");assert.equal(r.missing.length,0);assert.equal(r.provenance.price,"Komut");assert.equal(r.provenance.vatRate,"Kayıtlı firma/cari/model varsayılanı");assert.ok(resolveDirectFields(parseDirectCommand(command),{...item,unit:"KGM"},defaults,{},"2026-11-26").missing.some(x=>x.field==="unit"))});
+
+test("uses only persisted customer or tenant profile, never legacy demo defaults",()=>{assert.equal(storedWorkflowFields({legacy:{vat:20}}, "c").source,null);const r=storedWorkflowFields({version:"v1",profiles:[{id:"general",isDefault:true,companyId:"",vat:18,scenario:"TEMEL"},{id:"specific",isDefault:true,companyId:"c",vat:10,scenario:"TICARI",driver:"fixture"}]},"c");assert.equal(r.fields.vatRate,"10");assert.equal(r.fields.scenario,"TICARIFATURA");assert.equal(r.source?.id,"specific");assert.equal(storedWorkflowFields({version:"v",profiles:[{isDefault:true,companyId:"c"},{isDefault:true,companyId:"c"}]},"c").conflict,true)});
+test("explicit TL is TRY and conflicting currency blocks",()=>{const a=parseDirectCommand(command);assert.equal(resolveDirectFields(a,item,{vatRate:"20",scenario:"TICARIFATURA"},{},"2026-11-26").payload.currency,"TRY");assert.ok(resolveDirectFields(a,item,{vatRate:"20",scenario:"TICARIFATURA"},{currency:"USD"},"2026-11-26").missing.some(x=>x.field==="currency"))});

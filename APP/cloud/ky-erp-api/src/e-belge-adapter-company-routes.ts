@@ -19,7 +19,7 @@ async function permit(c:Context<Env>,method:"GET"|"PUT",body:Row={}) {
  if(!user||!tenant||!accountingTenantReadAllowed(user,tenant)||!accountingAccess(user,method,c.req.path))return {ok:false,tenant:""};
  return {ok:true,tenant};
 }
-async function selections(c:Context<Env>,tenant:string):Promise<{selected:Record<string,boolean>;enabled:Record<string,boolean>}> {
+export async function selections(c:Context<Env>,tenant:string):Promise<{selected:Record<string,boolean>;enabled:Record<string,boolean>}> {
  const rows=await c.env.DB.prepare(
   "SELECT id,file_name,data FROM json_store WHERE scope=? AND main_company_slug=? "+
   "ORDER BY CASE WHEN id LIKE 'EBELGE_ADAPTER_SELECTION_V1:%' THEN 0 ELSE 1 END, updated_at DESC, id DESC"

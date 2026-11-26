@@ -26,6 +26,9 @@ export async function resolveRegisteredItems(c:Context<Env>,slug:string,state:Ro
  const old=state.drafts.find((d:Row)=>d.id===a.id);
  if(old?.providerSource||old?.dispatchId||(!old&&(a.sourceRef||a.dispatchId))||((old?.source||a.source)==="DEMO_INCOMING"&&a.kind==="SAVE_DISPATCH"))return [];
  const ids=[...new Set<string>((Array.isArray(a.lines)?a.lines:[]).map((l:Row)=>clean(l.productId)).filter((id:string)=>specs.some(s=>id.startsWith(s.prefix))))];
- if(ids.length>50)throw Error("Ürün kalemi sınırı.");
+ return resolveRegisteredItemIds(c,slug,ids);
+}
+export async function resolveRegisteredItemIds(c:Context<Env>,slug:string,ids:string[]){
+ if(ids.length>50||ids.some(id=>!specs.some(s=>id.startsWith(s.prefix))))throw Error("Ürün kalemi sınırı veya geçersiz katalog kimliği.");
  return Promise.all(ids.map(async id=>{const s=specs.find(s=>id.startsWith(s.prefix))!;const row=await c.env.DB.prepare("SELECT m.id AS id,"+s.expr+" AS description,"+s.unit+" AS unit FROM "+s.from+" WHERE "+s.scope+" AND m.id=? LIMIT 1").bind(slug,id.slice(s.prefix.length)).first<Row>();if(!row||!clean(row.description))throw Error("Model veya ürün mevcut firmada bulunamadı.");return view(s.prefix,row);}));
 }
