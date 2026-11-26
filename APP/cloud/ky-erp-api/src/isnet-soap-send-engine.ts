@@ -2,6 +2,7 @@
 // Exact QNames, action and SOAP version MUST come from reviewed WSDL, not the PDF or UI.
 // @ts-nocheck
 import { requireApprovedSend, classifySendResult } from "./isnet-official-acceptance.ts";
+import {parseVerifiedTestSendResponse} from "./isnet-soap-response.ts";
 
 // Exact SOAP 1.1 HTTPS binding from user-supplied InvoiceService singleWsdl,
 // SHA-256 d728e3eea7c05acb1c5ca2db85ec6741e9eff9aa19880d358f02e87a35aca67e.
@@ -43,6 +44,7 @@ export async function submitVerifiedSoapTest({profile,draft,approval,binding,val
  const actualHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
  if(actualHash!==draft.contentSha256.toLowerCase())throw Error("UBL_HASH_MISMATCH");
  const exact=verifiedTestSendBinding(draft.kind);
+ if(fetcher===fetch&&(binding.contractHash!==ISNET_SEND_WSDL_SHA256||parseResult))throw Error("SOAP_REAL_SEND_REQUIRES_PINNED_PARSER");
  if(binding.contractHash===ISNET_SEND_WSDL_SHA256&&JSON.stringify(Object.keys(exact).map(k=>[k,typeof exact[k]==="object"?[exact[k].local,exact[k].ns]:exact[k]]))!==JSON.stringify(Object.keys(exact).map(k=>[k,typeof exact[k]==="object"?[binding[k]?.local,binding[k]?.ns]:binding[k]])))throw Error("SOAP_PINNED_BINDING_MISMATCH");
  const req=buildEnvelope(binding,validatedXml.base64,validatedXml.receiverTag,draft.kind);
  // Persistent claim precedes network IO. UNKNOWN or a failed settlement is never retried automatically.
@@ -52,7 +54,7 @@ export async function submitVerifiedSoapTest({profile,draft,approval,binding,val
  try{
   const response=await fetcher(req.endpoint,{method:"POST",headers:req.headers,body:req.body,redirect:"manual",signal:AbortSignal.timeout(30000)});
   // Never follow redirects with document contents. An unexpected response stays UNKNOWN.
-  if(response.status>=200&&response.status<300&&response.ok){const xml=await response.text();if(xml.length<=4000000&&!/<!DOCTYPE|<!ENTITY/i.test(xml)){providerResult=await parseResult(xml,binding);status=classifySendResult({...draft,status:"SUBMITTING"},providerResult);}}
+  if(response.status>=200&&response.status<300&&response.ok){const xml=await response.text();if(xml.length<=4000000&&!/<!DOCTYPE|<!ENTITY/i.test(xml)){providerResult=parseResult?await parseResult(xml,binding):await parseVerifiedTestSendResponse(xml,draft.kind,draft.ettn);status=classifySendResult({...draft,status:"SUBMITTING"},providerResult);}}
  }catch{status="UNKNOWN_REVIEW_REQUIRED";}
  await settle({claimId,tenant:draft.tenant,draftId:draft.id,version:draft.version,ettn:draft.ettn,status,providerResult});
  return {status};

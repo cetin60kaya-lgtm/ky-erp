@@ -79,14 +79,14 @@ export function requireApprovedSend(p:Profile,d:Draft,a:Approval,now:number):voi
 export type ProviderResult = {
  transport:"RESPONSE"|"TIMEOUT"|"NETWORK_ERROR";
  explicitAcceptance?:boolean; explicitRejection?:boolean; ettn?:string; documentNo?:string;
- receiptId?:string; finalStatusVerified?:boolean;
+ receiptId?:string; responseEvidenceSha256?:string; finalStatusVerified?:boolean;
 };
 export function classifySendResult(d:Draft,r:ProviderResult):Draft["status"]{
  // A lost response may already have created a document. Never auto-retry.
  if(d.status!=="SUBMITTING"||r.transport!=="RESPONSE")return "UNKNOWN_REVIEW_REQUIRED";
  if(r.explicitAcceptance===true&&r.explicitRejection===true)return "UNKNOWN_REVIEW_REQUIRED";
  if(r.explicitRejection===true&&r.explicitAcceptance!==true)return "REJECTED";
- if(r.explicitAcceptance!==true||!uuidOK(r.ettn)||r.ettn?.toLowerCase()!==d.ettn.toLowerCase()||!nonblank(r.documentNo)||!nonblank(r.receiptId))return "UNKNOWN_REVIEW_REQUIRED";
+ if(r.explicitAcceptance!==true||!uuidOK(r.ettn)||r.ettn?.toLowerCase()!==d.ettn.toLowerCase()||!nonblank(r.documentNo)||(!nonblank(r.receiptId)&&!hashOK(r.responseEvidenceSha256)))return "UNKNOWN_REVIEW_REQUIRED";
  return r.finalStatusVerified===true?"FINAL":"PROVIDER_ACCEPTED";
 }
 export function documentIdentity(tenant:string,environment:Environment,ettn:string):string{
