@@ -20,3 +20,5 @@ test("Kesin faturalandırıldı yalnız ilişki, şirket/VKN ve uygun fatura yö
   assert.match(source,/app.get\("\/api\/muhasebe\/incoming-dispatches\/billing"/);
   assert.doesNotMatch(source,/app.post\("\/api\/muhasebe\/incoming-dispatches\/billing"/);
 });
+
+test("Müşteri kaynak irsaliyesi için giden sevk ve doğrudan/dolaylı fatura bağları aynı resmi tenant kayıtlarından okunur",()=>{assert.match(source,/customerDispatchLinkMissing/);assert.match(source,/DISPATCH_LINK_MISSING/);assert.match(source,/viaDispatch=dispatches\.flatMap/);assert.match(source,/!conflict&&Boolean\(sameCompany\|\|sameTax\)/);assert.match(source,/json_each\(\?\)/);assert.match(source,/mainCompanySlug:slug,rows:result/);assert.match(source,/Bağlı belge de tüm miktarın tamamlandığını göstermez/);});
