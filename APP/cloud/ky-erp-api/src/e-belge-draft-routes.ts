@@ -3,6 +3,7 @@ import {getAuthenticatedUser} from "./auth-cloud";
 import {accountingAccess,accountingTenantReadAllowed} from "./accounting-access-policy";
 import {selections} from "./e-belge-adapter-company-routes";
 import {searchRegisteredItems,resolveRegisteredItemIds} from "./isnet-registered-items";
+import {parseDirectCommand,resolveDirectFields} from "./e-belge-command-core";
 import {normalizeDraft,type DraftKind} from "./e-belge-draft-core";
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -63,6 +64,37 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     else await c.env.DB.prepare("DELETE FROM accounting_document_read_state WHERE main_company_slug=? AND user_id=? AND document_id=?").bind(a.tenant,a.userId,id).run();
     return c.json({ok:true,data:{mainCompanySlug:a.tenant,id,state}});
   });
+  // Read-only command resolution; only the existing draft API can persist the result.
+  app.post("/api/e-belge/operator-command/prepare",async c=>{
+    const body=await c.req.json<Row>().catch(()=>null);
+    if(!body)return c.json(err("INVALID_BODY","Komut gerekli."),400);
+    const a=await operatorAccess(c,"POST",body);if(!a)return c.json(err("FORBIDDEN","Firma veya işlem yetkisi doğrulanamadı."),403);
+    let intent;try{intent=parseDirectCommand(body.command)}catch(e){return c.json(err("COMMAND_UNSUPPORTED",(e as Error).message),400)}
+    const companyRows=await c.env.DB.prepare("SELECT id,name,tax_no FROM companies WHERE main_company_slug=? AND deleted_at IS NULL AND is_active=1 AND (name=? COLLATE NOCASE OR tax_no=?) LIMIT 3").bind(a.tenant,intent.party,intent.party).all<Row>();
+    const companies=companyRows.results||[];
+    if(companies.length!==1)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[{field:"party",question:"Cari ünvanını tam olarak veya VKN ile belirtin."}],proposal:null}});
+    const company=companies[0]!;
+    // Exact, non-deduplicated model/product identities; ambiguous names require selection.
+    const modelRows=await c.env.DB.prepare("SELECT id,model_name AS description FROM model_records WHERE main_company_slug=? AND deleted_at IS NULL AND (model_name=? COLLATE NOCASE OR model_code=? COLLATE NOCASE) LIMIT 3").bind(a.tenant,intent.item,intent.item).all<Row>();
+    const productRows=await c.env.DB.prepare("SELECT id,name AS description,unit FROM products WHERE main_company_slug=? AND name=? COLLATE NOCASE LIMIT 3").bind(a.tenant,intent.item).all<Row>();
+    const items=[...(modelRows.results||[]).map(x=>({id:"MODEL:"+x.id,description:x.description,unit:"C62"})),...(productRows.results||[]).map(x=>({id:"PRODUCT:"+x.id,description:x.description,unit:clean(x.unit)}))];
+    if(items.length!==1)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[{field:"item",question:"Model/ürün adı tekil değil veya bulunamadı. Benzersiz model kodu kullanın ya da ortak editörden seçin."}],proposal:null}});
+    const item=items[0]!;
+    const today=new Date().toLocaleDateString("sv-SE",{timeZone:"Europe/Istanbul"});
+    const defaultsReady=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ebelge_command_defaults'").first();
+    const defaults=defaultsReady?(await c.env.DB.prepare("SELECT id,version,payload FROM ebelge_command_defaults WHERE main_company_slug=? AND party_company_id=? AND catalog_id=? AND kind=? AND approved_by<>'' AND valid_from<=? AND valid_until>=? ORDER BY version DESC LIMIT 2").bind(a.tenant,company.id,item.id,intent.kind,today,today).all<Row>()).results||[]:[];
+    if(defaults.length>1)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[{field:"defaults",question:"Çakışan aktif varsayılan kayıtları var; yönetici kontrolü gerekli."}],proposal:null}});
+    const rule=defaults[0],values=rule?JSON.parse(rule.payload):{};
+    const provided=body.answers&&typeof body.answers==="object"?body.answers:{};
+    const resolved=resolveDirectFields(intent,{partyId:clean(company.id),description:clean(item.description),catalogId:item.id,unit:clean(item.unit)},values,provided,today);
+    if(resolved.missing.length)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:resolved.missing,proposal:null}});
+    let data;try{data=await verifiedDraft(c,a.tenant,resolved.payload,intent.kind)}catch(e){return c.json(err("INVALID_DRAFT",(e as Error).message),400)}
+    const enabled=await selections(c,a.tenant);
+    const providers=Object.keys(enabled.selected).filter(k=>k!=="MANUAL"&&enabled.selected[k]&&enabled.enabled[k]);
+    const providerKey=providers.length===1?providers[0]:"";
+    c.header("Cache-Control","no-store");
+    return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[],proposal:{kind:intent.kind,providerKey,payload:{...data,partyName:company.name,partyTaxNo:company.tax_no||""},provenance:resolved.provenance,rule:rule?{id:rule.id,version:rule.version}:null,sendAllowed:false}}});
+  });
   const base="/api/e-belge/operator-drafts";
   app.get(base,async c=>{
     const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma veya muhasebe yetkisi doğrulanamadı."),403);
@@ -100,7 +132,7 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     if(!body)return c.json(err("INVALID_BODY","Taslak verisi gerekli."),400);
     const a=await operatorAccess(c,"PATCH",body);if(!a)return c.json(err("FORBIDDEN","Taslak güncelleme yetkisi gerekli."),403);
     if(!await readiness(c))return c.json(err("DRAFT_SCHEMA_REQUIRED","Taslak şeması üretim onayı bekliyor."),503);
-    const id=c.req.param("id"),version=Number(body.version);
+    const id=clean(c.req.param("id")),version=Number(body.version);
     if(!idOk(id)||!Number.isSafeInteger(version)||version<1)return c.json(err("INVALID_VERSION","Geçerli kayıt sürümü gerekli."),400);
     const old=await read(c,a.tenant,id);if(!old)return c.json(err("NOT_FOUND","Taslak bulunamadı."),404);
     if(old.version!==version)return c.json(err("DRAFT_CONFLICT","Taslak değişti. Listeyi yenileyin; eski veri üzerine yazılmadı."),409);

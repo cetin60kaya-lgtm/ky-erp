@@ -24,7 +24,7 @@ export const MODULES = [
     label: "e-Belge Merkezi",
     icon: "e-belge",
     groups: [
-      { label: "Genel", tabs: [["genel-bakis", "Genel Bakış", "dashboard"]] },
+      { label: "Genel", tabs: [["genel-bakis", "Genel Bakış", "dashboard"], ["olustur", "e-Belge Oluştur", "dosya"], ["ai-center", "Akıllı İşlem Merkezi", "dashboard"]] },
       { label: "Fatura İşlemleri", tabs: [["gelen-faturalar", "Gelen Faturalar", "dosya"], ["okunmamis-faturalar", "Okunmamış Faturalar", "dosya"], ["giden-faturalar", "Giden Faturalar", "dosya"], ["fatura-taslaklari", "Fatura Taslakları", "dosya"]] },
       { label: "İrsaliye İşlemleri", tabs: [["gelen-irsaliyeler", "Gelen İrsaliyeler", "dosya"], ["okunmamis-irsaliyeler", "Okunmamış İrsaliyeler", "dosya"], ["giden-irsaliyeler", "Giden İrsaliyeler", "dosya"], ["irsaliye-taslaklari", "İrsaliye Taslakları", "dosya"]] },
       { label: "Belge Yönetimi", tabs: [["belgeleri-al", "Belge Aktarımı", "upload"], ["belge-havuzu", "Belge Havuzu", "upload"], ["eslestirmeler", "Belge Eşleştirme", "file-check"], ["onay-sorunlar", "Belge Kontrol ve Onay", "uyari"], ["is-akislari", "Sevk ve Faturalandırma", "file-check"]] },

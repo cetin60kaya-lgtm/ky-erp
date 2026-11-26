@@ -46,6 +46,7 @@ import InvoiceDispatchControlWorkspace from "./InvoiceDispatchControlWorkspace";
 import IncomingDispatchBillingWorkspace from "./IncomingDispatchBillingWorkspace";
 import "./eBelgeCenter.css";
 import EBelgeDraftWorkspace from "./EBelgeDraftWorkspace";
+import EBelgeSmartWorkspace,{EBelgeCreateHub} from "./EBelgeSmartWorkspace";
 import EBelgeReceiveWorkspace from "./EBelgeReceiveWorkspace";
 
 const today = () => {
@@ -615,7 +616,7 @@ function DetailDrawer({ id, onClose, onChanged, mainCompanySlug, onOpenMailDraft
 }
 
 export default function EBelgeCenterPage({ activeMainCompany, initialView = "overview", openModule, moduleActionContext }) {
-  const allowedViews = ["overview", "incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts"];
+  const allowedViews = ["overview", "incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "workflow", "archive", "integrations", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "create-hub", "smart-center"];
   const view = allowedViews.includes(initialView) ? initialView : "overview";
   const poolViews = useMemo(() => ["incoming", "outgoing", ...Object.keys(FOUR_DOCUMENT_FILTERS), "pool", "matching", "issues", "archive"], []);
   const [pool, setPool] = useState({ items: [], stats: {}, total: 0 });
@@ -741,7 +742,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
-    if (["workflow", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts"].includes(view)) return;
+    if (["workflow", "visual-templates", "receive", "invoice-drafts", "dispatch-drafts", "create-hub", "smart-center"].includes(view)) return;
     setBusy(true);
     setError("");
     try {
@@ -848,6 +849,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const summary = dashboard.summary || {};
   const providers = [...(integrations.mainCompanySlug===mainCompanySlug?(integrations.providers || []):[])].sort((a, b) => String(a.label || a.key || "").localeCompare(String(b.label || b.key || ""), "tr"));
   const viewMeta = {
+    "create-hub": ["e-Belge Oluştur", "Tek editör · kaynak belge · firma ve sağlayıcı yeteneği."],
+    "smart-center": ["Akıllı İşlem Merkezi", "Komuttan taslağa · kayıtlı bilgiler ve istisnalar."],
     receive: ["Belge Aktarımı", "Entegrasyon kaynaklarından belge aktarın veya orijinal XML/PDF dosyalarını Belge Havuzu üzerinden yükleyin."],
     "invoice-drafts": ["Fatura Taslakları", "Tek veri girişi · kaydet · kontrol et. Resmî gönderim ayrı kabul gerektirir."],
     "dispatch-drafts": ["İrsaliye Taslakları", "Sevk kalemleri ve teslim bilgilerini hazırlayın."],
@@ -911,6 +914,8 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         {(view === "overview" || view === "outgoing-invoices") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("fatura-taslaklari")}>+ Yeni Fatura</button>}
         {(view === "overview" || view === "outgoing-dispatches") && <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("irsaliye-taslaklari")}>+ Yeni İrsaliye</button>}
         {view === "overview" && <>
+          <button type="button" className="eb-primary" onClick={()=>openEBelgeTab("olustur")}>e-Belge Oluştur</button>
+          <button type="button" onClick={()=>openEBelgeTab("ai-center")}>Akıllı İşlem Merkezi</button>
           <button type="button" onClick={() => openEBelgeTab("belge-havuzu")}><Upload size={17} /> Belge Yükle</button>
           <button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile VKN, belge kimliği ve tarih doğrulanan eksik carileri aç/eşleştir; kesin muhasebeleştirme yapma">
             {companyBatchBusy?<LoaderCircle size={17} className="eb-spin" />:<Link2 size={17} />} {companyBatchBusy?"Cari Eşleşiyor...":"XML'den Carileri Eşleştir"}
@@ -940,7 +945,10 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view==="integrations"&&integrationError&&<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{integrationError}</span></div>}
     {notice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Kontrol tamamlandı</strong><span>{notice}</span></div></div>}
 
+    {view === "create-hub" && <EBelgeCreateHub openModule={openModule}/>}
+    {view === "smart-center" && <EBelgeSmartWorkspace key={mainCompanySlug+":smart"} activeMainCompany={activeMainCompany} openModule={openModule}/>}
     {view === "overview" && <>
+      <EBelgeSmartWorkspace compact key={mainCompanySlug+":quick"} activeMainCompany={activeMainCompany} openModule={openModule}/>
       <div className="eb-stats eb-dashboard-stats">
         <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
         <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />

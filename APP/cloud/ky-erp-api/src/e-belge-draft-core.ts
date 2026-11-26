@@ -33,7 +33,7 @@ export function normalizeDraft(value:unknown,kind:DraftKind) {
     const rate=invoice?digits(raw.vatRate,2,3):0n;
     const discount=invoice?digits(raw.discountRate??"0",2,3):0n;
     if(rate>10000n||discount>10000n)throw new Error("Yüzde 0–100 aralığında olmalı.");
-    if(freeKind&&price!==0n)throw new Error("Bedelsiz kalemde fiyat sıfır olmalı.");
+    if(freeKind&&(price!==0n||rate!==0n||discount!==0n))throw new Error("Bedelsiz kalemde fiyat, KDV ve iskonto sıfır olmalı.");
     const gross=round(quantity*price,100000n);
     const lineNet=gross-round(gross*discount,10000n);
     const lineVat=round(lineNet*rate,10000n);
@@ -44,6 +44,7 @@ export function normalizeDraft(value:unknown,kind:DraftKind) {
   });
   const deliveryAddress=clean(x.deliveryAddress,500),driver=clean(x.driver,160),plate=clean(x.plate,32),carrier=clean(x.carrier,160),dispatchDate=invoice?"":date(x.dispatchDate),dispatchTime=invoice?"":clean(x.dispatchTime,5);
   if(!invoice&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dispatchTime)||!deliveryAddress))throw new Error("Sevk saati ve teslim adresi gerekli.");
+  if(!invoice&&dispatchDate<issueDate)throw new Error("Fiili sevk tarihi belge tarihinden önce olamaz.");
   const warnings:string[]=[];
   if(invoice&&lines.some((l:typeof lines[number])=>l.freeKind))warnings.push("Bedelsiz kalemlerin vergi/istisna kabulü ayrı doğrulanmalıdır.");
   if(invoice&&lines.some((l:typeof lines[number])=>l.vatRate==="0.00"&&!l.freeKind))warnings.push("Sıfır KDV için yasal dayanak doğrulanmalıdır.");

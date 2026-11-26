@@ -25,3 +25,13 @@ CREATE TABLE IF NOT EXISTS accounting_document_read_state (
   read_at TEXT NOT NULL,
   PRIMARY KEY(main_company_slug,user_id,document_id)
 );
+
+-- REV3 approved versioned defaults. No default rows seeded; management/approval is a separate gate.
+CREATE TABLE IF NOT EXISTS ebelge_command_defaults (
+ id TEXT NOT NULL, main_company_slug TEXT NOT NULL, party_company_id TEXT NOT NULL,
+ catalog_id TEXT NOT NULL, kind TEXT NOT NULL CHECK(kind IN ('INVOICE','DISPATCH')),
+ version INTEGER NOT NULL CHECK(version>0), valid_from TEXT NOT NULL, valid_until TEXT NOT NULL,
+ payload TEXT NOT NULL CHECK(json_valid(payload)), approved_by TEXT NOT NULL,
+ CHECK(valid_from<=valid_until), PRIMARY KEY(main_company_slug,id,version)
+);
+CREATE INDEX IF NOT EXISTS idx_ebelge_command_defaults ON ebelge_command_defaults(main_company_slug,party_company_id,catalog_id,kind,valid_from,valid_until);

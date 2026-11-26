@@ -26,3 +26,5 @@ test("e-Belge kurumsal menü adları iki kayıt katmanında ve çalışma ekran�
  }
  assert.doesNotMatch(center,/> Belgeleri Al<\/button>/);
 });
+
+test("REV3 quick command and create hub use canonical routes, never provider send",()=>{const app=read("../../../AppV3.jsx"),nav=read("../../../app/moduleRegistry.js"),center=read("./EBelgeCenterPage.jsx"),smart=read("./EBelgeSmartWorkspace.jsx");for(const k of ["olustur","ai-center"]){assert.ok(app.includes(k));assert.ok(nav.includes(k));assert.ok(center.includes(k))}assert.match(smart,/operator-command\/prepare/);assert.match(smart,/operator-drafts/);assert.doesNotMatch(smart,/SendInvoice|SendDespatch|\/send\b/);});

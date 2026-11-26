@@ -312,6 +312,8 @@ export default function AppV3() {
 
     const eBelgeView = {
       "genel-bakis": "overview",
+      "olustur": "create-hub",
+      "ai-center": "smart-center",
       "gelen-belgeler": "incoming",
       "giden-belgeler": "outgoing",
       "gelen-faturalar": "incoming-invoices",
