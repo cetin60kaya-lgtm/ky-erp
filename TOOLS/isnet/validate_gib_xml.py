@@ -6,7 +6,7 @@ import hashlib
 import json
 import sys
 import tempfile
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 from lxml import etree
 
@@ -14,6 +14,13 @@ UBL_HASH = 'cb583941b8a8a239c59902c6bc455c0f75d48f2bb81d7d3fbe1ae827f981f7db'
 GIB_HASH = 'e0fd9136cadbb79bd29f286c7ff80c6f2202ce1a0354338d0bf0739dd88dc29e'
 NS = 'urn:oasis:names:specification:ubl:schema:xsd:'
 SVRL = 'http://purl.oclc.org/dsdl/svrl'
+# ISO Schematron source revision 77dcd36c53d12ed786c144ece3b2af7694abdc56.
+COMPILER_HASHES = {
+    'iso_abstract_expand.xsl': 'c5267f124abf23eeb6669884e40a98607c055bfaa1f39e73b7d578feceeb6e46',
+    'iso_dsdl_include.xsl': '43ff20a1afd89d8a744d1c0b8df94ac5559ffa6a820d1ffbf508d6431ee4fdd9',
+    'iso_schematron_skeleton_for_saxon.xsl': '95f3195d9f437ea8ff5f75d1a27f4e68ae20b236fe0d4a217bb4209f498a10a3',
+    'iso_svrl_for_xslt2.xsl': '0588d617924a0686255f6d182633d434c7986d561be8fcc3b363907d3f671b26',
+}
 
 def sha(b):
     return hashlib.sha256(b).hexdigest()
@@ -28,7 +35,7 @@ def extract_package(source, expected, prefix, root, suffixes):
         for entry in z.infolist():
             if not entry.filename.startswith(prefix) or entry.is_dir():
                 continue
-            rel = Path(entry.filename[len(prefix):])
+            rel = PurePosixPath(entry.filename[len(prefix):])
             if rel.is_absolute() or '..' in rel.parts or '\\' in str(rel):
                 raise ValueError('PACKAGE_PATH_INVALID')
             if rel.suffix not in suffixes:
@@ -66,11 +73,16 @@ def validate(xml, ubl, gib, compiler=None, mode='efatura'):
                 from saxonche import PySaxonProcessor
                 # Trusted local ISO Schematron XSLT2 distribution; never taken from document input.
                 stages = ('iso_dsdl_include.xsl', 'iso_abstract_expand.xsl', 'iso_svrl_for_xslt2.xsl')
-                if not all((compiler / n).is_file() for n in stages):
+                if not all((compiler / n).is_file() for n in COMPILER_HASHES):
                     return dict(result, error='SCHEMATRON_COMPILER_REQUIRED')
+                if any(sha((compiler / n).read_bytes()) != expected for n, expected in COMPILER_HASHES.items()):
+                    return dict(result, error='SCHEMATRON_COMPILER_HASH_MISMATCH')
                 source = root/'sch/UBL-TR_Main_Schematron.xml'
                 main = etree.parse(str(source), parser())
                 main.getroot().set('queryBinding', 'xslt2')
+                # GIB's unquoted mode token must be an XPath string literal.
+                for let in main.xpath('/*/*[local-name()="let" and @name="type"]'):
+                    let.set('value', "'"+mode+"'")
                 main.write(str(source), encoding='UTF-8', xml_declaration=True)
                 xml_path = root/'document.xml'
                 xml_path.write_bytes(xml)
@@ -97,7 +109,8 @@ def validate(xml, ubl, gib, compiler=None, mode='efatura'):
                     return dict(result, error='SCHEMATRON_NO_DOCUMENT_RULES')
                 result.update(schematronRuleFirings=len(fired), schematronFailureCount=len(fails))
                 if fails:
-                    return dict(result, error='SCHEMATRON_INVALID')
+                    # Do not log assert text, values or private source XML.
+                    return dict(result, error='SCHEMATRON_INVALID', failureRuleIds=[sha((f.get('test') or '').encode('utf-8'))[:16] for f in fails])
                 # Local validation is not provider authorization or acceptance.
                 return dict(result, schematronVerified=True, localValidationPassed=True)
             except (ImportError, ModuleNotFoundError):
