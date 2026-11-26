@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS accounting_document_drafts (
   provider_key TEXT,
   party_company_id TEXT NOT NULL,
   payload TEXT NOT NULL CHECK(json_valid(payload)),
+  creation_context TEXT NOT NULL DEFAULT '{}' CHECK(json_valid(creation_context)),
   version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
   state TEXT NOT NULL DEFAULT 'DRAFT' CHECK(state IN ('DRAFT','CHECKED')),
   created_by TEXT NOT NULL,

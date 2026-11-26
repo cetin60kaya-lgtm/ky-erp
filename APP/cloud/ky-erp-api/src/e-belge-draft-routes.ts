@@ -3,7 +3,7 @@ import {getAuthenticatedUser} from "./auth-cloud";
 import {accountingAccess,accountingTenantReadAllowed} from "./accounting-access-policy";
 import {selections} from "./e-belge-adapter-company-routes";
 import {searchRegisteredItems,resolveRegisteredItemIds} from "./isnet-registered-items";
-import {parseDirectCommand,resolveDirectFields} from "./e-belge-command-core";
+import {parseDirectCommand,resolveDirectFields,storedWorkflowFields} from "./e-belge-command-core";
 import {normalizeDraft,type DraftKind} from "./e-belge-draft-core";
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
@@ -17,8 +17,8 @@ export async function operatorAccess(c:Context<Env>,method:string,body:Row={}){
   if(tenants.length!==1||!user?.id||!accountingTenantReadAllowed(user,tenants[0])||!accountingAccess(user,method,c.req.path))return null;
   return {tenant:tenants[0],userId:clean(user.id)};
 }
-const select="id,kind,provider_key,party_company_id,payload,version,state,created_at,updated_at";
-const unpack=(row:Row):Row=>({...row,payload:JSON.parse(row.payload)});
+const select="id,kind,provider_key,party_company_id,payload,version,state,created_at,updated_at,creation_context";
+const unpack=(row:Row):Row=>({...row,payload:JSON.parse(row.payload),creation_context:JSON.parse(row.creation_context||"{}")});
 async function read(c:Context<Env>,tenant:string,id:string){
   const row=await c.env.DB.prepare("SELECT "+select+" FROM accounting_document_drafts WHERE main_company_slug=? AND id=?").bind(tenant,id).first<Row>();
   return row?unpack(row):null;
@@ -37,6 +37,13 @@ async function verifiedDraft(c:Context<Env>,tenant:string,value:unknown,kind:Dra
   const byId=new Map(registered.map(x=>[x.id,x]));
   for(const line of data.lines){if(line.catalogId&&byId.get(line.catalogId)?.description!==line.description)throw Error("Katalog kalemi değişmiş. Kalemi yeniden seçin.");}
   return data;
+}
+async function persistNewDraft(c:Context<Env>,a:{tenant:string;userId:string},id:string,kind:DraftKind,provider:string,data:Row,company:Row,context:Row={}){
+ const payload=JSON.stringify({...data,partyName:company.name,partyTaxNo:company.tax_no||""}),now=new Date().toISOString(),audit=JSON.stringify(context);
+ const result=await c.env.DB.prepare("INSERT INTO accounting_document_drafts(id,main_company_slug,kind,provider_key,party_company_id,payload,version,state,created_by,updated_by,created_at,updated_at,creation_context) VALUES(?,?,?,?,?,?,1,'DRAFT',?,?,?,?,?) ON CONFLICT(main_company_slug,id) DO NOTHING").bind(id,a.tenant,kind,provider||null,data.partyId,payload,a.userId,a.userId,now,now,audit).run();
+ const saved=await read(c,a.tenant,id);
+ if(!saved||(!result.meta.changes&&(saved.kind!==kind||saved.provider_key!==(provider||null)||JSON.stringify(saved.payload)!==payload||JSON.stringify(saved.creation_context)!==audit||saved.version!==1)))return null;
+ return saved;
 }
 export async function operatorReadReady(c:Context<Env>){
  return Boolean(await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='accounting_document_read_state'").first());
@@ -84,7 +91,12 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     const defaultsReady=await c.env.DB.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='ebelge_command_defaults'").first();
     const defaults=defaultsReady?(await c.env.DB.prepare("SELECT id,version,payload FROM ebelge_command_defaults WHERE main_company_slug=? AND party_company_id=? AND catalog_id=? AND kind=? AND approved_by<>'' AND valid_from<=? AND valid_until>=? ORDER BY version DESC LIMIT 2").bind(a.tenant,company.id,item.id,intent.kind,today,today).all<Row>()).results||[]:[];
     if(defaults.length>1)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[{field:"defaults",question:"Çakışan aktif varsayılan kayıtları var; yönetici kontrolü gerekli."}],proposal:null}});
-    const rule=defaults[0],values=rule?JSON.parse(rule.payload):{};
+    const rule=defaults[0];
+    const profileKey="workflow-defaults:"+a.tenant;
+    const profileRow=await c.env.DB.prepare("SELECT data FROM json_store WHERE id=? AND scope='ISNET_BUSINESS_SETTINGS' AND main_company_slug=? AND file_name=?").bind(profileKey,a.tenant,profileKey).first<Row>();
+    const workflow=storedWorkflowFields(profileRow?JSON.parse(profileRow.data):{},clean(company.id));
+    if(workflow.conflict)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[{field:"defaults",question:"Birden fazla etkin cari/firma iş akışı profili var. Ayarları kontrol edin."}],proposal:null}});
+    const values={...workflow.fields,...(rule?JSON.parse(rule.payload):{})};
     const provided=body.answers&&typeof body.answers==="object"?body.answers:{};
     const resolved=resolveDirectFields(intent,{partyId:clean(company.id),description:clean(item.description),catalogId:item.id,unit:clean(item.unit)},values,provided,today);
     if(resolved.missing.length)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:resolved.missing,proposal:null}});
@@ -93,7 +105,14 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     const providers=Object.keys(enabled.selected).filter(k=>k!=="MANUAL"&&enabled.selected[k]&&enabled.enabled[k]);
     const providerKey=providers.length===1?providers[0]:"";
     c.header("Cache-Control","no-store");
-    return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[],proposal:{kind:intent.kind,providerKey,payload:{...data,partyName:company.name,partyTaxNo:company.tax_no||""},provenance:resolved.provenance,rule:rule?{id:rule.id,version:rule.version}:null,sendAllowed:false}}});
+    const proposal={kind:intent.kind,providerKey,payload:{...data,partyName:company.name,partyTaxNo:company.tax_no||""},provenance:resolved.provenance,rule:rule?{id:rule.id,version:rule.version}:null,workflowProfile:workflow.source,sendAllowed:false};
+    if(body.saveDraft!==true)return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[],proposal}});
+    const id=clean(body.id);if(!idOk(id))return c.json(err("INVALID_DRAFT","İşlem kimliği geçersiz."),400);
+    if(!await readiness(c))return c.json(err("DRAFT_SCHEMA_REQUIRED","Taslak şeması üretim onayı bekliyor."),503);
+    const commandHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(clean(body.command)))),n=>n.toString(16).padStart(2,"0")).join("");
+    const saved=await persistNewDraft(c,a,id,intent.kind,providerKey,data,company,{source:"REV3_COMMAND",commandHash,provenance:resolved.provenance,rule:proposal.rule,workflowProfile:workflow.source,sendAllowed:false});
+    if(!saved)return c.json(err("DRAFT_CONFLICT","İşlem kimliği kayıtlı veya varsayılanlar değişti. Taslak listesini kontrol edin."),409);
+    return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[],proposal,draft:saved}},201);
   });
   const base="/api/e-belge/operator-drafts";
   app.get(base,async c=>{
@@ -121,10 +140,8 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
       const enabled=await selections(c,a.tenant);
       if(provider==="MANUAL"||!enabled.selected[provider]||!enabled.enabled[provider])return c.json(err("INVALID_PROVIDER","Seçili sağlayıcı firma için etkin değil."),400);
     }
-    const payload=JSON.stringify({...data,partyName:company.name,partyTaxNo:company.tax_no||""}),now=new Date().toISOString();
-    const result=await c.env.DB.prepare("INSERT INTO accounting_document_drafts(id,main_company_slug,kind,provider_key,party_company_id,payload,version,state,created_by,updated_by,created_at,updated_at) VALUES(?,?,?,?,?,?,1,'DRAFT',?,?,?,?) ON CONFLICT(main_company_slug,id) DO NOTHING").bind(id,a.tenant,kind,provider||null,data.partyId,payload,a.userId,a.userId,now,now).run();
-    const saved=await read(c,a.tenant,id);
-    if(!saved||(!result.meta.changes&&(saved.kind!==kind||saved.provider_key!==(provider||null)||JSON.stringify(saved.payload)!==payload||saved.version!==1)))return c.json(err("DRAFT_CONFLICT","Taslak kimliği kayıtlı. Listeyi yenileyin."),409);
+    const saved=await persistNewDraft(c,a,id,kind,provider,data,company);
+    if(!saved)return c.json(err("DRAFT_CONFLICT","Taslak kimliği kayıtlı. Listeyi yenileyin."),409);
     return c.json({ok:true,data:{mainCompanySlug:a.tenant,draft:saved}},201);
   });
   app.patch(base+"/:id",async c=>{

@@ -14,14 +14,12 @@ export default function EBelgeSmartWorkspace({activeMainCompany,openModule,compa
   lock.current=true;setBusy(true);setError("");setProposal(null);
   const key=id||crypto.randomUUID();setId(key);
   try{
-   const r=unwrap(await apiPost("/e-belge/operator-command/prepare",{mainCompanySlug:slug,command,answers}));
+   const r=unwrap(await apiPost("/e-belge/operator-command/prepare",{mainCompanySlug:slug,command,answers,saveDraft:save,id:key}));
    if(!scope(r)||!Array.isArray(r.missing))throw Error("Firma kapsamı doğrulanamadı.");
    setMissing(r.missing);setProposal(r.proposal);
    if(!r.proposal||r.missing.length||!save)return;
-   const p=r.proposal;
-   const result=unwrap(await apiPost("/e-belge/operator-drafts",{mainCompanySlug:slug,kind:p.kind,id:key,providerKey:p.providerKey,payload:p.payload}));
-   if(!scope(result)||result.draft?.id!==key)throw Error("Kayıt sonucu doğrulanamadı; taslak listesini kontrol edin.");
-   setSaved(result.draft);
+   if(r.draft?.id!==key||!r.draft?.payload)throw Error("Kayıt sonucu doğrulanamadı; taslak listesini kontrol edin.");
+   setSaved(r.draft);
   }catch(e){setError(e.message||"İşlem tamamlanamadı.")}finally{lock.current=false;setBusy(false)}
  }
  return <section className="ebo-workspace ebo-rev3-smart">
@@ -29,7 +27,7 @@ export default function EBelgeSmartWorkspace({activeMainCompany,openModule,compa
   <div className="ebo-command"><input aria-label="İşlem komutu" disabled={busy||Boolean(saved)} value={command} onChange={e=>change(e.target.value)} placeholder="Cari için Model 100 adet 10 TL’den doğrudan fatura oluştur" onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void run(false)}}}/><button type="button" disabled={busy||!command.trim()||Boolean(saved)} onClick={()=>void run(false)}>İşlemi Hazırla</button><button type="button" disabled={busy||!command.trim()||Boolean(saved)} onClick={()=>void run(true)}>Hazırla ve Taslağa Kaydet</button></div>
   {error&&<p role="alert" className="ebo-error">{error}</p>}
   {missing.length>0&&<div className="ebo-grid">{missing.map(x=><label key={x.field}>{x.question}{!["party","item","unit","defaults"].includes(x.field)&&<input disabled={busy} value={answers[x.field]||""} onChange={e=>{setAnswers(a=>({...a,[x.field]:e.target.value}));setProposal(null)}}/>}</label>)}</div>}
-  {proposal&&<div className="ebo-rev3-proposal"><strong>{proposal.payload.partyName} · {proposal.kind==="INVOICE"?"Fatura":"İrsaliye"}</strong><p>{proposal.payload.lines.map(l=>l.description+" · "+l.quantity+" "+l.unit).join(", ")}</p>{proposal.kind==="INVOICE"&&<p>Toplam: {proposal.payload.total} {proposal.payload.currency}</p>}<details><summary>Bilgi kaynakları ve kontrol uyarıları</summary>{Object.entries(proposal.provenance).map(([k,v])=><p key={k}>{k}: {v}</p>)}{proposal.payload.warnings.map(v=><p key={v}>{v}</p>)}</details></div>}
+  {proposal&&<div className="ebo-rev3-proposal"><strong>{proposal.payload.partyName} · {proposal.kind==="INVOICE"?"Fatura":"İrsaliye"}</strong><p>{proposal.payload.lines.map(l=>l.description+" · "+l.quantity+" "+l.unit).join(", ")}</p>{proposal.kind==="INVOICE"&&<p>Toplam: {proposal.payload.total} {proposal.payload.currency}</p>}<details><summary>Bilgi kaynakları ve kontrol uyarıları</summary>{Object.entries(proposal.provenance).map(([k,v])=><p key={k}>{k}: {v}</p>)}{proposal.workflowProfile&&<p>İş akışı profili · {proposal.workflowProfile.version}</p>}{proposal.payload.warnings.map(v=><p key={v}>{v}</p>)}</details></div>}
   {saved&&<p role="status">Taslak kaydedildi. <button type="button" onClick={()=>nav(saved.kind==="INVOICE"?"fatura-taslaklari":"irsaliye-taslaklari")}>Taslak Listesini Aç</button> <button type="button" onClick={()=>change("")}>Yeni Komut</button></p>}
   {!compact&&<p>Kaynak irsaliyeye bağlı işlem için <button type="button" onClick={()=>nav("is-akislari")}>Sevk ve Faturalandırma</button> kullanın. Komutla atomik kaynak rezervasyonu henüz doğrulanmadı.</p>}
  </section>;
