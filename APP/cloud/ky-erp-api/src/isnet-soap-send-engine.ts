@@ -45,7 +45,7 @@ export async function submitVerifiedSoapTest({profile,draft,approval,binding,val
  const actualHash=Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",bytes)),n=>n.toString(16).padStart(2,"0")).join("");
  if(actualHash!==draft.contentSha256.toLowerCase())throw Error("UBL_HASH_MISMATCH");
  const exact=verifiedTestSendBinding(draft.kind);
- if(fetcher===fetch){
+ if(fetcher===fetch||binding.contractHash===ISNET_SEND_WSDL_SHA256){
   if(binding.contractHash!==ISNET_SEND_WSDL_SHA256||parseResult)throw Error("SOAP_REAL_SEND_REQUIRES_PINNED_PARSER");
   await requireVerifiedTestUblIdentity({bytes,kind:draft.kind,tenant:draft.tenant,ettn:draft.ettn,senderHash:profile.testCompanyTaxSha256,receiverTag:validatedXml.receiverTag,evidence:validatedXml.providerTagEvidence,now:Date.now()});
  }
