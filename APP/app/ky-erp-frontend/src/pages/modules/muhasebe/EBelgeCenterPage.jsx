@@ -1,4 +1,5 @@
 import {apiPatch} from "../../../utils/api";
+import {canonicalCompanySlug} from "../../../utils/companyIdentity";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
@@ -624,7 +625,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [sortBy, setSortBy] = useState("DATE");
   const [sortDirection, setSortDirection] = useState("DESC");
   const poolRequestSeq = useRef(0);
-  const [dashboard, setDashboard] = useState({ summary: {}, recent: [] });
+  const [dashboard, setDashboard] = useState({ summary: {}, recent: [], verified: false });
   const [integrations, setIntegrations] = useState({ mainCompanySlug:"", providers: [], archive: [], fileHub: [] });
   const integrationRequestSeq = useRef(0);
   const [integrationError,setIntegrationError]=useState("");
@@ -651,7 +652,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const [archiveType, setArchiveType] = useState("ALL");
   const [archiveSelectedIds, setArchiveSelectedIds] = useState([]);
   const [archiveQueue, setArchiveQueue] = useState({ items: [], index: 0 });
-  const mainCompanySlug=activeMainCompany?.slug||activeMainCompany?.id||"";
+  const mainCompanySlug=canonicalCompanySlug(activeMainCompany);
 
   const effectiveFilter=FOUR_DOCUMENT_FILTERS[view]||(
    view==="matching"?"MATCHING_WAIT":view==="issues"?"ISSUE":view==="archive"?archiveType:view==="pool"?filter:"ALL");
@@ -708,9 +709,17 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const dashboardRequestSeq = useRef(0);
   const loadDashboard = useCallback(async () => {
     const seq = ++dashboardRequestSeq.current;
-    const data = await getEBelgeDashboard({ mainCompanySlug, today: today(), monthStart: monthStart() });
-    if (seq !== dashboardRequestSeq.current) return;
-    setDashboard(data || { summary: {}, recent: [] });
+    try {
+      const data = await getEBelgeDashboard({ mainCompanySlug, today: today(), monthStart: monthStart() });
+      if (seq !== dashboardRequestSeq.current) return;
+      if(!data?.summary || !Array.isArray(data.recent))throw new Error("Belge özeti doğrulanamadı.");
+      if(data.mainCompanySlug && canonicalCompanySlug(data.mainCompanySlug)!==mainCompanySlug)throw new Error("Belge özeti firma kapsamı uyuşmuyor.");
+      setDashboard({...data,verified:true});
+    } catch(e) {
+      if(seq!==dashboardRequestSeq.current)return;
+      setDashboard({summary:{},recent:[],verified:false});
+      throw e;
+    }
   }, [mainCompanySlug]);
 
   const loadIntegrations = useCallback(async () => {
@@ -733,7 +742,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
   const refreshCurrent = useCallback(async () => {
     if (!activeMainCompany?.slug && !activeMainCompany?.id) {
       setPool({ items: [], stats: {}, total: 0 });
-      setDashboard({ summary: {}, recent: [] });
+      setDashboard({ summary: {}, recent: [], verified: false });
       setIntegrations({ providers: [], archive: [], fileHub: [] });
       setError("e-Belge için ana firma seçin.");
       return;
@@ -750,7 +759,9 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       else if (poolViews.includes(view)) await loadPool();
       else if (view === "integrations") await loadIntegrations();
     } catch (e) {
-      setError(e?.message || "e-Belge verileri yüklenemedi.");
+      const requestId=e?.payload?.error?.requestId||e?.payload?.error?.details?.requestId||"";
+      const errorCode=e?.payload?.error?.code||e?.code||"";
+      setError((e?.message || "e-Belge verileri yüklenemedi.")+(errorCode?" · "+errorCode:"")+(requestId?" · İstek: "+requestId:""));
     } finally {
       setBusy(false);
     }
@@ -767,7 +778,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     integrationRequestSeq.current += 1;
     setIntegrationError("");
     setPool({ items: [], stats: {}, total: 0 });
-    setDashboard({ summary: {}, recent: [] });
+    setDashboard({ summary: {}, recent: [], verified: false });
     setIntegrations({ providers: [], archive: [], fileHub: [] });
     setSelectedId("");
     setPrintStatuses({});setPrintStatusError("");setOnlyPrintPending(false);
@@ -941,7 +952,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       </div>
     </div>}
 
-    {error && <div className="eb-error"><AlertTriangle size={18} />{error}</div>}
+    {error && <div className="eb-error" role="alert"><AlertTriangle size={18} /><span>{error}</span><button type="button" disabled={busy} onClick={()=>void refreshCurrent()}>Tekrar Dene</button></div>}
     {view==="integrations"&&integrationError&&<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{integrationError}</span></div>}
     {notice && <div className="eb-overview-note"><CheckCircle2 size={18} /><div><strong>Kontrol tamamlandı</strong><span>{notice}</span></div></div>}
 
@@ -949,6 +960,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "smart-center" && <EBelgeSmartWorkspace key={mainCompanySlug+":smart"} activeMainCompany={activeMainCompany} openModule={openModule}/>}
     {view === "overview" && <>
       <EBelgeSmartWorkspace compact key={mainCompanySlug+":quick"} activeMainCompany={activeMainCompany} openModule={openModule}/>
+      {!dashboard.verified?<div className="eb-overview-note" role="status"><AlertTriangle size={18}/><span>{busy?"Belge özeti doğrulanıyor…":"Belge özeti okunamadı. Kayıt sayıları ve tutarlar doğrulanana kadar gösterilmiyor."}</span></div>:<>
       <div className="eb-stats eb-dashboard-stats">
         <StatCard label="Bugün Toplam" value={summary.todayTotal} hint="Bugün sisteme alınan" />
         <StatCard label="Bugün Gelen" value={summary.todayIncoming} hint="Alıcı olduğumuz belgeler" />
@@ -967,6 +979,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           {dashboard.recent.map((row) => <button type="button" className="eb-tr" key={row.id} onClick={() => setSelectedId(row.id)}><span data-label="Belge"><strong>{row.document_no || "Belge No Yok"}</strong><small>{typeLabel(row.document_type)}</small></span><span data-label="Cari"><strong>{row.party_name || "Cari eşleşmesi bekliyor"}</strong><small>{row.direction === "OUTGOING" ? "Giden" : "Gelen"}</small></span><span data-label="Tarih">{dateText(row.issue_date)}</span><span data-label="Kaynak / Çıktı"><small>{sourceLabel(row.source_type)}</small></span><span data-label="Toplam"><strong>{money(row.payable_total, row.currency)}</strong><small>{row.currency || "TRY"}</small></span><span data-label="Kontrol" className={`eb-chip ${Number(row.issue_count || 0) > 0 ? "review_required" : "ready"}`}>{Number(row.issue_count || 0) > 0 ? `${row.issue_count} kontrol` : statusLabel(row.status)}</span></button>)}
         </div></div> : <Empty title="Henüz belge yok" text="Belge Havuzu'ndan ilk dosyaları yükleyin." />}
       </section>
+      </>}
     </>}
 
     {view === "pool" && <>

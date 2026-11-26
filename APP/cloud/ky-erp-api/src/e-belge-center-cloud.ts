@@ -695,13 +695,16 @@ function poolFilter(filter:string){const f=upper(filter);if(f==="INCOMING_INVOIC
 export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
   registerEBelgeDraftRoutes(app);
   app.get("/api/e-belge/dashboard",async c=>{
-    const slug=slugOf(c);
+    const slug=slugOf(c).toLowerCase();
+    if(!slug)return c.json(error("MAIN_COMPANY_REQUIRED","Ana firma seçimi gerekli."),400);
     const todayValue=text(c.req.query("today"))||new Date().toLocaleDateString("sv-SE",{timeZone:"Europe/Istanbul"});
     const monthStart=text(c.req.query("monthStart"))||`${todayValue.slice(0,8)}01`;
     if(!validDate(todayValue)||!validDate(monthStart)||monthStart.slice(0,7)!==todayValue.slice(0,7))return c.json(error("INVALID_DASHBOARD_PERIOD","Bugün ve ay başlangıcı aynı geçerli ayda olmalıdır."),400);
     const monthDate=new Date(`${monthStart}T00:00:00Z`);
     const previousMonthStart=new Date(Date.UTC(monthDate.getUTCFullYear(),monthDate.getUTCMonth()-1,1)).toISOString().slice(0,10);
     const previousMonthEnd=new Date(Date.UTC(monthDate.getUTCFullYear(),monthDate.getUTCMonth(),0)).toISOString().slice(0,10);
+    let stage="SUMMARY";
+    try {
     const summary=await c.env.DB.prepare(`SELECT COUNT(*) total,
       SUM(CASE WHEN date(created_at,'+3 hours')=? THEN 1 ELSE 0 END) todayTotal,
       SUM(CASE WHEN date(created_at,'+3 hours')=? AND direction='INCOMING' THEN 1 ELSE 0 END) todayIncoming,
@@ -718,10 +721,19 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
       SUM(CASE WHEN date(COALESCE(issue_date,created_at)) BETWEEN ? AND ? AND direction='OUTGOING' THEN COALESCE(payable_total,0) ELSE 0 END) previousMonthOutgoingAmount
       FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL`)
       .bind(todayValue,todayValue,todayValue,monthStart,todayValue,monthStart,todayValue,monthStart,todayValue,monthStart,todayValue,monthStart,todayValue,previousMonthStart,previousMonthEnd,previousMonthStart,previousMonthEnd,previousMonthStart,previousMonthEnd,previousMonthStart,previousMonthEnd,previousMonthStart,previousMonthEnd,slug).first<Row>();
+    stage="ATTENTION";
     const attention=await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')`).bind(slug).first<Row>();
+    stage="MATCHING";
     const matching=await c.env.DB.prepare(`SELECT COUNT(DISTINCT i.document_id) n FROM accounting_document_issues i JOIN accounting_documents d ON d.id=i.document_id AND d.main_company_slug=i.main_company_slug WHERE i.main_company_slug=? AND d.deleted_at IS NULL AND i.is_resolved=0 AND i.issue_code LIKE 'DISPATCH_%'`).bind(slug).first<Row>();
+    stage="RECENT";
     const recent=await c.env.DB.prepare(`SELECT d.id,d.document_no,d.document_type,d.direction,d.party_name,d.issue_date,d.payable_total,d.currency,d.status,d.source_type,d.created_at,(SELECT COUNT(*) FROM accounting_document_issues i WHERE i.main_company_slug=d.main_company_slug AND i.document_id=d.id AND i.is_resolved=0 AND UPPER(COALESCE(i.severity,'')) IN ('WARNING','ERROR')) issue_count FROM accounting_documents d WHERE d.main_company_slug=? AND d.deleted_at IS NULL ORDER BY d.created_at DESC LIMIT 10`).bind(slug).all<Row>();
-    return c.json({ok:true,data:{today:todayValue,monthStart,previousMonthStart,previousMonthEnd,summary:{...summary,attention:numberValue(attention?.n),matchingWait:numberValue(matching?.n)},recent:recent.results||[]}});
+    c.header("Cache-Control","no-store");
+    return c.json({ok:true,data:{mainCompanySlug:slug,today:todayValue,monthStart,previousMonthStart,previousMonthEnd,summary:{...summary,attention:numberValue(attention?.n),matchingWait:numberValue(matching?.n)},recent:recent.results||[]}});
+    }catch(e){
+      const requestId=c.get("requestId")||crypto.randomUUID();
+      console.error(JSON.stringify({code:"EBELGE_DASHBOARD_READ_FAILED",stage,requestId,message:e instanceof Error?e.message:String(e)}));
+      return c.json({ok:false,error:{code:"EBELGE_DASHBOARD_READ_FAILED",message:"Belge özeti okunamadı ("+stage+"). Veriler değiştirilmedi.",requestId}},503);
+    }
   });
   app.get("/api/e-belge/pool",async c=>{const slug=slugOf(c),page=safePageInt(c.req.query("page"),1,1000000),pageSize=safePageInt(c.req.query("pageSize"),50,100),q=text(c.req.query("q")),from=text(c.req.query("from")),to=text(c.req.query("to")),status=upper(c.req.query("status")),direction=upper(c.req.query("direction")),filter=poolFilter(text(c.req.query("filter"))),printStatus=upper(c.req.query("printStatus")),where=["d.main_company_slug=?","d.deleted_at IS NULL",filter.sql],args:any[]=[slug];if((from&&!validDate(from))||(to&&!validDate(to))||(from&&to&&from>to))return c.json(error("INVALID_DATE_RANGE","Geçerli bir başlangıç ve bitiş tarihi seçin; bitiş başlangıçtan önce olamaz."),400);if(direction==="INCOMING"||direction==="OUTGOING"){where.push("d.direction=?");args.push(direction)}if(status&&status!=="ALL"){where.push("UPPER(COALESCE(d.status,''))=?");args.push(status)}if(q){where.push("(UPPER(COALESCE(d.document_no,'')) LIKE UPPER(?) OR UPPER(COALESCE(d.party_name,'')) LIKE UPPER(?) OR COALESCE(d.party_tax_no,'') LIKE ?)");args.push(`%${q}%`,`%${q}%`,`%${q}%`)}if(from){where.push("COALESCE(d.issue_date,d.created_at)>=?");args.push(from)}if(to){where.push("COALESCE(d.issue_date,d.created_at)<=?");args.push(`${to}T23:59:59`)}
   if(upper(c.req.query("readStatus"))==="UNREAD"){
