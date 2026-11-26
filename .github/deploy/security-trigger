@@ -1,10 +1,8 @@
-deploy: kyerp-ebelge-final-rev3-dashboard-20261126
-pr: 680
-merge: 6356529b84a96b1bed62652b9a2d54ed8fded9f2
-ci: 45879778362 SUCCESS
-scope: REV3 overview, file inbox and canonical document menu; API and PRO PWA
-release: Existing KY Security Canonical Final Deploy
+deploy: kyerp-ebelge-customer-dispatch-tracking-20261126
+pr: 681
+merge: 124f2516cc9ca57c18121b6c2d64f0f3f2d09002
+ci: 45883726832 SUCCESS
+scope: canonical customer dispatch tracking; daily draft and unread shortcuts; API and PRO PWA
 migration: NONE
 production_data_mutation: NONE
-secret_rotation: NONE
-provider_submission: DISABLED
+provider_submission: UNCHANGED
