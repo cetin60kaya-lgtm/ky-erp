@@ -13,7 +13,8 @@ export default function EBelgeRev3Overview({dashboard,openModule}){
  const nav=(tab,opts={})=>openModule?.("e-belge",{tabKey:tab,actionContext:{dashboardMetric:true,...opts}});
  const dateOpts=period==="month"?{from:monthStart,to:today}:{};
  const metric=(label,value,tab,opts=dateOpts,tone="",always=false)=>({label,value,tab,opts,tone,always});
- const customerRows=billing&&!billing.truncated?billing.rows.filter(row=>row.companyType==="CUSTOMER"&&(period!=="month"||(String(row.issueDate||"").slice(0,10)>=monthStart&&String(row.issueDate||"").slice(0,10)<=today))):null;
+ const datedRows=billing&&!billing.truncated?billing.rows.filter(row=>period!=="month"||(String(row.issueDate||"").slice(0,10)>=monthStart&&String(row.issueDate||"").slice(0,10)<=today)):null;
+ const customerRows=datedRows?.filter(row=>row.companyType==="CUSTOMER")??null;
  const customerCount=predicate=>customerRows?customerRows.filter(predicate).length:null;
  const draft=(kind,label,tab)=>metric(label,drafts[kind]?.active,tab,{draftState:"ACTIVE"},"teal",true);
  const groups=[
@@ -28,7 +29,9 @@ export default function EBelgeRev3Overview({dashboard,openModule}){
    metric("Okunmamış",data.INCOMING_DISPATCH_UNREAD,"okunmamis-irsaliyeler",dateOpts,"blue",true),
    draft("DISPATCH","İrsaliye taslakları","irsaliye-taslaklari"),
    metric("Sevk bağı bekleyen",customerCount(x=>x.dispatchLinkStatus==="DISPATCH_LINK_MISSING"),"gelen-irsaliyeler",{...dateOpts,billingFilter:"CUSTOMER_DISPATCH_MISSING"},"amber",true),
-   metric("Fatura bağı bekleyen",customerCount(x=>x.status==="INVOICE_LINK_MISSING"),"gelen-irsaliyeler",{...dateOpts,billingFilter:"CUSTOMER_MISSING"},"amber",true)]},
+   metric("Fatura bağı bekleyen",customerCount(x=>x.status==="INVOICE_LINK_MISSING"),"gelen-irsaliyeler",{...dateOpts,billingFilter:"CUSTOMER_MISSING"},"amber",true),
+   metric("Resmî XML bekleyen",datedRows?datedRows.filter(x=>x.xmlPending===true).length:null,"gelen-irsaliyeler",{...dateOpts,billingFilter:"XML_PENDING"},"amber",true),
+   metric("Cari türü kontrolü",datedRows?datedRows.filter(x=>x.status==="ROLE_REVIEW").length:null,"gelen-irsaliyeler",{...dateOpts,billingFilter:"ROLE_REVIEW"},"amber",true)]},
   {title:"e-Arşiv",items:[
    metric("Giden e-Arşiv",data.OUTGOING_ARCHIVE,"earchive-out"),
    draft("ARCHIVE","e-Arşiv taslakları","earchive-drafts")]},

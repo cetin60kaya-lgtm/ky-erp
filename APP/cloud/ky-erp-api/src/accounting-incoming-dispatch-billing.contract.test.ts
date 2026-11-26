@@ -2,11 +2,11 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 const source=readFileSync(new URL("./accounting-dispatch-control-canonical.ts",import.meta.url),"utf8");
-test("Gelen irsaliye rolünün kaynağı cari kartı; yön tek başına sınıflandırma yapmaz",()=>{
+test("Gelen irsaliye rolü cari kartı ve doğrulanmış fatura geçmişinden gelir; yön tek başına sınıflandırma yapmaz",()=>{
   assert.match(source,/LEFT JOIN companies c ON c.id=d.party_company_id/);
-  assert.match(source,/role==="CUSTOMER"/);
-  assert.match(source,/role==="SUPPLIER"/);
-  assert.match(source,/role==="BOTH"/);
+  assert.match(source,/dispatchPartyRole\(role,history\?\.sales,history\?\.purchases\)/);
+  assert.match(source,/xml_file_asset_id IS NOT NULL/);
+  assert.match(source,/invoiceTypeCode/);
   assert.match(source,/UNCLASSIFIED/);
   assert.match(source,/d.direction='INCOMING'/);
   assert.match(source,/expectedDirection=group==="CUSTOMER"\?"OUTGOING"/);

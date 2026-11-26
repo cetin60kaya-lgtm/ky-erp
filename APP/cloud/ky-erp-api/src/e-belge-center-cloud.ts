@@ -22,6 +22,7 @@ import { dispatchRequirement } from "./e-belge-dispatch-policy";
 import { eBelgePoolOrderBy } from "./e-belge-pool-sort";
 import { accountingAccess,accountingTenantReadAllowed } from "./accounting-access-policy";
 import { registerEBelgeDraftRoutes, operatorAccess, operatorReadReady } from "./e-belge-draft-routes";
+import {normalizedEttn,normalizedTax,normalizedIssueDate,compareIncomingDispatchIdentity,equalSourceLines,incomingDispatchKey} from "./e-belge-incoming-dispatch-identity.ts";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -197,12 +198,68 @@ async function linkDocumentCanonicalModels(c:Context<AppEnv>,slug:string,documen
 async function stageFile(c:Context<AppEnv>,slug:string,file:File){const id=crypto.randomUUID(),ts=now(),safe=file.name.replace(/[^A-Za-z0-9._ÇĞİÖŞÜçğıöşü -]+/g,"_").slice(0,160),key=`accounting-intake/${slug}/${id}/${safe}`;await c.env.FILES.put(key,await file.arrayBuffer(),{httpMetadata:{contentType:file.type||"application/octet-stream"},customMetadata:{purpose:"TEMP_ACCOUNTING_INTAKE",originalName:file.name}});const ext=(file.name.split(".").pop()||"").toUpperCase();await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','ACCOUNTING_STAGING','READY',?,?,?,?,?,?)`).bind(id,slug,`accounting-staging:${id}`,file.name,ext,file.type||null,file.size,key,JSON.stringify({temporary:true,requiresCanonicalArchive:true,eBelge:true}),ts,ts,ts,ts).run();return{id,key,ext,fileName:file.name}}
 async function linkFile(c:Context<AppEnv>,slug:string,assetId:string,documentId:string,relationType:string){await c.env.DB.prepare(`INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,1,1,'E_BELGE','{}',?,?)`).bind(crypto.randomUUID(),slug,assetId,"DOCUMENT",documentId,relationType,now(),now()).run()}
 async function queueArchive(c:Context<AppEnv>,slug:string,documentId:string,assetId:string,documentType:string){await c.env.DB.prepare(`INSERT OR IGNORE INTO accounting_document_archive_jobs(id,main_company_slug,document_id,file_asset_id,purpose_code,status,attempts,created_at,updated_at) VALUES(?,?,?,?,?,'PENDING',0,?,?)`).bind(crypto.randomUUID(),slug,documentId,assetId,isDispatch(documentType)?"DELIVERY_NOTE":"INVOICE",now(),now()).run();await addIssue(c,slug,documentId,"CANONICAL_ARCHIVE_PENDING","Belge File Hub ana arşivine aktarım kuyruğunda.","INFO","file_asset_id")}
+// Incoming dispatches require scope, issuer and recipient evidence, not sender email.
+const incomingDispatch=(p:Row)=>upper(p.direction)==="INCOMING"&&isDispatch(p.documentType||p.document_type);
+function sourceIdentity(slug:string,p:Row){
+ const raw=safeJson(p.rawMetadata||p.raw_metadata),prior=safeJson(raw.earlySource);
+ return {tenant:slug,issuerTax:normalizedTax(p.supplierTaxNo||raw.supplierTaxNo||prior.issuerTax||p.partyTaxNo||p.party_tax_no),recipientTax:normalizedTax(p.customerTaxNo||raw.customerTaxNo||prior.recipientTax),documentNo:text(p.documentNo||p.document_no),issueDate:normalizedIssueDate(p.issueDate||p.issue_date),ettn:normalizedEttn(p.uuid),direction:upper(p.direction),kind:isDispatch(p.documentType||p.document_type)?"DISPATCH":"OTHER"};
+}
+async function incomingDispatchDuplicate(c:Context<AppEnv>,slug:string,p:Row){
+ const identity=sourceIdentity(slug,p),id=identity.ettn,no=identity.documentNo,tax=identity.issuerTax,date=identity.issueDate;
+ const found=(await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL AND COALESCE(record_scope,'OFFICIAL')='OFFICIAL' AND
+   ((?<>'' AND UPPER(TRIM(COALESCE(uuid,'')))=?) OR
+    (?<>'' AND ?<>'' AND ?<>'' AND direction='INCOMING' AND (document_type LIKE '%IRSALIYE%' OR document_type LIKE '%DISPATCH%' OR document_type LIKE '%DESPATCH%') AND UPPER(TRIM(document_no))=UPPER(?) AND REPLACE(REPLACE(TRIM(party_tax_no),' ',''),'-','')=? AND issue_date=?)
+    OR (?<>'' AND ?<>'' AND provider_type=? AND provider_document_id=?)) LIMIT 3`).bind(slug,id,id,no,tax,date,no,tax,date,text(p.providerType),text(p.providerDocumentId),upper(p.providerType),text(p.providerDocumentId)).all<Row>()).results||[];
+ if(found.some(x=>!incomingDispatch(x)))throw Object.assign(new Error("ETTN veya sağlayıcı kimliği farklı belge türünde kayıtlı; otomatik aktarım durduruldu."),{code:"SOURCE_SCOPE_CONFLICT"});
+ if(found.length>1)throw Object.assign(new Error("Birden fazla eski irsaliye aynı kimliğe aday; otomatik işlem durduruldu."),{code:"SOURCE_IDENTITY_AMBIGUOUS"});
+ return found[0]||null;
+}
+async function reconcileEarlyDispatchFile(c:Context<AppEnv>,slug:string,doc:Row,p:Row,asset:Row){
+ if(!incomingDispatch(doc))throw Object.assign(new Error("Kaynak belge kapsamı uyuşmuyor."),{code:"SOURCE_SCOPE_CONFLICT"});
+ const old=sourceIdentity(slug,doc),next=sourceIdentity(slug,p),identity=compareIncomingDispatchIdentity(old,next);
+ const owner=await mainCompanyIdentity(c,slug);
+ const knownRecipient=owner.taxNos.includes(next.recipientTax)&&owner.taxNos.includes(old.recipientTax);
+ const lines=(await c.env.DB.prepare("SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no").bind(slug,doc.id).all<Row>()).results||[];
+ const sameLines=equalSourceLines(lines,p.lines);
+ const isXml=asset.ext==="XML",verifiedXml=isXml&&safeJson(p.rawMetadata).ublVerified===true&&p.directionNeedsReview!==true;
+ const locked=Boolean(doc.posted_at)||["FINALIZING","FINALIZE_RETRY","APPROVED","POSTED"].includes(upper(doc.status));
+ const existingXml=Boolean(doc.xml_file_asset_id);
+ if(identity==="SAME_ETTN"&&knownRecipient&&sameLines&&(!isXml||verifiedXml)&&(!locked||existingXml)){
+   if(isXml&&!existingXml){
+     const raw={...safeJson(doc.raw_metadata),...safeJson(p.rawMetadata),earlySource:{...old,state:"XML_MATCHED",verifiedAt:now()}};
+     const changed=await c.env.DB.prepare(`UPDATE accounting_documents SET uuid=?,provider_type=?,provider_document_id=COALESCE(?,provider_document_id),raw_metadata=?,xml_file_asset_id=?,updated_at=? WHERE main_company_slug=? AND id=? AND updated_at=? AND posted_at IS NULL AND status NOT IN ('FINALIZING','FINALIZE_RETRY','APPROVED','POSTED') AND xml_file_asset_id IS NULL`).bind(next.ettn,upper(p.providerType)||upper(doc.provider_type)||"MANUAL",text(p.providerDocumentId)||null,JSON.stringify(raw),asset.id,now(),slug,doc.id,doc.updated_at).run();
+     if(changed.meta.changes!==1)throw Object.assign(new Error("Belge eşzamanlı değişti; tekrar işlem yapmadan kaydı kontrol edin."),{code:"SOURCE_VERSION_CONFLICT"});
+     await resolveIssues(c,slug,doc.id,["EARLY_DISPATCH_XML_PENDING"]);
+     doc={...doc,xml_file_asset_id:asset.id,raw_metadata:JSON.stringify(raw)};
+   }
+   return attachDuplicateFile(c,slug,doc,asset);
+ }
+ // Preserve conflicting bytes as evidence, never overwrite existing original XML or quantities.
+ await c.env.DB.prepare("INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,'E_BELGE','{}',?,?)").bind(crypto.randomUUID(),slug,asset.id,"DOCUMENT",doc.id,"SOURCE_REVIEW",now(),now()).run();
+ await addIssue(c,slug,doc.id,"EARLY_DISPATCH_SOURCE_CONFLICT","İrsaliye kimliği, alıcısı, kalemleri veya resmî XML doğrulaması uyuşmadı. Yeni belge/tekrar kesim yapılmadı; kaynak mutabakatı gerekli.","ERROR","source");
+ return {documentId:text(doc.id),duplicate:true,attached:"SOURCE_REVIEW",status:"REVIEW_REQUIRED",sourceConflict:true};
+}
 async function findDuplicate(c:Context<AppEnv>,slug:string,p:Row){if(text(p.providerType)&&text(p.providerDocumentId)){const r=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE main_company_slug=? AND provider_type=? AND provider_document_id=? AND deleted_at IS NULL LIMIT 1`).bind(slug,upper(p.providerType),text(p.providerDocumentId)).first<Row>();if(r)return r}if(text(p.uuid)){const r=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE main_company_slug=? AND uuid=? AND deleted_at IS NULL LIMIT 1`).bind(slug,text(p.uuid)).first<Row>();if(r)return r}if(text(p.documentNo)&&text(p.partyTaxNo)&&text(p.issueDate))return c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE main_company_slug=? AND document_no=? AND COALESCE(party_tax_no,'')=? AND COALESCE(issue_date,'')=? AND deleted_at IS NULL LIMIT 1`).bind(slug,text(p.documentNo),cleanTax(p.partyTaxNo),text(p.issueDate)).first<Row>();return null}
 async function attachDuplicateFile(c:Context<AppEnv>,slug:string,doc:Row,asset:Row){const field=asset.ext==="XML"?"xml_file_asset_id":asset.ext==="PDF"?"pdf_file_asset_id":"file_asset_id";if(!text(doc[field]))await c.env.DB.prepare(`UPDATE accounting_documents SET ${field}=?,file_asset_id=COALESCE(file_asset_id,?),updated_at=? WHERE id=? AND main_company_slug=?`).bind(asset.id,asset.id,now(),doc.id,slug).run();await linkFile(c,slug,asset.id,doc.id,asset.ext||"ATTACHMENT");if(!asset.canonicalSource)await queueArchive(c,slug,doc.id,asset.id,doc.document_type);await linkDocumentCanonicalModels(c,slug,text(doc.id),text(asset.fileName));return{documentId:text(doc.id),duplicate:true,attached:asset.ext}}
 
 async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
-  const dupe=await findDuplicate(c,slug,p);if(dupe)return attachDuplicateFile(c,slug,dupe,asset);
-  const id=crypto.randomUUID(),ts=now();await ensureOfficialXmlCompany(c,slug,p);const match=await matchCompany(c,slug,text(p.partyName),cleanTax(p.partyTaxNo)),confidence=numberValue(p.extractionConfidence),providerType=upper(p.providerType)||"MANUAL",sourceType=text(p.sourceType)||(asset.ext==="XML"?"XML_IMPORT":"AI_SCAN"),supplierProfile=await getEBelgeSupplierProfile(c,slug,match.companyId);
+  const early=incomingDispatch(p);
+  if(early){
+    const identity=sourceIdentity(slug,p);
+    // Normalize both channels before the existing unique UUID index participates.
+    if(identity.ettn)p={...p,uuid:identity.ettn};
+    const dupe=await incomingDispatchDuplicate(c,slug,p);
+    if(dupe)return reconcileEarlyDispatchFile(c,slug,dupe,p,asset);
+    const raw=safeJson(p.rawMetadata);
+    const owner=await mainCompanyIdentity(c,slug);
+    const verified=asset.ext==="XML"&&raw.ublVerified===true&&p.directionNeedsReview!==true&&owner.taxNos.includes(identity.recipientTax);
+    p={...p,rawMetadata:{...raw,earlySource:{...identity,state:verified?"XML_VERIFIED":"XML_PENDING"}}};
+  }else{
+    const dupe=await findDuplicate(c,slug,p);if(dupe)return attachDuplicateFile(c,slug,dupe,asset);
+  }
+  const sourceKey=early?incomingDispatchKey(sourceIdentity(slug,p)):"";
+  const stable=sourceKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(sourceKey)))).slice(0,16).map(v=>v.toString(16).padStart(2,"0")).join(""):"";
+  const id=stable?`${stable.slice(0,8)}-${stable.slice(8,12)}-5${stable.slice(13,16)}-a${stable.slice(17,20)}-${stable.slice(20,32)}`:crypto.randomUUID(),ts=now();await ensureOfficialXmlCompany(c,slug,p);const match=await matchCompany(c,slug,text(p.partyName),cleanTax(p.partyTaxNo)),confidence=numberValue(p.extractionConfidence),providerType=upper(p.providerType)||"MANUAL",sourceType=text(p.sourceType)||(asset.ext==="XML"?"XML_IMPORT":"AI_SCAN"),supplierProfile=await getEBelgeSupplierProfile(c,slug,match.companyId);
   const meta={...safeJson(p.rawMetadata),extractionConfidence:confidence,extractionQualityScore:numberValue(p.extractionQualityScore),extractor:p.extractor||null,extractorModel:p.extractorModel||null,needsManualReview:p.needsManualReview===true,manualReviewReasons:Array.isArray(p.manualReviewReasons)?p.manualReviewReasons:[],extractionDiscrepancies:Array.isArray(p.extractionDiscrepancies)?p.extractionDiscrepancies:[],supplierProfile:{isChemicalSupplier:supplierProfile.isChemicalSupplier===true,requireLot:supplierProfile.requireLot===true}};
   await insertDynamic(c,"accounting_documents",{id,main_company_slug:slug,direction:p.direction,document_type:p.documentType,provider_type:providerType,provider_document_id:text(p.providerDocumentId)||null,source_type:sourceType,status:text(p.status)||"REVIEW_REQUIRED",record_scope:text(p.recordScope)||"OFFICIAL",document_no:text(p.documentNo)||null,uuid:text(p.uuid)||null,issue_date:text(p.issueDate)||null,due_date:text(p.dueDate)||null,currency:text(p.currency)||"TRY",party_company_id:match.companyId||null,party_name:text(p.partyName)||null,party_tax_no:cleanTax(p.partyTaxNo)||null,subtotal:numberValue(p.subtotal),tax_total:numberValue(p.taxTotal),discount_total:numberValue(p.discountTotal),payable_total:numberValue(p.payableTotal),file_asset_id:asset.id,xml_file_asset_id:asset.ext==="XML"?asset.id:null,pdf_file_asset_id:asset.ext==="PDF"?asset.id:null,parser_version:text(p.parserVersion)||null,raw_metadata:meta,created_at:ts,updated_at:ts});
   const lines=Array.isArray(p.lines)?p.lines:[];
@@ -217,6 +274,7 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
         `${text(l.description)||`Kalem ${i+1}`}: ${numberValue(raw.packageCount)} paket × ${numberValue(raw.packageWeightKg)} kg = ${numberValue(raw.calculatedKg)} kg karşılığı muhasebeci tarafından kontrol edilmelidir.`,"ERROR","lines");
   }
   if(!match.companyId)await addIssue(c,slug,id,"PARTY_UNMATCHED","Firma/cari otomatik eşleşmedi. Son onaydan önce cari seçin.","ERROR","party_company_id");
+  if(early&&safeJson(safeJson(p.rawMetadata).earlySource).state==="XML_PENDING")await addIssue(c,slug,id,"EARLY_DISPATCH_XML_PENDING","Resmî XML ve alıcı/kalem mutabakatı bekleniyor. Kesin muhasebeleştirme kapalı.","ERROR","source");
   if(!lines.length)await addIssue(c,slug,id,"LINES_MISSING","Belge kalemleri bulunamadı veya okunamadı.","ERROR","lines");
   if(confidence>0&&confidence<.75)await addIssue(c,slug,id,"LOW_EXTRACTION_CONFIDENCE","Belge yapay zeka okuma güveni düşük; kritik alanları kontrol edin.","WARNING");
   if(p.needsManualReview===true)await addIssue(c,slug,id,"OCR_MANUAL_REVIEW_REQUIRED",`OCR sonuçları kritik alanlarda manuel kontrol gerektiriyor${Array.isArray(p.manualReviewReasons)&&p.manualReviewReasons.length?`: ${p.manualReviewReasons.join(", ")}`:"."}`,"ERROR","ocr");
@@ -227,7 +285,7 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
 
 async function stageProviderR2Asset(c:Context<AppEnv>,slug:string,input:Row){const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo),storageKey=text(input.storageKey),ext=upper(input.ext),fileName=text(input.fileName)||`${text(input.documentNo)||providerDocumentId||crypto.randomUUID()}.${ext.toLowerCase()}`,logicalKey=`e-belge-provider:${providerType}:${providerDocumentId||normalize(fileName)}:${ext}`;const existing=await c.env.DB.prepare(`SELECT id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key FROM file_hub_assets WHERE main_company_slug=? AND logical_key=? LIMIT 1`).bind(slug,logicalKey).first<Row>();if(existing)return{...existing,ext};let sizeBytes=0;try{const head=storageKey?await c.env.FILES.head(storageKey):null;sizeBytes=Number(head?.size||0)}catch{}const id=crypto.randomUUID(),ts=now(),mimeType=text(input.mimeType)||(ext==="XML"?"application/xml":ext==="PDF"?"application/pdf":"application/octet-stream");await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,preview_storage_key,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','E_DOCUMENT_PROVIDER','READY',?,?,?,?,?,?)`).bind(id,slug,logicalKey,fileName,ext,mimeType,sizeBytes,storageKey||null,JSON.stringify({providerType,providerDocumentId,providerManaged:true,sourceKey:storageKey||null}),ts,ts,ts,ts).run();return{id,ext,fileName,preview_storage_key:storageKey,mime_type:mimeType,size_bytes:sizeBytes}}
 
-export async function ingestProviderEBelgeXml(c:Context<AppEnv>,slug:string,input:Row){const xmlText=text(input.xmlText);if(!xmlText)throw Object.assign(new Error("Provider XML içeriği olmadan canonical e-Belge oluşturulamaz."),{code:"PROVIDER_XML_REQUIRED"});const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo||input.uuid),direction=directionOf(input.direction),parsed=parseCanonicalEBelgeUbl(xmlText,direction),documentNo=text(parsed.documentNo)||text(input.documentNo),xmlKey=text(input.xmlKey),pdfKey=text(input.pdfKey),rawMetadata={...safeJson(parsed.rawMetadata),...safeJson(input.rawMetadata),providerType,providerDocumentId,providerSourceId:text(input.sourceId),providerAutomationKey:text(input.automationKey),providerStatus:text(input.statusText),providerSyncedAt:now()};const xmlAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:xmlKey,ext:"XML",fileName:`${documentNo||providerDocumentId||"belge"}.xml`,documentNo});const result=await createDocument(c,slug,{...parsed,direction,documentNo,providerType,providerDocumentId,sourceType:text(input.sourceType)||`${providerType}_DIRECT`,status:"REVIEW_REQUIRED",extractionConfidence:1,rawMetadata},xmlAsset);if(pdfKey){const pdfAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:pdfKey,ext:"PDF",fileName:`${documentNo||providerDocumentId||"belge"}.pdf`,documentNo});const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? LIMIT 1`).bind(result.documentId,slug).first<Row>();if(doc)await attachDuplicateFile(c,slug,doc,pdfAsset)}return{...result,providerType,providerDocumentId,documentNo}}
+export async function ingestProviderEBelgeXml(c:Context<AppEnv>,slug:string,input:Row){const xmlText=text(input.xmlText);if(!xmlText)throw Object.assign(new Error("Provider XML içeriği olmadan canonical e-Belge oluşturulamaz."),{code:"PROVIDER_XML_REQUIRED"});const providerType=upper(input.providerType)||"ISNET",providerDocumentId=text(input.providerDocumentId||input.sourceId||input.documentNo||input.uuid),direction=directionOf(input.direction),parsed=parseCanonicalEBelgeUbl(xmlText,direction),documentNo=text(parsed.documentNo)||text(input.documentNo),xmlKey=text(input.xmlKey),pdfKey=text(input.pdfKey),rawMetadata={...safeJson(parsed.rawMetadata),...safeJson(input.rawMetadata),providerType,providerDocumentId,providerSourceId:text(input.sourceId),providerAutomationKey:text(input.automationKey),providerStatus:text(input.statusText),providerSyncedAt:now()};const xmlAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:xmlKey,ext:"XML",fileName:`${documentNo||providerDocumentId||"belge"}.xml`,documentNo});const result=await createDocument(c,slug,{...parsed,direction,documentNo,providerType,providerDocumentId,sourceType:text(input.sourceType)||`${providerType}_DIRECT`,status:"REVIEW_REQUIRED",extractionConfidence:1,rawMetadata},xmlAsset);if(pdfKey&&!result.sourceConflict){const pdfAsset=await stageProviderR2Asset(c,slug,{providerType,providerDocumentId,storageKey:pdfKey,ext:"PDF",fileName:`${documentNo||providerDocumentId||"belge"}.pdf`,documentNo});const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? LIMIT 1`).bind(result.documentId,slug).first<Row>();if(doc)await attachDuplicateFile(c,slug,doc,pdfAsset)}return{...result,providerType,providerDocumentId,documentNo}}
 
 /** Ingest an already-indexed, explicitly bound Drive/OneDrive file in-place.
  * Source bytes never enter GitHub or application logs; File Hub remains canonical.
@@ -319,7 +377,7 @@ export async function ingestIndexedFileHubEBelge(env:Cloudflare.Env,slug:string,
     id:assetId,fileName:text(asset.file_name),ext,canonicalSource:true});
   // XML is the document authority. Attach the unique sibling PDF even if
   // PDF was indexed earlier, without requiring OCR or a second document.
-  if(ext==="XML"){
+  if(ext==="XML"&&!record.sourceConflict){
     const siblingPath=path.replace(/\.xml$/i,".pdf");
     if(siblingPath!==path){
       const found=await env.DB.prepare(`SELECT a.id,a.file_name
@@ -371,16 +429,22 @@ function prepareManualEBelgeInput(input:Row,fileName:string){
   if(description.length<2||description.length>240||!Number.isFinite(quantity)||quantity<=0||quantity>1e9||!Number.isFinite(unitPrice)||unitPrice<0||unitPrice>1e9||!Number.isFinite(taxRate)||taxRate<0||taxRate>100||unitCode.length>20)
    invalid(`Kalem ${index+1} açıklama, miktar, birim fiyat veya KDV değeri geçersiz.`);
   const lineTotal=round(quantity*unitPrice),taxAmount=round(lineTotal*taxRate/100);
-  return {lineNo:index+1,description,quantity,unitPrice,taxRate,unitCode,lineTotal,taxAmount};
+  return {lineNo:index+1,description,quantity,unitPrice,taxRate,unitCode,lineTotal,taxAmount,productCode:text(row.productCode).slice(0,100)};
  });
+ const uuid=normalizedEttn(input.ettn),recipientTax=normalizedTax(input.recipientTaxNo);
+ if(kind==="IRSALIYE"&&direction==="INCOMING"&&(!tax||!recipientTax||(text(input.ettn)&&!uuid)))invalid("Gelen irsaliye için düzenleyici ve alıcı VKN/TCKN ile varsa geçerli ETTN gerekir.");
  const subtotal=round(lines.reduce((sum: number,line:Row)=>sum+line.lineTotal,0));
  const taxTotal=round(lines.reduce((sum: number,line:Row)=>sum+line.taxAmount,0));
  return {direction,documentType:documentTypeOf(kind,direction),documentNo:no,issueDate:date,
-  partyName:party,partyTaxNo:tax,currency,subtotal,taxTotal,payableTotal:round(subtotal+taxTotal),
+  partyName:party,partyTaxNo:tax,uuid,customerTaxNo:direction==="INCOMING"?recipientTax:"",currency,subtotal,taxTotal,payableTotal:round(subtotal+taxTotal),
   lines,providerType:"MANUAL",sourceType:"MANUAL_REVIEW",extractionConfidence:0,
   rawMetadata:{originalFileName:fileName,manualSourceVerificationRequired:true,manuallyCalculatedTotals:true}};
 }
 
+async function preserveIntakeFailure(c:Context<AppEnv>,slug:string,asset:Row){
+ // Never delete original bytes after an uncertain/partial DB write. File Hub keeps them for recovery.
+ await c.env.DB.prepare("UPDATE file_hub_assets SET metadata=json_set(CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,'$.accountingImportState','NEEDS_REVIEW','$.accountingImportResult','INTAKE_UNCERTAIN'),updated_at=? WHERE id=? AND main_company_slug=?").bind(now(),asset.id,slug).run().catch(()=>{});
+}
 async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirection:string,kind:string,analysisFile:File|null=null,manualData:Row|null=null){
   const ext=upper(file.name.split(".").pop());
   if(!allowedExt.has(ext))throw Object.assign(new Error(`${file.name}: desteklenmeyen dosya tipi.`),{code:"UNSUPPORTED_FILE"});
@@ -393,7 +457,7 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
       if(!record.duplicate)await addIssue(c,slug,record.documentId,"MANUAL_SOURCE_REVIEW_REQUIRED",
         "Kaynak dosyadaki firma, tarih, tutar, KDV ve her kalem kullanıcı tarafından doğrulanmalıdır.","ERROR","source");
       return {...record,manual:true};
-    }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
+    }catch(e){await preserveIntakeFailure(c,slug,asset);throw e}
   }
   const readiness=accountingDocumentIntelligenceStatus(c.env as any);
   if(ext!=="XML"&&!readiness.configured)throw Object.assign(new Error("PDF/görsel okuma servisi production ortamında hazır değil. XML yükleme kullanılabilir."),{code:"DOCINTEL_NOT_CONFIGURED",detail:{provider:readiness.provider,endpointConfigured:readiness.endpointConfigured,keyConfigured:readiness.keyConfigured,workersAiConfigured:readiness.workersAiConfigured}});
@@ -413,9 +477,35 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
     const outgoing=parsed.direction==="OUTGOING";
     const hasCounterparty=Boolean(text(parsed.partyName)||cleanTax(parsed.partyTaxNo));
     return await createDocument(c,slug,{...parsed,outgoingCounterpartyReview:outgoing&&!hasCounterparty,sourceType:"AI_SCAN",rawMetadata:{...safeJson(canonical.rawMetadata),aiProvider:canonical.extractor||"DOCUMENT_INTELLIGENCE",requestedDocumentKind:requestedKind,inferredDocumentKind:resolvedKind,autoDetected:canonical.autoDetected===true,directionResolution:parsed.directionResolution,analysisSource:analysisTarget===file?"ORIGINAL_FILE":"CLIENT_PDF_PREVIEW",originalFileName:file.name}},asset);
-  }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
+  }catch(e){await preserveIntakeFailure(c,slug,asset);throw e}
 }
 
+/** Existing Microsoft mail account, explicit authorization checked by caller.
+ * Never use sender as issuer; never import an unclassified attachment as a document. */
+export async function ingestIncomingMailDispatch(c:Context<AppEnv>,slug:string,file:File){
+ const ext=upper(file.name.split(".").pop());
+ if(!["PDF","XML"].includes(ext)||!file.size||file.size>MAX_FILE_BYTES)throw Object.assign(new Error("Desteklenmeyen mail eki."),{code:"MAIL_ATTACHMENT_REVIEW"});
+ let parsed:Row;
+ if(ext==="XML"){
+   const raw=parseCanonicalEBelgeUbl(await file.text(),"INCOMING");
+   if(!isDispatch(raw.documentType)||safeJson(raw.rawMetadata).ublVerified!==true)throw Object.assign(new Error("İrsaliye XML doğrulaması gerekli."),{code:"MAIL_ATTACHMENT_REVIEW"});
+   parsed=await resolveManualDirection(c,slug,"AUTO",raw,"IRSALIYE");
+ }else{
+   const readiness=accountingDocumentIntelligenceStatus(c.env as any);
+   if(!readiness.azureConfigured)throw Object.assign(new Error("PDF okuma servisi hazır değil."),{code:"MAIL_OCR_UNAVAILABLE"});
+   const ai=await analyzeAccountingDocument(c,file,"AUTO"),canonical=ai?.canonical||ai?.data||ai||{};
+   if(!isDispatch(canonical.inferredDocumentKind))throw Object.assign(new Error("Ek otomatik irsaliye olarak doğrulanamadı."),{code:"MAIL_ATTACHMENT_REVIEW"});
+   parsed=await resolveManualDirection(c,slug,"AUTO",canonical,"IRSALIYE");
+ }
+ const identity=sourceIdentity(slug,parsed),owner=await mainCompanyIdentity(c,slug);
+ if(!incomingDispatch(parsed)||!incomingDispatchKey(identity)||!owner.taxNos.includes(identity.recipientTax)||identity.issuerTax===identity.recipientTax||!Array.isArray(parsed.lines)||!parsed.lines.length)
+   throw Object.assign(new Error("Düzenleyici, alıcı, belge kimliği veya kalemler doğrulanamadı."),{code:"MAIL_ATTACHMENT_REVIEW"});
+ const asset=await stageFile(c,slug,file);
+ try{
+  const result=await createDocument(c,slug,{...parsed,sourceType:ext==="PDF"?"OUTLOOK_PDF":"OUTLOOK_XML",rawMetadata:{...safeJson(parsed.rawMetadata),originalFileName:file.name}},asset);
+  return {...result,assetId:asset.id};
+ }catch(e){await preserveIntakeFailure(c,slug,asset);throw e}
+}
 // Newly received dispatches also refresh existing unposted invoice drafts.
 // The established UBL/quantity engine remains the final relationship authority.
 async function autoReconcileInvoicesAfterDispatch(c:Context<AppEnv>,slug:string,dispatchId:string){
@@ -508,6 +598,7 @@ async function reconcileOne(c:Context<AppEnv>,slug:string,id:string,internalFina
 async function validateForFinal(c:Context<AppEnv>,slug:string,id:string){
   const doc=await c.env.DB.prepare(`SELECT * FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1`).bind(id,slug).first<Row>();
   if(!doc)throw Object.assign(new Error("Belge bulunamadı."),{code:"NOT_FOUND"});
+  if(incomingDispatch(doc)&&safeJson(safeJson(doc.raw_metadata).earlySource).state==="XML_PENDING")throw Object.assign(new Error("Resmî XML mutabakatı tamamlanmadan kesin kayıt yapılamaz."),{code:"EARLY_DISPATCH_XML_PENDING"});
   if(isInvoice(doc.document_type))await reconcileOne(c,slug,id,true);
   const lines=(await c.env.DB.prepare(`SELECT * FROM accounting_document_lines WHERE main_company_slug=? AND document_id=? ORDER BY line_no`).bind(slug,id).all<Row>()).results||[];
   for(const l of lines){
@@ -848,7 +939,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     const items=[],errors=[];
     for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index],manualData)})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
     const autoReconcile=[],reconcileIds=new Set<string>();
-    const uploadedIds=[...new Set(items.map((item:any)=>text(item.documentId)).filter(Boolean))];
+    const uploadedIds=[...new Set(items.filter((item:any)=>!item.sourceConflict).map((item:any)=>text(item.documentId)).filter(Boolean))];
     for(const documentId of uploadedIds){
       const doc=await c.env.DB.prepare("SELECT id,document_type,direction,party_company_id,party_tax_no,party_name,issue_date,created_at FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
       if(!doc||!["INCOMING","OUTGOING"].includes(upper(doc.direction)))continue;
@@ -1007,6 +1098,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
       WHERE i.id=? AND i.document_id=? AND i.main_company_slug=? AND d.deleted_at IS NULL LIMIT 1`)
       .bind(issueId,id,slug).first<Row>();
     if(!issue)return c.json(error("ISSUE_NOT_FOUND","Kontrol kaydı bulunamadı."),404);
+    if(["EARLY_DISPATCH_XML_PENDING","EARLY_DISPATCH_SOURCE_CONFLICT"].includes(issue.issue_code))return c.json(error("SOURCE_RECONCILIATION_REQUIRED","Kaynak mutabakatı tamamlanmadan bu kontrol elle kapatılamaz."),409);
     if(issue.issue_code==="MANUAL_SOURCE_REVIEW_REQUIRED"){
       const user=await getAuthenticatedUser(c),b=await c.req.json<Row>().catch(()=>({}));
       if(!user?.id||!accountingTenantReadAllowed(user,slug)||!accountingAccess(user,"POST",c.req.path))return c.json(error("ACCOUNTING_FORBIDDEN","Bu firmada manuel belge doğrulaması için muhasebe yetkisi gerekir."),403);

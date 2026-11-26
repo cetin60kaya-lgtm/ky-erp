@@ -1,4 +1,5 @@
 // @ts-nocheck
+import {extractLabeledEttn} from "./e-belge-incoming-dispatch-identity.ts";
 // Provider-neutral document intelligence for scanned/image/PDF accounting documents.
 // Azure Document Intelligence v4 is the first adapter; callers consume one canonical result.
 // structured fields + line items + confidence
@@ -225,7 +226,7 @@ function canonicalFromAzure(result: Row, documentKind: string, requestedModel: s
     extractionConfidence: documentConfidence,
     supplierName,customerName,
     customerTaxNo,
-    partyName,partyTaxNo,partyTaxOffice:"",partyIban:"",documentNo,uuid:"",issueDate,dueDate,currency,
+    partyName,partyTaxNo,partyTaxOffice:"",partyIban:"",documentNo,uuid:extractLabeledEttn(content),issueDate,dueDate,currency,
     subtotal,taxTotal,discountTotal:num(fieldValue(fields.TotalDiscount)),payableTotal,lines,
     rawText: content.slice(0,20000),
     rawResult: compactRaw(result,requestedModel),
@@ -315,11 +316,11 @@ export async function analyzeAccountingDocument(c: Context<AppEnv>, file: File, 
   const customModel=text(profile?.provider_model_id),threshold=num(profile?.min_confidence)||num(env.KYERP_DOCINTEL_REVIEW_THRESHOLD)||0.75;
   let candidate:Row={...first,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",profileId:profile?.id||null,profileThreshold:threshold};
 
-  if(useAzure&&customModel&&upper(profile?.provider_type)==="AZURE_DOCUMENT_INTELLIGENCE"){
+  if(useAzure&&profile&&customModel&&upper(profile.provider_type)==="AZURE_DOCUMENT_INTELLIGENCE"){
     try{const refined=await azureAnalyze(c,file,resolvedKind,customModel);await c.env.DB.prepare(`UPDATE accounting_extraction_profiles SET successful_samples=successful_samples+1,last_used_at=?,updated_at=? WHERE id=? AND main_company_slug=?`).bind(new Date().toISOString(),new Date().toISOString(),profile.id,slugOf(c)).run();candidate={...refined,inferredDocumentKind:resolvedKind,autoDetected:requested==="AUTO",fallbackExtractionConfidence:first.extractionConfidence,profileId:profile.id,profileThreshold:threshold};}catch{candidate={...candidate,customModelFallbackUsed:true}}
   }
 
-  const missingCritical=!text(candidate.documentNo)||!text(candidate.issueDate)||num(candidate.payableTotal)<=0||!Array.isArray(candidate.lines)||candidate.lines.length===0;
+  const missingCritical=!text(candidate.documentNo)||!text(candidate.issueDate)||(resolvedKind==="FATURA"&&num(candidate.payableTotal)<=0)||!Array.isArray(candidate.lines)||candidate.lines.length===0;
   const lowConfidence=num(candidate.extractionConfidence)<threshold,shouldFallback=lowConfidence||missingCritical;
   let secondary:Row|null=null;
   if(useAzure&&shouldFallback&&autoLayout&&candidate.extractorModel!==autoLayout.extractorModel)secondary=autoLayout;

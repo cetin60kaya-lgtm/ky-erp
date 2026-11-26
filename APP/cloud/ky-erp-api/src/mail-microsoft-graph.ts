@@ -5,6 +5,8 @@ import { readFileHubAssetForMail } from "./file-hub-cloud-oauth.ts";
 import { mailReplyContext } from "./mail-reply-context.ts";
 import {microsoftDeltaPageState,microsoftDeltaSafeUrl,microsoftDeltaComplete} from "./mail-microsoft-delta-core.ts";
 import {invoiceMailDocumentFromFile,invoiceMailDispatchKey,invoiceMailLegacyKeyPrefix} from "./invoice-mail-model-evidence.ts";
+import {ingestIncomingMailDispatch} from "./e-belge-center-cloud";
+import {accountingAccess,accountingTenantReadAllowed} from "./accounting-access-policy";
 
 type AnyRow = Record<string, any>;
 
@@ -357,6 +359,39 @@ async function syncMicrosoftFolder(c:any,tenant:string,account:AnyRow,token:stri
   }
 }
 
+
+const intakeScope="EBELGE_INCOMING_DISPATCH";
+const intakeMeta="CASE WHEN json_valid(ma.provider_metadata) THEN ma.provider_metadata ELSE '{}' END";
+const intakeState="COALESCE(json_extract("+intakeMeta+",'$.ebelgeIntake.state'),'WAITING')";
+const intakeSource="FROM mail_attachments ma JOIN mail_messages m ON m.id=ma.message_id AND m.main_company_slug=ma.main_company_slug JOIN mail_accounts a ON a.id=m.account_id AND a.main_company_slug=m.main_company_slug WHERE ma.main_company_slug=? AND m.direction='INCOMING' AND COALESCE(ma.is_inline,0)=0 AND (LOWER(ma.file_name) LIKE '%.pdf' OR LOWER(ma.file_name) LIKE '%.xml') AND a.provider_type='MICROSOFT_365' AND a.status='ACTIVE' AND a.approval_status='APPROVED'";
+async function processIncomingMailAttachment(c:any,tenant:string,account:AnyRow,token:string,row:AnyRow){
+ const ts=nowIso(),id=text(row.id);
+ const claim=await c.env.DB.prepare("UPDATE mail_attachments SET provider_metadata=json_set(CASE WHEN json_valid(provider_metadata) THEN provider_metadata ELSE '{}' END,'$.ebelgeIntake',json(?)) WHERE main_company_slug=? AND id=? AND COALESCE(json_extract(CASE WHEN json_valid(provider_metadata) THEN provider_metadata ELSE '{}' END,'$.ebelgeIntake.state'),'WAITING')='WAITING'").bind(JSON.stringify({state:"PROCESSING",claimedAt:ts}),tenant,id).run();
+ if(claim.meta.changes!==1)return {state:"ALREADY_CLAIMED"};
+ let result:AnyRow;
+ try{
+  if(Number(row.size_bytes||0)>20*1024*1024||!text(row.provider_attachment_id)||!text(row.provider_message_id))throw new Error("MAIL_ATTACHMENT_REVIEW");
+  const payload=(await graphJson(mailboxBase(account)+"/messages/"+encodeURIComponent(text(row.provider_message_id))+"/attachments/"+encodeURIComponent(text(row.provider_attachment_id))+"?$select=id,name,size,contentBytes",token)).payload;
+  if(text(payload.name)!==text(row.file_name)||Number(payload.size||0)!==Number(row.size_bytes||0)||!text(payload.contentBytes))throw new Error("MAIL_ATTACHMENT_CHANGED");
+  const bytes=Uint8Array.from(atob(text(payload.contentBytes).replace(/\s+/g,"")),ch=>ch.charCodeAt(0));
+  if(!bytes.length||bytes.length>20*1024*1024)throw new Error("MAIL_ATTACHMENT_REVIEW");
+  const xml=/\.xml$/i.test(row.file_name);
+  if(!xml&&new TextDecoder().decode(bytes.slice(0,5))!=="%PDF-")throw new Error("MAIL_ATTACHMENT_REVIEW");
+  const context={env:c.env,req:{query:(k:string)=>k==="mainCompanySlug"?tenant:"",header:()=>""},get:()=>""};
+  const imported=await ingestIncomingMailDispatch(context as any,tenant,new File([bytes],text(row.file_name),{type:xml?"application/xml":"application/pdf"}));
+  result={state:imported.sourceConflict?"REVIEW":"ATTACHED",documentId:imported.documentId,assetId:imported.assetId,code:imported.sourceConflict?"SOURCE_CONFLICT":"",checkedAt:nowIso()};
+ }catch(e:any){result={state:"REVIEW",code:["MAIL_ATTACHMENT_REVIEW","MAIL_ATTACHMENT_CHANGED","MAIL_OCR_UNAVAILABLE","SOURCE_SCOPE_CONFLICT","SOURCE_IDENTITY_AMBIGUOUS","SOURCE_VERSION_CONFLICT"].includes(text(e?.code||e?.message))?text(e?.code||e?.message):"INTAKE_UNCERTAIN",checkedAt:nowIso()};}
+ // Never retry uncertain writes automatically, never advance a financial state.
+ await c.env.DB.prepare("UPDATE mail_attachments SET provider_metadata=json_set(CASE WHEN json_valid(provider_metadata) THEN provider_metadata ELSE '{}' END,'$.ebelgeIntake',json(?)),file_asset_id=COALESCE(?,file_asset_id) WHERE main_company_slug=? AND id=? AND json_extract(CASE WHEN json_valid(provider_metadata) THEN provider_metadata ELSE '{}' END,'$.ebelgeIntake.claimedAt')=?").bind(JSON.stringify(result),result.assetId||null,tenant,id,ts).run();
+ return result;
+}
+async function scheduledIncomingMailIntake(c:any,tenant:string,account:AnyRow,token:string){
+ const scope=await c.env.DB.prepare("SELECT id FROM mail_account_scopes WHERE main_company_slug=? AND account_id=? AND scope_code=? LIMIT 1").bind(tenant,account.id,intakeScope).first();
+ if(!scope)return;
+ const row=await c.env.DB.prepare("SELECT ma.*,m.provider_message_id "+intakeSource+" AND a.id=? AND "+intakeState+"='WAITING' AND COALESCE(json_extract("+intakeMeta+",'$.removed'),0)=0 ORDER BY m.received_at ASC,ma.id LIMIT 1").bind(tenant,account.id).first<AnyRow>();
+ if(row)await processIncomingMailAttachment(c,tenant,account,token,row);
+}
+
 export async function runMicrosoftMailScheduledSync(env:Cloudflare.Env){
   // Fair, bounded scheduling. An invalid token pauses only this account for 15 minutes.
   const cutoff=new Date(Date.now()-15*60*1000).toISOString();
@@ -373,6 +408,7 @@ export async function runMicrosoftMailScheduledSync(env:Cloudflare.Env){
   try{
     const c={env},token=(await usableToken(c,text(account.main_company_slug),account)).text,results=[];
     for(const folder of folders.results||[])results.push(await syncMicrosoftFolder(c,text(account.main_company_slug),account,token,folder,1));
+    try{await scheduledIncomingMailIntake(c,text(account.main_company_slug),account,token)}catch{ /* Metadata queue remains visible; never advance a financial record. */ }
     return {processed:results.reduce((n,r)=>n+r.count,0),accountCount:1,folders:results.length,partial:results.some(r=>!r.completed)};
   }catch(error:any){
     const ts=nowIso(),code=["MAIL_REAUTH_REQUIRED","MICROSOFT_TOKEN_FAILED"].includes(text(error?.code))?text(error.code):"MAIL_SYNC_ACCOUNT_FAILED";
@@ -384,6 +420,41 @@ export async function runMicrosoftMailScheduledSync(env:Cloudflare.Env){
 }
 
 export function registerMicrosoftMailRoutes(app:any){
+  app.get("/api/mail/ebelge-inbox/microsoft",async(c:any)=>{
+    const a:any=await currentAccess(c);if(a.error)return a.error;const{current,tenant}=a;
+    if(!perm(current)||!accountingTenantReadAllowed(current,tenant)||!accountingAccess(current,"GET","/api/e-belge/file-inbox"))return c.json(err("MAIL_FORBIDDEN","Mail ve muhasebe görüntüleme yetkisi gerekli."),403);
+    const elevated=ownerRole(current.role)||companyAdminRole(current.role);
+    const member=elevated?"":" AND (a.created_by=? OR EXISTS(SELECT 1 FROM mail_account_members mm WHERE mm.main_company_slug=a.main_company_slug AND mm.account_id=a.id AND mm.user_id=? AND mm.can_view=1))";
+    const args=elevated?[tenant]:[tenant,text(current.id),text(current.id)];
+    const page=Math.min(100000,Math.max(1,Math.trunc(Number(c.req.query("page"))||1))),filter=text(c.req.query("state"))||"ALL";
+    if(!["ALL","WAITING","PROCESSING","REVIEW","ATTACHED"].includes(filter))return c.json(err("INVALID_STATE","Geçersiz durum."),400);
+    const where=intakeSource+member+(filter==="ALL"?"":" AND "+intakeState+"=?"),params=filter==="ALL"?args:[...args,filter];
+    const total=await c.env.DB.prepare("SELECT COUNT(*) n "+where).bind(...params).first<AnyRow>();
+    const rows=await c.env.DB.prepare("SELECT ma.id,ma.file_name,m.received_at,a.id account_id,a.display_name,"+intakeState+" intake_state,json_extract("+intakeMeta+",'$.ebelgeIntake.documentId') document_id,json_extract("+intakeMeta+",'$.ebelgeIntake.code') issue_code "+where+" ORDER BY m.received_at DESC,ma.id LIMIT 50 OFFSET ?").bind(...params,(page-1)*50).all<AnyRow>();
+    const accounts=await c.env.DB.prepare("SELECT a.id,a.display_name,a.email_address,EXISTS(SELECT 1 FROM mail_account_scopes s WHERE s.main_company_slug=a.main_company_slug AND s.account_id=a.id AND s.scope_code='EBELGE_INCOMING_DISPATCH') auto_enabled FROM mail_accounts a WHERE a.main_company_slug=? AND a.provider_type='MICROSOFT_365' AND a.status='ACTIVE' AND a.approval_status='APPROVED'"+member).bind(...args).all<AnyRow>();
+    c.header("Cache-Control","no-store");
+    return c.json({ok:true,data:{mainCompanySlug:tenant,items:rows.results||[],total:Number(total?.n||0),page,pageSize:50,accounts:accounts.results||[],canManage:companyAdminRole(current.role)&&ownTenant(current)===tenant}});
+  });
+  app.post("/api/mail/ebelge-inbox/microsoft/:id/intake",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(body.confirmed!==true||!perm(current)||!accountingTenantReadAllowed(current,tenant)||!accountingAccess(current,"POST","/api/e-belge/upload"))return c.json(err("MAIL_INTAKE_FORBIDDEN","Açık aktarım onayı ve muhasebe yetkisi gerekli."),403);
+    const row=await c.env.DB.prepare("SELECT ma.*,m.provider_message_id,a.id account_id "+intakeSource+" AND ma.id=? LIMIT 1").bind(tenant,text(c.req.param("id"))).first<AnyRow>();
+    if(!row)return c.json(err("MAIL_ATTACHMENT_NOT_FOUND","Uygun gelen ek bulunamadı."),404);
+    const account=await accountForUser(c,current,tenant,text(row.account_id));
+    if(!account||!account.provider_connected)return c.json(err("MAIL_ACCOUNT_FORBIDDEN","Posta hesabı erişimi doğrulanamadı."),403);
+    const token=(await usableToken(c,tenant,account)).text,result=await processIncomingMailAttachment(c,tenant,account,token,row);
+    return c.json({ok:true,data:{mainCompanySlug:tenant,...result}});
+  });
+  app.post("/api/mail/accounts/:id/ebelge-intake-policy/microsoft",async(c:any)=>{
+    const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
+    if(body.confirmed!==true||typeof body.enabled!=="boolean"||!companyAdminRole(current.role)||ownTenant(current)!==tenant||!accountingTenantReadAllowed(current,tenant))return c.json(err("OWNER_APPROVAL_REQUIRED","Firma yöneticisinin açık posta kutusu aktarım onayı gerekir."),403);
+    const account=await accountForUser(c,current,tenant,text(c.req.param("id")));
+    if(!account||upper(account.provider_type)!=="MICROSOFT_365"||upper(account.status)!=="ACTIVE"||upper(account.approval_status)!=="APPROVED"||!account.provider_connected)return c.json(err("MAIL_ACCOUNT_NOT_READY","Onaylı ve bağlı Outlook hesabı gerekli."),409);
+    if(body.enabled)await c.env.DB.prepare("INSERT OR IGNORE INTO mail_account_scopes(id,main_company_slug,account_id,scope_code,created_at) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),tenant,account.id,intakeScope,nowIso()).run();
+    else await c.env.DB.prepare("DELETE FROM mail_account_scopes WHERE main_company_slug=? AND account_id=? AND scope_code=?").bind(tenant,account.id,intakeScope).run();
+    await audit(c,tenant,text(current.id),text(account.id),body.enabled?"EBELGE_MAIL_INTAKE_ENABLED":"EBELGE_MAIL_INTAKE_DISABLED",{});
+    return c.json({ok:true,data:{mainCompanySlug:tenant,enabled:body.enabled}});
+  });
   app.post("/api/mail/accounts/:id/oauth/microsoft/start",async(c:any)=>{
     const body=await bodyOf(c),a:any=await currentAccess(c,body);if(a.error)return a.error;const{current,tenant}=a;
     if(!perm(current,"canCreate"))return c.json(err("MAIL_CONNECT_FORBIDDEN","Mail hesabı bağlama yetkiniz yok."),403);
