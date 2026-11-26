@@ -37,3 +37,5 @@ test("REV3 mobile shares existing routes, draft actions and protected output",()
 });
 
 test("REV3 AI is explicit proposal only, not an automatic provider send",()=>{const smart=read("./EBelgeSmartWorkspace.jsx");assert.match(smart,/operator-policy/);assert.match(smart,/operator-command\/interpret/);assert.match(smart,/allowAi:true/);assert.match(smart,/requiresReview!==true/);assert.match(smart,/change\(aiSuggestion.command\)/);});
+
+test("Dashboard never displays zero or empty records for failed requests; canonical tenant is verified",()=>{const s=read("./EBelgeCenterPage.jsx");assert.match(s,/canonicalCompanySlug\(activeMainCompany\)/);assert.match(s,/!dashboard\.verified/);assert.match(s,/İstek:/);assert.match(s,/Tekrar Dene/);});

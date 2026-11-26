@@ -55,7 +55,7 @@ async function buildPdfOcrPreview(file) {
 }
 
 export const getEBelgeDashboard = (params = {}) =>
-  apiGet("/e-belge/dashboard", params, { timeoutMs: 30_000 }).then(unwrap);
+  apiGet("/e-belge/dashboard", params, { timeoutMs: 30_000, forceFresh:true }).then(unwrap);
 
 export const getEBelgePool = (params = {}) =>
   apiGet("/e-belge/pool", params, { timeoutMs: 60_000 }).then(unwrap);
