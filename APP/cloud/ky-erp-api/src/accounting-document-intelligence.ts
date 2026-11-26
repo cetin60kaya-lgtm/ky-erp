@@ -1,3 +1,4 @@
+import {extractLabeledEttn} from "./e-belge-incoming-dispatch-identity.ts";
 // @ts-nocheck
 // Provider-neutral document intelligence for scanned/image/PDF accounting documents.
 // Azure Document Intelligence v4 is the first adapter; callers consume one canonical result.
@@ -225,7 +226,7 @@ function canonicalFromAzure(result: Row, documentKind: string, requestedModel: s
     extractionConfidence: documentConfidence,
     supplierName,customerName,
     customerTaxNo,
-    partyName,partyTaxNo,partyTaxOffice:"",partyIban:"",documentNo,uuid:"",issueDate,dueDate,currency,
+    partyName,partyTaxNo,partyTaxOffice:"",partyIban:"",documentNo,uuid:extractLabeledEttn(content),issueDate,dueDate,currency,
     subtotal,taxTotal,discountTotal:num(fieldValue(fields.TotalDiscount)),payableTotal,lines,
     rawText: content.slice(0,20000),
     rawResult: compactRaw(result,requestedModel),

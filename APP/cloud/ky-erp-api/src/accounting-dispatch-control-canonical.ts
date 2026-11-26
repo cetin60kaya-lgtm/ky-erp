@@ -1,3 +1,4 @@
+import {dispatchPartyRole,normalizedTax} from "./e-belge-incoming-dispatch-identity.ts";
 import {searchRegisteredItems,resolveRegisteredItems} from "./isnet-registered-items.ts";
 import {testProductCatalog,resolveTestProductAction} from "./isnet-test-product-catalog.ts";
 import {fetchSource,remainingLines} from "./isnet-provider-source.ts";
@@ -88,6 +89,28 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
     ORDER BY COALESCE(d.issue_date,d.created_at) DESC,d.created_at DESC LIMIT 2001
   `).bind(slug).all<Row>()).results||[];
   const truncated=records.length>2000,selected=records.slice(0,2000),ids=selected.map(row=>text(row.id));
+  // Real invoice history, not the sender of an incoming dispatch. No company write.
+  const taxes=[...new Set(selected.map(row=>normalizedTax(row.party_tax_no)).filter(Boolean))];
+  const evidence=new Map<string,{sales:number;purchases:number}>();
+  for(let offset=0;offset<taxes.length;offset+=200){
+    const part=JSON.stringify(taxes.slice(offset,offset+200));
+    const records=await c.env.DB.prepare(`
+      SELECT REPLACE(REPLACE(TRIM(d.party_tax_no),' ',''),'-','') tax,
+        SUM(CASE WHEN d.direction='OUTGOING' THEN 1 ELSE 0 END) sales,
+        SUM(CASE WHEN d.direction='INCOMING' THEN 1 ELSE 0 END) purchases
+      FROM accounting_documents d
+      WHERE d.main_company_slug=? AND d.deleted_at IS NULL AND COALESCE(d.record_scope,'OFFICIAL')='OFFICIAL'
+        AND d.xml_file_asset_id IS NOT NULL
+        AND d.direction IN ('INCOMING','OUTGOING')
+        AND (d.document_type LIKE '%FATURA%' OR d.document_type LIKE '%INVOICE%' OR d.document_type LIKE '%ARSIV%')
+        AND d.document_type NOT LIKE '%IADE%' AND d.document_type NOT LIKE '%RETURN%'
+        AND UPPER(COALESCE(d.status,'')) NOT IN ('CANCELLED','CANCELED','REJECTED','IPTAL','REDDEDILDI')
+        AND CASE WHEN json_valid(d.raw_metadata) THEN json_extract(d.raw_metadata,'$.ublVerified') ELSE 0 END=1
+        AND CASE WHEN json_valid(d.raw_metadata) THEN UPPER(COALESCE(json_extract(d.raw_metadata,'$.invoiceTypeCode'),'')) ELSE '' END IN ('SATIS','ISTISNA','TEVKIFAT','OZELMATRAH','IHRACKAYITLI')
+        AND REPLACE(REPLACE(TRIM(d.party_tax_no),' ',''),'-','') IN (SELECT value FROM json_each(?))
+      GROUP BY 1`).bind(slug,part).all<Row>();
+    for(const row of records.results||[])evidence.set(text(row.tax),{sales:num(row.sales),purchases:num(row.purchases)});
+  }
   // Read existing official relations only. JSON ID lists avoid D1's 100 bind parameter limit.
   const readRelations=async (requested:string[])=>{
     const result:Row[]=[];
@@ -130,8 +153,9 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
   }
   const result=selected.map(doc=>{
     const role=upper(doc.company_type||doc.company_legacy_type);
-    const group=role==="CUSTOMER"?"CUSTOMER":role==="SUPPLIER"?"SUPPLIER":
-      role==="BOTH"?"BOTH":"UNCLASSIFIED";
+    const history=evidence.get(normalizedTax(doc.party_tax_no));
+    const classification=dispatchPartyRole(role,history?.sales,history?.purchases);
+    const group=classification.group;
     const expectedDirection=group==="CUSTOMER"?"OUTGOING":group==="SUPPLIER"?"INCOMING":"";
     const sameParty=(d:ReturnType<typeof candidate>)=>{
       const company=text(doc.party_company_id),tax=text(doc.party_tax_no);
@@ -151,7 +175,7 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
       unique.length?"INVOICE_LINKED":"INVOICE_LINK_MISSING";
     return{id:text(doc.id),dispatchNo:text(doc.document_no),issueDate:text(doc.issue_date||doc.created_at),
       companyName:text(doc.party_name),companyId:text(doc.party_company_id),
-      companyType:group,status,invoiceIds:unique.map(v=>v.id),
+      companyType:group,companyCardRole:role,roleSource:classification.source,salesEvidence:history?.sales||0,purchaseEvidence:history?.purchases||0,status,invoiceIds:unique.map(v=>v.id),
       invoiceNumbers:unique.map(v=>v.no).filter(Boolean),dispatchLinkStatus:group!=="CUSTOMER"?"NOT_APPLICABLE":dispatches.length?"DISPATCH_LINKED":"DISPATCH_LINK_MISSING",outgoingDispatchIds:dispatches.map(v=>v.id),outgoingDispatchNumbers:dispatches.map(v=>v.no).filter(Boolean)};
   });
   const totals={customerDispatchLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.dispatchLinkStatus==="DISPATCH_LINK_MISSING").length,customerLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINK_MISSING").length,

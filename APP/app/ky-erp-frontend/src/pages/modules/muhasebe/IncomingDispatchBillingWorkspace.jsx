@@ -44,7 +44,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
   }, [slug]);
   useEffect(() => { setPartial(null); void refresh(); }, [refresh]);
 
-  useEffect(()=>{if(actionContext?.targetModule!=="e-belge"||actionContext.targetTab!=="gelen-irsaliyeler")return;if(["CUSTOMER_MISSING","CUSTOMER_DISPATCH_MISSING"].includes(actionContext.billingFilter)){setFilter(actionContext.billingFilter);setSearch("");setPeriod({from:actionContext.from||"",to:actionContext.to||""});setPartial(null)}},[actionContext?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(actionContext?.targetModule!=="e-belge"||actionContext.targetTab!=="gelen-irsaliyeler")return;if(["CUSTOMER_MISSING","CUSTOMER_DISPATCH_MISSING","ROLE_REVIEW"].includes(actionContext.billingFilter)){setFilter(actionContext.billingFilter);setSearch("");setPeriod({from:actionContext.from||"",to:actionContext.to||""});setPartial(null)}},[actionContext?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const dated=useMemo(()=>data.rows.filter(row=>{const d=String(row.issueDate||"").slice(0,10);return (!period.from||d>=period.from)&&(!period.to||d<=period.to)}),[data.rows,period]);
   const shown = useMemo(() => dated.filter(row => {
     const matches = filter === "ALL" ||
@@ -95,7 +95,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
           {shown.map(row => <tr key={row.id}>
             <td><strong>{row.dispatchNo || "No bekliyor"}</strong><small>{day(row.issueDate)}</small></td>
             <td>{row.companyName || "Cari eşleşmesi bekliyor"}</td>
-            <td>{roleName(row.companyType)}</td>
+            <td>{roleName(row.companyType)}{row.roleSource==="VERIFIED_SALES_HISTORY"&&<small> · Satış faturası geçmişi</small>}{row.roleSource==="VERIFIED_PURCHASE_HISTORY"&&<small> · Alış faturası geçmişi</small>}{row.roleSource==="ROLE_CONFLICT_REVIEW"&&<small> · Cari kontrolü</small>}</td>
             <td>{row.companyType!=="CUSTOMER"?"—":row.dispatchLinkStatus==="DISPATCH_LINKED"?<span className="idb-linked">{row.outgoingDispatchNumbers?.join(", ")||"Sevk bağı mevcut"}</span>:<span className="idb-pending">Sevk bağı bulunamadı</span>}</td>
             <td>{row.status === "ROLE_REVIEW" ?
               <span className="idb-note"><AlertTriangle size={14}/> Cari türünü doğrula</span> :
@@ -104,7 +104,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
               <span className="idb-pending">Fatura bağlantısı bulunamadı · kontrol bekliyor</span>}</td>
             <td><button type="button" onClick={() => onOpenDocument?.(row.id)}>
               <FileText size={14}/> İrsaliyeyi Aç
-            </button>{row.companyType==="CUSTOMER"&&<button type="button" onClick={()=>setPartial(row)}>Gelenden irsaliye oluştur</button>}</td>
+            </button>{row.companyType==="CUSTOMER"&&row.companyCardRole==="CUSTOMER"&&<button type="button" onClick={()=>setPartial(row)}>Gelenden irsaliye oluştur</button>}{row.companyType==="CUSTOMER"&&row.companyCardRole!=="CUSTOMER"&&<span>İşlem öncesi cari doğrulaması gerekli</span>}</td>
           </tr>)}
         </tbody>
       </table>{!shown.length && <p className="idb-empty">Bu filtrede kayıt yok.</p>}</div>}
