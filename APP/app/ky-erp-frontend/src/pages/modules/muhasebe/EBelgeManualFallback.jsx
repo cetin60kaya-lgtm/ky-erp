@@ -5,7 +5,7 @@ const blankLine=()=>({description:"",quantity:"1",unitCode:"ADET",unitPrice:"0",
 const formatMoney=value=>new Intl.NumberFormat("tr-TR",{minimumFractionDigits:2,maximumFractionDigits:2}).format(value);
 export default function EBelgeManualFallback({file,onSaved,onCancel}){
   const [form,setForm]=useState({documentKind:"FATURA",direction:"INCOMING",documentNo:"",issueDate:"",
-    partyName:"",partyTaxNo:"",currency:"TRY"});
+    partyName:"",partyTaxNo:"",recipientTaxNo:"",ettn:"",currency:"TRY"});
   const [lines,setLines]=useState([blankLine()]);
   const [confirmed,setConfirmed]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState("");
   const totals=useMemo(()=>{
@@ -41,12 +41,14 @@ export default function EBelgeManualFallback({file,onSaved,onCancel}){
       <label>Belge Tarihi<input type="date" required value={form.issueDate} onChange={e=>field("issueDate",e.target.value)}/></label>
       <label>Karşı Firma<input required maxLength={200} value={form.partyName} onChange={e=>field("partyName",e.target.value)}/></label>
       <label>VKN / TCKN<input inputMode="numeric" maxLength={11} value={form.partyTaxNo} onChange={e=>field("partyTaxNo",e.target.value)}/></label>
+      {form.documentKind==="IRSALIYE"&&form.direction==="INCOMING"&&<><label>Alıcı VKN / TCKN<input required inputMode="numeric" maxLength={11} value={form.recipientTaxNo} onChange={e=>field("recipientTaxNo",e.target.value)}/></label><label>ETTN (varsa)<input maxLength={36} value={form.ettn} onChange={e=>field("ettn",e.target.value)}/></label></>}
       <label>Para Birimi<input required maxLength={3} value={form.currency} onChange={e=>field("currency",e.target.value.toUpperCase())}/></label>
     </div>
     <div className="eb-manual-lines-head"><strong>Kalemler ({lines.length})</strong>
       <button type="button" disabled={busy||lines.length>=100} onClick={()=>setLines(old=>[...old,blankLine()])}><Plus size={16}/> Kalem Ekle</button></div>
     <div className="eb-manual-lines">{lines.map((row,index)=><div className="eb-manual-line" key={index}>
       <label className="description">Kalem {index+1} açıklaması<input required maxLength={240} value={row.description} onChange={e=>lineField(index,"description",e.target.value)}/></label>
+      {form.documentKind==="IRSALIYE"&&<label>Malzeme No<input maxLength={100} value={row.productCode||""} onChange={e=>lineField(index,"productCode",e.target.value)}/></label>}
       <label>Miktar<input required type="number" min="0.000001" step="any" value={row.quantity} onChange={e=>lineField(index,"quantity",e.target.value)}/></label>
       <label>Birim<input required maxLength={20} value={row.unitCode} onChange={e=>lineField(index,"unitCode",e.target.value)}/></label>
       <label>Birim Fiyat<input required type="number" min="0" step="any" value={row.unitPrice} onChange={e=>lineField(index,"unitPrice",e.target.value)}/></label>

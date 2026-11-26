@@ -18,3 +18,11 @@ test("PDF/XML exact line comparison preserves colour, unit, individual quantity"
  assert.equal(equalSourceLines([],[]),false);
  assert.equal(equalSourceLines([line],[{...line,quantity:4000},{...line,quantity:4373}]),false);
 });
+
+import {incomingDispatchKey} from "./e-belge-incoming-dispatch-identity.ts";
+test("PDF/XML concurrency uses same tenant-scoped complete source key",()=>{
+ assert.equal(incomingDispatchKey(pdf),incomingDispatchKey(xml));
+ assert.notEqual(incomingDispatchKey(pdf),incomingDispatchKey({...xml,tenant:"other"}));
+ assert.equal(incomingDispatchKey({...pdf,recipientTax:""}),"");
+ assert.notEqual(incomingDispatchKey(pdf),incomingDispatchKey({...xml,documentNo:"OTHER"}));
+});

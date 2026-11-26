@@ -64,3 +64,10 @@ export function sourceLineSignature(lines:unknown){
 export function equalSourceLines(a:unknown,b:unknown){
  const x=sourceLineSignature(a),y=sourceLineSignature(b);return x!==null&&x===y;
 }
+
+/** Stable ID basis for concurrent PDF/XML of the same fully identified incoming dispatch. */
+export function incomingDispatchKey(v:Identity){
+ const a=identity(v);
+ if(!a.tenant||a.direction!=="INCOMING"||a.kind!=="DISPATCH"||!a.issuer||!a.recipient||!a.no||!a.date)return "";
+ return JSON.stringify([a.tenant,a.direction,a.kind,a.issuer,a.recipient,a.no,a.date]);
+}

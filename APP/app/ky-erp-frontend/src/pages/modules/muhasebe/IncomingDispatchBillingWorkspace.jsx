@@ -44,7 +44,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
   }, [slug]);
   useEffect(() => { setPartial(null); void refresh(); }, [refresh]);
 
-  useEffect(()=>{if(actionContext?.targetModule!=="e-belge"||actionContext.targetTab!=="gelen-irsaliyeler")return;if(["CUSTOMER_MISSING","CUSTOMER_DISPATCH_MISSING","ROLE_REVIEW"].includes(actionContext.billingFilter)){setFilter(actionContext.billingFilter);setSearch("");setPeriod({from:actionContext.from||"",to:actionContext.to||""});setPartial(null)}},[actionContext?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(()=>{if(actionContext?.targetModule!=="e-belge"||actionContext.targetTab!=="gelen-irsaliyeler")return;if(["CUSTOMER_MISSING","CUSTOMER_DISPATCH_MISSING","ROLE_REVIEW","XML_PENDING"].includes(actionContext.billingFilter)){setFilter(actionContext.billingFilter);setSearch("");setPeriod({from:actionContext.from||"",to:actionContext.to||""});setPartial(null)}},[actionContext?.nonce]); // eslint-disable-line react-hooks/exhaustive-deps
   const dated=useMemo(()=>data.rows.filter(row=>{const d=String(row.issueDate||"").slice(0,10);return (!period.from||d>=period.from)&&(!period.to||d<=period.to)}),[data.rows,period]);
   const shown = useMemo(() => dated.filter(row => {
     const matches = filter === "ALL" ||
@@ -52,6 +52,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
       (filter === "CUSTOMER_MISSING" && row.companyType === "CUSTOMER" && row.status === "INVOICE_LINK_MISSING") ||
       (filter === "CUSTOMER_LINKED" && row.companyType === "CUSTOMER" && row.status === "INVOICE_LINKED") ||
       (filter === "SUPPLIER" && row.companyType === "SUPPLIER") ||
+      (filter === "XML_PENDING" && row.xmlPending===true) ||
       (filter === "ROLE_REVIEW" && row.status === "ROLE_REVIEW");
     return matches && (row.dispatchNo + " " + row.companyName + " " + (row.invoiceNumbers || []).join(" "))
       .toLocaleLowerCase("tr-TR").includes(search.toLocaleLowerCase("tr-TR").trim());
@@ -63,6 +64,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
     ["CUSTOMER_MISSING", "Müşteri · Fatura Bağı Bekleyen", count(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINK_MISSING")],
     ["CUSTOMER_LINKED", "Müşteri · Fatura Bağlı", count(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINKED")],
     ["SUPPLIER", "Tedarikçi İrsaliyeleri", count(x=>x.companyType==="SUPPLIER")],
+    ["XML_PENDING", "Resmî XML Bekleyen", count(x=>x.xmlPending===true)],
     ["ROLE_REVIEW", "Cari Türü Kontrolü", count(x=>x.status==="ROLE_REVIEW")],
     ["ALL", "Tümü", count(()=>true)],
   ];
@@ -93,7 +95,7 @@ export default function IncomingDispatchBillingWorkspace({ activeMainCompany, on
           <th>Giden Sevk Bağı</th><th>Fatura Bağı</th><th>İşlem</th></tr></thead>
         <tbody>
           {shown.map(row => <tr key={row.id}>
-            <td><strong>{row.dispatchNo || "No bekliyor"}</strong><small>{day(row.issueDate)}</small></td>
+            <td><strong>{row.dispatchNo || "No bekliyor"}</strong><small>{day(row.issueDate)}</small>{row.xmlPending&&<small>Resmî XML bekleniyor</small>}</td>
             <td>{row.companyName || "Cari eşleşmesi bekliyor"}</td>
             <td>{roleName(row.companyType)}{row.roleSource==="VERIFIED_SALES_HISTORY"&&<small> · Satış faturası geçmişi</small>}{row.roleSource==="VERIFIED_PURCHASE_HISTORY"&&<small> · Alış faturası geçmişi</small>}{row.roleSource==="ROLE_CONFLICT_REVIEW"&&<small> · Cari kontrolü</small>}</td>
             <td>{row.companyType!=="CUSTOMER"?"—":row.dispatchLinkStatus==="DISPATCH_LINKED"?<span className="idb-linked">{row.outgoingDispatchNumbers?.join(", ")||"Sevk bağı mevcut"}</span>:<span className="idb-pending">Sevk bağı bulunamadı</span>}</td>

@@ -79,7 +79,7 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
   const slug=await assertAccountingScope(c);
   const records=(await c.env.DB.prepare(`
     SELECT d.id,d.document_no,d.issue_date,d.party_name,d.party_tax_no,
-      d.party_company_id,d.created_at,c.company_type,c.type AS company_legacy_type
+      d.party_company_id,d.created_at,d.xml_file_asset_id,d.raw_metadata,c.company_type,c.type AS company_legacy_type
     FROM accounting_documents d
     LEFT JOIN companies c ON c.id=d.party_company_id AND c.main_company_slug=d.main_company_slug
       AND c.deleted_at IS NULL
@@ -175,7 +175,7 @@ export async function buildIncomingDispatchBilling(c:Context<AppEnv>){
       unique.length?"INVOICE_LINKED":"INVOICE_LINK_MISSING";
     return{id:text(doc.id),dispatchNo:text(doc.document_no),issueDate:text(doc.issue_date||doc.created_at),
       companyName:text(doc.party_name),companyId:text(doc.party_company_id),
-      companyType:group,companyCardRole:role,roleSource:classification.source,salesEvidence:history?.sales||0,purchaseEvidence:history?.purchases||0,status,invoiceIds:unique.map(v=>v.id),
+      xmlPending:!doc.xml_file_asset_id||json(json(doc.raw_metadata).earlySource).state==="XML_PENDING",companyType:group,companyCardRole:role,roleSource:classification.source,salesEvidence:history?.sales||0,purchaseEvidence:history?.purchases||0,status,invoiceIds:unique.map(v=>v.id),
       invoiceNumbers:unique.map(v=>v.no).filter(Boolean),dispatchLinkStatus:group!=="CUSTOMER"?"NOT_APPLICABLE":dispatches.length?"DISPATCH_LINKED":"DISPATCH_LINK_MISSING",outgoingDispatchIds:dispatches.map(v=>v.id),outgoingDispatchNumbers:dispatches.map(v=>v.no).filter(Boolean)};
   });
   const totals={customerDispatchLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.dispatchLinkStatus==="DISPATCH_LINK_MISSING").length,customerLinkMissing:result.filter(x=>x.companyType==="CUSTOMER"&&x.status==="INVOICE_LINK_MISSING").length,

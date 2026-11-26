@@ -22,7 +22,7 @@ import { dispatchRequirement } from "./e-belge-dispatch-policy";
 import { eBelgePoolOrderBy } from "./e-belge-pool-sort";
 import { accountingAccess,accountingTenantReadAllowed } from "./accounting-access-policy";
 import { registerEBelgeDraftRoutes, operatorAccess, operatorReadReady } from "./e-belge-draft-routes";
-import {normalizedEttn,normalizedTax,normalizedIssueDate,compareIncomingDispatchIdentity,equalSourceLines} from "./e-belge-incoming-dispatch-identity.ts";
+import {normalizedEttn,normalizedTax,normalizedIssueDate,compareIncomingDispatchIdentity,equalSourceLines,incomingDispatchKey} from "./e-belge-incoming-dispatch-identity.ts";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
@@ -210,10 +210,12 @@ async function incomingDispatchDuplicate(c:Context<AppEnv>,slug:string,p:Row){
    ((?<>'' AND UPPER(TRIM(COALESCE(uuid,'')))=?) OR
     (?<>'' AND ?<>'' AND ?<>'' AND direction='INCOMING' AND (document_type LIKE '%IRSALIYE%' OR document_type LIKE '%DISPATCH%' OR document_type LIKE '%DESPATCH%') AND UPPER(TRIM(document_no))=UPPER(?) AND REPLACE(REPLACE(TRIM(party_tax_no),' ',''),'-','')=? AND issue_date=?)
     OR (?<>'' AND ?<>'' AND provider_type=? AND provider_document_id=?)) LIMIT 3`).bind(slug,id,id,no,tax,date,no,tax,date,text(p.providerType),text(p.providerDocumentId),upper(p.providerType),text(p.providerDocumentId)).all<Row>()).results||[];
+ if(found.some(x=>!incomingDispatch(x)))throw Object.assign(new Error("ETTN veya sağlayıcı kimliği farklı belge türünde kayıtlı; otomatik aktarım durduruldu."),{code:"SOURCE_SCOPE_CONFLICT"});
  if(found.length>1)throw Object.assign(new Error("Birden fazla eski irsaliye aynı kimliğe aday; otomatik işlem durduruldu."),{code:"SOURCE_IDENTITY_AMBIGUOUS"});
  return found[0]||null;
 }
 async function reconcileEarlyDispatchFile(c:Context<AppEnv>,slug:string,doc:Row,p:Row,asset:Row){
+ if(!incomingDispatch(doc))throw Object.assign(new Error("Kaynak belge kapsamı uyuşmuyor."),{code:"SOURCE_SCOPE_CONFLICT"});
  const old=sourceIdentity(slug,doc),next=sourceIdentity(slug,p),identity=compareIncomingDispatchIdentity(old,next);
  const owner=await mainCompanyIdentity(c,slug);
  const knownRecipient=owner.taxNos.includes(next.recipientTax)&&owner.taxNos.includes(old.recipientTax);
@@ -233,7 +235,7 @@ async function reconcileEarlyDispatchFile(c:Context<AppEnv>,slug:string,doc:Row,
    return attachDuplicateFile(c,slug,doc,asset);
  }
  // Preserve conflicting bytes as evidence, never overwrite existing original XML or quantities.
- await linkFile(c,slug,asset.id,doc.id,"SOURCE_REVIEW");
+ await c.env.DB.prepare("INSERT OR IGNORE INTO file_hub_relations(id,main_company_slug,file_asset_id,entity_type,entity_id,relation_type,is_primary,confidence,source,metadata,created_at,updated_at) VALUES(?,?,?,?,?,?,0,0,'E_BELGE','{}',?,?)").bind(crypto.randomUUID(),slug,asset.id,"DOCUMENT",doc.id,"SOURCE_REVIEW",now(),now()).run();
  await addIssue(c,slug,doc.id,"EARLY_DISPATCH_SOURCE_CONFLICT","İrsaliye kimliği, alıcısı, kalemleri veya resmî XML doğrulaması uyuşmadı. Yeni belge/tekrar kesim yapılmadı; kaynak mutabakatı gerekli.","ERROR","source");
  return {documentId:text(doc.id),duplicate:true,attached:"SOURCE_REVIEW",status:"REVIEW_REQUIRED",sourceConflict:true};
 }
@@ -255,7 +257,9 @@ async function createDocument(c:Context<AppEnv>,slug:string,p:Row,asset:Row){
   }else{
     const dupe=await findDuplicate(c,slug,p);if(dupe)return attachDuplicateFile(c,slug,dupe,asset);
   }
-  const id=crypto.randomUUID(),ts=now();await ensureOfficialXmlCompany(c,slug,p);const match=await matchCompany(c,slug,text(p.partyName),cleanTax(p.partyTaxNo)),confidence=numberValue(p.extractionConfidence),providerType=upper(p.providerType)||"MANUAL",sourceType=text(p.sourceType)||(asset.ext==="XML"?"XML_IMPORT":"AI_SCAN"),supplierProfile=await getEBelgeSupplierProfile(c,slug,match.companyId);
+  const sourceKey=early?incomingDispatchKey(sourceIdentity(slug,p)):"";
+  const stable=sourceKey?Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",new TextEncoder().encode(sourceKey)))).slice(0,16).map(v=>v.toString(16).padStart(2,"0")).join(""):"";
+  const id=stable?`${stable.slice(0,8)}-${stable.slice(8,12)}-5${stable.slice(13,16)}-a${stable.slice(17,20)}-${stable.slice(20,32)}`:crypto.randomUUID(),ts=now();await ensureOfficialXmlCompany(c,slug,p);const match=await matchCompany(c,slug,text(p.partyName),cleanTax(p.partyTaxNo)),confidence=numberValue(p.extractionConfidence),providerType=upper(p.providerType)||"MANUAL",sourceType=text(p.sourceType)||(asset.ext==="XML"?"XML_IMPORT":"AI_SCAN"),supplierProfile=await getEBelgeSupplierProfile(c,slug,match.companyId);
   const meta={...safeJson(p.rawMetadata),extractionConfidence:confidence,extractionQualityScore:numberValue(p.extractionQualityScore),extractor:p.extractor||null,extractorModel:p.extractorModel||null,needsManualReview:p.needsManualReview===true,manualReviewReasons:Array.isArray(p.manualReviewReasons)?p.manualReviewReasons:[],extractionDiscrepancies:Array.isArray(p.extractionDiscrepancies)?p.extractionDiscrepancies:[],supplierProfile:{isChemicalSupplier:supplierProfile.isChemicalSupplier===true,requireLot:supplierProfile.requireLot===true}};
   await insertDynamic(c,"accounting_documents",{id,main_company_slug:slug,direction:p.direction,document_type:p.documentType,provider_type:providerType,provider_document_id:text(p.providerDocumentId)||null,source_type:sourceType,status:text(p.status)||"REVIEW_REQUIRED",record_scope:text(p.recordScope)||"OFFICIAL",document_no:text(p.documentNo)||null,uuid:text(p.uuid)||null,issue_date:text(p.issueDate)||null,due_date:text(p.dueDate)||null,currency:text(p.currency)||"TRY",party_company_id:match.companyId||null,party_name:text(p.partyName)||null,party_tax_no:cleanTax(p.partyTaxNo)||null,subtotal:numberValue(p.subtotal),tax_total:numberValue(p.taxTotal),discount_total:numberValue(p.discountTotal),payable_total:numberValue(p.payableTotal),file_asset_id:asset.id,xml_file_asset_id:asset.ext==="XML"?asset.id:null,pdf_file_asset_id:asset.ext==="PDF"?asset.id:null,parser_version:text(p.parserVersion)||null,raw_metadata:meta,created_at:ts,updated_at:ts});
   const lines=Array.isArray(p.lines)?p.lines:[];
@@ -425,16 +429,22 @@ function prepareManualEBelgeInput(input:Row,fileName:string){
   if(description.length<2||description.length>240||!Number.isFinite(quantity)||quantity<=0||quantity>1e9||!Number.isFinite(unitPrice)||unitPrice<0||unitPrice>1e9||!Number.isFinite(taxRate)||taxRate<0||taxRate>100||unitCode.length>20)
    invalid(`Kalem ${index+1} açıklama, miktar, birim fiyat veya KDV değeri geçersiz.`);
   const lineTotal=round(quantity*unitPrice),taxAmount=round(lineTotal*taxRate/100);
-  return {lineNo:index+1,description,quantity,unitPrice,taxRate,unitCode,lineTotal,taxAmount};
+  return {lineNo:index+1,description,quantity,unitPrice,taxRate,unitCode,lineTotal,taxAmount,productCode:text(row.productCode).slice(0,100)};
  });
+ const uuid=normalizedEttn(input.ettn),recipientTax=normalizedTax(input.recipientTaxNo);
+ if(kind==="IRSALIYE"&&direction==="INCOMING"&&(!tax||!recipientTax||(text(input.ettn)&&!uuid)))invalid("Gelen irsaliye için düzenleyici ve alıcı VKN/TCKN ile varsa geçerli ETTN gerekir.");
  const subtotal=round(lines.reduce((sum: number,line:Row)=>sum+line.lineTotal,0));
  const taxTotal=round(lines.reduce((sum: number,line:Row)=>sum+line.taxAmount,0));
  return {direction,documentType:documentTypeOf(kind,direction),documentNo:no,issueDate:date,
-  partyName:party,partyTaxNo:tax,currency,subtotal,taxTotal,payableTotal:round(subtotal+taxTotal),
+  partyName:party,partyTaxNo:tax,uuid,customerTaxNo:direction==="INCOMING"?recipientTax:"",currency,subtotal,taxTotal,payableTotal:round(subtotal+taxTotal),
   lines,providerType:"MANUAL",sourceType:"MANUAL_REVIEW",extractionConfidence:0,
   rawMetadata:{originalFileName:fileName,manualSourceVerificationRequired:true,manuallyCalculatedTotals:true}};
 }
 
+async function preserveIntakeFailure(c:Context<AppEnv>,slug:string,asset:Row){
+ // Never delete original bytes after an uncertain/partial DB write. File Hub keeps them for recovery.
+ await c.env.DB.prepare("UPDATE file_hub_assets SET metadata=json_set(CASE WHEN json_valid(metadata) THEN metadata ELSE '{}' END,'$.accountingImportState','NEEDS_REVIEW','$.accountingImportResult','INTAKE_UNCERTAIN'),updated_at=? WHERE id=? AND main_company_slug=?").bind(now(),asset.id,slug).run().catch(()=>{});
+}
 async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirection:string,kind:string,analysisFile:File|null=null,manualData:Row|null=null){
   const ext=upper(file.name.split(".").pop());
   if(!allowedExt.has(ext))throw Object.assign(new Error(`${file.name}: desteklenmeyen dosya tipi.`),{code:"UNSUPPORTED_FILE"});
@@ -447,7 +457,7 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
       if(!record.duplicate)await addIssue(c,slug,record.documentId,"MANUAL_SOURCE_REVIEW_REQUIRED",
         "Kaynak dosyadaki firma, tarih, tutar, KDV ve her kalem kullanıcı tarafından doğrulanmalıdır.","ERROR","source");
       return {...record,manual:true};
-    }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
+    }catch(e){await preserveIntakeFailure(c,slug,asset);throw e}
   }
   const readiness=accountingDocumentIntelligenceStatus(c.env as any);
   if(ext!=="XML"&&!readiness.configured)throw Object.assign(new Error("PDF/görsel okuma servisi production ortamında hazır değil. XML yükleme kullanılabilir."),{code:"DOCINTEL_NOT_CONFIGURED",detail:{provider:readiness.provider,endpointConfigured:readiness.endpointConfigured,keyConfigured:readiness.keyConfigured,workersAiConfigured:readiness.workersAiConfigured}});
@@ -467,9 +477,35 @@ async function uploadOne(c:Context<AppEnv>,slug:string,file:File,requestedDirect
     const outgoing=parsed.direction==="OUTGOING";
     const hasCounterparty=Boolean(text(parsed.partyName)||cleanTax(parsed.partyTaxNo));
     return await createDocument(c,slug,{...parsed,outgoingCounterpartyReview:outgoing&&!hasCounterparty,sourceType:"AI_SCAN",rawMetadata:{...safeJson(canonical.rawMetadata),aiProvider:canonical.extractor||"DOCUMENT_INTELLIGENCE",requestedDocumentKind:requestedKind,inferredDocumentKind:resolvedKind,autoDetected:canonical.autoDetected===true,directionResolution:parsed.directionResolution,analysisSource:analysisTarget===file?"ORIGINAL_FILE":"CLIENT_PDF_PREVIEW",originalFileName:file.name}},asset);
-  }catch(e){await c.env.FILES.delete(asset.key).catch(()=>{});await c.env.DB.prepare("DELETE FROM file_hub_assets WHERE id=? AND main_company_slug=?").bind(asset.id,slug).run().catch(()=>{});throw e}
+  }catch(e){await preserveIntakeFailure(c,slug,asset);throw e}
 }
 
+/** Existing Microsoft mail account, explicit authorization checked by caller.
+ * Never use sender as issuer; never import an unclassified attachment as a document. */
+export async function ingestIncomingMailDispatch(c:Context<AppEnv>,slug:string,file:File){
+ const ext=upper(file.name.split(".").pop());
+ if(!["PDF","XML"].includes(ext)||!file.size||file.size>MAX_FILE_BYTES)throw Object.assign(new Error("Desteklenmeyen mail eki."),{code:"MAIL_ATTACHMENT_REVIEW"});
+ let parsed:Row;
+ if(ext==="XML"){
+   const raw=parseCanonicalEBelgeUbl(await file.text(),"INCOMING");
+   if(!isDispatch(raw.documentType)||safeJson(raw.rawMetadata).ublVerified!==true)throw Object.assign(new Error("İrsaliye XML doğrulaması gerekli."),{code:"MAIL_ATTACHMENT_REVIEW"});
+   parsed=await resolveManualDirection(c,slug,"AUTO",raw,"IRSALIYE");
+ }else{
+   const readiness=accountingDocumentIntelligenceStatus(c.env as any);
+   if(!readiness.azureConfigured)throw Object.assign(new Error("PDF okuma servisi hazır değil."),{code:"MAIL_OCR_UNAVAILABLE"});
+   const ai=await analyzeAccountingDocument(c,file,"AUTO"),canonical=ai?.canonical||ai?.data||ai||{};
+   if(!isDispatch(canonical.inferredDocumentKind))throw Object.assign(new Error("Ek otomatik irsaliye olarak doğrulanamadı."),{code:"MAIL_ATTACHMENT_REVIEW"});
+   parsed=await resolveManualDirection(c,slug,"AUTO",canonical,"IRSALIYE");
+ }
+ const identity=sourceIdentity(slug,parsed),owner=await mainCompanyIdentity(c,slug);
+ if(!incomingDispatch(parsed)||!incomingDispatchKey(identity)||!owner.taxNos.includes(identity.recipientTax)||identity.issuerTax===identity.recipientTax||!Array.isArray(parsed.lines)||!parsed.lines.length)
+   throw Object.assign(new Error("Düzenleyici, alıcı, belge kimliği veya kalemler doğrulanamadı."),{code:"MAIL_ATTACHMENT_REVIEW"});
+ const asset=await stageFile(c,slug,file);
+ try{
+  const result=await createDocument(c,slug,{...parsed,sourceType:ext==="PDF"?"OUTLOOK_PDF":"OUTLOOK_XML",rawMetadata:{...safeJson(parsed.rawMetadata),originalFileName:file.name}},asset);
+  return {...result,assetId:asset.id};
+ }catch(e){await preserveIntakeFailure(c,slug,asset);throw e}
+}
 // Newly received dispatches also refresh existing unposted invoice drafts.
 // The established UBL/quantity engine remains the final relationship authority.
 async function autoReconcileInvoicesAfterDispatch(c:Context<AppEnv>,slug:string,dispatchId:string){
@@ -903,7 +939,7 @@ export function registerEBelgeCenterRoutes(app:Hono<AppEnv>){
     const items=[],errors=[];
     for(let index=0;index<files.length;index+=1){const file=files[index];try{items.push({fileName:file.name,...await uploadOne(c,slug,file,direction,kind,previews[index],manualData)})}catch(e:any){errors.push({fileName:file.name,code:text(e?.code)||"UPLOAD_FAILED",message:text(e?.message)||"Belge alınamadı."})}}
     const autoReconcile=[],reconcileIds=new Set<string>();
-    const uploadedIds=[...new Set(items.map((item:any)=>text(item.documentId)).filter(Boolean))];
+    const uploadedIds=[...new Set(items.filter((item:any)=>!item.sourceConflict).map((item:any)=>text(item.documentId)).filter(Boolean))];
     for(const documentId of uploadedIds){
       const doc=await c.env.DB.prepare("SELECT id,document_type,direction,party_company_id,party_tax_no,party_name,issue_date,created_at FROM accounting_documents WHERE id=? AND main_company_slug=? AND deleted_at IS NULL LIMIT 1").bind(documentId,slug).first<Row>();
       if(!doc||!["INCOMING","OUTGOING"].includes(upper(doc.direction)))continue;
