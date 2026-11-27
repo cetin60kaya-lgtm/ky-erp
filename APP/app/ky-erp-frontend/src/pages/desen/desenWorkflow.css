@@ -565,3 +565,5 @@
 .dsg-image-pick-action { cursor: pointer; border: 1px solid #a9c8e4; background: #f5faff; border-radius: 8px; color: #215681; padding: 10px 12px; font-size: 12px; font-weight: 700; text-align: center; }
 .dsg-image-pick-action input { display: block; margin: 7px auto 0; max-width: 100%; font-size: 11px; }
 .dsg-editor-image-picker small { font-size: 11px; color: #546d80; line-height: 1.4; }
+
+.dw-storage-details{padding:10px 14px;border:1px solid #dbe4ee;border-radius:8px;min-width:0}.dw-storage-details summary{cursor:pointer;font-size:13px;font-weight:650}.dw-storage-details[open]>summary{margin-bottom:10px}.dw-page .dsg-btn{min-height:40px}.dw-page :is(button,summary):focus-visible{outline:2px solid #245bc8;outline-offset:2px}

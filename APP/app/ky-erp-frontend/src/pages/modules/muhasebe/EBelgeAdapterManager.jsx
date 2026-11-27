@@ -77,7 +77,7 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
  const available=visibleData.systemCatalog.filter(x=>!enabled.has(x.key)&&String(x.label+" "+x.description).toLocaleLowerCase("tr-TR").includes(query.toLocaleLowerCase("tr-TR")));
  const choice=key=>visibleData.companyAdapters.find(x=>x.key===key);
  const active=visibleData.systemCatalog.find(x=>x.key===selected&&enabled.has(x.key));
- const activeCount=installed.filter(x=>choice(x.key)?.enabled!==false).length;
+ const activeCount=installed.filter(x=>x.driver!==null&&choice(x.key)?.enabled!==false).length;
  const provider=adapter=>providerStatuses.find(x=>String(x.key||"").toUpperCase()===adapter.key);
  const status=adapter=>connectionStatus(adapter,provider(adapter),choice(adapter.key));
  const connected=installed.filter(x=>x.key==="ISNET"&&choice(x.key)?.enabled!==false&&provider(x)?.connected===true).length;
