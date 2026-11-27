@@ -2,7 +2,8 @@ import type {Context,Hono} from "hono";
 import {getAuthenticatedUser} from "./auth-cloud";
 import {accountingAccess,accountingTenantReadAllowed} from "./accounting-access-policy";
 import {selections} from "./e-belge-adapter-company-routes";
-import {searchRegisteredItems,resolveRegisteredItemIds} from "./isnet-registered-items";
+import {resolveRegisteredItemIds} from "./isnet-registered-items";
+import {searchOperatorItems,getCommercialHistory} from "./e-belge-commercial-history";
 import {parseDirectCommand,resolveDirectFields,storedWorkflowFields} from "./e-belge-command-core";
 import {checkCompanyAiAllowance,recordCompanyAiUsage} from "./company-billing-cloud";
 import {validateInterpretation} from "./e-belge-ai-intent";
@@ -39,6 +40,16 @@ async function verifiedDraft(c:Context<Env>,tenant:string,value:unknown,kind:Dra
   const registered=await resolveRegisteredItemIds(c,tenant,ids);
   const byId=new Map(registered.map(x=>[x.id,x]));
   for(const line of data.lines){if(line.catalogId&&byId.get(line.catalogId)?.description!==line.description)throw Error("Katalog kalemi değişmiş. Kalemi yeniden seçin.");}
+  for(const id of ids){
+    if(id.startsWith("MODEL:")){
+      const m=await c.env.DB.prepare("SELECT COALESCE(NULLIF(company_id,''),NULLIF(customer_id,''),'') AS companyId FROM model_records WHERE main_company_slug=? AND id=? AND deleted_at IS NULL").bind(tenant,id.slice(6)).first<Row>();
+      if(!m||m.companyId&&m.companyId!==data.partyId)throw Error("Modelin kayıtlı müşterisi seçili cari ile uyuşmuyor.");
+    }
+    if(id.startsWith("HISTORY:")){
+      const h=await c.env.DB.prepare("SELECT d.party_company_id FROM accounting_document_lines l JOIN accounting_documents d ON d.main_company_slug=l.main_company_slug AND d.id=l.document_id AND d.deleted_at IS NULL WHERE l.main_company_slug=? AND l.id=?").bind(tenant,id.slice(8)).first<Row>();
+      if(!h||h.party_company_id!==data.partyId)throw Error("Geçmiş fatura kalemi seçili cariye ait değil.");
+    }
+  }
   return data;
 }
 async function persistNewDraft(c:Context<Env>,a:{tenant:string;userId:string},id:string,kind:DraftKind,provider:string,data:Row,company:Row,context:Row={}){
@@ -122,8 +133,19 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
   });
   app.get("/api/e-belge/operator-catalog",async c=>{
     const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma yetkisi doğrulanamadı."),403);
-    const items=await searchRegisteredItems(c,a.tenant,clean(c.req.query("q")));
+    const partyId=clean(c.req.query("partyId"));
+    if(partyId&&!await party(c,a.tenant,partyId))return c.json(err("INVALID_PARTY","Aktif cari doğrulanamadı."),400);
+    const items=await searchOperatorItems(c,a.tenant,partyId,clean(c.req.query("q")));
     c.header("Cache-Control","no-store");return c.json({ok:true,data:{mainCompanySlug:a.tenant,items}});
+  });
+  app.get("/api/e-belge/operator-commercial-history",async c=>{
+    const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma yetkisi doğrulanamadı."),403);
+    const partyId=clean(c.req.query("partyId"));
+    if(!partyId||!await party(c,a.tenant,partyId))return c.json(err("INVALID_PARTY","Aktif cari seçin."),400);
+    try{
+      const data=await getCommercialHistory(c,a.tenant,partyId,clean(c.req.query("catalogId")),clean(c.req.query("asOf")),clean(c.req.query("referenceModelId")),clean(c.req.query("candidateQuery")));
+      c.header("Cache-Control","private, no-store");return c.json({ok:true,data:{mainCompanySlug:a.tenant,...data}});
+    }catch{return c.json(err("COMMERCIAL_HISTORY_UNAVAILABLE","Cari/model ilişkisi veya fiyat geçmişi doğrulanamadı."),422)}
   });
   app.get("/api/e-belge/operator-companies",async c=>{
     const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma yetkisi doğrulanamadı."),403);

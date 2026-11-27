@@ -14,3 +14,5 @@
 .eip>button:disabled{opacity:.5}
 .eip-message{font-size:12px;color:#2b6784}
 @media(max-width:700px){.eip-fields{grid-template-columns:1fr}}
+
+.eip-fields{border:0;margin:0;padding:0;min-width:0}.eip-fields:disabled{opacity:.72}.eip-fields :disabled{cursor:not-allowed}

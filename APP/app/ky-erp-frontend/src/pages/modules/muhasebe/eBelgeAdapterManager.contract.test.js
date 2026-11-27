@@ -19,7 +19,7 @@ test("Firma entegrasyonları tek açılır seçiciden seçilir, katalog yalnız 
  assert.match(ui,/aria-expanded=\{showCatalog\}/);
  assert.match(ui,/select id="eam-company-integration"/);
  assert.match(ui,/setSelected\(e.target.value\)/);
- assert.match(css,/\.eam-catalog-popup\{position:absolute/);
+ assert.match(css,/\.eam-catalog-popup\{position:static/);
  assert.doesNotMatch(ui,/eam-sidebar|eam-workspace|eam-item-main/);
  assert.match(parent,/<EBelgeAdapterManager /);
 });
@@ -46,7 +46,7 @@ test("Kurulu olmayan sağlayıcıya rastgele URL ya da sahte sürücü tanımlan
  assert.match(ui,/Bağlayıcı motoru henüz hazır değil/);
  assert.match(ui,/driver===null/);
  assert.match(ui,/providerService\(active.key\)/);
- assert.match(ui,/https:\/\/einvoiceapi\.isnet\.net\.tr/);
+ assert.match(ui,/add&&activate&&adapter.driver===null/);
  assert.match(ui,/key==="MANUAL"/);
  assert.match(ui,/setCompanyEBelgeAdapter\(owner,adapter.key,add,activate\)/);
 });
@@ -63,7 +63,7 @@ test("Tüm entegratörlerde ortak belge test ve kodsuz profil düzenleme sekmele
  assert.match(ui,/<EBelgeIntegrationTestCenter /);
  assert.match(ui,/<EBelgeIntegrationProfileEditor /);
  assert.match(ui,/Belge Test Merkezi/);
- assert.match(ui,/Entegrasyonu Düzenle/);
+ assert.match(ui,/Firma Ayarları/);
  assert.match(sharedTest,/incoming-invoice/);
  assert.match(sharedTest,/outgoing-invoice/);
  assert.match(sharedTest,/incoming-despatch/);
@@ -97,3 +97,5 @@ test("Ortak belge testinde onaylı firma + tür şablonu otomatik seçilir",()=>
 });
 
 test("geçici hata kayıtlı seçimi boş listeye çevirmez; yetki kaybında ekran kapanır",()=>{assert.match(ui,/current.mainCompanySlug===tenant\?current/);assert.match(ui,/const verified=data.mainCompanySlug===tenant&&!loading&&!error/);assert.match(ui,/\[401,403\]\.includes/);assert.match(ui,/Entegrasyon listesi doğrulanamadı/);assert.match(ui,/verified\?installed.length:"—"/);});
+
+test("Bağlantı ilk görünüm; test ve profil isteğe bağlı, değişiklik yetkisi ve yeniden okuma zorunlu",()=>{assert.match(ui,/useState\("overview"\)/);assert.match(ui,/Bağlantı Durumu/);assert.match(ui,/data.canManage===true/);assert.match(ui,/state.selected!==add/);assert.match(ui,/state.enabled!==\(add&&activate\)/);assert.match(ui,/refreshKey=\{officeRefresh\}/);assert.match(profileEditor,/getCompanyEBelgeAdapterProfile\(company,adapter.key\)/);assert.match(profileEditor,/!canManage/);assert.match(css,/container-type:inline-size/);});

@@ -226,7 +226,8 @@ function withOperationalGroups(module) {
         { label: "e-Arşiv İşlemleri", tabs: [["earchive-out", "Giden e-Arşiv", "dosya"], ["earchive-drafts", "e-Arşiv Taslakları", "dosya"], ["earchive-cancel", "İptal ve İtirazlar", "uyari"]] },
         { label: "Belge Yönetimi", tabs: [["dosya-kutusu", "Dosya Kutusu", "dosya"], ["belgeleri-al", "Belge Aktarımı", "upload"], ["belge-havuzu", "Belge Havuzu", "upload"], ["eslestirmeler", "Belge Eşleştirme", "file-check"], ["onay-sorunlar", "Belge Kontrol ve Onay", "uyari"], ["muhasebe-onayi", "Muhasebe Onayı Bekleyenler", "file-check"], ["eksik-orijinaller", "Eksik XML / PDF", "uyari"], ["is-akislari", "Sevk ve Faturalandırma", "file-check"]] },
         { label: "Diğer İşlemler", tabs: [["other-docs", "Diğer e-Belgeler", "dosya"], ["responses", "Belge Yanıtları", "dosya"], ["send-queue", "Gönderim Takibi", "dosya"], ["reports", "Raporlar", "raporlar"], ["directory", "Cari / Ürün / Adres", "firma-kartlari"]] },
-        { label: "Arşiv ve Ayarlar", tabs: [["arsiv-cikti", "Belge Arşivi ve Çıktılar", "dosya"], ["gorsel-sablonlar", "Belge Şablonları", "dosya"], ["entegrasyonlar", "Entegrasyon Yönetimi", "ayarlar"]] },
+        { label: "Arşiv ve Çıktılar", tabs: [["arsiv-cikti", "Belge Arşivi ve Çıktılar", "dosya"]] },
+        { label: "Ayarlar ve Bağlantılar", tabs: [["entegrasyonlar", "Entegrasyon Yönetimi", "ayarlar"], ["gorsel-sablonlar", "Belge Şablonları", "dosya"]] },
       ],
     };
   }

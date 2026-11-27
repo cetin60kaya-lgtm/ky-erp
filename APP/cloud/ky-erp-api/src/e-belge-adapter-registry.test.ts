@@ -53,3 +53,5 @@ test("Firma adaptörleri seçili ve etkin durumlarını ayrı taşır; eski İş
  assert.match(guard,/configuredPath\(path\)/);
  assert.match(main,/shell\.use\("\/api\/isnet\/\*", enforceIsnetAdapterActivation\)/);
 });
+
+test("Unsupported adapter cannot become enabled by omitting enabled or via a legacy row",()=>{const route=readFileSync(new URL("./e-belge-adapter-company-routes.ts",import.meta.url),"utf8");assert.match(route,/adapter\.driver===null&&body\.selected&&body\.enabled===true/);assert.match(route,/enabled:body\.selected && adapter\.driver!==null/);assert.match(route,/enabled:selected\[adapter\.key\]===true && adapter\.driver!==null/);assert.match(route,/canManage:accountingAccess/);});
