@@ -1,5 +1,7 @@
 # KY ERP — Model 360 Ortak Kart ve Departman İşlemleri
 
+## 27.11.2026 canlı ek kabul: 29 uygun fiyatlı XML satırında kesin model/cari eşleşmesi 0, MANUAL ürün eşleşmesi 0, aynı cari/kod tekrar grubu 0. Eski fatura kalemi araması ayrı, aday olarak gösterilir; seçili cari/tarih sınırı, fiyat referansı kullanıcı onayıyla alınır. Otomatik model eşleştirmesi veya geçmiş belge değişikliği yok. Gerçek kalem-model eşleştirmesi ve repet ilişkisi için ayrıca kullanıcı doğrulaması gerekli.
+
 ## 27.11.2026 — Kullanıcı kararı: e-Belge model/ürün seçimi canonical Model 360 ve önceki üretim/işlem kayıtlarıyla bağlı olacak; repetlerde tarih ve geçmiş birim fiyat görülecek, yeni fiyat farkı karşılaştırılacak. Mevcut gerçek D1 salt-okunur sütun kabulü: model 8/8, belge 13/13, kalem 11/11, model-kalem bağ 4/4; 724 aktif model, 29 pozitif fiyatlı doğrulanmış XML giden fatura kalemi (model bağı ayrı). Yeni ortak katalog kimlikleri isimle birleştirmez; seçili cari, tenant, belge tarihi ve XML doğrulamasıyla fiyat geçmişi; tek model-kalem bağ/explicit raw model ID; ürün yalnız MANUAL eşleşme, geçmiş kalem exact ID. Aynı cari ve model kodu repet adayı, ayrı kimlik, kullanıcı seçimi; otomatik fiyat değişikliği yok. Model 360 mevcut üretim/işlem geçmişi açılır. Gerçek repet/mesai alanı ayrıca doğrulanmalı; yeni endpoint canlı kullanıcı kabulü bekliyor. Resmî gönderim kapalı.
 **Karar tarihi:** 18.11.2026 · **Modüller:** DESEN / İmalat / Boyahane / Muhasebe / e-Belge / Fatura Mail
 

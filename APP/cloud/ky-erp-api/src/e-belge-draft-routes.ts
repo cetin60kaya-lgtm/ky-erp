@@ -143,7 +143,7 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     const partyId=clean(c.req.query("partyId"));
     if(!partyId||!await party(c,a.tenant,partyId))return c.json(err("INVALID_PARTY","Aktif cari seçin."),400);
     try{
-      const data=await getCommercialHistory(c,a.tenant,partyId,clean(c.req.query("catalogId")),clean(c.req.query("asOf")),clean(c.req.query("referenceModelId")));
+      const data=await getCommercialHistory(c,a.tenant,partyId,clean(c.req.query("catalogId")),clean(c.req.query("asOf")),clean(c.req.query("referenceModelId")),clean(c.req.query("candidateQuery")));
       c.header("Cache-Control","private, no-store");return c.json({ok:true,data:{mainCompanySlug:a.tenant,...data}});
     }catch{return c.json(err("COMMERCIAL_HISTORY_UNAVAILABLE","Cari/model ilişkisi veya fiyat geçmişi doğrulanamadı."),422)}
   });

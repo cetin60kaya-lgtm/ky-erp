@@ -30,7 +30,7 @@ export async function searchOperatorItems(c:Context<Env>,tenant:string,partyId:s
  ]);
  return ([["MODEL",m.results||[]],["PRODUCT",p.results||[]],["HISTORY",h.results||[]]] as [string,Row[]][]).flatMap(([origin,rows])=>rows.filter(row=>clean(row.description)).map(row=>({...row,id:origin+":"+row.id,origin,unit:clean(row.unit)||"ADET"})));
 }
-export async function getCommercialHistory(c:Context<Env>,tenant:string,partyId:string,catalogId:string,asOf:string,referenceModelId:string){
+export async function getCommercialHistory(c:Context<Env>,tenant:string,partyId:string,catalogId:string,asOf:string,referenceModelId:string,candidateQuery=""){
  const colon=catalogId.indexOf(":"),origin=catalogId.slice(0,colon),id=catalogId.slice(colon+1);
  if(!["MODEL","PRODUCT","HISTORY"].includes(origin)||!id||id.length>100||!/^\d{4}-\d{2}-\d{2}$/.test(asOf)||!Number.isFinite(Date.parse(asOf+"T00:00:00Z"))||new Date(asOf+"T00:00:00Z").toISOString().slice(0,10)!==asOf||referenceModelId.length>100)throw Error("Geçersiz model/ürün geçmişi isteği.");
  let item:Row|null=null,repeats:Row[]=[],referenceId=id,predicate="",params:string[]=[];
@@ -55,5 +55,8 @@ export async function getCommercialHistory(c:Context<Env>,tenant:string,partyId:
  }
  if(!item)throw Error("Kayıtlı model/ürün/kalem bulunamadı.");
  const rows=(await c.env.DB.prepare(priceBase+" AND "+predicate+priceOrder).bind(tenant,partyId,asOf,...params).all<Row>()).results||[];
- return {catalogId,partyId,asOf,referenceModelId:referenceId,item,repeats,items:rows.slice(0,100),truncated:rows.length>100,source:origin==="MODEL"?"EXACT_MODEL_LINE":origin==="PRODUCT"?"MANUAL_PRODUCT_MATCH":"EXACT_HISTORICAL_LINE",providerAcceptanceVerified:false};
+ const query=clean(candidateQuery).slice(0,100);
+ // Candidate search is separate; description similarity is not a model relation.
+ const candidates=query.length>=2?(await c.env.DB.prepare(priceBase+" AND instr(upper(COALESCE(l.description,'')||' '||COALESCE(l.product_code,'')||' '||COALESCE(l.supplier_product_code,'')||' '||d.document_no),upper(?))>0"+priceOrder).bind(tenant,partyId,asOf,query).all<Row>()).results||[]:[];
+ return {candidateQuery:query,candidates:candidates.slice(0,100).filter(x=>!rows.some(y=>y.lineId===x.lineId&&y.documentId===x.documentId)),candidateTruncated:candidates.length>100,catalogId,partyId,asOf,referenceModelId:referenceId,item,repeats,items:rows.slice(0,100),truncated:rows.length>100,source:origin==="MODEL"?"EXACT_MODEL_LINE":origin==="PRODUCT"?"MANUAL_PRODUCT_MATCH":"EXACT_HISTORICAL_LINE",providerAcceptanceVerified:false};
 }
