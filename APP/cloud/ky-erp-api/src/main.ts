@@ -80,6 +80,7 @@ import { registerIsnetFileRuntimeRoutes } from "./isnet-file-runtime";
 import { registerIsnetInvoiceRuntimeRoutes } from "./isnet-invoice-runtime";
 import { registerIsnetLiveSyncRoutes } from "./isnet-live-sync";
 import { registerIsnetLocalPortalRoutes } from "./isnet-local-portal-routes";
+import { registerIsnetOfficeRoutes, isOfficeHeartbeatRequest } from "./isnet-office-routes";
 import { registerIsnetOutgoingRecoveryRoutes } from "./isnet-outgoing-recovery";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
@@ -252,6 +253,7 @@ registerIsnetBusinessSettingsCloudRoutes(app);
 registerIsnetRuntimeV2Routes(app);
 registerIsnetLiveSyncRoutes(app);
 registerIsnetLocalPortalRoutes(app);
+registerIsnetOfficeRoutes(app);
 registerIsnetOutgoingRecoveryRoutes(app);
 registerIsnetFileRuntimeRoutes(app);
 registerIsnetInvoiceRuntimeRoutes(app);
@@ -304,7 +306,7 @@ shell.use("/api/*", async (c, next) => {
   const url = new URL(c.req.url);
   const path = url.pathname;
   const isLocal = ["localhost", "127.0.0.1", "::1"].includes(url.hostname);
-  const isPublic = path === "/api/health" || path === "/api/health/isnet-egress" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/") || path === "/api/employee-portal/companies";
+  const isPublic = isOfficeHeartbeatRequest(path, c.req.method) || path === "/api/health" || path === "/api/health/isnet-egress" || path.startsWith("/api/auth/") || path.startsWith("/api/build-agent/") || path.startsWith("/api/system-agent/") || path.startsWith("/api/compliance-public/") || path === "/api/employee-portal/companies";
   if (isLocal || isPublic) return next();
 
   const authenticated = await getAuthenticatedUser(c);

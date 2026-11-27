@@ -1,5 +1,9 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 27.11.2026 — İşNet statik IPv4 ve çoklu ofis PC kararı
+- [Ofis bağlantı sözleşmesi](KY_ISNET_OFIS_STATIK_IP_COKLU_PC_20261127.md): mevcut TTNET statik çıkış IP, tek X bağımlılığı yok, aynı internet çıkışında ayrı yetkili cihazlar aktif/yedek. Telefon/dış ağ KYERP normal oturumu; kullanıcı girişine IP kısıtlaması yok. İşNet TEST fatura kabulü tamam, canlı yetki bekliyor. IP ve kimlik bilgisi repoda yok; canlı gönderim, Windows kurulum, secret provisioning ve tam transport ayrı kabul.
+
+
 
 ## 25.11.2026 — İşNet son TEST ekranı ve model araması
 - Kullanıcı kararı: müşteri kişi/SAS/sipariş bilgisi ayrı alanlara bölünmez; kaynak belge ve kalem notları aynen korunur. Outlook analizi/gönderimi sonraki ayrı kapsamdır. Mal/hizmet seçimi mevcut tenant model kartı, ürün kartı, geçmiş giden fatura satırlarından aranır; model kodu ve fatura ürün kodları da sorgulanır. Kaydetmeden önce kayıt kimliği yeniden doğrulanır. Sentetik bedelsiz kalemler, eski taslaklar, kaynak satırlar korunur. Gerçek model adları yalnız iç KYERP TEST taslağında; sağlayıcıya gönderim yok. Seçili yön belirgin, C62 görünümde ADET, hızlı kaydet ve önizleme ayrı. Önceki canlı kabul: 180 TL kaydedildi, kaynak notu ve kontrol onayı ekranda doğrulandı. Gerçek model arama sonucu, gerçek firma/ürün sağlayıcı eşleme, UBL/resmî gönderim ve vergi kabulü henüz açık. Kişisel notlar veya gerçek belge örnekleri repoya taşınmadı. CI ve yayın ayrı kabul.
