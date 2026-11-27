@@ -1,5 +1,7 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 27.11.2026 akşam kullanıcı ekran kabulü: Hakan Emprime Genel Bakış ve Fatura Taslakları açıldı, 0 kayıt, yeni fatura editörü açıldı ve ISNET seçili. Kaydetme veya resmî gönderim yapılmadı. #685 ek düzen: tekrar başlık azaltıldı, durum filtresi üstte, yeni fatura/kaydet öncelikli, cari ve kalem alanları kullanılabilir genişlikte, opsiyonel irsaliye paneli, satır ve genel toplam için Worker ile aynı tamsayı ölçekli ön hesap (eksik/geçersiz alanlarda boş; sunucu hesapları otorite). CI ve gerçek ekran kabulü bekliyor.
+
 ## 27.11.2026 akşam — DESEN gerçek salt-okunur kontrol: DNS IPv4 çözümleme başarılı, iki canlı singleWsdl GET 15 saniye içinde HTTP yanıtı vermedi, TLS/443 zaman aşımı, KYERP health OK. Statik IP eşleşmesi/sağlayıcı ağ yetkisi ve WSDL sözleşmesi doğrulanmadı. Önceki 0063 canlı READY ve #684 merge 44d77f2; canlı ofis cihazı kayıt, resmî gönderim transport/queue/UBL ve kabul açık. UI: aynı irsaliyenin diğer kalemleri tekrar aramadan seçilir, seçili kalem işaretlenir, kayıt butonu belirgin; bağlantı, canlı servis, firma yetkisi ve gönderim ayrı durumlar. Yeni mutation veya resmî gönderim yok.
 
 ## 27.11.2026 — 0063 hedefli canlı geçiş kapısı
