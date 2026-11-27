@@ -34,3 +34,6 @@
  .ebo-line{grid-template-columns:repeat(2,minmax(0,1fr))}
  .ebo-workspace .ebo-footer{grid-template-columns:1fr}
 }
+
+/* Compact daily work and explicit production readiness. */
+.ebo-source-panel{display:grid;gap:8px;padding:12px;border:1px solid var(--border,#d6dce4);border-radius:8px}.ebo-source-panel p,.ebo-send-note{margin:0;font-size:13px;line-height:1.45}.ebo-source-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(210px,100%),1fr));gap:6px}.ebo-source-results button{display:grid;text-align:left;gap:4px;overflow-wrap:anywhere}.ebo-source-results small,.ebo-connection-grid small{color:var(--text-secondary,#637488)}.ebo-workspace .ebo-primary-action:not(:disabled){background:#1762a5;color:#fff;border-color:#1762a5}.ebo-send-note{padding:10px 12px;border:1px solid var(--border,#d6dce4);border-radius:6px}.ebo-connection-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(135px,100%),1fr));gap:8px}.ebo-connection-grid>div{display:grid;gap:5px;min-width:0;padding:10px;border:1px solid var(--border,#d6dce4);border-radius:6px}.ebo-connection-grid strong{font-size:14px;overflow-wrap:anywhere}@media(max-width:700px){.ebo-connection-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
