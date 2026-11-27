@@ -76,7 +76,7 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
    systemCatalog:EBELGE_ADAPTERS,
    companyAdapters:EBELGE_ADAPTERS.map(adapter=>({
     key:adapter.key,selected:selected[adapter.key]===true,
-    enabled:selected[adapter.key]===true && selection.enabled[adapter.key]!==false,
+    enabled:selected[adapter.key]===true && adapter.driver!==null && selection.enabled[adapter.key]!==false,
     ...classifyAdapterInstallation(adapter.key,selected[adapter.key]===true),
    })),
   }});
@@ -98,7 +98,7 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
   const stableId=`EBELGE_ADAPTER_SELECTION_V1:${access.tenant}:${adapter.key}`;
   const previous=await selections(c,access.tenant);
   const state={key:adapter.key,selected:body.selected,
-    enabled:body.selected && (typeof body.enabled==="boolean" ? body.enabled : previous.enabled[adapter.key]!==false),
+    enabled:body.selected && adapter.driver!==null && (typeof body.enabled==="boolean" ? body.enabled : previous.enabled[adapter.key]!==false),
     updatedAt:ts,
     updatedBy:(await getAuthenticatedUser(c))?.id||null};
   await c.env.DB.prepare(
