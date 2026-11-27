@@ -953,7 +953,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
         </>:<>
           {showPool&&<button type="button" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
           {["outgoing-invoices","outgoing-dispatches"].includes(view)&&<button type="button" className="eb-primary" onClick={()=>openModule?.("e-belge",{tabKey:view==="outgoing-invoices"?"fatura-taslaklari":"irsaliye-taslaklari",actionContext:{createDraft:true}})}>{view==="outgoing-invoices"?"+ Yeni Fatura":"+ Yeni İrsaliye"}</button>}
-          {["pool","issues"].includes(view)&&<button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile doğrulanan carileri eşleştir; kesin muhasebeleştirme yapma">{companyBatchBusy?<LoaderCircle className="eb-spin" size={17}/>:<Link2 size={17}/>} XML'den Carileri Eşleştir</button>}
+          {!showPool&&["pool","issues"].includes(view)&&<button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile doğrulanan carileri eşleştir; kesin muhasebeleştirme yapma">{companyBatchBusy?<LoaderCircle className="eb-spin" size={17}/>:<Link2 size={17}/>} XML'den Carileri Eşleştir</button>}
         </>}
         {showPool && <>
       <nav className="eb-four-document-nav" aria-label="Dört belge işlem ekranı">
@@ -1096,7 +1096,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     {view === "visual-templates" && <VisualProfileStudio key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} standalone />}
 
     {view === "integrations" && <>
-      <EBelgeAdapterManager activeMainCompany={activeMainCompany} openModule={openModule} providerStatuses={providers} onRefreshStatuses={loadIntegrations} />
+      <EBelgeAdapterManager key={mainCompanySlug} activeMainCompany={activeMainCompany} openModule={openModule} providerStatuses={providers} onRefreshStatuses={loadIntegrations} />
 
     </>}
 

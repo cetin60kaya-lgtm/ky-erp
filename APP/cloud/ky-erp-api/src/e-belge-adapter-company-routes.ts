@@ -72,6 +72,7 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
   const selected=selection.selected;
   return c.json({ok:true,data:{
    mainCompanySlug:access.tenant,
+   canManage:accountingAccess(await getAuthenticatedUser(c)||{},"PUT","/api/e-belge/adapters/ISNET"),
    systemCatalog:EBELGE_ADAPTERS,
    companyAdapters:EBELGE_ADAPTERS.map(adapter=>({
     key:adapter.key,selected:selected[adapter.key]===true,
@@ -90,6 +91,7 @@ export function registerEBelgeAdapterCompanyRoutes(app:Hono<Env>) {
    return c.json(error("INVALID_SELECTION","Adaptörü eklemek veya kaldırmak için açık seçim gerekir."),400);
   if(body.enabled!==undefined && typeof body.enabled!=="boolean")
    return c.json(error("INVALID_ACTIVATION","Aktif/Pasif seçimi geçersiz."),400);
+  if(adapter.driver===null&&body.selected&&body.enabled===true)return c.json(error("DRIVER_PENDING","Bağlantı motoru hazır olmayan sağlayıcı etkinleştirilemez."),409);
   const ts=new Date().toISOString();
   // Stable primary key prevents concurrent first-time PUTs from creating duplicate rows.
   // Historical UUID rows remain untouched; reads prefer the new canonical row.
