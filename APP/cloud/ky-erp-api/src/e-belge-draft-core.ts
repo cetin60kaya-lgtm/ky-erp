@@ -21,6 +21,7 @@ export function normalizeDraft(value:unknown,kind:DraftKind) {
   if(!(invoice?["TEMELFATURA","TICARIFATURA","EARSIVFATURA"]:["TEMELIRSALIYE"]).includes(scenario))throw new Error("Belge senaryosu geçersiz.");
   if(!Array.isArray(x.lines)||!x.lines.length||x.lines.length>200)throw new Error("1–200 belge kalemi gerekir.");
   let net=0n,vat=0n;
+  const sources=new Set<string>();
   const lines=x.lines.map((raw:Record<string,unknown>,i:number)=>{
     if(!raw||typeof raw!=="object")throw new Error("Geçersiz kalem.");
     const description=clean(raw.description,500),unit=clean(raw.unit,20);
@@ -40,12 +41,20 @@ export function normalizeDraft(value:unknown,kind:DraftKind) {
     net+=lineNet;vat+=lineVat;
     const catalogId=clean(raw.catalogId,150);
     if(catalogId&&!/^(MODEL|PRODUCT|HISTORY):.+$/.test(catalogId))throw Error("Geçersiz katalog kimliği.");
-    return {catalogId,description,unit,quantity:decimal(quantity,3),price:decimal(price,4),vatRate:decimal(rate,2),discountRate:decimal(discount,2),freeKind,note:clean(raw.note,500),net:decimal(lineNet,2),vat:decimal(lineVat,2)};
+    const sourceDocumentId=clean(raw.sourceDocumentId,100),sourceLineId=clean(raw.sourceLineId,100);
+    if(raw.sourceDocumentId||raw.sourceLineId){
+      if(!invoice||!sourceDocumentId||!sourceLineId||sourceDocumentId!==raw.sourceDocumentId||sourceLineId!==raw.sourceLineId||catalogId)throw Error("Geçersiz irsaliye kaynak kimliği.");
+      const key=JSON.stringify([sourceDocumentId,sourceLineId]);
+      if(sources.has(key))throw Error("Aynı kaynak kalemi bir taslakta iki kez kullanılamaz.");
+      sources.add(key);
+    }
+    return {...(sourceLineId?{sourceDocumentId,sourceLineId}:{}),catalogId,description,unit,quantity:decimal(quantity,3),price:decimal(price,4),vatRate:decimal(rate,2),discountRate:decimal(discount,2),freeKind,note:clean(raw.note,500),net:decimal(lineNet,2),vat:decimal(lineVat,2)};
   });
   const deliveryAddress=clean(x.deliveryAddress,500),driver=clean(x.driver,160),plate=clean(x.plate,32),carrier=clean(x.carrier,160),dispatchDate=invoice?"":date(x.dispatchDate),dispatchTime=invoice?"":clean(x.dispatchTime,5);
   if(!invoice&&(!/^([01]\d|2[0-3]):[0-5]\d$/.test(dispatchTime)||!deliveryAddress))throw new Error("Sevk saati ve teslim adresi gerekli.");
   if(!invoice&&dispatchDate<issueDate)throw new Error("Fiili sevk tarihi belge tarihinden önce olamaz.");
   const warnings:string[]=[];
+  if(sources.size)warnings.push("Kaynak irsaliyelerin resmî fatura mutabakatı doğrulanmadan kontrol/onay tamamlanamaz.");
   if(invoice&&lines.some((l:typeof lines[number])=>l.freeKind))warnings.push("Bedelsiz kalemlerin vergi/istisna kabulü ayrı doğrulanmalıdır.");
   if(invoice&&lines.some((l:typeof lines[number])=>l.vatRate==="0.00"&&!l.freeKind))warnings.push("Sıfır KDV için yasal dayanak doğrulanmalıdır.");
   if(!invoice&&(!driver||!plate))warnings.push("Sürücü/plaka veya uygun taşıma istisnası doğrulanmalıdır.");

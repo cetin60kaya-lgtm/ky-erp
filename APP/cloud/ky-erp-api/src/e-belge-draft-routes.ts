@@ -7,6 +7,7 @@ import {parseDirectCommand,resolveDirectFields,storedWorkflowFields} from "./e-b
 import {checkCompanyAiAllowance,recordCompanyAiUsage} from "./company-billing-cloud";
 import {validateInterpretation} from "./e-belge-ai-intent";
 import {normalizeDraft,type DraftKind} from "./e-belge-draft-core";
+import {sourceLookupSql,sourceReservationGuard} from "./e-belge-source-reservation";
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type Row=Record<string,any>;
 const clean=(v:unknown)=>String(v??"").trim();
@@ -42,7 +43,8 @@ async function verifiedDraft(c:Context<Env>,tenant:string,value:unknown,kind:Dra
 }
 async function persistNewDraft(c:Context<Env>,a:{tenant:string;userId:string},id:string,kind:DraftKind,provider:string,data:Row,company:Row,context:Row={}){
  const payload=JSON.stringify({...data,partyName:company.name,partyTaxNo:company.tax_no||""}),now=new Date().toISOString(),audit=JSON.stringify(context);
- const result=await c.env.DB.prepare("INSERT INTO accounting_document_drafts(id,main_company_slug,kind,provider_key,party_company_id,payload,version,state,created_by,updated_by,created_at,updated_at,creation_context) VALUES(?,?,?,?,?,?,1,'DRAFT',?,?,?,?,?) ON CONFLICT(main_company_slug,id) DO NOTHING").bind(id,a.tenant,kind,provider||null,data.partyId,payload,a.userId,a.userId,now,now,audit).run();
+ const guard=data.lines.some((l:Row)=>l.sourceLineId)?sourceReservationGuard(a.tenant,id,data.partyId,payload):{sql:"",args:[]};
+ const result=await c.env.DB.prepare("INSERT INTO accounting_document_drafts(id,main_company_slug,kind,provider_key,party_company_id,payload,version,state,created_by,updated_by,created_at,updated_at,creation_context) SELECT ?,?,?,?,?,?,1,'DRAFT',?,?,?,?,? WHERE 1=1"+guard.sql+" ON CONFLICT(main_company_slug,id) DO NOTHING").bind(id,a.tenant,kind,provider||null,data.partyId,payload,a.userId,a.userId,now,now,audit,...guard.args).run();
  const saved=await read(c,a.tenant,id);
  if(!saved||(!result.meta.changes&&(saved.kind!==kind||saved.provider_key!==(provider||null)||JSON.stringify(saved.payload)!==payload||JSON.stringify(saved.creation_context)!==audit||saved.version!==1)))return null;
  return saved;
@@ -183,6 +185,16 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     if(!saved)return c.json(err("DRAFT_CONFLICT","İşlem kimliği kayıtlı veya varsayılanlar değişti. Taslak listesini kontrol edin."),409);
     return c.json({ok:true,data:{mainCompanySlug:a.tenant,missing:[],proposal,draft:saved}},201);
   });
+  app.get("/api/e-belge/operator-dispatch-sources",async c=>{
+    const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma erişimi gerekli."),403);
+    if(!await readiness(c))return c.json(err("DRAFT_SCHEMA_REQUIRED","Taslak şeması üretim onayı bekliyor."),503);
+    const partyId=clean(c.req.query("partyId")),documentNo=clean(c.req.query("documentNo"));
+    if(!partyId||!documentNo||documentNo.length>100||!await party(c,a.tenant,partyId))return c.json(err("INVALID_SOURCE","Aktif cari ve tam irsaliye numarası gerekli."),400);
+    const rows=(await c.env.DB.prepare(sourceLookupSql).bind(a.tenant,partyId,documentNo).all<Row>()).results||[];
+    if(rows.length>200||new Set(rows.map(r=>r.documentId)).size>1)return c.json(err("SOURCE_REVIEW_REQUIRED","Kaynak belge tekil değil veya kalem sınırı aşıldı."),409);
+    c.header("Cache-Control","no-store");
+    return c.json({ok:true,data:{mainCompanySlug:a.tenant,partyId,documentNo,items:rows.map(r=>({documentId:r.documentId,lineId:r.lineId,description:r.description,unit:r.unit,quantity:r.quantity,internalRemaining:Math.max(0,Math.round(Number(r.quantity)*1000)-Number(r.reservedMilli))/1000})),officialRemainingVerified:false}});
+  });
   const base="/api/e-belge/operator-drafts";
   app.get(base,async c=>{
     const a=await operatorAccess(c,"GET");if(!a)return c.json(err("FORBIDDEN","Firma veya muhasebe yetkisi doğrulanamadı."),403);
@@ -216,7 +228,7 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
       if(provider==="MANUAL"||!enabled.selected[provider]||!enabled.enabled[provider])return c.json(err("INVALID_PROVIDER","Seçili sağlayıcı firma için etkin değil."),400);
     }
     const saved=await persistNewDraft(c,a,id,kind,provider,data,company);
-    if(!saved)return c.json(err("DRAFT_CONFLICT","Taslak kimliği kayıtlı. Listeyi yenileyin."),409);
+    if(!saved)return c.json(err("DRAFT_CONFLICT","Taslak kimliği, kaynak irsaliye veya ayrılabilir miktar değişti. Listeyi yenileyin."),409);
     return c.json({ok:true,data:{mainCompanySlug:a.tenant,draft:saved}},201);
   });
   app.patch(base+"/:id",async c=>{
@@ -257,8 +269,11 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
       }else aiControl={status:policy?"NOT_REQUESTED":"UNAVAILABLE"};
     }
     const payload=JSON.stringify({...data,partyName:company.name,partyTaxNo:company.tax_no||"",...(aiControl?{aiControl}: {})}),state=body.action==="CHECK"?"CHECKED":"DRAFT";
-    const changed=await c.env.DB.prepare("UPDATE accounting_document_drafts SET payload=?,party_company_id=?,state=?,version=version+1,updated_by=?,updated_at=? WHERE main_company_slug=? AND id=? AND version=?").bind(payload,data.partyId,state,a.userId,new Date().toISOString(),a.tenant,id,version).run();
-    if(changed.meta.changes!==1)return c.json(err("DRAFT_CONFLICT","Taslak değişti; üzerine yazılmadı."),409);
+    const oldSources=old.payload.lines.filter((l:Row)=>l.sourceLineId);
+    if(oldSources.length&&(old.payload.partyId!==data.partyId||!data.lines.some((l:Row)=>l.sourceLineId)||oldSources.some((l:Row)=>!data.lines.some((n:Row)=>n.sourceDocumentId===l.sourceDocumentId&&n.sourceLineId===l.sourceLineId))))return c.json(err("SOURCE_IDENTITY_LOCKED","Kaydedilmiş kaynak kalemleri ve cari değiştirilemez. Gerekirse taslağı iptal edip yeniden oluşturun."),409);
+    const guard=data.lines.some((l:Row)=>l.sourceLineId)?sourceReservationGuard(a.tenant,id,data.partyId,payload):{sql:"",args:[]};
+    const changed=await c.env.DB.prepare("UPDATE accounting_document_drafts SET payload=?,party_company_id=?,state=?,version=version+1,updated_by=?,updated_at=? WHERE main_company_slug=? AND id=? AND version=?"+guard.sql).bind(payload,data.partyId,state,a.userId,new Date().toISOString(),a.tenant,id,version,...guard.args).run();
+    if(changed.meta.changes!==1)return c.json(err("DRAFT_CONFLICT","Taslak veya kaynak miktarı değişti; üzerine yazılmadı."),409);
     const saved=await read(c,a.tenant,id);
     if(!saved||saved.version!==version+1)return c.json(err("DRAFT_CONFLICT","Kayıt yeniden okunurken sürüm değişti. Listeyi yenileyin."),409);
     return c.json({ok:true,data:{mainCompanySlug:a.tenant,draft:saved}});
