@@ -1,5 +1,6 @@
 // Multi-PC office egress coordination. Only server-owned settings and Cloudflare
 // edge-observed IP are trusted. User login is intentionally independent of this IP.
+import {normalizeLiveProbe,type LiveProbe} from "./isnet-live-contract.ts";
 type DB={prepare(sql:string):{bind(...args:any[]):{run():Promise<{meta?:{changes?:number|bigint}}>;first<T=unknown>():Promise<T|null>}}};
 export const OFFICE_LEASE_SCOPE="ISNET_OFFICE_LEASE_V1";
 export const OFFICE_HEARTBEAT_SCOPE="ISNET_OFFICE_HEARTBEAT_V1";
@@ -40,11 +41,11 @@ export async function authorizeOfficeDevice(rows:Device[],i:AuthInput):Promise<V
 export const officeLeaseKey=(tenant:string)=>OFFICE_LEASE_SCOPE+":"+tenant;
 const hbKey=(d:VerifiedOfficeDevice)=>OFFICE_HEARTBEAT_SCOPE+":"+JSON.stringify([d.tenant,d.deviceId]);
 type Row={data:string};
-export async function heartbeatOfficeDevice(db:DB,d:VerifiedOfficeDevice,now=Date.now()):Promise<{role:"LEADER"|"STANDBY";lease:OfficeFence|null}>{
+export async function heartbeatOfficeDevice(db:DB,d:VerifiedOfficeDevice,now=Date.now(),probe:LiveProbe|null=null):Promise<{role:"LEADER"|"STANDBY";lease:OfficeFence|null}>{
  if(d[brand]!==true||!Number.isSafeInteger(now)||now<0)throw Error("OFFICE_DEVICE_DENIED");
  const ts=new Date(now).toISOString(),id=officeLeaseKey(d.tenant),fence=crypto.randomUUID(),expiresAt=now+OFFICE_LEASE_MS;
  const hb=hbKey(d);
- await db.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at WHERE scope=excluded.scope AND main_company_slug=excluded.main_company_slug").bind(hb,OFFICE_HEARTBEAT_SCOPE,d.tenant,hb,JSON.stringify({deviceId:d.deviceId,instanceId:d.instanceId,lastSeenAt:now}),ts,ts).run();
+ await db.prepare("INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data,updated_at=excluded.updated_at WHERE scope=excluded.scope AND main_company_slug=excluded.main_company_slug").bind(hb,OFFICE_HEARTBEAT_SCOPE,d.tenant,hb,JSON.stringify({deviceId:d.deviceId,instanceId:d.instanceId,lastSeenAt:now,liveProbe:normalizeLiveProbe(probe,now)}),ts,ts).run();
  // Keep a single active lease per tenant. Same running instance renews its fence;
  // expired or replaced instance receives a new fence. No check-then-write race.
  const value=JSON.stringify({tenant:d.tenant,deviceId:d.deviceId,instanceId:d.instanceId,fence,expiresAt});
@@ -63,9 +64,9 @@ export async function officeStatus(db:DB,tenant:string,registry:Device[],now=Dat
  const status=await Promise.all(devices.map(async d=>{
   const id=OFFICE_HEARTBEAT_SCOPE+":"+JSON.stringify([tenant,d.deviceId]);
   const row=await db.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=?").bind(id,OFFICE_HEARTBEAT_SCOPE,tenant).first<Row>();
-  let lastSeenAt:number|null=null;try{const v=JSON.parse(row?.data||"null");if(v?.deviceId===d.deviceId&&Number.isSafeInteger(v.lastSeenAt)&&v.lastSeenAt<=now)lastSeenAt=v.lastSeenAt;}catch{}
+  let lastSeenAt:number|null=null,liveProbe:LiveProbe|null=null;try{const v=JSON.parse(row?.data||"null");if(v?.deviceId===d.deviceId&&Number.isSafeInteger(v.lastSeenAt)&&v.lastSeenAt<=now){lastSeenAt=v.lastSeenAt;liveProbe=normalizeLiveProbe(v.liveProbe,now);}}catch{}
   const online=lastSeenAt!==null&&now-lastSeenAt<OFFICE_LEASE_MS;
-  return {deviceId:d.deviceId,online,lastSeenAt:lastSeenAt===null?null:new Date(lastSeenAt).toISOString(),role:online&&leader?.deviceId===d.deviceId?"LEADER":online?"STANDBY":"OFFLINE"};
+  return {deviceId:d.deviceId,online,lastSeenAt:lastSeenAt===null?null:new Date(lastSeenAt).toISOString(),role:online&&leader?.deviceId===d.deviceId?"LEADER":online?"STANDBY":"OFFLINE",liveProbe:online?liveProbe:null};
  }));
  return {configured:devices.length>0,online:status.some(d=>d.online),devices:status,providerAuthorized:false,sendEnabled:false,reason:"PROVIDER_LIVE_CONTRACT_PENDING"};
 }

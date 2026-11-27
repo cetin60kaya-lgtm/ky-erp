@@ -1,5 +1,8 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 27.11.2026 — İşNet canlı servis geçişi: sağlayıcı IP tanımlamasını ve 20:00 TRT başlangıcını bildirdi. InvoiceService ve AddressBookService sabit production adresleri kullanılır. Yetkili ofis ajanından yalnız HTTPS singleWsdl GET, sınırlı metadata ve SHA256 bildirimi; TEST fallback yok. WSDL bildirimi şirket kimliği/yetki/UBL/gönderim kabulü değildir. Gerçek Windows ajan kurulumu, canlı servis doğrulaması, 0063 yedek/migration, ortak gönderim kuyruğu/transport ve File Hub mutabakatı açık; resmî gönderim kapalı.
+
+
 ## 27.11.2026 — Ortak e-Belge / İşNet tek motor geçişi
 - [Tek motor kabul kaydı](KYERP_EBELGE_ISNET_TEK_MOTOR_20261127.md): eski yazma yolları kaldırıldı; geçmiş okuma/manuel XML/PDF korunur. Cihaz bağlantısı ve kullanıcı oturumu ayrıldı, firma kapsamı ve muhasebe yetkisi sıkılaştırıldı. AI görüşü opsiyonel; kesin iç kontroller ve resmî gönderim kilidi korunur. #684 CI, merge, yayın ayrı. Canlı transport, kaynak rezervasyonu, 0063 ve gerçek cihaz/sağlayıcı kabulü açık.
 

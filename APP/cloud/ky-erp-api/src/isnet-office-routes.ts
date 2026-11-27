@@ -5,6 +5,7 @@ import {getAuthenticatedUser} from "./auth-cloud";
 import {selections} from "./e-belge-adapter-company-routes";
 import {accountingAccess,accountingTenantReadAllowed,accountingTenantCandidates} from "./accounting-access-policy";
 import {authorizeOfficeDevice,heartbeatOfficeDevice,officeRegistry,officeStatus} from "./isnet-office-coordinator.ts";
+import {LIVE_ENDPOINTS,LIVE_NOT_BEFORE,normalizeLiveProbe} from "./isnet-live-contract.ts";
 type Env={Bindings:Cloudflare.Env & {ISNET_OFFICE_REGISTRY_JSON?:string};Variables:{requestId:string}};
 export const OFFICE_HEARTBEAT_PATH="/api/isnet/office/heartbeat";
 export function isOfficeHeartbeatRequest(path:string,method:string){return path===OFFICE_HEARTBEAT_PATH&&method==="POST";}
@@ -25,7 +26,14 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
    });
    const enabled=await selections(c,d.tenant);
    if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
-   const result=await heartbeatOfficeDevice(c.env.DB,d);
+   // Optional bounded metadata only; old heartbeat agents without body remain compatible.
+   let probe=null;
+   if(c.req.raw.body){
+    const reader=c.req.raw.body.getReader();let size=0,raw="";const decoder=new TextDecoder();
+    try{while(true){const x=await reader.read();if(x.done)break;size+=x.value.byteLength;if(size>4096){await reader.cancel();return c.json(error("OFFICE_PROBE_TOO_LARGE"),400)}raw+=decoder.decode(x.value,{stream:true})}raw+=decoder.decode()}finally{reader.releaseLock()}
+    if(raw){try{const value=JSON.parse(raw);if(value.liveProbe!=null){probe=normalizeLiveProbe(value.liveProbe,Date.now());if(!probe)return c.json(error("OFFICE_PROBE_INVALID"),400)}}catch{return c.json(error("OFFICE_PROBE_INVALID"),400)}}
+   }
+   const result=await heartbeatOfficeDevice(c.env.DB,d,Date.now(),probe);
    // A heartbeat or lease is never proof that the live provider is authorized.
    return c.json({ok:true,data:{...result,providerAuthorized:false,sendEnabled:false,pollAfterMs:30000}});
   }catch{return c.json(error("OFFICE_DEVICE_OR_STORAGE_DENIED"),403)}
@@ -36,6 +44,6 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
   const user=await getAuthenticatedUser(c);
   if(candidates.length!==1||!user||!accountingTenantReadAllowed(user,candidates[0]!)||!accountingAccess(user,"GET",c.req.path))return c.json(error("FORBIDDEN"),403);
   // Intentionally no IP restriction for users: mobile internet and external networks work.
-  try{return c.json({ok:true,data:await officeStatus(c.env.DB,candidates[0]!,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON))})}catch{return c.json(error("OFFICE_STATUS_UNAVAILABLE"),503)}
+  try{return c.json({ok:true,data:{...await officeStatus(c.env.DB,candidates[0]!,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON)),mainCompanySlug:candidates[0],liveEndpoints:LIVE_ENDPOINTS,liveNotBefore:new Date(LIVE_NOT_BEFORE).toISOString()}})}catch{return c.json(error("OFFICE_STATUS_UNAVAILABLE"),503)}
  });
 }
