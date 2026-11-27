@@ -1,5 +1,9 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 27.11.2026 — 0063 hedefli canlı geçiş kapısı
+Kullanıcı canlı geçişi ve 0063 engelinin çözülmesini açıkça istedi. Önceki #684 kaynak 0bcb878f3731 CI 46002286609 SUCCESS. Yeni `APP/cloud/ky-erp-api/scripts/d1-0063-private-migration.mjs` mevcut Wrangler yetkisiyle, yalnız özel kullanıcı ortamında çalışır; CI/GitHub runner içinde tam D1 export yasak. `--check` yalnız schema ve gerekli sütunları okur. `--apply-0063 --private-backup-dir <mevcut-sahibine-ozel-yedek-dizini>` Time Travel, tam SQL yedek, yerelde SQLite geri yükleme ve quick_check, tablo kapsamı, SHA256 makbuzu, yeniden readiness, yalnız 0063 ve kesin 4 tablo + 2 indeks kanıtı. Kısmi/uyumsuz şema otomatik düzeltilmez. Başka migration, resmi gönderim ve production kod deploy betikte yok. Cloudflare oturumu/DB erişimi ve gerçek özel backup bu oturumda doğrulanamadı; geçiş uygulanmadı. #684 merge/deploy öncesi canlı READY kanıtı zorunlu.
+
+
 ## 27.11.2026 — İşNet canlı servis geçişi: sağlayıcı IP tanımlamasını ve 20:00 TRT başlangıcını bildirdi. InvoiceService ve AddressBookService sabit production adresleri kullanılır. Yetkili ofis ajanından yalnız HTTPS singleWsdl GET, sınırlı metadata ve SHA256 bildirimi; TEST fallback yok. WSDL bildirimi şirket kimliği/yetki/UBL/gönderim kabulü değildir. Gerçek Windows ajan kurulumu, canlı servis doğrulaması, 0063 yedek/migration, ortak gönderim kuyruğu/transport ve File Hub mutabakatı açık; resmî gönderim kapalı.
 
 
