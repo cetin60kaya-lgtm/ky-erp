@@ -1,4 +1,5 @@
 import type {Context,Next} from "hono";
+import {isOfficeHeartbeatRequest} from "./isnet-office-routes";
 import {accountingTenantCandidates} from "./accounting-access-policy";
 
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
@@ -12,7 +13,7 @@ const configuredPath=(path:string)=>/^\/api\/isnet\/(?:settings|connection|busin
  */
 export async function enforceIsnetAdapterActivation(c:Context<Env>,next:Next){
  const method=c.req.method.toUpperCase(),path=c.req.path;
- if(["GET","HEAD","OPTIONS"].includes(method)||configuredPath(path))return next();
+ if(isOfficeHeartbeatRequest(path,method)||["GET","HEAD","OPTIONS"].includes(method)||configuredPath(path))return next();
  let body:Row={};
  if((c.req.header("Content-Type")||"").includes("json")){
   try{body=(await c.req.raw.clone().json()) as Row}catch{/* Called route handles its bad body. */}

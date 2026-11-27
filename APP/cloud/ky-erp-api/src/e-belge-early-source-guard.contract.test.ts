@@ -10,8 +10,11 @@ test("incoming XML reconciliation cannot overwrite mismatched lines, identity or
  assert.match(intake,/SOURCE_RECONCILIATION_REQUIRED/);
  assert.match(intake,/record\.sourceConflict/);
 });
-test("draft CHECK fails closed if second opinion fails; SAVE does not call model",()=>{
- assert.match(draft,/if\(body\.action==="CHECK"\)\{const result=await mandatoryDraftAiReview/);
+test("draft CHECK keeps deterministic gates; AI is optional but explicit REVIEW blocks",()=>{
+ assert.match(draft,/data\.warnings\.length/);
+ assert.match(draft,/if\(policy\?\.aiEnabled\)/);
+ assert.match(draft,/result\?\.code==="AI_CONTROL_REVIEW"/);
+ assert.match(draft,/status:policy\?"NOT_REQUESTED"/);
  assert.match(draft,/ledger\.recorded/);
  assert.match(draft,/skipCache:true,collectLog:false/);
  assert.match(draft,/parsed\.status!=="PASS"/);

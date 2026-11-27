@@ -2,6 +2,7 @@
 // Server-owned draft and approval are required; not a public request handler.
 import {classifySendResult,requireApprovedSend,type Profile,type Draft,type Approval,type ProviderResult} from "./isnet-official-acceptance.ts";
 import {classifyProviderNumberedTestResult,PROVIDER_NUMBERING} from "./isnet-soap-provider-numbering.ts";
+import {officeFenceCondition,type OfficeFence} from "./isnet-office-coordinator.ts";
 type NumberingMode="CLIENT_NUMBERED"|typeof PROVIDER_NUMBERING;
 const SCOPE="ISNET_TEST_SEND_CLAIM_V1";
 const key=(d:Draft)=>SCOPE+":"+JSON.stringify([d.tenant,d.id]);
@@ -9,7 +10,7 @@ type DB={prepare(sql:string):{bind(...args:any[]):{run():Promise<{meta?:{changes
 type ClaimInput={tenant:string;environment:string;draftId:string;version:string;ettn:string;contentSha256:string;expectedStatus:string;numberingMode?:NumberingMode};
 type SettleInput={claimId:string;tenant:string;draftId:string;version:string;ettn:string;status:string;providerResult:ProviderResult|null;numberingMode?:NumberingMode};
 /** Exclusive reservation on both draft and ETTN. Never delete/retry an ambiguous claim. */
-export function makeTestSendJournal(db:DB,profile:Profile,draft:Draft,approval:Approval,numberingMode:NumberingMode="CLIENT_NUMBERED"){
+export function makeTestSendJournal(db:DB,profile:Profile,draft:Draft,approval:Approval,numberingMode:NumberingMode="CLIENT_NUMBERED",officeFence?:OfficeFence){
  if(numberingMode!=="CLIENT_NUMBERED"&&numberingMode!==PROVIDER_NUMBERING)throw Error("SEND_NUMBERING_MODE");
  const id=key(draft);
  return {
@@ -21,8 +22,9 @@ export function makeTestSendJournal(db:DB,profile:Profile,draft:Draft,approval:A
    const data={claimId,tenant:draft.tenant,environment:"TEST",draftId:draft.id,kind:draft.kind,version:draft.version,ettn,contentSha256:draft.contentSha256,approvedAt:approval.approvedAt,approvedBy:approval.userId,status:"SUBMITTING",numberingMode,claimedAt:now};
    // Single SQL write, serialized by SQLite/D1; scope-wide ETTN exclusion protects
    // the same external test document even when a second tenant creates a copy.
-   const sql="INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM json_store WHERE scope=? AND (json_extract(data,'$.ettn')=? OR json_extract(data,'$.providerEttn')=?)) ON CONFLICT(id) DO NOTHING";
-   const r=await db.prepare(sql).bind(id,SCOPE,draft.tenant,id,JSON.stringify(data),now,now,SCOPE,ettn,ettn).run();
+   const gate=officeFence?officeFenceCondition(officeFence,draft.tenant,Date.now()):{sql:"",args:[]};
+   const sql="INSERT INTO json_store(id,scope,main_company_slug,file_name,data,created_at,updated_at) SELECT ?,?,?,?,?,?,? WHERE NOT EXISTS (SELECT 1 FROM json_store WHERE scope=? AND (json_extract(data,'$.ettn')=? OR json_extract(data,'$.providerEttn')=?))"+gate.sql+" ON CONFLICT(id) DO NOTHING";
+   const r=await db.prepare(sql).bind(id,SCOPE,draft.tenant,id,JSON.stringify(data),now,now,SCOPE,ettn,ettn,...gate.args).run();
    return Number(r.meta?.changes||0)===1?claimId:null;
   },
   async settle(input:SettleInput){

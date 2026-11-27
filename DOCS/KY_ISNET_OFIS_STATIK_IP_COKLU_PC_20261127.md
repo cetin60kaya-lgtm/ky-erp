@@ -1,0 +1,18 @@
+# KYERP İşNet — ortak statik IPv4 / çoklu ofis cihazı (27.11.2026)
+
+Kullanıcı mevcut iş yeri TTNET statik IPv4 üzerinden çalışmaya karar verdi. X tek zorunlu cihaz değildir. Yetkili, aynı internet çıkışındaki tüm kayıtlı Windows cihazları aktif/yedek olabilir. Telefon, tablet ve dış ağdaki tarayıcılar normal KYERP oturumu ve firma yetkileriyle çalışır; kullanıcı girişine IP kısıtlaması eklenmez. Her ofis cihazı ayrı yetkilidir. Aynı IP tek başına kimlik değildir. Bilgisayarların hepsi kapalıysa yeni İşNet işlemleri yapılamaz; buluttaki mevcut belgeler ve taslaklar erişilebilir. İşNet başarılı TEST faturayı kabul etti; canlı IP/VKN yetkisi ve canlı servis sözleşmesi henüz bekleniyor.
+
+## Bu revizyon
+- `isnet-office-coordinator.ts`: server-only registry, per-device secret hash + Cloudflare edge IP, tenant isolation, persistent heartbeat, 90s fenced leader, standby takeover. Existing json_store only; no migration.
+- `isnet-office-routes.ts`: exact POST heartbeat (native agent, canonical HTTPS host, separate auth, no browser origin), GET status (normal authenticated accounting/tenant gate, no user IP restriction). No submit API. Status always reports providerAuthorized=false/sendEnabled=false pending actual acceptance.
+- `TOOLS/isnet/office-agent.mjs`: outbound-only heartbeat every 30s; bounded failure backoff; no incoming port, provider call, remote shell or document access. Future integration uses existing İşNet transport, no second independent ERP database.
+- Existing TEST send journal can require office fence atomically at reservation. Same document cannot be sent by second PC after uncertain response or takeover. No production send enabled.
+- Actual IP and device credentials are NOT source code or public GitHub data. Runtime secret binding ISNET_OFFICE_REGISTRY_JSON: array of {tenant,deviceId,enabled,secretHash,allowedIp}. Each device uses unique random 256-bit base64url secret, server holds SHA256 hex only. Real secret provisioning only via approved protected service account and secret store; no chat, command-line args, public repo, global File Hub key or plaintext shared config. Env KYERP_ISNET_TENANT, KYERP_ISNET_DEVICE_ID, KYERP_ISNET_DEVICE_KEY from protected service runtime. No registry by default = unavailable. No paid services.
+- Enrollment/Windows automatic startup and real route smoke remain separate acceptance. Production endpoint/capabilities must be checked against received live WSDL, provider IP-VKN and exact company identities. Queue/worker actual transport, validation service, XML/PDF File Hub intake and live send gate not completed by heartbeat. Never interpret online as provider authorized. If all agents offline, do not retry a previously claimed submission.
+
+## Acceptance order
+1. Confirm real public egress IPv4 on each enrolled device, VPN/alternate WAN off for agent traffic; provider's registered IP and actual edge/soap egress must match.
+2. Provision separate device credentials and configure one existing approved service instance per device. Check restart and 2-device failover.
+3. Validate live GetCompany and read-only four directions, original XML/PDF with identity hashes and canonical File Hub, tenant scope and restart recovery.
+4. Complete trusted UBL validation and durable queue/actual transport, then separately approve live send capability. Use existing durable journal pattern; no automatic resend after timeout or lost acknowledgement. At least one office device online is required for provider operations.
+5. Mobile access smoke via different network and normal session; no shared device credentials in browser.

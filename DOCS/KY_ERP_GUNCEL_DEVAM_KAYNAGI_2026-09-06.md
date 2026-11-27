@@ -1,5 +1,20 @@
 # KY ERP — GÜNCEL DEVAM + YAPILAN İŞLER ANA KAYNAĞI
 
+## 27.11.2026 — 0063 hedefli canlı geçiş kapısı
+Kullanıcı canlı geçişi ve 0063 engelinin çözülmesini açıkça istedi. Önceki #684 kaynak 0bcb878f3731 CI 46002286609 SUCCESS. Yeni `APP/cloud/ky-erp-api/scripts/d1-0063-private-migration.mjs` mevcut Wrangler yetkisiyle, yalnız özel kullanıcı ortamında çalışır; CI/GitHub runner içinde tam D1 export yasak. `--check` yalnız schema ve gerekli sütunları okur. `--apply-0063 --private-backup-dir <mevcut-sahibine-ozel-yedek-dizini>` Time Travel, tam SQL yedek, yerelde SQLite geri yükleme ve quick_check, tablo kapsamı, SHA256 makbuzu, yeniden readiness, yalnız 0063 ve kesin 4 tablo + 2 indeks kanıtı. Kısmi/uyumsuz şema otomatik düzeltilmez. Başka migration, resmi gönderim ve production kod deploy betikte yok. Cloudflare oturumu/DB erişimi ve gerçek özel backup bu oturumda doğrulanamadı; geçiş uygulanmadı. #684 merge/deploy öncesi canlı READY kanıtı zorunlu.
+
+
+## 27.11.2026 — İşNet canlı servis geçişi: sağlayıcı IP tanımlamasını ve 20:00 TRT başlangıcını bildirdi. InvoiceService ve AddressBookService sabit production adresleri kullanılır. Yetkili ofis ajanından yalnız HTTPS singleWsdl GET, sınırlı metadata ve SHA256 bildirimi; TEST fallback yok. WSDL bildirimi şirket kimliği/yetki/UBL/gönderim kabulü değildir. Gerçek Windows ajan kurulumu, canlı servis doğrulaması, 0063 yedek/migration, ortak gönderim kuyruğu/transport ve File Hub mutabakatı açık; resmî gönderim kapalı.
+
+
+## 27.11.2026 — Ortak e-Belge / İşNet tek motor geçişi
+- [Tek motor kabul kaydı](KYERP_EBELGE_ISNET_TEK_MOTOR_20261127.md): eski yazma yolları kaldırıldı; geçmiş okuma/manuel XML/PDF korunur. Cihaz bağlantısı ve kullanıcı oturumu ayrıldı, firma kapsamı ve muhasebe yetkisi sıkılaştırıldı. AI görüşü opsiyonel; kesin iç kontroller ve resmî gönderim kilidi korunur. #684 CI, merge, yayın ayrı. Canlı transport, kaynak rezervasyonu, 0063 ve gerçek cihaz/sağlayıcı kabulü açık.
+
+
+## 27.11.2026 — İşNet statik IPv4 ve çoklu ofis PC kararı
+- [Ofis bağlantı sözleşmesi](KY_ISNET_OFIS_STATIK_IP_COKLU_PC_20261127.md): mevcut TTNET statik çıkış IP, tek X bağımlılığı yok, aynı internet çıkışında ayrı yetkili cihazlar aktif/yedek. Telefon/dış ağ KYERP normal oturumu; kullanıcı girişine IP kısıtlaması yok. İşNet TEST fatura kabulü tamam, canlı yetki bekliyor. IP ve kimlik bilgisi repoda yok; canlı gönderim, Windows kurulum, secret provisioning ve tam transport ayrı kabul.
+
+
 
 ## 25.11.2026 — İşNet son TEST ekranı ve model araması
 - Kullanıcı kararı: müşteri kişi/SAS/sipariş bilgisi ayrı alanlara bölünmez; kaynak belge ve kalem notları aynen korunur. Outlook analizi/gönderimi sonraki ayrı kapsamdır. Mal/hizmet seçimi mevcut tenant model kartı, ürün kartı, geçmiş giden fatura satırlarından aranır; model kodu ve fatura ürün kodları da sorgulanır. Kaydetmeden önce kayıt kimliği yeniden doğrulanır. Sentetik bedelsiz kalemler, eski taslaklar, kaynak satırlar korunur. Gerçek model adları yalnız iç KYERP TEST taslağında; sağlayıcıya gönderim yok. Seçili yön belirgin, C62 görünümde ADET, hızlı kaydet ve önizleme ayrı. Önceki canlı kabul: 180 TL kaydedildi, kaynak notu ve kontrol onayı ekranda doğrulandı. Gerçek model arama sonucu, gerçek firma/ürün sağlayıcı eşleme, UBL/resmî gönderim ve vergi kabulü henüz açık. Kişisel notlar veya gerçek belge örnekleri repoya taşınmadı. CI ve yayın ayrı kabul.

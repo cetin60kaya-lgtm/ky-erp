@@ -1,3 +1,4 @@
+import IsnetOfficeStatus from "./IsnetOfficeStatus";
 import {useCallback,useEffect,useMemo,useRef,useState} from "react";
 import {Activity,AlertTriangle,CheckCircle2,ChevronDown,FileCode2,FolderOpen,Layers3,Plus,RefreshCw,Search,ShieldCheck,LockKeyhole,PauseCircle,PlayCircle,Settings2,X,Trash2} from "lucide-react";
 import {getCompanyEBelgeAdapters,setCompanyEBelgeAdapter,getCompanyEBelgeAdapterProfile} from "../../../services/eBelgeAdapterApi";
@@ -24,7 +25,7 @@ const connectionStatus=(adapter,provider,entry)=>{
  return "Sağlayıcı bağlantısı doğrulanmadı";
 };
 const providerService=(key)=>key==="ISNET"
- ?{title:"İşNet NetteFatura · DESEN yerel bağlantısı",description:"Gerçek portal girişi Windows adaptöründe yapılır. Orijinal XML/PDF KY ERP Belge Havuzu’na aktarılır; buluta portal şifresi gönderilmez."}
+ ?{title:"İşNet NetteFatura · Ofis bağlantısı",description:"Günlük belge işlemleri e-Belge merkezinde; burada firma bağlantısı, canlı servisler ve teknik kontrol yönetilir."}
  :key==="MANUAL"
  ?{title:"Yerel belge kaynağı",description:"Manuel UBL-TR XML / PDF yüklemesi için dış servis URL'si gerekmez."}
  :{title:"Henüz entegre edilmedi",description:"Bu sağlayıcının doğrulanmış bağlantı sürücüsü yok. Rastgele servis URL'si eklemek bağlantı açmaz; bağlantı ayarları sürücü hazırlandığında gösterilir."};
@@ -174,8 +175,9 @@ export default function EBelgeAdapterManager({activeMainCompany,openModule,provi
     <div className="eam-service"><ShieldCheck size={18}/><div><strong>{providerService(active.key).title}</strong>
      {active.key!=="ISNET"&&profile?.serviceUrl&&<code>{profile.serviceUrl}</code>}
      <p>{providerService(active.key).description}</p></div></div>
+    {active.key==="ISNET"&&<IsnetOfficeStatus key={tenant} slug={tenant}/>}
     <div className="eam-tabs" role="tablist" aria-label="Entegrasyon çalışma alanları">
-     {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="official"} className={panel==="official"?"active":""} onClick={()=>setPanel("official")}>İşNet Teknik Kabul</button>}
+     {active.key==="ISNET"&&<button type="button" role="tab" aria-selected={panel==="official"} className={panel==="official"?"active":""} onClick={()=>setPanel("official")}>Teknik Kabul / TEST</button>}
      <button type="button" role="tab" aria-selected={panel==="connection"} className={panel==="connection"?"active":""} onClick={()=>setPanel("connection")}>Gelişmiş İş Kuralları</button>
      <button type="button" role="tab" aria-selected={panel==="test"} className={panel==="test"?"active":""} onClick={()=>setPanel("test")}>{active.key==="ISNET"?"Dosya Kontrolü":"Belge Test Merkezi"}</button>
      <button type="button" role="tab" aria-selected={panel==="profile"} className={panel==="profile"?"active":""} onClick={()=>setPanel("profile")}>Entegrasyonu Düzenle</button>

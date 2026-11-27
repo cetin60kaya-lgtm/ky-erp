@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { scopedIsnetTenant } from "./isnet-tenant-guard";
 import type { Context, Hono } from "hono";
 
 type Bindings = Cloudflare.Env;
@@ -78,15 +79,7 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
   }
 }
 
-function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(
-    body.mainCompanySlug ||
-      body.main_company_slug ||
-      c.req.query("mainCompanySlug") ||
-      c.req.query("mainCompanyId") ||
-      "mecit-hakan",
-  );
-}
+function slugOf(c: Context<AppEnv>, _body: Row = {}) { return scopedIsnetTenant(c); }
 
 function safeUrl(value: unknown) {
   const raw = text(value);
@@ -120,7 +113,7 @@ async function storeList(c: Context<AppEnv>, scope: string, slug: string) {
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
       WHERE scope = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY updated_at DESC, id DESC`,
   )
     .bind(scope, slug)
@@ -146,7 +139,7 @@ async function storeGet(
        FROM json_store
       WHERE scope = ?
         AND file_name = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY updated_at DESC
       LIMIT 1`,
   )
@@ -175,7 +168,7 @@ async function storePut(
   if (existing?.storeId) {
     await c.env.DB.prepare(
       `UPDATE json_store SET data = ?, updated_at = ?
-        WHERE id = ? AND (main_company_slug = ? OR main_company_slug IS NULL)`,
+        WHERE id = ? AND main_company_slug=?`,
     )
       .bind(JSON.stringify(payload), timestamp, existing.storeId, slug)
       .run();
@@ -210,7 +203,7 @@ async function storeDelete(
   await c.env.DB.prepare(
     `DELETE FROM json_store
       WHERE scope = ? AND file_name = ?
-        AND (main_company_slug = ? OR main_company_slug IS NULL)`,
+        AND main_company_slug=?`,
   )
     .bind(scope, fileName, slug)
     .run();
@@ -1309,107 +1302,17 @@ export function registerIsnetCloudRoutes(app: Hono<AppEnv>) {
     });
   });
 
-  app.post("/api/isnet/drafts/dispatch", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    if (!text(body.recipientId) || !text(body.modelName)) {
-      return c.json(errorBody("DRAFT_FIELDS_REQUIRED", "Alıcı ve model adı zorunludur."), 400);
-    }
-    const draft = await createDraft(c, slug, body, "DISPATCH");
-    return c.json({
-      ok: true,
-      success: true,
-      data: draftResult(
-        draft,
-        "İrsaliye KY ERP taslağı kaydedildi. Resmî gönderim adaptörü ayrıca onaylanmalıdır.",
-      ),
-    }, 201);
-  });
+  // Retired: /api/isnet/drafts/dispatch (canonical e-Belge only).
 
-  app.post("/api/isnet/drafts/invoice", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    if (!text(body.recipientId) || !Array.isArray(body.lines) || !body.lines.length) {
-      return c.json(errorBody("DRAFT_FIELDS_REQUIRED", "Alıcı ve fatura satırı zorunludur."), 400);
-    }
-    const draft = await createDraft(c, slug, body, "INVOICE");
-    return c.json({
-      ok: true,
-      success: true,
-      data: draftResult(
-        draft,
-        "Fatura KY ERP taslağı kaydedildi. Resmî gönderim yapılmadı.",
-      ),
-    }, 201);
-  });
+  // Retired: /api/isnet/drafts/invoice (canonical e-Belge only).
 
-  app.post("/api/isnet/dispatches/:id/create-invoice", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const document = await findDocument(c, slug, { id: c.req.param("id") });
-    if (!document) return c.json(errorBody("NOT_FOUND", "İrsaliye bulunamadı."), 404);
-    const draft = await createDraft(
-      c,
-      slug,
-      { ...body, sourceId: document.id, dispatchNo: document.documentNo },
-      "INVOICE",
-    );
-    return c.json({
-      ok: true,
-      success: true,
-      data: draftResult(
-        draft,
-        "İrsaliyeye bağlı fatura taslağı doğrulandı ve yerel olarak kaydedildi.",
-      ),
-    }, 201);
-  });
+  // Retired: /api/isnet/dispatches/:id/create-invoice (canonical e-Belge only).
 
-  app.post("/api/isnet/drafts/:id/validate", async (c) => {
-    const slug = slugOf(c);
-    const draft = await storeGet(c, SCOPES.draft, c.req.param("id"), slug);
-    if (!draft) return c.json(errorBody("NOT_FOUND", "Taslak bulunamadı."), 404);
-    const differences: string[] = [];
-    if (!text(draft.recipientId || draft.recipientName)) differences.push("Alıcı eksik.");
-    if (!Array.isArray(draft.lines) || !draft.lines.length) differences.push("Belge satırı eksik.");
-    return c.json({
-      ok: true,
-      success: true,
-      data: { verified: differences.length === 0, differences, draft },
-    });
-  });
+  // Retired: /api/isnet/drafts/:id/validate (canonical e-Belge only).
 
-  app.post("/api/isnet/drafts/:id/prepare", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const current = await storeGet(c, SCOPES.draft, c.req.param("id"), slug);
-    if (!current) return c.json(errorBody("NOT_FOUND", "Taslak bulunamadı."), 404);
-    const draft = await storePut(
-      c,
-      SCOPES.draft,
-      text(current.id || current.fileName),
-      { ...current, ...body, status: "VERIFIED_LOCAL_DRAFT", verified: true },
-      slug,
-    );
-    return c.json({ ok: true, success: true, data: draftResult(draft, "Taslak hazırlandı.") });
-  });
+  // Retired: /api/isnet/drafts/:id/prepare (canonical e-Belge only).
 
-  app.post("/api/isnet/drafts/:id/approve", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const current = await storeGet(c, SCOPES.draft, c.req.param("id"), slug);
-    if (!current) return c.json(errorBody("NOT_FOUND", "Taslak bulunamadı."), 404);
-    if (body.confirmationText && body.confirmationText !== "FATURAYI GÖNDER") {
-      return c.json(errorBody("CONFIRMATION_TEXT_INVALID", "Onay metni geçersiz."), 400);
-    }
-    const draft = await storePut(
-      c,
-      SCOPES.draft,
-      text(current.id || current.fileName),
-      { ...current, approved: body.approved !== false, approvedAt: nowIso(), status: "APPROVED_LOCAL_DRAFT" },
-      slug,
-    );
-    return c.json({ ok: true, success: true, data: draft });
-  });
+  // Retired: /api/isnet/drafts/:id/approve (canonical e-Belge only).
 
   app.get("/api/isnet/drafts/:id/status", async (c) => {
     const row = await storeGet(c, SCOPES.draft, c.req.param("id"), slugOf(c));
@@ -1417,81 +1320,9 @@ export function registerIsnetCloudRoutes(app: Hono<AppEnv>) {
     return c.json({ ok: true, success: true, data: row });
   });
 
-  app.post("/api/isnet/drafts/:id/submit", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const settings = await settingsOf(c, slug);
-    const draft = await storeGet(c, SCOPES.draft, c.req.param("id"), slug);
-    if (!draft) return c.json(errorBody("NOT_FOUND", "Taslak bulunamadı."), 404);
-    if (!settings.submitEndpoint) {
-      return c.json(
-        errorBody(
-          "OFFICIAL_SUBMIT_ADAPTER_NOT_CONFIGURED",
-          "Resmî fatura gönderim adaptörü bağlı değil. Taslak gönderilmiş olarak işaretlenmedi.",
-        ),
-        409,
-      );
-    }
-    if (draft.approved !== true) {
-      return c.json(errorBody("DRAFT_NOT_APPROVED", "Taslak açık onay bekliyor."), 409);
-    }
-    const payload = await externalJson(c, slug, settings.submitEndpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(draft),
-    });
-    const officialInvoiceNumber = text(
-      payload.officialInvoiceNumber || payload.invoiceNo || payload.documentNo,
-    );
-    const officialUuid = text(payload.officialUuid || payload.uuid);
-    if (!officialInvoiceNumber) {
-      return c.json(
-        errorBody(
-          "OFFICIAL_RESULT_UNVERIFIED",
-          "Adaptör resmî fatura numarası döndürmedi; gönderim tamamlandı sayılmadı.",
-        ),
-        502,
-      );
-    }
-    const updated = await storePut(
-      c,
-      SCOPES.draft,
-      text(draft.id || draft.fileName),
-      {
-        ...draft,
-        status: "COMPLETED",
-        officialInvoiceNumber,
-        officialUuid,
-        submittedAt: nowIso(),
-        officialResponse: payload,
-      },
-      slug,
-    );
-    return c.json({ ok: true, success: true, data: updated });
-  });
+  // Retired: /api/isnet/drafts/:id/submit (canonical e-Belge only).
 
-  app.post("/api/isnet/drafts/:id/retry-closure", async (c) => {
-    const slug = slugOf(c);
-    const draft = await storeGet(c, SCOPES.draft, c.req.param("id"), slug);
-    if (!draft) return c.json(errorBody("NOT_FOUND", "Taslak bulunamadı."), 404);
-    if (!draft.officialInvoiceNumber) {
-      return c.json(
-        errorBody(
-          "OFFICIAL_RESULT_MISSING",
-          "Resmî fatura sonucu yok; yerel kapanış yapılamaz.",
-        ),
-        409,
-      );
-    }
-    const updated = await storePut(
-      c,
-      SCOPES.draft,
-      text(draft.id || draft.fileName),
-      { ...draft, status: "COMPLETED", closureCompletedAt: nowIso() },
-      slug,
-    );
-    return c.json({ ok: true, success: true, data: updated });
-  });
+  // Retired: /api/isnet/drafts/:id/retry-closure (canonical e-Belge only).
 
   app.get("/api/isnet/issued-documents", async (c) => {
     const docs = (await normalizedDocuments(c, slugOf(c))).filter(
@@ -1510,26 +1341,7 @@ export function registerIsnetCloudRoutes(app: Hono<AppEnv>) {
     return objectResponse(object, format === "xml" ? "application/xml" : "application/pdf");
   });
 
-  app.post("/api/isnet/documents/:id/complete", async (c) => {
-    const body = await bodyOf(c);
-    const slug = slugOf(c, body);
-    const document = await findDocument(c, slug, { id: c.req.param("id") });
-    if (!document) return c.json(errorBody("NOT_FOUND", "Belge bulunamadı."), 404);
-    if (!document.filesReady) {
-      return c.json(
-        errorBody(
-          "FILES_NOT_READY",
-          "PDF/XML dosyaları tamamlanmadan belge arşivi kapatılamaz.",
-        ),
-        409,
-      );
-    }
-    const metadata = await updateDocumentMeta(c, document.id, slug, {
-      archiveCompletedAt: nowIso(),
-      archiveStatus: "COMPLETED",
-    });
-    return c.json({ ok: true, success: true, data: { ...document, metadata } });
-  });
+  // Retired: /api/isnet/documents/:id/complete (canonical e-Belge only).
 
   app.get("/api/isnet/mail-queue", async (c) => {
     const rows = (await storeList(c, SCOPES.mail, slugOf(c))).map((row) => ({

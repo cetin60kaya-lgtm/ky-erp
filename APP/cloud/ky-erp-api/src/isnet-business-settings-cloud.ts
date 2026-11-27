@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { scopedIsnetTenant } from "./isnet-tenant-guard";
 import type { Context, Hono } from "hono";
 
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
@@ -79,16 +80,7 @@ async function bodyOf(c: Context<AppEnv>) {
   }
 }
 
-function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(
-    body.mainCompanySlug ||
-      body.mainCompanyId ||
-      body.main_company_slug ||
-      c.req.query("mainCompanySlug") ||
-      c.req.query("mainCompanyId") ||
-      "mecit-hakan",
-  );
-}
+function slugOf(c: Context<AppEnv>, _body: Row = {}) { return scopedIsnetTenant(c); }
 
 function err(code: string, message: string) {
   return { ok: false, success: false, error: { code, message } };
@@ -110,7 +102,7 @@ async function storeGet(c: Context<AppEnv>, scope: string, fileName: string, slu
     `SELECT id,file_name,data,created_at,updated_at
        FROM json_store
       WHERE scope=? AND file_name=?
-        AND (main_company_slug=? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY updated_at DESC LIMIT 1`,
   )
     .bind(scope, fileName, slug)
@@ -130,7 +122,7 @@ async function storeList(c: Context<AppEnv>, scope: string, slug: string) {
   const result = await c.env.DB.prepare(
     `SELECT id,file_name,data,created_at,updated_at
        FROM json_store
-      WHERE scope=? AND (main_company_slug=? OR main_company_slug IS NULL)
+      WHERE scope=? AND main_company_slug=?
       ORDER BY updated_at DESC,id DESC`,
   )
     .bind(scope, slug)
@@ -168,7 +160,7 @@ async function storePut(c: Context<AppEnv>, scope: string, fileName: string, dat
 async function storeDelete(c: Context<AppEnv>, scope: string, fileName: string, slug: string) {
   if (!(await tableExists(c, "json_store"))) return;
   await c.env.DB.prepare(
-    "DELETE FROM json_store WHERE scope=? AND file_name=? AND (main_company_slug=? OR main_company_slug IS NULL)",
+    "DELETE FROM json_store WHERE scope=? AND file_name=? AND main_company_slug=?",
   )
     .bind(scope, fileName, slug)
     .run();

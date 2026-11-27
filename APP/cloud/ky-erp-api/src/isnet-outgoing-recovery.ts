@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { scopedIsnetTenant } from "./isnet-tenant-guard";
 import type { Context, Hono } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 
@@ -84,7 +85,7 @@ async function companyContext(c: Context<AppEnv>, body: Row = {}) {
     c.req.header("X-KYERP-Tenant-Slug"),
   );
   const ownSlug = text(current.mainCompanySlug || current.main_company_slug);
-  const slug = requested || ownSlug;
+  const slug = scopedIsnetTenant(c);
   if (!slug) {
     return { ok: false as const, status: 400, error: errorBody("MAIN_COMPANY_REQUIRED", "Ana firma bağlamı zorunludur.") };
   }
@@ -149,7 +150,7 @@ async function settingRow(c: Context<AppEnv>, slug: string) {
   const row = await c.env.DB.prepare(
     `SELECT data FROM json_store
       WHERE scope=? AND file_name=?
-        AND (main_company_slug=? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY CASE WHEN main_company_slug=? THEN 0 ELSE 1 END, updated_at DESC
       LIMIT 1`,
   ).bind(SETTINGS_SCOPE, slug, slug, slug).first<Row>();
@@ -161,7 +162,7 @@ async function storePut(c: Context<AppEnv>, scope: string, fileName: string, slu
   const row = await c.env.DB.prepare(
     `SELECT id,data FROM json_store
       WHERE scope=? AND file_name=?
-        AND (main_company_slug=? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY CASE WHEN main_company_slug=? THEN 0 ELSE 1 END, updated_at DESC
       LIMIT 1`,
   ).bind(scope, fileName, slug, slug).first<Row>();
