@@ -15,7 +15,7 @@ const integrationError=e=>{
  return message+(id?" · İstek: "+id:"");
 };
 const connectionStatus=(adapter,provider,entry)=>{
- if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Portal oturumu ve firma seçimi Belge Aktarımı ekranından doğrulanır";
+ if(adapter.key==="ISNET")return entry?.enabled===false?"Firma için pasif":"Firma seçimi kayıtlı olabilir; canlı ofis bağlantısı ve sağlayıcı yetkisi aşağıda ayrı gösterilir";
  if(adapter.driver===null)return "Bağlayıcı henüz hazır değil";
  if(entry?.enabled===false)return "Firma için pasif";
  if(adapter.key==="MANUAL")return "XML yükleme kullanılabilir";
