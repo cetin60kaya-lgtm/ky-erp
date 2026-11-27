@@ -85,6 +85,7 @@ import { registerIsnetOutgoingRecoveryRoutes } from "./isnet-outgoing-recovery";
 import { registerIsnetRuntimeV2Routes } from "./isnet-runtime-v2";
 import { registerIsnetCloudRoutes } from "./isnet-cloud";
 import { enforceIsnetTenant } from "./isnet-tenant-guard";
+import { retiredIsnetMutation, retiredIsnetResponse } from "./isnet-retired-mutations";
 import { registerProductionCenterRoutes } from "./production-center";
 import { enforceProductionTenant } from "./production-tenant-guard";
 import { registerProductionRuntimeV2Routes } from "./production-runtime-v2";
@@ -379,6 +380,7 @@ for (const productionRoute of [
 shell.use("/api/file-hub/*", enforceFileHubTenant);
 
 shell.use("/api/isnet/*", enforceIsnetTenant);
+shell.use("/api/isnet/*", async (c,next)=>retiredIsnetMutation(c.req.path,c.req.method)?c.json(retiredIsnetResponse,410):next());
 shell.use("/api/isnet/*", enforceIsnetAdapterActivation);
 
 // e-Belge Merkezi, Muhasebe yetkisi ve oturumun tenant bağlamı dışında erişilemez.

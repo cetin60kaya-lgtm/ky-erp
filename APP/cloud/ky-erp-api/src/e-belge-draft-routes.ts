@@ -57,10 +57,10 @@ async function aiPolicy(c:Context<Env>,tenant:string){
  const row=ready?await c.env.DB.prepare("SELECT version,ai_enabled,updated_at FROM ebelge_operator_policy WHERE main_company_slug=?").bind(tenant).first<Row>():null;
  return {ready,version:Number(row?.version||0),aiEnabled:Number(row?.ai_enabled||0)===1,updatedAt:row?.updated_at||"",sendEnabled:false};
 }
-// Mandatory second opinion for outgoing draft CHECK only. No personal fields or document text sent.
-async function mandatoryDraftAiReview(c:Context<Env>,a:{tenant:string;userId:string},data:Row,kind:DraftKind){
+// Optional second opinion for outgoing draft CHECK only. Deterministic warnings remain hard gates. No personal fields or document text sent.
+async function draftAiReview(c:Context<Env>,a:{tenant:string;userId:string},data:Row,kind:DraftKind){
  const policy=await aiPolicy(c,a.tenant);
- if(!policy.ready||!policy.aiEnabled||!c.env.AI)return {ok:false,code:"AI_CONTROL_NOT_READY",message:"Zorunlu AI kontrolü hazır değil; taslak saklanabilir, onaylanamaz."};
+ if(!policy.ready||!policy.aiEnabled||!c.env.AI)return {ok:false,code:"AI_CONTROL_NOT_READY",message:"AI görüşü hazır değil; kesin resmî onay verilmez."};
  const allowance=await checkCompanyAiAllowance(c.env.DB,a.tenant);
  if(!allowance.allowed||!allowance.metered)return {ok:false,code:"AI_CONTROL_NOT_READY",message:"AI kullanım yetkisi doğrulanamadı."};
  if(!data.lines.length||data.lines.length>200)return {ok:false,code:"AI_CONTROL_REQUIRED",message:"Kalem kontrolü gerekli."};
@@ -69,7 +69,7 @@ async function mandatoryDraftAiReview(c:Context<Env>,a:{tenant:string;userId:str
   const binding=c.env.AI as unknown as {run:(model:string,input:Record<string,unknown>,options:Record<string,unknown>)=>Promise<unknown>};
   const result=await binding.run(aiModel,{messages:[{role:"system",content:"Yalnız sayısal ve belge senaryosu ön kontrolü yap. Kullanıcı bilgisi yok. Vergi mevzuatı onayı verme, işlem yapma. Belirgin miktar/fiyat/iskonto/KDV/tutar tutarsızlığı veya şüphe varsa REVIEW, yalnız tutarlıysa PASS. Çıktı tam olarak JSON {\"status\":\"PASS\"} veya {\"status\":\"REVIEW\"}. Başka alan yok."},{role:"user",content:JSON.stringify(shape)}],temperature:0,max_tokens:40},{gateway:{id:clean((c.env as unknown as Row).AI_GATEWAY_ID)||"default",skipCache:true,collectLog:false,metadata:{app:"KYERP",tenant:a.tenant,module:"EBELGE_DRAFT_CONTROL",requestId:clean(c.get("requestId"))}}});
   const output=result as Row;
-  const ledger=await recordCompanyAiUsage(c.env.DB,{mainCompanySlug:a.tenant,usage:output?.usage,sourceRef:clean(c.get("requestId"))||crypto.randomUUID(),actorUserId:a.userId,model:aiModel,note:"e-Belge zorunlu taslak ön kontrolü"});
+  const ledger=await recordCompanyAiUsage(c.env.DB,{mainCompanySlug:a.tenant,usage:output?.usage,sourceRef:clean(c.get("requestId"))||crypto.randomUUID(),actorUserId:a.userId,model:aiModel,note:"e-Belge isteğe bağlı taslak ön kontrolü"});
   const after=await aiPolicy(c,a.tenant);
   if(!ledger.recorded||!after.aiEnabled||after.version!==policy.version)return {ok:false,code:"AI_CONTROL_UNVERIFIED",message:"AI kontrolü doğrulanamadı."};
   const parsed=JSON.parse(typeof result==="string"?result:typeof output?.response==="string"?output.response:"");
@@ -243,7 +243,19 @@ export function registerEBelgeDraftRoutes(app:Hono<Env>){
     const company=await party(c,a.tenant,data.partyId);if(!company)return c.json(err("INVALID_PARTY","Cari kaydı artık geçerli değil."),400);
     if(body.action==="CHECK"&&data.warnings.length)return c.json(err("CONTROL_REQUIRED",data.warnings.join(" ")),409);
     let aiControl:Row|null=null;
-    if(body.action==="CHECK"){const result=await mandatoryDraftAiReview(c,a,data,old.kind);if(!result.ok)return c.json(err(result.code||"AI_CONTROL_REQUIRED",result.message||"AI kontrolü gerekli."),409);aiControl=result;}
+    if(body.action==="CHECK"){
+      // CHECKED is an internal deterministic validation; no official approval/send.
+      const user=await getAuthenticatedUser(c);
+      if(!user||!accountingAccess(user,"POST","/api/e-belge/operator-drafts/approve"))return c.json(err("FORBIDDEN","Taslak kontrolü için onay yetkisi gerekli."),403);
+      let policy:Awaited<ReturnType<typeof aiPolicy>>|null=null;
+      try{policy=await aiPolicy(c,a.tenant)}catch{/* deterministic validation remains available */}
+      if(policy?.aiEnabled){
+        let result:Awaited<ReturnType<typeof draftAiReview>>|null=null;
+        try{result=await draftAiReview(c,a,data,old.kind)}catch{/* unavailable */}
+        if(result?.code==="AI_CONTROL_REVIEW")return c.json(err("AI_CONTROL_REVIEW",result.message||"Kalemleri inceleyin."),409);
+        aiControl=result?.ok?{...result,status:"PASS"}:{status:"UNAVAILABLE",code:result?.code||"AI_CONTROL_UNAVAILABLE"};
+      }else aiControl={status:policy?"NOT_REQUESTED":"UNAVAILABLE"};
+    }
     const payload=JSON.stringify({...data,partyName:company.name,partyTaxNo:company.tax_no||"",...(aiControl?{aiControl}: {})}),state=body.action==="CHECK"?"CHECKED":"DRAFT";
     const changed=await c.env.DB.prepare("UPDATE accounting_document_drafts SET payload=?,party_company_id=?,state=?,version=version+1,updated_by=?,updated_at=? WHERE main_company_slug=? AND id=? AND version=?").bind(payload,data.partyId,state,a.userId,new Date().toISOString(),a.tenant,id,version).run();
     if(changed.meta.changes!==1)return c.json(err("DRAFT_CONFLICT","Taslak değişti; üzerine yazılmadı."),409);

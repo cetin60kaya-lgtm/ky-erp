@@ -2,6 +2,7 @@
 // No production send, arbitrary command, provider URL, document data or remote shell.
 import type {Context,Hono} from "hono";
 import {getAuthenticatedUser} from "./auth-cloud";
+import {selections} from "./e-belge-adapter-company-routes";
 import {accountingAccess,accountingTenantReadAllowed,accountingTenantCandidates} from "./accounting-access-policy";
 import {authorizeOfficeDevice,heartbeatOfficeDevice,officeRegistry,officeStatus} from "./isnet-office-coordinator.ts";
 type Env={Bindings:Cloudflare.Env & {ISNET_OFFICE_REGISTRY_JSON?:string};Variables:{requestId:string}};
@@ -22,6 +23,8 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
     instanceId:c.req.header("X-KYERP-Office-Instance")||"",presentedSecret:c.req.header("X-KYERP-Agent-Token")||"",
     trustedEdgeIp:c.req.header("CF-Connecting-IP")||"",
    });
+   const enabled=await selections(c,d.tenant);
+   if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
    const result=await heartbeatOfficeDevice(c.env.DB,d);
    // A heartbeat or lease is never proof that the live provider is authorized.
    return c.json({ok:true,data:{...result,providerAuthorized:false,sendEnabled:false,pollAfterMs:30000}});

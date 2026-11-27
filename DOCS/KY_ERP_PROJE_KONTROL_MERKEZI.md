@@ -1,5 +1,9 @@
 # KY ERP — PROJE KONTROL MERKEZİ
 
+## 27.11.2026 — Ortak e-Belge / İşNet tek motor geçişi
+- [Tek motor kabul kaydı](KYERP_EBELGE_ISNET_TEK_MOTOR_20261127.md): eski yazma yolları kaldırıldı; geçmiş okuma/manuel XML/PDF korunur. Cihaz bağlantısı ve kullanıcı oturumu ayrıldı, firma kapsamı ve muhasebe yetkisi sıkılaştırıldı. AI görüşü opsiyonel; kesin iç kontroller ve resmî gönderim kilidi korunur. #684 CI, merge, yayın ayrı. Canlı transport, kaynak rezervasyonu, 0063 ve gerçek cihaz/sağlayıcı kabulü açık.
+
+
 ## 27.11.2026 — İşNet statik IPv4 ve çoklu ofis PC kararı
 - [Ofis bağlantı sözleşmesi](KY_ISNET_OFIS_STATIK_IP_COKLU_PC_20261127.md): mevcut TTNET statik çıkış IP, tek X bağımlılığı yok, aynı internet çıkışında ayrı yetkili cihazlar aktif/yedek. Telefon/dış ağ KYERP normal oturumu; kullanıcı girişine IP kısıtlaması yok. İşNet TEST fatura kabulü tamam, canlı yetki bekliyor. IP ve kimlik bilgisi repoda yok; canlı gönderim, Windows kurulum, secret provisioning ve tam transport ayrı kabul.
 

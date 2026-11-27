@@ -1,0 +1,8 @@
+# KYERP e-Belge / İşNet — tek motor geçişi (27.11.2026)
+Ortak e-Belge günlük operasyon, İşNet entegrasyonu firma bağlantısı ve teknik kabul. Eski veriler silinmez. Mevcut statik IPv4, birden fazla yetkili ofis cihazı ve dış ağdan kullanıcı erişimi.
+- Eski 20 fatura/irsaliye yazma işleyicisi ve eski SaveInvoice/SendStagingInvoice/SaveDespatchAdvice yardımcı yolları kaldırıldı. Eski istemci 410 CANONICAL_EBELGE_REQUIRED; geçmiş kayıt okuma, XML/PDF intake ve ayarlar korunur. Resmî gönderim açılmadı.
+- Tek çelişkisiz tenant (query/header/body/form), muhasebe izni ve doğrulanmış istek scope'u. Eski NULL global kayıt fallback'i kaldırıldı; 0027/0028 readiness ayrı. Veri topluca değiştirilmedi.
+- Native heartbeat exact POST cihaz auth + edge IP + etkin firma adaptörü, normal kullanıcı oturumundan ayrı. Status iki ekranda, providerAuthorized/sendEnabled false. Gerçek IP/secret repoda yok.
+- Ortak taslak CHECK kesin alan/uyarı/rol/sürüm kontrollerini korur. AI opt-in danışman, REVIEW engel; hizmet yoksa UNAVAILABLE, kapalıysa NOT_REQUESTED. CHECKED resmî onay değildir.
+## Açık zorunlu kabul
+0063 canlı şema ve açık onay/yedek; kaynak satır rezervasyonu, harici belge mutabakatı, güvenli transport ve UBL validator proof, gerçek canlı WSDL/IP-VKN/etiket/seri, cihaz failover ve queue, source→draft→provider→1300→orijinal XML/PDF→cari/arşiv. Bedelsiz/istisna/tevkifat/iade/e-Arşiv/döviz, resmî yanıtlar ve mobil gerçek kabul ayrı tamamlanmalıdır. CI/merge/deploy ayrı kanıt.

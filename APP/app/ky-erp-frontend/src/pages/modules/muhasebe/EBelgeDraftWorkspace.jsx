@@ -41,7 +41,7 @@ export default function EBelgeDraftWorkspace({activeMainCompany,kind,family="ALL
    const body={mainCompanySlug:slug,kind,id:draftId,providerKey:provider,payload:form,action,version:saved?.version};
    const r=unwrap(saved?await apiPatch(base+"/"+encodeURIComponent(saved.id),body):await apiPost(base,body));
    if(!validScope(r)||r.draft?.id!==draftId||!r.draft?.payload)throw Error("Taslak kayıt sonucu doğrulanamadı.");
-   setSaved(r.draft);setForm(r.draft.payload);setDirty(false);setNotice(action==="CHECK"?"Zorunlu alan ve AI kontrolü tamamlandı. Resmî onay/gönderim değildir.":"Taslak sunucuya kaydedildi.");setRefresh(v=>v+1);
+   setSaved(r.draft);setForm(r.draft.payload);setDirty(false);setNotice(action==="CHECK"?(r.draft.payload.aiControl?.status==="PASS"?"Alan ve AI ön kontrolü tamamlandı.":r.draft.payload.aiControl?.status==="UNAVAILABLE"?"Alan kontrolü tamamlandı; AI görüşü alınamadı.":"Alan kontrolü tamamlandı; AI görüşü istenmedi.")+" Resmî onay/gönderim değildir.":"Taslak sunucuya kaydedildi.");setRefresh(v=>v+1);
   }catch(e){setError((e.message||"İşlem tamamlanamadı.")+" Girilen bilgiler korunuyor. Tekrar işlemden önce kayıt listesini doğrulayın.");}finally{lock.current=false;setBusy(false)}
  }
  const field=(label,key,type="text")=><label>{label}<input type={type} value={form[key]||""} onChange={e=>update(key,e.target.value)}/></label>;

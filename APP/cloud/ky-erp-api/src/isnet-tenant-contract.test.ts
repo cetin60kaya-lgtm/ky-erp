@@ -20,7 +20,9 @@ test("every IsNet API route is protected by one explicit tenant guard", () => {
   assert.match(guard, /mainCompanySlug/);
   assert.match(guard, /X-KYERP-Tenant-Slug/);
   assert.doesNotMatch(guard, /mecit-hakan/);
-  assert.doesNotMatch(guard, /mainCompanyId/);
+  assert.match(guard, /mainCompanyId/); // all aliases are checked for conflicts
+  assert.match(guard, /exactIsnetTenant/);
+  assert.match(guard, /accountingAccess/);
 });
 
 test("non-owner IsNet access fails closed when user tenant context is missing or different", () => {

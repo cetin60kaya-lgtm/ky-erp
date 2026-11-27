@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { scopedIsnetTenant } from "./isnet-tenant-guard";
 import type { Context, Hono } from "hono";
 import { ingestProviderEBelgeXml } from "./e-belge-center-cloud";
 import { MAX_ISNET_DOCUMENT_BYTES, verifyIsnetDownloadedFile } from "./isnet-file-validation";
@@ -78,15 +79,7 @@ async function bodyOf(c: Context<AppEnv>) {
   }
 }
 
-function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(
-    body.mainCompanySlug ||
-      body.main_company_slug ||
-      c.req.query("mainCompanySlug") ||
-      c.req.query("mainCompanyId") ||
-      "mecit-hakan",
-  );
-}
+function slugOf(c: Context<AppEnv>, _body: Row = {}) { return scopedIsnetTenant(c); }
 
 async function tableExists(c: Context<AppEnv>, table: string) {
   return Boolean(
@@ -114,7 +107,7 @@ async function storeGet(c: Context<AppEnv>, scope: string, fileName: string, slu
     `SELECT id,file_name,data,created_at,updated_at
        FROM json_store
       WHERE scope=? AND file_name=?
-        AND (main_company_slug=? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY updated_at DESC LIMIT 1`,
   )
     .bind(scope, fileName, slug)

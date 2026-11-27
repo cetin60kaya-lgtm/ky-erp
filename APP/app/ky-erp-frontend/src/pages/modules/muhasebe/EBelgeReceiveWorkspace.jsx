@@ -2,6 +2,7 @@ import {useEffect,useState} from "react";
 import {canonicalCompanySlug} from "../../../utils/companyIdentity";
 import {getCompanyEBelgeAdapters} from "../../../services/eBelgeAdapterApi";
 import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
+import IsnetOfficeStatus from "./IsnetOfficeStatus";
 import "./eBelgeOperator.css";
 export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
  const slug=canonicalCompanySlug(activeMainCompany);
@@ -24,6 +25,7 @@ export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
    {isnet&&<><p>Yerel İşNet oturumu KYERP firma seçiminden bağımsızdır. Aktarım öncesinde aynı firmanın yetkili portal hesabını ve arşivini doğrulayın.</p>
    <button type="button" onClick={()=>setShow(v=>!v)}>{show?"İşNet Aktarım Panelini Kapat":"İşNet Aktarım Panelini Aç"}</button></>}
   </div>}
+  {isnet&&<IsnetOfficeStatus key={slug} slug={slug}/>}
   {isnet&&show&&<EBelgeIsnetPortalSync key={slug} activeMainCompany={activeMainCompany} openModule={openModule} enabled={true}/>}
  </section>;
 }

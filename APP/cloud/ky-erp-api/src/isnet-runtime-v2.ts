@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { scopedIsnetTenant } from "./isnet-tenant-guard";
 import type { Context, Hono } from "hono";
 import { probeIsnetSessionHealth, verifiedCachedIsnetSession } from "./isnet-session-health";
 import { normalizeIsnetConnectionMode, checkedIsnetCompanySave } from "./isnet-connection-flow";
@@ -83,15 +84,7 @@ async function bodyOf(c: Context<AppEnv>): Promise<Row> {
   }
 }
 
-function slugOf(c: Context<AppEnv>, body: Row = {}) {
-  return text(
-    body.mainCompanySlug ||
-      body.main_company_slug ||
-      c.req.query("mainCompanySlug") ||
-      c.req.query("mainCompanyId") ||
-      "mecit-hakan",
-  );
-}
+function slugOf(c: Context<AppEnv>, _body: Row = {}) { return scopedIsnetTenant(c); }
 
 async function tableExists(c: Context<AppEnv>, table: string) {
   const row = await c.env.DB.prepare(
@@ -111,7 +104,7 @@ async function storeList(c: Context<AppEnv>, scope: string, slug: string) {
   const result = await c.env.DB.prepare(
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
-      WHERE scope=? AND (main_company_slug=? OR main_company_slug IS NULL)
+      WHERE scope=? AND main_company_slug=?
       ORDER BY updated_at DESC, id DESC`,
   ).bind(scope, slug).all<Row>();
   return (result.results || []).map((row) => ({
@@ -129,7 +122,7 @@ async function storeGet(c: Context<AppEnv>, scope: string, fileName: string, slu
     `SELECT id, file_name, data, created_at, updated_at
        FROM json_store
       WHERE scope=? AND file_name=?
-        AND (main_company_slug=? OR main_company_slug IS NULL)
+        AND main_company_slug=?
       ORDER BY updated_at DESC LIMIT 1`,
   ).bind(scope, fileName, slug).first<Row>();
   if (!row) return null;
@@ -170,7 +163,7 @@ async function storeDelete(c: Context<AppEnv>, scope: string, fileName: string, 
   if (!(await tableExists(c, "json_store"))) return;
   await c.env.DB.prepare(
     `DELETE FROM json_store WHERE scope=? AND file_name=?
-      AND (main_company_slug=? OR main_company_slug IS NULL)`,
+      AND main_company_slug=?`,
   ).bind(scope, fileName, slug).run();
 }
 
@@ -657,50 +650,7 @@ async function matchRecipient(c: Context<AppEnv>, slug: string, companyName: str
   return list.find((row) => normalize(row.name) === name) || list.find((row) => normalize(row.name).includes(name) || name.includes(normalize(row.name))) || null;
 }
 
-async function createApiDespatchDraft(c: Context<AppEnv>, slug: string, params: Row) {
-  const settings = await settingsRaw(c, slug);
-  const companyId = text(settings.companyId);
-  if (!companyId) throw new Error("İşNet yetkili firma seçilmemiş.");
-  const recipient = params.recipient || await matchRecipient(c, slug, text(params.companyName || params.partnerName), text(params.partnerTaxNo));
-  if (!recipient?.id) throw new Error("İşNet alıcısı bulunamadı. Firma VKN/ünvan eşleşmesini kontrol edin.");
-  const issueDate = text(params.issueDate) || new Date().toISOString().slice(0, 10);
-  const issueTime = text(params.issueTime) || new Date().toLocaleTimeString("tr-TR", { hour12: false });
-  const number = text(params.despatchAdviceNumber) || `KYERP-TASLAK-${Date.now()}`;
-  const lines = arrayOf(params.lines).filter((line) => num(line.quantity) > 0);
-  const payload = {
-    DespatchAdviceNumber: number,
-    IdIrsaliyeExternal: `KYERP-${crypto.randomUUID()}`,
-    CompanyId: Number(companyId),
-    ScenarioType: 0,
-    DespatchAdviceDate: issueDate,
-    DespatchAdviceTime: issueTime,
-    ActualDespatchAdviceDate: issueDate,
-    ActualDespatchAdviceTime: issueTime,
-    DespatchAdviceType: 1,
-    OrderNumber: text(params.orderNo || ""),
-    Notes: ["KY ERP üzerinden kontrollü taslak", ...(text(params.note) ? [text(params.note)] : [])],
-    IdAlici: Number(recipient.id),
-    Products: lines.map((line) => ({
-      ProductName: text(line.productName || line.description || params.modelName || "Baskı hizmeti"),
-      StockDescription: text(line.description || line.productName || params.modelName || "Baskı hizmeti"),
-      Quantity: num(line.quantity),
-      MeasureUnitDesc: "ADET",
-      UnitPrice: 0,
-      VatRate: 0,
-      VatAmount: 0,
-      LineExtensionAmount: 0,
-      Note: text(line.description || ""),
-    })),
-  };
-  const response = await isnetApiRequest(c, slug, "/api/Invoice/SaveDespatchAdvice", payload);
-  return {
-    recipient,
-    response,
-    draftNo: text(response?.DespatchNumber || response?.DespatchAdviceNumber || number),
-    ettn: text(response?.Ettn || response?.ETTN),
-    externalId: payload.IdIrsaliyeExternal,
-  };
-}
+// Legacy SaveDespatchAdvice helper removed.
 
 function intakeCapacity(row: Row) {
   const source = num(row.quantity);
@@ -1007,7 +957,7 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
   });
 
   app.post("/api/isnet/source-intakes/manual-pdf", async (c) => {
-    const form = await c.req.formData(); const slug = text(form.get("mainCompanySlug") || form.get("mainCompanyId") || c.req.query("mainCompanySlug") || "mecit-hakan"); const file = form.get("pdf"); const id = crypto.randomUUID();
+    const form = await c.req.formData(); const slug = scopedIsnetTenant(c); const file = form.get("pdf"); const id = crypto.randomUUID();
     const quantity = num(form.get("quantity")); if (!text(form.get("companyId")) || (!text(form.get("modelId")) && !text(form.get("modelName"))) || quantity <= 0) return c.json(errorBody("SOURCE_FIELDS_REQUIRED", "Firma, model ve sıfırdan büyük adet zorunludur."), 400);
     let modelId = text(form.get("modelId"));
     if (!modelId) {
@@ -1031,7 +981,7 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     return c.json({ ok: true, success: true, data: { ...row, capacity: intakeCapacity(row) } });
   });
 
-  for (const [suffix, fields] of [["model", ["modelId", "modelName"]], ["customer-dispatch", ["customerDispatchNo", "documentId"]], ["quantities", ["quantity", "outgoingQuantity", "invoicedQuantity"]]] as any) {
+  for (const [suffix, fields] of [["model", ["modelId", "modelName"]], ["customer-dispatch", ["customerDispatchNo", "documentId"]]] as any) {
     app.patch(`/api/isnet/source-intakes/:id/${suffix}`, async (c) => {
       const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const current = await storeGet(c, SCOPE.sourceIntake, id, slug);
       if (!current) return c.json(errorBody("NOT_FOUND", "Kaynak kayıt bulunamadı."), 404);
@@ -1041,40 +991,11 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     });
   }
 
-  app.post("/api/isnet/source-workflow/:id/outgoing-dispatch", async (c) => {
-    const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const intake = await storeGet(c, SCOPE.sourceIntake, id, slug);
-    if (!intake) return c.json(errorBody("NOT_FOUND", "Kaynak kayıt bulunamadı."), 404);
-    const total = arrayOf(body.lines).reduce((sum, line) => sum + num(line.quantity), 0); const remaining = intakeCapacity(intake).outgoingRemaining;
-    if (total <= 0 || total > remaining + 0.0001) return c.json(errorBody("OUTGOING_QUANTITY_INVALID", "İrsaliye adedi sıfırdan büyük olmalı ve kalan adedi aşmamalıdır."), 400);
-    try {
-      const apiDraft = await createApiDespatchDraft(c, slug, { ...body, companyName: intake.companyName, modelName: intake.modelName, orderNo: intake.orderNo });
-      const saved = await storePut(c, SCOPE.sourceIntake, id, { ...intake, outgoingQuantity: num(intake.outgoingQuantity) + total, outgoingDraftNo: apiDraft.draftNo, outgoingDraftId: apiDraft.externalId, recipientId: apiDraft.recipient.id, recipientName: apiDraft.recipient.name, status: "OUTGOING_SEND_REQUIRED" }, slug);
-      return c.json({ ok: true, success: true, data: { ...saved, draftNo: apiDraft.draftNo, capacity: intakeCapacity(saved), message: "Giden irsaliye İşNet taslağı oluşturuldu. Resmî gönderim kullanıcı onayıyla yapılmalıdır." } }, 201);
-    } catch (error: any) {
-      const draftId = crypto.randomUUID(); await storePut(c, SCOPE.draft, draftId, { id: draftId, type: "DISPATCH", sourceIntakeId: id, ...body, status: "VERIFIED_LOCAL_DRAFT", warning: text(error?.message) }, slug);
-      const saved = await storePut(c, SCOPE.sourceIntake, id, { ...intake, outgoingQuantity: num(intake.outgoingQuantity) + total, outgoingDraftId: draftId, status: "OUTGOING_SEND_REQUIRED", warning: text(error?.message) }, slug);
-      return c.json({ ok: true, success: true, data: { ...saved, draftId, capacity: intakeCapacity(saved), warning: `İşNet API taslağı oluşturulamadı; yerel kontrollü taslak hazırlandı. ${text(error?.message)}` } }, 201);
-    }
-  });
+  // Retired: /api/isnet/source-workflow/:id/outgoing-dispatch (canonical e-Belge only).
 
-  app.post("/api/isnet/source-workflow/:id/invoice", async (c) => {
-    const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const intake = await storeGet(c, SCOPE.sourceIntake, id, slug);
-    if (!intake) return c.json(errorBody("NOT_FOUND", "Kaynak kayıt bulunamadı."), 404);
-    const dispatchNo = text(intake.outgoingDocumentNo || intake.outgoingDraftNo);
-    if (!dispatchNo) return c.json(errorBody("OUTGOING_DISPATCH_REQUIRED", "Önce bizim giden irsaliyemiz oluşturulmalı/gönderilmelidir."), 409);
-    let recipient = null; try { recipient = await matchRecipient(c, slug, text(intake.companyName), text(intake.partnerTaxNo)); } catch { /* settings missing */ }
-    const quantity = Math.max(0, intakeCapacity(intake).invoiceRemaining || num(intake.outgoingQuantity));
-    const lines = [{ sourceLineId: "MAIN", category: "MAIN", productName: text(intake.modelName || "Baskı hizmeti"), description: text(intake.modelName || "Baskı hizmeti"), quantity, unitPrice: 0, vatRate: 20, measureUnitId: 67 }];
-    return c.json({ ok: true, success: true, data: { sourceId: text(intake.outgoingDraftId || intake.id), intakeId: id, dispatchNo, recipientId: text(recipient?.id), recipientName: text(recipient?.name || intake.companyName), localCompanyId: text(intake.companyId), modelId: text(intake.modelId), modelName: text(intake.modelName), invoiceDate: new Date().toISOString().slice(0, 10), dueDate: new Date().toISOString().slice(0, 10), lines, notes: [], quantity, message: "Bizim giden irsaliyemize bağlı fatura önizlemesi hazırlandı." } });
-  });
+  // Retired: /api/isnet/source-workflow/:id/invoice (canonical e-Belge only).
 
-  app.patch("/api/isnet/source-intakes/:id/outgoing-dispatch/:draftId/complete", async (c) => {
-    const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const current = await storeGet(c, SCOPE.sourceIntake, id, slug);
-    if (!current) return c.json(errorBody("NOT_FOUND", "Kaynak kayıt bulunamadı."), 404);
-    const no = text(body.documentNo || body.outgoingDocumentNo || body.dispatchNo); if (!no) return c.json(errorBody("DOCUMENT_NO_REQUIRED", "Gönderilmiş irsaliye numarası zorunludur."), 400);
-    const saved = await storePut(c, SCOPE.sourceIntake, id, { ...current, outgoingDocumentNo: no, status: "READY_FOR_INVOICE" }, slug);
-    return c.json({ ok: true, success: true, data: { ...saved, capacity: intakeCapacity(saved) } });
-  });
+  // Retired: /api/isnet/source-intakes/:id/outgoing-dispatch/:draftId/complete (canonical e-Belge only).
 
   app.get("/api/isnet/auto-flows", async (c) => {
     const rows = await storeList(c, SCOPE.autoFlow, slugOf(c));
@@ -1132,36 +1053,11 @@ export function registerIsnetRuntimeV2Routes(app: Hono<AppEnv>) {
     return c.json({ ok: true, success: true, data: { flow: current, preview: await flowPreview(c, slug, current) } });
   });
 
-  app.post("/api/isnet/auto-flows/:id/outgoing-draft", async (c) => {
-    const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const current = await storeGet(c, SCOPE.autoFlow, id, slug);
-    if (!current) return c.json(errorBody("NOT_FOUND", "İş akışı bulunamadı."), 404);
-    if (!text(current.modelId)) return c.json(errorBody("MODEL_REQUIRED", "Giden irsaliye için önce model bağlanmalıdır."), 409);
-    const total = arrayOf(body.lines).reduce((sum, line) => sum + num(line.quantity), 0); if (total <= 0 || total > num(current.remainingQuantity) + 0.0001) return c.json(errorBody("OUTGOING_QUANTITY_INVALID", "İrsaliye adedi kalan adedi aşamaz."), 400);
-    try {
-      const apiDraft = await createApiDespatchDraft(c, slug, { ...body, companyName: current.companyName || current.partnerName, partnerTaxNo: current.partnerTaxNo, modelName: current.modelName });
-      const saved = await storePut(c, SCOPE.autoFlow, id, { ...current, outgoingDraftNo: apiDraft.draftNo, outgoingDraftId: apiDraft.externalId, recipientId: apiDraft.recipient.id, recipientName: apiDraft.recipient.name, remainingQuantity: Math.max(0, num(current.remainingQuantity) - total), status: "OUTGOING_SEND_REQUIRED" }, slug);
-      return c.json({ ok: true, success: true, data: { ...saved, flow: saved, draftNo: apiDraft.draftNo, message: "Bizim giden irsaliye İşNet taslağı oluşturuldu. Gönderim için kullanıcı onayı bekleniyor." } }, 201);
-    } catch (error: any) {
-      const draftId = crypto.randomUUID(); await storePut(c, SCOPE.draft, draftId, { id: draftId, type: "DISPATCH", autoFlowId: id, ...body, status: "VERIFIED_LOCAL_DRAFT", warning: text(error?.message) }, slug);
-      const saved = await storePut(c, SCOPE.autoFlow, id, { ...current, outgoingDraftId: draftId, remainingQuantity: Math.max(0, num(current.remainingQuantity) - total), status: "OUTGOING_SEND_REQUIRED", warning: text(error?.message) }, slug);
-      return c.json({ ok: true, success: true, data: { ...saved, flow: saved, draftId, warning: `İşNet API taslağı oluşturulamadı; KY ERP taslağı kaydedildi. ${text(error?.message)}` } }, 201);
-    }
-  });
+  // Retired: /api/isnet/auto-flows/:id/outgoing-draft (canonical e-Belge only).
 
-  app.patch("/api/isnet/auto-flows/:id/outgoing-document-no", async (c) => {
-    const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const current = await storeGet(c, SCOPE.autoFlow, id, slug);
-    if (!current) return c.json(errorBody("NOT_FOUND", "İş akışı bulunamadı."), 404);
-    const no = text(body.documentNo || body.outgoingDocumentNo); if (!no) return c.json(errorBody("DOCUMENT_NO_REQUIRED", "Gönderilmiş İşNet irsaliye numarası zorunludur."), 400);
-    const saved = await storePut(c, SCOPE.autoFlow, id, { ...current, outgoingDocumentNo: no, status: "PRICE_REQUIRED" }, slug);
-    return c.json({ ok: true, success: true, data: saved });
-  });
+  // Retired: /api/isnet/auto-flows/:id/outgoing-document-no (canonical e-Belge only).
 
-  app.patch("/api/isnet/auto-flows/:id/invoice-state", async (c) => {
-    const body = await bodyOf(c); const slug = slugOf(c, body); const id = c.req.param("id"); const current = await storeGet(c, SCOPE.autoFlow, id, slug);
-    if (!current) return c.json(errorBody("NOT_FOUND", "İş akışı bulunamadı."), 404);
-    const saved = await storePut(c, SCOPE.autoFlow, id, { ...current, ...body }, slug);
-    return c.json({ ok: true, success: true, data: saved });
-  });
+  // Retired: /api/isnet/auto-flows/:id/invoice-state (canonical e-Belge only).
 
   app.get("/api/isnet/runtime-v2/status", async (c) => {
     const slug = slugOf(c); const settings = await settingsRaw(c, slug); const docs = await normalizedDocuments(c, slug);
