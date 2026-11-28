@@ -162,11 +162,23 @@ async function atomicBatch(c: any, statements: any[]) {
   // batch bütünü geri alınır; tenant aktarımı yarım durumda bırakılamaz.
   return c.env.DB.batch(statements);
 }
+// Only explicit profile fields may change; legacy callers leave fiscal data intact.
+export function companyFiscalFields(body:Row){
+ const limits={legalName:250,taxNumber:11,taxOffice:150,address:1000,email:254,phone:50};
+ return Object.entries(limits).map(([key,max])=>{
+  if(!Object.prototype.hasOwnProperty.call(body,key))return null;
+  if(typeof body[key]!=="string")throw Error("Firma bilgileri metin olmalıdır.");
+  const v=text(body[key]);
+  if(v.length>max||key==="taxNumber"&&v&&!/^\d{10,11}$/.test(v)||key==="email"&&v&&!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v))throw Error("Vergi kimliği, e-posta veya firma bilgisi biçimi geçersiz.");
+  return v;
+ });
+}
 function companyView(row: Row) {
   return {
     id: text(row.id),
     name: text(row.name),
     slug: text(row.slug),
+    legalName:text(row.legal_name),taxNumber:text(row.tax_number),taxOffice:text(row.tax_office),address:text(row.address),email:text(row.email),phone:text(row.phone),
     note: text(row.title),
     isActive: Number(row.is_active ?? 1) !== 0,
     createdAt: text(row.created_at),
@@ -175,7 +187,7 @@ function companyView(row: Row) {
 }
 async function companyById(c: any, id: string) {
   return c.env.DB.prepare(
-    "SELECT id,slug,name,is_active,created_at,updated_at FROM main_companies WHERE id=? LIMIT 1",
+    "SELECT id,slug,name,is_active,created_at,updated_at,legal_name,tax_number,tax_office,address,email,phone FROM main_companies WHERE id=? LIMIT 1",
   ).bind(id).first<Row>();
 }
 async function readSetting(c: any, fileName: string) {
@@ -227,7 +239,7 @@ export function registerAdminCoreRoutes(app: any) {
     const current = await ownerCurrent(c);
     if (!current) return c.json(errorBody("OWNER_ONLY", "Ana firma yönetimi yalnız uygulama sahibine açıktır."), 403);
     const result = await c.env.DB.prepare(
-      "SELECT id,slug,name,is_active,created_at,updated_at FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC",
+      "SELECT id,slug,name,is_active,created_at,updated_at,legal_name,tax_number,tax_office,address,email,phone FROM main_companies ORDER BY is_active DESC,name COLLATE NOCASE ASC",
     ).all<Row>();
     return c.json({ ok: true, data: await Promise.all((result.results || []).map((row: Row)=>companyWithNote(c,row))) });
   });
@@ -241,10 +253,11 @@ export function registerAdminCoreRoutes(app: any) {
     if (!name || !slug) return c.json(errorBody("INVALID_COMPANY", "Firma adı ve geçerli kısa kod zorunludur."), 400);
     const conflict = await c.env.DB.prepare("SELECT id FROM main_companies WHERE slug=? LIMIT 1").bind(slug).first<Row>();
     if (conflict?.id) return c.json(errorBody("COMPANY_SLUG_EXISTS", "Bu firma kısa kodu zaten kullanılıyor."), 409);
+    let fiscal;try{fiscal=companyFiscalFields(body)}catch{return c.json(errorBody("COMPANY_FISCAL_INVALID","Vergi kimliği veya firma bilgisi biçimi geçersiz."),400)}
     const id = text(body.id) || crypto.randomUUID();
     const timestamp = nowIso();
     await atomicBatch(c,[
-      c.env.DB.prepare(`INSERT INTO main_companies(id,slug,name,is_active,created_at,updated_at) VALUES (?,?,?,?,?,?)`).bind(id,slug,name,boolValue(body.isActive,true)?1:0,timestamp,timestamp),
+      c.env.DB.prepare(`INSERT INTO main_companies(id,slug,name,is_active,created_at,updated_at,legal_name,tax_number,tax_office,address,email,phone) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,slug,name,boolValue(body.isActive,true)?1:0,timestamp,timestamp,...fiscal.map(v=>v??"")),
       await noteWriteStatement(c,id,body.note),
     ]);
     await audit(c, "MAIN_COMPANY_CREATED", current.id, id, { mainCompanySlug: slug, name });
@@ -259,6 +272,7 @@ export function registerAdminCoreRoutes(app: any) {
     if (!row) return c.json(errorBody("COMPANY_NOT_FOUND", "Ana firma bulunamadı."), 404);
     const body = await bodyOf(c);
     const name = text(body.name || row.name);
+    let fiscal;try{fiscal=companyFiscalFields(body)}catch{return c.json(errorBody("COMPANY_FISCAL_INVALID","Vergi kimliği veya firma bilgisi biçimi geçersiz."),400)}
     const nextSlug = slugify(body.slug || row.slug || name);
     if (!name || !nextSlug) return c.json(errorBody("INVALID_COMPANY", "Firma adı ve geçerli kısa kod zorunludur."), 400);
     const timestamp = nowIso();
@@ -269,14 +283,14 @@ export function registerAdminCoreRoutes(app: any) {
         const plan = await tenantMovePlan(c, text(row.slug), nextSlug);
         plan.statements.push(
           c.env.DB.prepare(
-            `UPDATE main_companies SET slug=?,name=?,is_active=?,updated_at=? WHERE id=?`,
-          ).bind(nextSlug, name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, id),
+            `UPDATE main_companies SET slug=?,name=?,is_active=?,updated_at=?,legal_name=COALESCE(?,legal_name),tax_number=COALESCE(?,tax_number),tax_office=COALESCE(?,tax_office),address=COALESCE(?,address),email=COALESCE(?,email),phone=COALESCE(?,phone) WHERE id=?`,
+          ).bind(nextSlug, name, boolValue(body.isActive, Number(row.is_active ?? 1) !== 0) ? 1 : 0, timestamp, ...fiscal, id),
         );
         if (body.note !== undefined) plan.statements.push(await noteWriteStatement(c,id,body.note));
         await atomicBatch(c,plan.statements);
       } else {
-        const statements=[c.env.DB.prepare(`UPDATE main_companies SET name=?,is_active=?,updated_at=? WHERE id=?`)
-          .bind(name,boolValue(body.isActive,Number(row.is_active??1)!==0)?1:0,timestamp,id)];
+        const statements=[c.env.DB.prepare(`UPDATE main_companies SET name=?,is_active=?,updated_at=?,legal_name=COALESCE(?,legal_name),tax_number=COALESCE(?,tax_number),tax_office=COALESCE(?,tax_office),address=COALESCE(?,address),email=COALESCE(?,email),phone=COALESCE(?,phone) WHERE id=?`)
+          .bind(name,boolValue(body.isActive,Number(row.is_active??1)!==0)?1:0,timestamp,...fiscal,id)];
         if(body.note!==undefined)statements.push(await noteWriteStatement(c,id,body.note));
         await atomicBatch(c,statements);
       }

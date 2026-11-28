@@ -19,10 +19,13 @@ function rowsOf(value) {
 function slugify(value) {
   return String(value || "").toLocaleLowerCase("tr-TR").replace(/ı/g,"i").replace(/ğ/g,"g").replace(/ü/g,"u").replace(/ş/g,"s").replace(/ö/g,"o").replace(/ç/g,"c").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");
 }
+const fiscalKeys=["legalName","taxNumber","taxOffice","address","email","phone"];
+const fiscalOf=row=>Object.fromEntries(fiscalKeys.map(k=>[k,String(row?.[k]??"")]));
+const identityReady=row=>/^\d{10,11}$/.test(row?.taxNumber||"");
 function mapCompany(row = {}) {
-  return { id:String(row.id || ""), name:String(row.name || row.ad || ""), slug:String(row.slug || row.kod || ""), note:String(row.note || ""), isActive:row.isActive !== false, updatedAt:row.updatedAt || row.lastUpdatedAt || "" };
+  return { ...fiscalOf(row), id:String(row.id || ""), name:String(row.name || row.ad || ""), slug:String(row.slug || row.kod || ""), note:String(row.note || ""), isActive:row.isActive !== false, updatedAt:row.updatedAt || row.lastUpdatedAt || "" };
 }
-function emptyForm(){ return { id:"", name:"", slug:"", note:"", isActive:true }; }
+function emptyForm(){ return { ...fiscalOf({}), id:"", name:"", slug:"", note:"", isActive:true }; }
 function dateText(value){if(!value)return"-";const d=new Date(value);return Number.isNaN(d.getTime())?String(value):d.toLocaleString("tr-TR")}
 function sqlName(row,slug){const safe=String(row?.mainCompanySlug||slug||"firma").replace(/[^a-zA-Z0-9._-]+/g,"-");const date=String(row?.createdAt||row?.completedAt||new Date().toISOString()).slice(0,10);return `KYERP-${safe}-${date}.sql`}
 const ROLE_LABELS={COMPANY_ADMIN:"Firma Sahibi / İşveren",MUHASEBE:"Muhasebe",DESEN:"Desen",IMALAT:"İmalat",BOYAHANE:"Boyahane",IK:"İK",DENETIM:"Denetim",VIEWER:"Özel Yetkili",SUPER_ADMIN:"Süper Yönetici",ADMIN:"Süper Yönetici"};
@@ -154,19 +157,23 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   async function save(event){
     event?.preventDefault();
     if(!form.name.trim()) return setMessage("Firma adı zorunludur.");
+    const fiscal=Object.fromEntries(fiscalKeys.map(k=>[k,form[k].trim()]));
+    if(fiscal.taxNumber&&!/^\d{10,11}$/.test(fiscal.taxNumber))return setMessage("Hata: VKN 10, TCKN 11 rakam olmalıdır.");
     const slug=slugify(form.slug || form.name);
     if(!slug) return setMessage("Geçerli firma kısa kodu üretilemedi.");
     setBusy(true);
     try{
-      const payload={name:form.name.trim(),slug,note:form.note.trim(),isActive:Boolean(form.isActive)};
+      const payload={...fiscal,name:form.name.trim(),slug,note:form.note.trim(),isActive:Boolean(form.isActive)};
       let result;
       if(form.id) result=await apiPatch(`/admin/main-companies/${encodeURIComponent(form.id)}`,{id:form.id,...payload});
       else result=await apiPost("/admin/main-companies",payload);
       const created=result?.data || result;
-      setMessage(form.id?"Ana firma güncellendi.":"Ana firma oluşturuldu.");
+      if(!created?.id)throw Error("Firma kimliği dönmedi; yeniden kaydetmeden önce yenileyin.");
+      const verified=rowsOf(await apiGet("/admin/main-companies",{_ts:Date.now()})).find(row=>String(row.id)===String(created.id));
+      if(!verified||fiscalKeys.some(k=>String(verified[k]??"")!==fiscal[k])||verified.name!==payload.name||verified.slug!==payload.slug||verified.isActive!==payload.isActive)throw Error("Kayıt yeniden doğrulanamadı; yeniden kaydetmeden önce yenileyin.");
       setForm(emptyForm());setFormOpen(false);
-      await load();
-      if(created?.id) setSelectedId(String(created.id));
+      await load();setSelectedId(String(created.id));
+      setMessage("Firma bilgileri kaydedildi ve yeniden okundu.");
     }catch(error){setMessage(`Hata: ${error?.message || "Firma kaydedilemedi."}`);}finally{setBusy(false);}
   }
 
@@ -227,7 +234,7 @@ export default function AdminCompanySettings({ activeMainCompany }) {
   }
 
   return <div className="admpro-page">
-    <header className="admpro-head"><div><span className="admpro-kicker">YÖNETİM / FİRMA & SİSTEM</span><h2>Firma & Sistem Ayarları</h2><p>Ana firmalar, güvenlik entegrasyonları, firma yedeği ve sistem hazırlık durumu tek merkezde.</p></div><div className="admpro-actions"><button type="button" onClick={beginNew}>+ Yeni Ana Firma</button><button type="button" className="primary" onClick={load} disabled={busy}>Yenile</button></div></header>
+    <header className="admpro-head"><div><span className="admpro-kicker">YÖNETİM / FİRMA & SİSTEM</span><h2>Firma Yönetimi</h2><p>Ana firma kimliği, fatura bilgileri, kullanıcıları ve firmaya özel ayarlar.</p></div><div className="admpro-actions"><button type="button" onClick={beginNew}>+ Yeni Ana Firma</button><button type="button" className="primary" onClick={load} disabled={busy}>Yenile</button></div></header>
     <div className={`admpro-notice ${message.startsWith("Hata") ? "error" : message.includes("alınamadı")||message.includes("hazırlanamadı") ? "warn" : "success"}`}>{message}</div>
 
     <section className="admpro-grid-2">
@@ -235,8 +242,8 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         <div className="admpro-company-list">{companies.map((row)=><div key={row.id} className={`admpro-company-row ${row.id===selectedId?"active":""}`}><div onClick={()=>setSelectedId(row.id)} role="button" tabIndex={0}><strong>{row.name}</strong><small>{row.slug} · {row.isActive?"Aktif":"Pasif"} · {companyPeopleCount.get(row.slug)||0} kişi{row.id===activeMainCompany?.id?" · Şu an seçili":""}</small></div><div className="admpro-row-actions"><button type="button" onClick={()=>beginEdit(row)}>Düzenle</button><button type="button" onClick={()=>toggle(row)}>{row.isActive?"Pasife Al":"Aktifleştir"}</button></div></div>)}{!companies.length?<div className="admpro-empty">Ana firma kaydı alınamadı.</div>:null}</div>
       </div>
 
-      {formOpen?<div className="admpro-card"><div className="admpro-card-head"><div><h3>{form.id?"Ana Firma Düzenle":"Yeni Ana Firma"}</h3><p>İsim, kısa kod ve aktiflik ayarları.</p></div>{form.id?<button type="button" onClick={()=>setForm(emptyForm())}>Formu Temizle</button>:null}</div>
-        <form onSubmit={save}><div className="admpro-form-grid"><label>Firma Adı<input value={form.name} onChange={(e)=>setForm((old)=>({...old,name:e.target.value,slug:old.slug||slugify(e.target.value)}))}/></label><label>Kısa Kod / Slug<input value={form.slug} onChange={(e)=>setForm((old)=>({...old,slug:e.target.value}))}/></label><label className="wide">Açıklama<textarea value={form.note} onChange={(e)=>setForm((old)=>({...old,note:e.target.value}))}/></label><label className="admpro-check wide"><input type="checkbox" checked={form.isActive} onChange={(e)=>setForm((old)=>({...old,isActive:e.target.checked}))}/> Aktif ana firma</label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit" disabled={busy}>{form.id?"Değişiklikleri Kaydet":"Ana Firma Oluştur"}</button></div></form>
+      {formOpen?<div className="admpro-card"><div className="admpro-card-head"><div><h3>{form.id?"Ana Firma Düzenle":"Yeni Ana Firma"}</h3><p>Firma kimliği ve resmî belge bilgileri. Kısa kod mevcut firmada korunur.</p></div>{form.id?<button type="button" onClick={()=>{setForm(emptyForm());setFormOpen(false)}}>Vazgeç</button>:null}</div>
+        <form onSubmit={save}><div className="admpro-form-grid"><label>Firma Adı<input value={form.name} onChange={(e)=>setForm((old)=>({...old,name:e.target.value,slug:old.slug||slugify(e.target.value)}))}/></label><label>Kısa Kod / Slug<input value={form.slug} readOnly={Boolean(form.id)} onChange={(e)=>setForm((old)=>({...old,slug:e.target.value}))}/></label><div className="wide admpro-fiscal-head"><strong>Fatura ve resmî firma bilgileri</strong><small>Bu bilgiler İşNet firma kimliği ve e-Belge hazırlığı için kullanılır. Biçim kontrolü sağlayıcı yetkisi değildir.</small></div><label className="wide">Resmî ticari ünvan<input maxLength={250} value={form.legalName} onChange={e=>setForm(old=>({...old,legalName:e.target.value}))}/></label><label>VKN / TCKN<input inputMode="numeric" maxLength={11} autoComplete="off" value={form.taxNumber} onChange={e=>setForm(old=>({...old,taxNumber:e.target.value.replace(/\D/g,"")}))}/></label><label>Vergi dairesi<input maxLength={150} value={form.taxOffice} onChange={e=>setForm(old=>({...old,taxOffice:e.target.value}))}/></label><label className="wide">Fatura adresi<textarea maxLength={1000} value={form.address} onChange={e=>setForm(old=>({...old,address:e.target.value}))}/></label><label>E-posta<input type="email" maxLength={254} value={form.email} onChange={e=>setForm(old=>({...old,email:e.target.value}))}/></label><label>Telefon<input type="tel" maxLength={50} value={form.phone} onChange={e=>setForm(old=>({...old,phone:e.target.value}))}/></label><label className="wide">Açıklama<textarea value={form.note} onChange={(e)=>setForm((old)=>({...old,note:e.target.value}))}/></label><label className="admpro-check wide"><input type="checkbox" checked={form.isActive} onChange={(e)=>setForm((old)=>({...old,isActive:e.target.checked}))}/> Aktif ana firma</label></div><div className="admpro-actions" style={{justifyContent:"flex-start",marginTop:12}}><button className="primary" type="submit" disabled={busy}>{form.id?"Değişiklikleri Kaydet":"Ana Firma Oluştur"}</button></div></form>
       </div>:null}
     </section>
 
@@ -245,7 +252,7 @@ export default function AdminCompanySettings({ activeMainCompany }) {
         <div><h3>Firma Kartı · {selected.name}</h3><p>İşveren, muhasebe ve diğer bölüm kullanıcıları bu firmaya bağlı tek listede görünür. Mail ve Drive/File Hub karar yetkisi Firma Sahibi / İşveren rolündedir.</p></div>
         <span className="admpro-badge ok">{activePeople.length} aktif / {selectedPeople.length} toplam</span>
       </div>
-      <div className="admpro-company-profile-stats">
+      <div className="admpro-fiscal-status"><div><strong>Resmî firma bilgileri</strong><small>{identityReady(selected)?"Vergi kimliği kayıtlı (sağlayıcı yetkisi ayrı).":"Vergi kimliği eksik veya geçersiz. İşNet firma sorgusu yapılamaz."}</small></div><button type="button" onClick={()=>beginEdit(selected)}>Fatura Bilgilerini Düzenle</button></div><div className="admpro-company-profile-stats">
         <div><span>Firma Sahibi / İşveren</span><strong>{owners.length}</strong><small>{owners.map((row)=>row.fullName||row.username).join(", ")||"Atanmadı"}</small></div>
         <div><span>Muhasebe</span><strong>{accountingPeople.length}</strong><small>{accountingPeople.map((row)=>row.fullName||row.username).join(", ")||"Atanmadı"}</small></div>
         <div><span>Aktif Kullanıcı</span><strong>{activePeople.length}</strong><small>Bu firmada oturum açabilen</small></div>
