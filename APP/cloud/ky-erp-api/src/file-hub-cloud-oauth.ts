@@ -1190,7 +1190,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
     catch { cursor.graphDeltaBaselineUrl=""; }
   }
   // Eski checkpoint korunur; yillar onceki klasorler 2026 islerini bloklamaz.
-  prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
+  if (!cursor.pendingPage) prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
@@ -1217,11 +1217,23 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   try {
     for (let p = 0; p < Math.min(4, Math.max(1, Number(pageLimit) || 1)) && cursor.queue.length; p++) {
       const folder = cursor.queue[0];
-      const page = providerType==="GOOGLE_DRIVE"
-        ? await googleChildrenPage(accessToken, folder.id, folder.pageToken)
-        : await microsoftChildrenPage(accessToken, folder.id, text(link.provider_drive_id), folder.pageToken);
-      const discoveredFolders: Row[] = [];
-      for (const child of page.children) {
+      // Persist a provider page snapshot before consuming it in bounded chunks.
+      // Keep the provider token and queue head unchanged until ALL its entries are indexed.
+      let pending=cursor.pendingPage;
+      if(pending && (pending.folderId!==folder.id || pending.pageToken!==folder.pageToken || !Array.isArray(pending.children) || !Array.isArray(pending.discoveredFolders) || !Number.isInteger(pending.offset) || pending.offset<0 || pending.offset>pending.children.length))throw Error("SYNC_PAGE_CHECKPOINT_INVALID");
+      if(!pending){
+        const page = providerType==="GOOGLE_DRIVE"
+          ? await googleChildrenPage(accessToken, folder.id, folder.pageToken)
+          : await microsoftChildrenPage(accessToken, folder.id, text(link.provider_drive_id), folder.pageToken);
+        pending=cursor.pendingPage={folderId:folder.id,pageToken:folder.pageToken,children:page.children,nextPageToken:page.nextPageToken,offset:0,discoveredFolders:[]};
+        await persist(cursor);
+        checkpoint=JSON.parse(JSON.stringify(cursor));
+      }
+      const discoveredFolders: Row[] = pending.discoveredFolders;
+      const chunkStart=Date.now();
+      const end=Math.min(pending.children.length,pending.offset+3);
+      for (;pending.offset<end;pending.offset++) {
+        const child=pending.children[pending.offset];
         const relativePath = folder.path ? folder.path + "/" + child.name : child.name;
         if (child.isFolder) {
           folders += 1; cursor.folders += 1;
@@ -1235,7 +1247,15 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
             if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
           }
         }
+        // A slow model operation must not trigger the next expensive file in the same slice.
+        if(Date.now()-chunkStart>=2500){pending.offset++;break;}
       }
+      if(pending.offset<pending.children.length){
+        await persist(cursor,false,"",true);
+        return {files,folders,totalFiles:cursor.files,totalFolders:cursor.folders,modelSyncs,inProgress:true,completed:false,lastSyncAt:null};
+      }
+      const page={nextPageToken:pending.nextPageToken};
+      delete cursor.pendingPage;
       if (page.nextPageToken) folder.pageToken = page.nextPageToken;
       else cursor.queue.shift();
       // Derinlik öncelikli: kökte binlerce klasör olsa bile bekleyen kuyruk büyümez.
@@ -1246,14 +1266,16 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       await persist(cursor);
       checkpoint = JSON.parse(JSON.stringify(cursor));
     }
-    const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
-    const priorDesignFiles = await backfillIndexedCloudDesignFiles(c, slug, connectionId, providerType, text(cursor.designBackfillPath || meta.designBackfillPath));
-    cursor.designBackfillPath = priorDesignFiles.lastPath;
-    modelSyncs += recoveredModelLinks;
-    cursor.modelSyncs += recoveredModelLinks;
-    modelSyncs += priorDesignFiles.matched;
-    cursor.modelSyncs += priorDesignFiles.matched;
     const complete = cursor.queue.length === 0;
+    if(complete){
+      const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
+      const priorDesignFiles = await backfillIndexedCloudDesignFiles(c, slug, connectionId, providerType, text(cursor.designBackfillPath || meta.designBackfillPath));
+      cursor.designBackfillPath = priorDesignFiles.lastPath;
+      modelSyncs += recoveredModelLinks;
+      cursor.modelSyncs += recoveredModelLinks;
+      modelSyncs += priorDesignFiles.matched;
+      cursor.modelSyncs += priorDesignFiles.matched;
+    }
     // Snapshot the provider's change cursor when the one-time full index ends.
     // Any later additions/renames are fetched by runGoogleDeltaBatch.
     if (complete && providerType==="GOOGLE_DRIVE") {
