@@ -468,6 +468,7 @@ export default function KayitliRenklerWorkspace({
     if (!row) {
       if (!window.confirm("Yeni renk kartı açılsın mı? Hesaplanan formül yalnız düzenlenebilir taslak olacak; stok sarfı veya reçete onayı yapılmayacak.")) return;
       row = await createRegisteredColor(activeMainCompany, {
+        formulationExplicit: true,
         pantone: code,
         basePantone: sourceType === "REFERENCE" ? code : "",
         sourceType,
