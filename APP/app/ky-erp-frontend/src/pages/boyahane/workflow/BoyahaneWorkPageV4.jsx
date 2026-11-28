@@ -706,6 +706,9 @@ function ColorWorkspace({
     (row) => row.entityId === color.id || row.entityId === job.id,
   );
   const registeredHasRecipe = recipeLines(selectedRecipe).length > 0;
+  const catalogDraft = registered?.catalogFormula;
+  const catalogDraftLines = recipeLines(catalogDraft);
+  const canUseCatalogDraft = mode === "sample" && String(color?.registeredColorId || "") === String(registered?.id || "") && Boolean(registered?.id) && normalized(catalogDraft?.paintType || catalogDraft?.dyeType) === normalized(paintType) && catalogDraftLines.length > 0;
 
   return (
     <section className={`bh-card bh-recipe-workspace bh-workspace-v4 ${mode}`}>
@@ -759,6 +762,12 @@ function ColorWorkspace({
           </button>
         </div>
 
+        {canUseCatalogDraft ? <div className="bh-notice warning"><strong>Arşiv / formülasyon taslağı: {catalogDraft.version || "Taslak"}</strong><p>Bu öneri onaylı üretim reçetesi değildir. Numune için tartım gramajlarını çalışma masasına alabilirsiniz.</p><button type="button" className="bh-btn" disabled={busy} onClick={() => {
+          if (!window.confirm("Mevcut çalışma masası satırları arşiv taslağı ile değiştirilsin mi? Stok sarfı yapılmaz.")) return;
+          const allowed = new Set(products.filter(p => (p.approvalStatus === "APPROVED" || p.isApproved === true) && p.isActive !== false && p.active !== false).map(p => String(p.id)));
+          if (catalogDraftLines.some(line => !allowed.has(String(line.productId || line.inventoryId || "")))) { setError("Taslakta eşleşmeyen veya onaysız stok ürünü var."); return; }
+          setRows(exactDraftRows(catalogDraftLines, products, lots)); setRecipeId(""); setTrialCount(1); setRecipeWarning(""); setError(""); setMessage("Formülasyon taslağı numuneye alındı. Fiziksel numune ve lot kontrolü sonrası mevcut işte yeni versiyon onaylanabilir.");
+        }}>Formülasyon taslağını numuneye al</button></div> : null}
         <div className="bh-form-grid five bh-recipe-meta-grid">
           <label className="bh-field wide">
             <span>Kayıtlı Renk</span>
