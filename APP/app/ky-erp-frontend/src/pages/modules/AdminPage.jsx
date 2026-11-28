@@ -31,9 +31,9 @@ export default function AdminPage({ activeTab, activeMainCompany, openModule }) 
   const companyAdmin = canonicalRole(user?.role) === "COMPANY_ADMIN";
 
   if (String(activeTab || "").startsWith("depolama-")) {
-    if (owner) return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+    if (owner) return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} openModule={openModule} />;
     if (companyAdmin && activeTab !== "depolama-yedekleme") {
-      return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} />;
+      return <DepolamaPage activeTab={activeTab} activeMainCompany={activeMainCompany} openModule={openModule} />;
     }
     return <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }

@@ -115,7 +115,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   }, [slug]);
 
   useEffect(() => {
-    setAccountDiagnostics(null);
+    setAccountDiagnostics(null);setEditingId("");setEditing({displayName:"",departmentCode:""});setForm(INITIAL_FORM);
     load();
     return () => { loadSequence.current += 1; };
   }, [load]);
@@ -295,7 +295,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
         <button type="button" onClick={() => openModule?.("iletisim", { tabKey: "mail-gelen" })}>Mail Merkezini Aç</button>
       </div>
     </section>
-    <IntegrationFlowSteps kind="MAIL" stage={counts.ready > 0 ? 3 : counts.connected > 0 ? 2 : 1} />
+    <IntegrationFlowSteps kind="MAIL" stage={loadedSlug===slug&&loadHealth.accounts&&loadHealth.providers&&counts.ready > 0 ? 3 : loadedSlug===slug&&loadHealth.accounts&&counts.connected > 0 ? 2 : 1} />
     {oauthFeedback && <div role="status" className={"mail-admin-notice " + (oauthFeedback.ok ? "ok" : "bad")}>Gmail OAuth — {oauthFeedback.code}: {oauthFeedback.text}</div>}
     {notice && <div role="status" className={"mail-admin-notice " + (notice.startsWith("Hata:") ? "bad" : "ok")}>{notice}</div>}
     {syncBatchRunning && <button type="button" className="secondary" onClick={() => { syncStopRequested.current = true; setNotice("Durdurma istendi. Mevcut küçük senkronizasyon adımı bittikten sonra yeni istek yapılmayacak."); }}>Senkronizasyonu Durdur</button>}

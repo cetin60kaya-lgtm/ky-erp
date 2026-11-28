@@ -17,6 +17,7 @@ export default function DepolamaPage({ activeTab, activeMainCompany, openModule 
       activeMainCompany={activeMainCompany}
       activeTab={activeTab}
       showToolbar={false}
+      openModule={openModule}
     />
   );
 }
