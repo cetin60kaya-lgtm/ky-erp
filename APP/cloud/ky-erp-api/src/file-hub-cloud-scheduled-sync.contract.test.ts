@@ -66,8 +66,8 @@ test("same account and root are reused; no duplicate D1 scan queue",()=>{
 });
 
 test("DESEN image queue no longer starves the common file index",()=>{
-  assert.match(cloud, /await syncRecentBoundGoogleImages\(c,slug,connectionId,link,accessToken\)/);
-  assert.match(cloud, /await runGoogleSyncBatch\(c, slug, connectionId, 3, true\)/);
+  assert.match(cloud, /await syncRecentBoundGoogleImages\(c,slug,connectionId,fresh\.link,fresh\.accessToken\)/);
+  assert.match(cloud, /await runGoogleSyncBatch\(c, slug, connectionId, 1, true\)/);
   assert.doesNotMatch(cloud, /if \(priority\.ran\) continue/);
 });
 
@@ -111,4 +111,4 @@ test("Worker code-only release skips unrelated personnel preflight but retains D
   assert.match(workflow, /- name: Worker'i api\.kyerp\.net adresine dagit/);
 });
 
-test("partial scan does not launch a second image scan in the same cron pass",()=>{assert.match(cloud,/provider === "GOOGLE_DRIVE" && !central\.inProgress && !central\.busy/);assert.match(cloud,/const fresh = await connectionAccount\(c,slug,connectionId\)/);});
+test("partial scan does not launch a second image scan in the same cron pass",()=>{assert.match(cloud,/provider === "GOOGLE_DRIVE" && !\("inProgress" in central && central\.inProgress\) && !\("busy" in central && central\.busy\)/);assert.match(cloud,/const fresh = await connectionAccount\(c,slug,connectionId\)/);});

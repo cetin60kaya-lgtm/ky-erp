@@ -1322,7 +1322,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
         // Central metadata index ALWAYS gets the first turn. Even a very
         // large design image archive must not block fresh e-Belge metadata.
         const central = await runGoogleSyncBatch(c, slug, connectionId, 1, true);
-        if (provider === "GOOGLE_DRIVE" && !central.inProgress && !central.busy) {
+        if (provider === "GOOGLE_DRIVE" && !("inProgress" in central && central.inProgress) && !("busy" in central && central.busy)) {
           // Existing model image workflow remains an independent small page.
           // Its failure never rolls back the shared File Hub index cursor.
           try {
