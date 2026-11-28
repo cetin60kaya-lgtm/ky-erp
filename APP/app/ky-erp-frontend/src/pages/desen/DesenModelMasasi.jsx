@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -50,9 +50,12 @@ export default function DesenModelMasasi({ activeMainCompany, openModule }) {
   const [activeGroup, setActiveGroup] = useState(null);
   const [editorGroup, setEditorGroup] = useState(null);
   const [showErrors, setShowErrors] = useState(false);
+  const [inboxState,setInboxState]=useState("unknown");
+  const requestSeq=useRef(0);
 
   const load = useCallback(async () => {
     if (!activeMainCompany?.slug && !activeMainCompany?.id) return;
+    const seq=++requestSeq.current;
     setLoading(true);
     try {
       const tenant = activeMainCompany?.slug || activeMainCompany?.id;
@@ -63,30 +66,37 @@ export default function DesenModelMasasi({ activeMainCompany, openModule }) {
           companies: { fallback: [], load: () => getDesignCompanies(activeMainCompany) },
         },
       });
-      if (result.states.inbox.status !== "error") setInbox(result.data.inbox || EMPTY_INBOX);
+      if(seq!==requestSeq.current)return;
+      const value=result.data.inbox;
+      const valid=value&&Array.isArray(value.groups)&&Array.isArray(value.items)&&value.summary;
+      setInboxState(valid?result.states.inbox.status:"error");
+      if (result.states.inbox.status !== "error"&&valid) setInbox(value);
       if (result.states.companies.status !== "error") setCompanies(result.data.companies || []);
       setMessage(moduleLoadMessage(
         result,
         "Gelen Desenler ana listesi yüklenemedi; son başarılı içerik korunuyor.",
         "Firma listesi geçici olarak yenilenemedi; Gelen Desenler görünmeye devam ediyor.",
       ));
-    } catch (error) { setMessage(error?.message || "Gelen Desenler yüklenemedi."); }
-    finally { setLoading(false); }
+    } catch (error) { if(seq===requestSeq.current){setInboxState("error");setMessage(error?.message || "Gelen Desenler yüklenemedi.");} }
+    finally { if(seq===requestSeq.current)setLoading(false); }
   }, [activeMainCompany]);
 
   const runScan = useCallback(async (openModal = true) => {
     if (!activeMainCompany?.slug || scanning) return;
     if (openModal) setScanOpen(true);
-    setScanning(true); setMessage("");
+    const seq=++requestSeq.current;
+    setLoading(false);setScanning(true); setMessage("");
     try {
       const data = await scanDesignInbox(activeMainCompany);
-      setInbox(data || EMPTY_INBOX);
+      if(seq!==requestSeq.current)return;
+      if(!data||!Array.isArray(data.groups)||!Array.isArray(data.items)||!data.summary)throw Error("Tarama sonucu doğrulanamadı.");
+      setInbox(data);setInboxState("success");
       setMessage(`${data?.items?.length || 0} dosya kontrol edildi, ${data?.groups?.length || 0} grup önerildi.`);
-    } catch (error) { setMessage(error?.message || "Gelen klasör taranamadı."); }
-    finally { setScanning(false); }
+    } catch (error) { if(seq===requestSeq.current){setInboxState("error");setMessage(error?.message || "Gelen klasör taranamadı.");} }
+    finally { if(seq===requestSeq.current)setScanning(false); }
   }, [activeMainCompany, scanning]);
 
-  useEffect(() => { load(); }, [activeMainCompany?.slug, load]);
+  useEffect(() => { load();return()=>{requestSeq.current+=1}; }, [activeMainCompany?.slug, load]);
 
   const groups = useMemo(() => showErrors
     ? inbox.groups.filter((group) => ["ERROR", "UNSUPPORTED"].includes(group.status))
@@ -107,8 +117,8 @@ export default function DesenModelMasasi({ activeMainCompany, openModule }) {
   return <>
     <section className="dsg-toolbar-card">
       <div className="dsg-toolbar-main">
-        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} R2 Gelenleri Tara</button>
-        <button className="dsg-btn" onClick={load}><RefreshCw size={16} /> Yenile</button>
+        <button className="dsg-btn primary" onClick={() => runScan(true)} disabled={scanning||loading}>{scanning ? <LoaderCircle className="spin" size={16} /> : <ScanLine size={16} />} Gelen Dosyaları Tara</button>
+        <button className="dsg-btn" onClick={load} disabled={scanning||loading}><RefreshCw size={16} /> Yenile</button>
         {openModule ? <button className="dsg-btn" onClick={() => openModule("depolama", { tabKey: "depolama-senkronizasyon" })}><FolderOpen size={16} /> Drive / File Hub Kontrol</button> : null}
         <button className={`dsg-btn ${showErrors ? "active danger" : ""}`} onClick={() => setShowErrors((value) => !value)}><AlertTriangle size={16} /> Hatalı Dosyalar</button>
       </div>
@@ -116,12 +126,12 @@ export default function DesenModelMasasi({ activeMainCompany, openModule }) {
     </section>
     {message && <div className="dsg-page-message">{message}</div>}
     <p className="dsg-inbox-origin-note"><strong>Kaynak ayrımı:</strong> Google Drive dosyaları File Hub üzerinden mevcut model kartlarıyla eşleştirilir. Buradaki gelen kuyruğu yalnız uygulama üzerinden R2'ye yüklenmiş, henüz işlenmemiş dosyaları gösterir; sıfır grup olması Drive'ın boş olduğu anlamına gelmez.</p>
-    <section className="dsg-summary-grid">{summaryCards.map(([label, value, Icon, tone]) => <article className={tone} key={label}><Icon size={22} /><div><span>{label}</span><strong>{value}</strong></div></article>)}</section>
+    <section className="dsg-summary-grid">{summaryCards.map(([label, value, Icon, tone]) => <article className={tone} key={label}><Icon size={22} /><div><span>{label}</span><strong>{inboxState==="success"?value:"—"}</strong></div></article>)}</section>
     <section className="dsg-card dsg-inbox-list-card">
-      <header className="dsg-card-head"><div><h2>Gelen model grupları</h2><p>Aynı model köküne sahip görseller birlikte önerilir; son karar kullanıcıya aittir.</p></div><span>{groups.length} grup</span></header>
-      {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Gerçek veriler yükleniyor…</div> : groups.length === 0 ? <EmptyState icon={FolderOpen} title={showErrors ? "Hatalı dosya yok" : "Gelen klasörde bekleyen grup yok"} text="Bu R2 kuyruğunda bekleyen dosya yok. Google Drive kaynakları ayrı File Hub indeksinden model kartlarına bağlanır." action={<button className="dsg-btn primary" onClick={() => runScan(true)}><ScanLine size={16} /> R2 Klasörünü Tara</button>} /> : <div className="dsg-inbox-table"><div className="dsg-inbox-row head"><span>Önizleme</span><span>Tahmini Model</span><span>Dosya</span><span>Model Görseli</span><span>Kanal Görseli</span><span>Durum</span><span>İşlem</span></div>{groups.map((group) => <button className="dsg-inbox-row" key={group.id} onClick={() => openGroup(group)}><span className="dsg-row-thumb">{group.files.find((file) => file.metadata?.imagePreview) ? <DesenImage src={group.files.find((file) => file.metadata?.imagePreview).previewUrl} alt="" /> : <FileImage size={22} />}</span><strong>{group.modelName}</strong><span>{group.fileCount} dosya</span><span>{group.hasModelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><span>{group.hasChannelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><StatusBadge value={group.status}>{group.status === "READY" ? "Kontrole Hazır" : group.status}</StatusBadge><span className="dsg-btn compact"><Settings2 size={15} /> Kontrol Et</span></button>)}</div>}
+      <header className="dsg-card-head"><div><h2>Gelen model grupları</h2><p>Aynı model köküne sahip görseller birlikte önerilir; son karar kullanıcıya aittir.</p></div><span>{inboxState==="success"?groups.length:"—"} grup</span></header>
+      {loading ? <div className="dsg-loading"><LoaderCircle className="spin" /> Gerçek veriler yükleniyor…</div> : inboxState!=="success" ? <div className="dsg-loading" role="alert">Dosya kuyruğu güncel olarak doğrulanamadı. Yenile veya yeniden tara.</div> : groups.length === 0 ? <EmptyState icon={FolderOpen} title={showErrors ? "Hatalı dosya yok" : "Gelen klasörde bekleyen grup yok"} text="Bu R2 kuyruğunda bekleyen dosya yok. Google Drive kaynakları ayrı File Hub indeksinden model kartlarına bağlanır." action={<button className="dsg-btn primary" onClick={() => runScan(true)}><ScanLine size={16} /> R2 Klasörünü Tara</button>} /> : <div className="dsg-inbox-table"><div className="dsg-inbox-row head"><span>Önizleme</span><span>Tahmini Model</span><span>Dosya</span><span>Model Görseli</span><span>Kanal Görseli</span><span>Durum</span><span>İşlem</span></div>{groups.map((group) => <button className="dsg-inbox-row" key={group.id} onClick={() => openGroup(group)}><span className="dsg-row-thumb">{group.files.find((file) => file.metadata?.imagePreview) ? <DesenImage src={group.files.find((file) => file.metadata?.imagePreview).previewUrl} alt="" /> : <FileImage size={22} />}</span><strong>{group.modelName}</strong><span>{group.fileCount} dosya</span><span>{group.hasModelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><span>{group.hasChannelImage ? <CheckCircle2 className="ok" size={18} /> : <XCircle className="missing" size={18} />}</span><StatusBadge value={group.status}>{group.status === "READY" ? "Kontrole Hazır" : group.status}</StatusBadge><span className="dsg-btn compact"><Settings2 size={15} /> Kontrol Et</span></button>)}</div>}
     </section>
-    {scanOpen && <InboxScanModal activeMainCompany={activeMainCompany} companies={companies} inbox={inbox} initialGroup={activeGroup} scanning={scanning} onScan={() => runScan(false)} onClose={() => { setScanOpen(false); setActiveGroup(null); }} onEdit={(group) => setEditorGroup(group)} onChanged={async () => { await load(); setActiveGroup(null); }} />}
+    {scanOpen && (inboxState==="success"||scanning) && <InboxScanModal activeMainCompany={activeMainCompany} companies={companies} inbox={inbox} initialGroup={activeGroup} scanning={scanning} onScan={() => runScan(false)} onClose={() => { setScanOpen(false); setActiveGroup(null); }} onEdit={(group) => setEditorGroup(group)} onChanged={async () => { await load(); setActiveGroup(null); }} />}
     {editorGroup && <ModelEditorModal activeMainCompany={activeMainCompany} companies={companies} inboxGroup={editorGroup} onClose={() => setEditorGroup(null)} onSaved={async () => { setEditorGroup(null); setScanOpen(false); await load(); }} />}
   </>;
 }

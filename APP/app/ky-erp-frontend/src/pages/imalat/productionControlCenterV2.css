@@ -73,3 +73,5 @@
 .pc2-image-frame{position:relative;overflow:hidden;display:inline-flex;align-items:center;justify-content:center}
 .pc2-image-frame>img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff}
 .pc2-image-frame>img[data-kyerp-secure-error]{display:none!important}
+
+.pc2-workflow-help{border:1px solid #dbe4ee;border-radius:8px;padding:9px 12px;min-width:0}.pc2-workflow-help summary{cursor:pointer;font-size:13px;font-weight:650}.pc2-workflow-help[open] .pc2-workflow-guide{margin-top:9px}.pc2-page .pc2-actions button,.pc2-page .pc2-link-action{min-height:40px}.pc2-page :is(button,a,summary):focus-visible{outline:2px solid #245bc8;outline-offset:2px}

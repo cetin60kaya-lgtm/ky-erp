@@ -31,6 +31,7 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
     return <CompanyPending />;
   }
 
+  const tenantKey=String(activeMainCompany.slug||activeMainCompany.id);
   if (
     [
       "uretim-raporlari",
@@ -39,7 +40,7 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
     ].includes(activeTab)
   ) {
     return (
-      <ImalatKontrolRapor
+      <ImalatKontrolRapor key={tenantKey}
         activeMainCompany={activeMainCompany}
         initialView="report"
       />
@@ -47,11 +48,11 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
   }
 
   if (activeTab === "uretim-gecmis-arsiv") {
-    return <ProductionControlCenterPage activeMainCompany={activeMainCompany} pool="ARSIV" />;
+    return <ProductionControlCenterPage key={tenantKey} activeMainCompany={activeMainCompany} pool="ARSIV" />;
   }
 
   if (activeTab === "uretim-ayarlari") {
-    return <ProductionSettingsPage activeMainCompany={activeMainCompany} />;
+    return <ProductionSettingsPage key={tenantKey} activeMainCompany={activeMainCompany} />;
   }
 
   const pool = {
@@ -61,5 +62,5 @@ export default function UretimPage({ activeMainCompany, activeTab }) {
     "fatura-kontrol": "FATURA",
   }[activeTab] || "IMALATTA";
 
-  return <ProductionControlCenterPage activeMainCompany={activeMainCompany} pool={pool} />;
+  return <ProductionControlCenterPage key={tenantKey} activeMainCompany={activeMainCompany} pool={pool} />;
 }

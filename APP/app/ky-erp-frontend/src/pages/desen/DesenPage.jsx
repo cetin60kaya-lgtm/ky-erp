@@ -67,12 +67,13 @@ export default function DesenPage({ activeTab, activeMainCompany, openModule }) 
   const screenKey = resolveScreenKey(activeTab);
   const screenCopy = SCREEN_COPY[screenKey];
   const isInbox = screenKey === "gelen-desenler";
-  const showFolderSettings = isInbox || screenKey === "desen-klasor-ayarlari";
+  const tenantKey=String(activeMainCompany?.slug||activeMainCompany?.id||"");
+  const showFolderSettings = screenKey === "desen-klasor-ayarlari";
   const page = renderScreen(screenKey, activeMainCompany, inboxRevision, openModule);
 
   return (
     <div className="clean-workflow-page dw-page">
-      <section className="cw-screen">
+      <section className="cw-screen" key={tenantKey+":"+screenKey}>
         <header className="cw-card dw-header">
           <div>
             <h1>{screenCopy.title}</h1>
@@ -85,7 +86,7 @@ export default function DesenPage({ activeTab, activeMainCompany, openModule }) 
             />
           ) : null}
         </header>
-        {showFolderSettings ? <DesenFolderSettingsBar activeMainCompany={activeMainCompany} /> : null}
+        {showFolderSettings ? <DesenFolderSettingsBar activeMainCompany={activeMainCompany} /> : isInbox ? <details className="dw-storage-details"><summary>Dosya kaynakları ve depolama ayarları</summary><DesenFolderSettingsBar activeMainCompany={activeMainCompany}/></details> : null}
         {page}
       </section>
     </div>

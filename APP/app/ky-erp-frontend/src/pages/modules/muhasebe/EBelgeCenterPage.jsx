@@ -755,7 +755,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
       setError("e-Belge için ana firma seçin.");
       return;
     }
-    if (from && to && from > to) {
+    if (poolViews.includes(view)&&from && to && from > to) {
       setError("Bitiş tarihi başlangıç tarihinden önce olamaz.");
       return;
     }
@@ -794,7 +794,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
     setLastUpload(null);
     setQuery("");
   }, [activeMainCompany?.slug, activeMainCompany?.id]);
-  useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; dashboardRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
+  useEffect(() => { void refreshCurrent(); return () => { poolRequestSeq.current += 1; dashboardRequestSeq.current += 1; integrationRequestSeq.current += 1; }; }, [refreshCurrent, activeMainCompany?.slug, activeMainCompany?.id]);
   useEffect(() => {
     if (moduleActionContext?.targetModule !== "e-belge" || !moduleActionContext?.documentId) return;
     setSelectedId(String(moduleActionContext.documentId));

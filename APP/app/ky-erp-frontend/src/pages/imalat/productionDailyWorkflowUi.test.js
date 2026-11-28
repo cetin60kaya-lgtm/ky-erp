@@ -25,11 +25,11 @@ test("İmalat ana menü dört gerçek operasyon ekranı; rapor ve makine ayarı 
 
 test("Her havuz amacına uygun ve gerçek menü rotasına giden işlemi gösterir", () => {
   assert.match(center, /href="\/e-belge\/eslestirmeler"/);
-  assert.match(center, /href="\/e-belge\/giden-belgeler"/);
+  assert.match(center, /href="\/e-belge\/giden-faturalar"/);
   assert.match(center, /href="\/uretim\/uretim-raporlari"/);
   assert.match(center, /pool === "IMALATTA" \? <button className="primary"/);
   assert.match(center, /pool === "IRSALIYE" \? <a href="\/e-belge\/eslestirmeler"/);
-  assert.match(center, /pool === "FATURA" \? <a href="\/e-belge\/giden-belgeler"/);
+  assert.match(center, /pool === "FATURA" \? <a href="\/e-belge\/giden-faturalar"/);
   assert.match(center, /pool === "ARSIV" \? <button type="button" onClick=\{\(\) => setHistoryOpen\(true\)\}/);
   assert.match(center, /<ModelThumbnail row=\{row\}/);
   assert.match(center, /productionDateTime\(row\)/);
