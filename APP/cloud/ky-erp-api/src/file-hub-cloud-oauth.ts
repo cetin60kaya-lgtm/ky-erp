@@ -1165,7 +1165,7 @@ async function runMicrosoftDeltaBatch(
   }
 }
 
-async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false) {
+async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId: string, pageLimit = 1, scheduled = false, resumeOnly = false) {
   const { link, accessToken } = await connectionAccount(c, slug, connectionId);
   const providerType=upper(link.provider_type);
   if (!["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(providerType)) throw Object.assign(new Error("Google Drive veya Microsoft depolama servisi bekleniyor."), { code: "INVALID_PROVIDER" });
@@ -1189,6 +1189,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   };
   const resumed = meta.cloudSyncCursor && meta.cloudSyncCursor.rootId === rootId && Array.isArray(meta.cloudSyncCursor.queue);
   const previousComplete = Date.parse(text(meta.cloudSyncProgress?.completedAt)) || 0;
+  if(resumeOnly&&!resumed)return {completed:!!previousComplete&&!meta.cloudNeedsFullRescan,inProgress:false,stopped:true,totalFiles:Number(meta.cloudSyncProgress?.files||0),totalFolders:Number(meta.cloudSyncProgress?.folders||0)};
   // The initial tree walk is shared in D1. All subsequent routine Google
   // checks use provider change tokens, not another 22,000-file tree walk.
   if (scheduled && !resumed && previousComplete && !meta.cloudNeedsFullRescan) {
@@ -1225,13 +1226,19 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   let phase="PAGE_FETCH";
+  const stepStarted=Date.now(),baseFiles=Number(cursor.files||0),baseFolders=Number(cursor.folders||0);
+  const priorLimit=Number(meta.cloudSyncProgress?.chunkLimit||3);
+  const chunkLimit=[3,6,12].includes(priorLimit)?priorLimit:3;
   const persist = async (state: Row, complete = false, error = "", release = false) => {
     const stamp = now();
     const progress = { files: Number(state.files || 0), folders: Number(state.folders || 0),
       changedFiles: Number(state.changedFiles || 0), modelSyncs: Number(state.modelSyncs || 0),
       startedAt: state.startedAt, updatedAt: stamp, completedAt: complete ? stamp : null,
       pages: Number(state.pages || 0), pendingFolders: Array.isArray(state.queue) ? state.queue.length : 0,
-      state: error ? "ERROR" : complete ? "COMPLETED" : release ? "WAITING" : "RUNNING" };
+      state: error ? "ERROR" : complete ? "COMPLETED" : release ? "WAITING" : "RUNNING",
+      phase, stepFiles:Math.max(0,Number(state.files||0)-baseFiles),stepFolders:Math.max(0,Number(state.folders||0)-baseFolders),stepDurationMs:Date.now()-stepStarted,
+      pageOffset:Number(state.pendingPage?.offset||0),pageSize:Array.isArray(state.pendingPage?.children)?state.pendingPage.children.length:0,
+      chunkLimit:error?3:release&&Date.now()-stepStarted<1800&&Number(state.files||0)-baseFiles+Number(state.folders||0)-baseFolders>=chunkLimit?Math.min(12,chunkLimit*2):chunkLimit };
     const data = { ...meta, cloudDirect: true, cloudSyncCursor: complete ? null : state,
       cloudSyncProgress: progress, syncTruncated: !complete,
       lastSyncFiles: progress.files, lastSyncFolders: progress.folders,
@@ -1265,7 +1272,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       }
       const discoveredFolders: Row[] = pending.discoveredFolders;
       const chunkStart=Date.now();
-      const end=Math.min(pending.children.length,pending.offset+3);
+      const end=Math.min(pending.children.length,pending.offset+chunkLimit);
       for (;pending.offset<end;pending.offset++) {
         const child=pending.children[pending.offset];
         const relativePath = folder.path ? folder.path + "/" + child.name : child.name;
@@ -1661,7 +1668,9 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
         // checkpoint as the scheduled shared index. A large DESEN image
         // archive must never consume this click and delay E_BELGE/E_DOCUMENT.
         // The independent image fast scan remains in the 5-minute cron.
-        const progress = await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
+        const progress = body.resumeOnly===true
+          ? await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false, true)
+          : await runGoogleSyncBatch(c, gate.slug, connectionId, 1, false);
         return c.json({ ok: true, data: progress });
       }
       const queue: Row[] = [{ id: rootId, path: "" }]; let files = 0, folders = 0, truncated = false, modelSyncs = 0;
