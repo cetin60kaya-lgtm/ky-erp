@@ -1,0 +1,3 @@
+import test from "node:test";import assert from "node:assert/strict";import {readFileSync} from "node:fs";
+const s=readFileSync(new URL("./file-hub.ts",import.meta.url),"utf8");
+test("binding write and audit are atomic, existing default preserved",()=>{const route=s.slice(s.indexOf('app.put("/api/file-hub/bindings"'),s.indexOf('app.get("/api/file-hub/resolve-storage"'));assert.match(route,/requireCompanyOwner/);assert.match(route,/WHERE id=\? AND main_company_slug=\?/);assert.match(route,/DB\.batch\(\[write,audit\]\)/);assert.match(route,/Number\(old\?\.is_default\|\|0\)===1/);assert.match(route,/BINDING_RESULT_UNAVAILABLE/);});

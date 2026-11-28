@@ -100,11 +100,19 @@ export function registerFileHubRoutes(app: Hono<AppEnv>) {
     const b=await bodyOf(c),owner=await requireCompanyOwner(c,b); if(!owner) return c.json(err("COMPANY_OWNER_ONLY","Bölüm / dosya depolama yönlendirmesini yalnız firma sahibi veya kendi firmasında uygulama sahibi değiştirebilir."),403);
     const slug=slugOf(c,b),moduleCode=upper(b.moduleCode),purposeCode=upper(b.purposeCode),connectionId=text(b.storageConnectionId),ts=now();
     if(!moduleCode||!purposeCode||!connectionId) return c.json(err("REQUIRED","Modül, amaç ve depolama bağlantısı zorunludur."),422);
-    const conn=await c.env.DB.prepare(`SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1`).bind(connectionId,slug).first<Row>(); if(!conn) return c.json(err("INVALID_CONNECTION","Aktif depolama bağlantısı bulunamadı."),422);
-    const old=await c.env.DB.prepare(`SELECT id FROM file_hub_bindings WHERE main_company_slug=? AND module_code=? AND purpose_code=?`).bind(slug,moduleCode,purposeCode).first<Row>(); const id=text(old?.id)||crypto.randomUUID();
-    if(old) await c.env.DB.prepare(`UPDATE file_hub_bindings SET storage_connection_id=?,root_path=?,read_enabled=?,write_enabled=?,sync_enabled=?,is_default=?,updated_at=? WHERE id=?`).bind(connectionId,text(b.rootPath),bool(b.readEnabled,true)?1:0,bool(b.writeEnabled,true)?1:0,bool(b.syncEnabled,true)?1:0,bool(b.isDefault,false)?1:0,ts,id).run();
-    else await c.env.DB.prepare(`INSERT INTO file_hub_bindings(id,main_company_slug,module_code,purpose_code,storage_connection_id,root_path,read_enabled,write_enabled,sync_enabled,is_default,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).bind(id,slug,moduleCode,purposeCode,connectionId,text(b.rootPath),bool(b.readEnabled,true)?1:0,bool(b.writeEnabled,true)?1:0,bool(b.syncEnabled,true)?1:0,bool(b.isDefault,false)?1:0,ts,ts).run();
-    await event(c,slug,"BINDING_SAVED",{actorType:"USER",actorId:owner.id,storageConnectionId:connectionId,details:{moduleCode,purposeCode,rootPath:text(b.rootPath)}}); return c.json({ok:true,data:{id}});
+    try{
+      const conn=await c.env.DB.prepare("SELECT id FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1").bind(connectionId,slug).first<Row>();
+      if(!conn)return c.json(err("INVALID_CONNECTION","Aktif depolama bağlantısı bulunamadı."),422);
+      const old=await c.env.DB.prepare("SELECT id,is_default FROM file_hub_bindings WHERE main_company_slug=? AND module_code=? AND purpose_code=?").bind(slug,moduleCode,purposeCode).first<Row>();
+      const id=text(old?.id)||crypto.randomUUID(),isDefault=bool(b.isDefault,Number(old?.is_default||0)===1)?1:0;
+      const values=[connectionId,text(b.rootPath),bool(b.readEnabled,true)?1:0,bool(b.writeEnabled,true)?1:0,bool(b.syncEnabled,true)?1:0,isDefault];
+      const write=old?c.env.DB.prepare("UPDATE file_hub_bindings SET storage_connection_id=?,root_path=?,read_enabled=?,write_enabled=?,sync_enabled=?,is_default=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(...values,ts,id,slug):c.env.DB.prepare("INSERT INTO file_hub_bindings(id,main_company_slug,module_code,purpose_code,storage_connection_id,root_path,read_enabled,write_enabled,sync_enabled,is_default,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)").bind(id,slug,moduleCode,purposeCode,...values,ts,ts);
+      const audit=c.env.DB.prepare("INSERT INTO file_hub_events(id,main_company_slug,storage_connection_id,file_asset_id,event_type,actor_type,actor_id,device_name,details,created_at) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(crypto.randomUUID(),slug,connectionId,null,"BINDING_SAVED","USER",text(owner.id)||null,null,JSON.stringify({moduleCode,purposeCode,rootPath:text(b.rootPath),readEnabled:values[2]===1,writeEnabled:values[3]===1,syncEnabled:values[4]===1}),ts);
+      await c.env.DB.batch([write,audit]);
+      return c.json({ok:true,data:{id}});
+    }catch{
+      return c.json(err("BINDING_RESULT_UNAVAILABLE","Atama kayıt sonucu sunucuda doğrulanamadı. Yeniden kaydetmeden önce mevcut atamayı yenileyin."),503);
+    }
   });
 
   app.get("/api/file-hub/resolve-storage", async c => {
