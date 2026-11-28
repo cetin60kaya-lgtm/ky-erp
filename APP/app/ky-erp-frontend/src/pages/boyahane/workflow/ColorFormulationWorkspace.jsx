@@ -29,15 +29,17 @@ function typeOf(p) {
   return "pigment";
 }
 export default function ColorFormulationWorkspace({activeMainCompany,rows,onClose,onDraft}) {
+  const cacheKey = activeMainCompany?.slug && activeMainCompany?.id ? "kyerp-boyahane-formulasyon-v1:"+activeMainCompany.slug+":"+activeMainCompany.id : "";
+  const [stored] = useState(()=>{try{return cacheKey?JSON.parse(localStorage.getItem(cacheKey)||"{}"):{};}catch{return {};}});
   const [products,setProducts]=useState([]);
   const [palette,setPalette]=useState([]);
-  const [catalog,setCatalog]=useState({});
+  const [catalog,setCatalog]=useState(()=>stored.catalog&&typeof stored.catalog==="object"?stored.catalog:{});
   const [pantone,setPantone]=useState("");
   const [target,setTarget]=useState("#FAF520");
   const [mass,setMass]=useState(100);
   const [white,setWhite]=useState(40);
   const [load,setLoad]=useState(5);
-  const [power,setPower]=useState(1);
+  const [power,setPower]=useState(()=>Number.isFinite(stored.power)&&stored.power>0?stored.power:1);
   const [link,setLink]=useState(false);
   const [ground,setGround]=useState("");
   const [model,setModel]=useState("");
@@ -62,7 +64,8 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
       setWhiteId(String(approved.find(p=>typeOf(p)==="white")?.id||""));
       setPalette(approved.filter(p=>typeOf(p)==="pigment"||typeOf(p)==="special").map(p=>{
         const seed=seedFor(p), special=typeOf(p)==="special";
-        return {id:String(p.id),name:nameOf(p),hex:seed?.[1]||"",strength:seed?.[2]||1,enabled:!!seed&&!special,special,source:seed?"Başlangıç tahmini":"Kalibrasyon yok"};
+        const saved=Array.isArray(stored.palette)?stored.palette.find(x=>x.id===String(p.id)&&x.name===nameOf(p)&&valid(x.hex)&&Number.isFinite(x.strength)&&x.strength>0):null;
+        return {id:String(p.id),name:nameOf(p),hex:saved?.hex||seed?.[1]||"",strength:saved?.strength||seed?.[2]||1,enabled:!special&&Boolean(saved?saved.enabled:seed),special,source:saved?"Bu tarayıcıda kaydedilen ayar":seed?"Başlangıç tahmini":"Kalibrasyon yok"};
       }));
       setStockLoaded(true);setInfo("Yalnız seçili firmanın onaylı aktif ürünleri yüklendi. Özel efektler otomatik hesapta kapalıdır.");
     } catch(e){setError(e.message||"Ürünler okunamadı.");setStockLoaded(false);}
@@ -91,6 +94,9 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
       if(!Object.keys(next).length)throw Error("Geçerli Pantone/HEX kaydı bulunamadı.");
       setCatalog(next);invalidate();if(pantone)lookup(pantone,next);else setInfo(Object.keys(next).length+" dijital renk yüklendi.");
     }catch(e){setError(e.message);}
+  }
+  function saveLocalConfig(){
+    try{if(!cacheKey)throw Error("Firma kimliği doğrulanamadı; ayar saklanmadı.");if(!Number.isFinite(power)||power<=0)throw Error("Beyaz kuvveti geçersiz.");const safe=palette.filter(p=>valid(p.hex)&&Number.isFinite(p.strength)&&p.strength>0).map(({id,name,hex,strength,enabled})=>({id,name,hex,strength,enabled}));localStorage.setItem(cacheKey,JSON.stringify({catalog,power,palette:safe.length?safe:stored.palette||[]}));setInfo("Kalibrasyon ve katalog bu firma için yalnız bu tarayıcıda saklandı; sunucuya gönderilmedi.");}catch(e){setError(e.message);}
   }
   function editPigment(id,patch){setPalette(old=>old.map(p=>p.id===id?{...p,...patch}:p));invalidate();}
   function changeWhite(v){
@@ -161,6 +167,7 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
       <label style={fieldStyle}><span>Beyaz değişiminde pigment/beyaz oranını koru</span><input type="checkbox" checked={link} onChange={e=>setLink(e.target.checked)}/></label>
     </div>
     <div className="bh-row-actions"><button type="button" className="bh-btn" onClick={loadProducts} disabled={busy}>{busy?"Yükleniyor…":"Firma pigment ve stok ürünlerini yükle"}</button><button type="button" className="bh-btn primary" onClick={calculate} disabled={busy}>Yeni reçeteyi hesapla</button></div>
+    <div className="bh-row-actions"><button type="button" className="bh-btn" onClick={saveLocalConfig}>Katalog ve kalibrasyonu bu tarayıcıda sakla</button></div>
     {info&&<p>{info}</p>}{error&&<div role="alert" className="bh-notice danger">{error}</div>}
     {result&&<div style={{display:"grid",gap:12}}>
       <div style={gridStyle}>{[[result.target,"Hedef"],[result.hex,"Tahmini sonuç"]].map(([h,l])=><div key={l}><div style={{background:h,height:70,border:"1px solid #cbd5e1",borderRadius:8}}/><strong>{l} {h}</strong></div>)}</div>
