@@ -152,6 +152,38 @@ async function standaloneCurrent(c:Context<AppEnv>,slug:string,startDate:string,
   return(rows.results||[]).filter(row=>!firmId||text(row.company_id)===firmId);
 }
 
+
+/** Preview only: pending official TRY invoice headers, not a ledger or tax return.
+ * Caller must enforce the authenticated accounting tenant. No posting is performed.
+ */
+export async function readPendingInvoicePreview(c:Context<AppEnv>,slug:string,startDate:string,endDate:string,firmId=""){
+  const validDate=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
+  if(!slug||!validDate(startDate)||!validDate(endDate)||startDate>endDate)return null;
+  const q=await c.env.DB.prepare(`SELECT direction,COUNT(*) AS count,
+    SUM(CASE WHEN currency='TRY' AND duplicate_of_id IS NULL AND subtotal IS NOT NULL AND tax_total IS NOT NULL THEN 1 ELSE 0 END) AS included_count,
+    ROUND(SUM(CASE WHEN currency='TRY' AND duplicate_of_id IS NULL AND subtotal IS NOT NULL AND tax_total IS NOT NULL THEN subtotal ELSE 0 END),2) AS base,
+    ROUND(SUM(CASE WHEN currency='TRY' AND duplicate_of_id IS NULL AND subtotal IS NOT NULL AND tax_total IS NOT NULL THEN tax_total ELSE 0 END),2) AS vat
+    FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL
+    AND status='REVIEW_REQUIRED' AND record_scope='OFFICIAL'
+    AND ((direction='INCOMING' AND document_type='GELEN_FATURA') OR (direction='OUTGOING' AND document_type='GIDEN_FATURA'))
+    AND substr(COALESCE(issue_date,posted_at,created_at),1,10) BETWEEN ? AND ?
+    AND (?='' OR party_company_id=?) GROUP BY direction`).bind(slug,startDate,endDate,firmId,firmId).all<Row>();
+  return summarizePendingInvoicePreview(q.results||[]);
+}
+
+export function summarizePendingInvoicePreview(rows:Row[]){
+  const side=(direction:string)=>{
+    const r=rows.find(x=>x.direction===direction)||{};
+    return {count:num(r.count),includedCount:num(r.included_count),base:num(r.base),vat:num(r.vat)};
+  };
+  const incoming=side("INCOMING"),outgoing=side("OUTGOING");
+  return {status:"PREVIEW_ONLY",currency:"TRY",incoming,outgoing,
+    count:incoming.count+outgoing.count,
+    excludedCount:incoming.count+outgoing.count-incoming.includedCount-outgoing.includedCount,
+    baseDifference:Math.round((outgoing.base-incoming.base)*100)/100,
+    vatDifference:Math.round((outgoing.vat-incoming.vat)*100)/100};
+}
+
 export async function buildCanonicalAccountingReport(c:Context<AppEnv>){
   const slug=slugOf(c);
   const today=new Date(),startDate=text(c.req.query("startDate"))||`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,"0")}-01`,endDate=text(c.req.query("endDate"))||today.toISOString().slice(0,10);

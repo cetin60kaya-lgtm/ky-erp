@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, CircleAlert, RefreshCcw, X } from "lucide-react";
 import { apiGet } from "../../../utils/api";
 import "./vatComparisonWorkspace.css";
@@ -110,22 +110,29 @@ export default function VatComparisonWorkspace({ activeMainCompany, refreshKey }
     [activeMainCompany?.id, activeMainCompany?.slug, month],
   );
 
+  const requestKey = JSON.stringify(params);
+  const requestSequence = useRef(0);
   const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setState((old) => ({ ...old, loading: true, error: "" }));
     try {
       const response = await apiGet("/vat/summary", { ...params, _ts: Date.now() });
-      setState({ loading: false, error: "", data: unwrap(response) });
+      if (sequence !== requestSequence.current) return;
+      setState({ loading: false, error: "", data: unwrap(response), requestKey });
     } catch (error) {
+      if (sequence !== requestSequence.current) return;
       setState({
         loading: false,
         error: error?.message || "KDV verileri alınamadı.",
         data: {},
+        requestKey,
       });
     }
-  }, [params]);
+  }, [params, requestKey]);
 
   useEffect(() => {
     load();
+    return () => { requestSequence.current += 1; };
   }, [load, refreshKey]);
 
   const rows = Array.isArray(state.data?.liste) ? state.data.liste : [];
@@ -163,7 +170,7 @@ export default function VatComparisonWorkspace({ activeMainCompany, refreshKey }
     }
   };
 
-  if (state.loading) {
+  if (state.loading || state.requestKey !== requestKey) {
     return <div className="accounting-list-skeleton"><span /><span /><span /><span /></div>;
   }
 
@@ -188,19 +195,29 @@ export default function VatComparisonWorkspace({ activeMainCompany, refreshKey }
         <span>{Number(state.data?.recordCount || 0)} KDV kaydı</span>
       </div>
 
+      {state.data?.pendingInvoicePreview?.count > 0 ? (
+        <section className="vcw-purchase-note" role="status">
+          <CircleAlert size={19} />
+          <div>
+            <strong>{state.data.pendingInvoicePreview.count} fatura kontrol bekliyor — kesin KDV hesabına eklenmedi</strong>
+            <span>Bekleyen alış KDV {money(state.data.pendingInvoicePreview.incoming.vat)} · satış KDV {money(state.data.pendingInvoicePreview.outgoing.vat)} · fark {money(state.data.pendingInvoicePreview.vatDifference)}. Bu fark ödenecek KDV değildir.</span>
+            {state.data.pendingInvoicePreview.excludedCount > 0 ? <span>{state.data.pendingInvoicePreview.excludedCount} kayıt para birimi, mükerrerlik veya eksik tutar nedeniyle toplama alınmadı.</span> : null}
+          </div>
+        </section>
+      ) : !state.data?.pendingInvoicePreview ? <section className="vcw-purchase-note"><CircleAlert size={19} /><span>Bekleyen fatura ön kontrolü alınamadı; kayıt yok anlamına gelmez.</span></section> : null}
       <section className="vcw-summary">
         <div><span>İndirilecek KDV</span><strong>{money(incomingVat)}</strong></div>
         <div><span>Hesaplanan KDV</span><strong>{money(outgoingVat)}</strong></div>
         <div><span>Önceki devreden</span><strong>{money(previousCarryVat)}</strong></div>
         <div className={payableVat > 0 ? "attention" : "success"}>
-          <span>Ödenecek KDV</span><strong>{money(payableVat)}</strong>
+          <span>Kayıtlı ödenecek KDV</span><strong>{money(payableVat)}</strong>
         </div>
         <div className={carryForwardVat > 0 ? "success" : ""}>
           <span>Sonraki döneme devreden</span><strong>{money(carryForwardVat)}</strong>
         </div>
       </section>
 
-      {payableVat > 0 ? (
+      {payableVat > 0 && state.data?.pendingInvoicePreview?.count === 0 ? (
         <section className="vcw-purchase-note">
           <CircleAlert size={19} />
           <div>
