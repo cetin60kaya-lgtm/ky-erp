@@ -89,6 +89,9 @@ test("bekleyen fatura sorgusu yalnız seçili firma, dönem ve fatura tipleri; g
     assert.match(sql,/document_type='GELEN_FATURA'/);
     assert.match(sql,/document_type='GIDEN_FATURA'/);
     assert.match(sql,/duplicate_of_id IS NULL/);
+    assert.match(sql,/xml_file_asset_id IS NOT NULL/);
+    assert.match(sql,/invoiceAmountsPresent/);
+    assert.match(sql,/subtotal>0 AND tax_total>0/);
     assert.doesNotMatch(sql,/\b(?:INSERT|UPDATE|DELETE)\b/i);
     return {bind(...args:any[]){assert.deepEqual(args,["tenant-a","2026-11-01","2026-11-30","firm-a","firm-a"]);return {all:async()=>({results:[]})}}};
   }}}};

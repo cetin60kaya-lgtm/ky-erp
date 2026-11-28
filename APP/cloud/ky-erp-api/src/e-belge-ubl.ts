@@ -184,6 +184,14 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
   const legal = xmlBlocks(xml, "LegalMonetaryTotal")[0] || "";
   const taxTotalBlock = xmlBlocks(xml, "TaxTotal")[0] || "";
   const lineName = invoice ? "InvoiceLine" : "DespatchLine";
+  // Explicit, parseable monetary fields distinguish an actual zero from
+  // the legacy amount() fallback of zero when a field is absent.
+  const explicitAmount = (value: string) => /^\d+(?:\.\d+)?$/.test(value) && Number.isFinite(Number(value));
+  const explicitBase = xmlTag(legal, ["TaxExclusiveAmount"]) || xmlTag(legal, ["LineExtensionAmount"]);
+  const explicitVat = xmlTag(taxTotalBlock, ["TaxAmount"]);
+  const invoiceAmountsPresent = invoice && explicitAmount(explicitBase) && explicitAmount(explicitVat)
+    && Number(explicitBase) === (amount(legal, "TaxExclusiveAmount") || amount(legal, "LineExtensionAmount"))
+    && Number(explicitVat) === amount(taxTotalBlock, "TaxAmount");
 
   const lines = xmlBlocks(xml, lineName).map((block, index) => {
     const item = xmlBlocks(block, "Item")[0] || block;
@@ -280,6 +288,7 @@ export function parseCanonicalEBelgeUbl(xml: string, directionInput: string): Ro
       partyPhone:counterpartyDetails.phone,
       partyEmail:counterpartyDetails.email,
       partyTaxOffice:counterpartyDetails.taxOffice,
+      invoiceAmountsPresent,
       ublVerified:qualityIssues.length === 0,
       ublQualityIssues:qualityIssues,
     },

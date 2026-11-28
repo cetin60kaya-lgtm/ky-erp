@@ -159,15 +159,25 @@ async function standaloneCurrent(c:Context<AppEnv>,slug:string,startDate:string,
 export async function readPendingInvoicePreview(c:Context<AppEnv>,slug:string,startDate:string,endDate:string,firmId=""){
   const validDate=(s:string)=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
   if(!slug||!validDate(startDate)||!validDate(endDate)||startDate>endDate)return null;
-  const q=await c.env.DB.prepare(`SELECT direction,COUNT(*) AS count,
-    SUM(CASE WHEN currency='TRY' AND duplicate_of_id IS NULL AND subtotal IS NOT NULL AND tax_total IS NOT NULL THEN 1 ELSE 0 END) AS included_count,
-    ROUND(SUM(CASE WHEN currency='TRY' AND duplicate_of_id IS NULL AND subtotal IS NOT NULL AND tax_total IS NOT NULL THEN subtotal ELSE 0 END),2) AS base,
-    ROUND(SUM(CASE WHEN currency='TRY' AND duplicate_of_id IS NULL AND subtotal IS NOT NULL AND tax_total IS NOT NULL THEN tax_total ELSE 0 END),2) AS vat
+  const q=await c.env.DB.prepare(`WITH eligible AS (
+    SELECT direction,subtotal,tax_total,
+      CASE WHEN currency='TRY' AND duplicate_of_id IS NULL
+        AND xml_file_asset_id IS NOT NULL AND subtotal>=0 AND tax_total>=0
+        AND CASE WHEN json_valid(raw_metadata) THEN
+          json_extract(raw_metadata,'$.ublVerified')=1 AND
+          (json_extract(raw_metadata,'$.invoiceAmountsPresent')=1 OR
+           (json_type(raw_metadata,'$.invoiceAmountsPresent') IS NULL AND subtotal>0 AND tax_total>0))
+          ELSE 0 END
+        THEN 1 ELSE 0 END AS include_amount
     FROM accounting_documents WHERE main_company_slug=? AND deleted_at IS NULL
     AND status='REVIEW_REQUIRED' AND record_scope='OFFICIAL'
     AND ((direction='INCOMING' AND document_type='GELEN_FATURA') OR (direction='OUTGOING' AND document_type='GIDEN_FATURA'))
     AND substr(COALESCE(issue_date,posted_at,created_at),1,10) BETWEEN ? AND ?
-    AND (?='' OR party_company_id=?) GROUP BY direction`).bind(slug,startDate,endDate,firmId,firmId).all<Row>();
+    AND (?='' OR party_company_id=?)
+  ) SELECT direction,COUNT(*) AS count,SUM(include_amount) AS included_count,
+    ROUND(SUM(CASE WHEN include_amount=1 THEN subtotal ELSE 0 END),2) AS base,
+    ROUND(SUM(CASE WHEN include_amount=1 THEN tax_total ELSE 0 END),2) AS vat
+    FROM eligible GROUP BY direction`).bind(slug,startDate,endDate,firmId,firmId).all<Row>();
   return summarizePendingInvoicePreview(q.results||[]);
 }
 
