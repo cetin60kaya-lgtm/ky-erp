@@ -10,8 +10,10 @@ test("Drive mevcut dosya konumu: SQL yer tutucuları ile bind parametreleri bire
   assert.ok(source.includes(sql), "Expected existing-file location UPDATE not found");
   assert.equal(sql.split("?").length - 1, 6);
   assert.ok(
-    source.includes(".bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id).run();"),
+    source.includes(".bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id)]);"),
     "The existing-file UPDATE must bind exactly six parameters in SQL order",
   );
   assert.ok(!source.includes(".bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt, location.id).run();"));
 });
+
+test("file assets and locations are committed in one D1 batch",()=>{const start=source.indexOf("async function upsertCloudFile"),end=source.indexOf("function designModelIdentity",start),body=source.slice(start,end);assert.match(body,/DB\.batch\(\[c\.env\.DB\.prepare\(`INSERT INTO file_hub_assets[\s\S]*c\.env\.DB\.prepare\(`INSERT INTO file_hub_locations[\s\S]*\]\)/);assert.match(body,/DB\.batch\(\[c\.env\.DB\.prepare\(`UPDATE file_hub_assets[\s\S]*c\.env\.DB\.prepare\(`UPDATE file_hub_locations[\s\S]*\]\)/);});
