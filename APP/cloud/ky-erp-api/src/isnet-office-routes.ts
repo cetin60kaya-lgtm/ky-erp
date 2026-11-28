@@ -31,14 +31,14 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
    const enabled=await selections(c,d.tenant);
    if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
    // Optional bounded metadata only; old heartbeat agents without body remain compatible.
-   let probe=null,readReport:unknown=null;
+   let probe=null,readReport:unknown=null,readProtocol=0;
    if(c.req.raw.body){
     const reader=c.req.raw.body.getReader();let size=0,raw="";const decoder=new TextDecoder();
     try{while(true){const x=await reader.read();if(x.done)break;size+=x.value.byteLength;if(size>4096){await reader.cancel();return c.json(error("OFFICE_PROBE_TOO_LARGE"),400)}raw+=decoder.decode(x.value,{stream:true})}raw+=decoder.decode()}finally{reader.releaseLock()}
-    if(raw){try{const value=JSON.parse(raw);readReport=value.readReport??null;if(value.liveProbe!=null){probe=normalizeLiveProbe(value.liveProbe,Date.now());if(!probe)return c.json(error("OFFICE_PROBE_INVALID"),400)}}catch{return c.json(error("OFFICE_PROBE_INVALID"),400)}}
+    if(raw){try{const value=JSON.parse(raw);readReport=value.readReport??null;readProtocol=value.readProtocol===1?1:0;if(value.liveProbe!=null){probe=normalizeLiveProbe(value.liveProbe,Date.now());if(!probe)return c.json(error("OFFICE_PROBE_INVALID"),400)}}catch{return c.json(error("OFFICE_PROBE_INVALID"),400)}}
    }
-   const result=await heartbeatOfficeDevice(c.env.DB,d,Date.now(),probe);
-   let readTask=null,archiveTask=null,archiveBusy=false;if(result.lease){try{const a=await officeArchiveTick(c.env.DB,result.lease);archiveTask=a.task;archiveBusy=a.busy;if(!archiveBusy)readTask=await officeReadTick(c.env.DB,result.lease,readReport)}catch{/* Heartbeat remains independent of job storage. */}}
+   const result=await heartbeatOfficeDevice(c.env.DB,d,Date.now(),probe,readProtocol);
+   let readTask=null,archiveTask=null,archiveBusy=false;if(result.lease&&readProtocol===1){try{const a=await officeArchiveTick(c.env.DB,result.lease);archiveTask=a.task;archiveBusy=a.busy;if(!archiveBusy)readTask=await officeReadTick(c.env.DB,result.lease,readReport)}catch{/* Heartbeat remains independent of job storage. */}}
    // A heartbeat or lease is never proof that the live provider is authorized.
    return c.json({ok:true,data:{...result,readTask,archiveTask,providerAuthorized:false,sendEnabled:false,pollAfterMs:readTask||archiveTask?1000:30000}});
   }catch{return c.json(error("OFFICE_DEVICE_OR_STORAGE_DENIED"),403)}
@@ -57,7 +57,7 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
   const tenant=tenants[0]!;
   try{
    const enabled=await selections(c,tenant);if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
-   const status=await officeStatus(c.env.DB,tenant,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON));if(!status.configured||!status.online)return c.json(error("OFFICE_NOT_READY"),409);
+   const status=await officeStatus(c.env.DB,tenant,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON));if(!status.configured||!status.devices.some(d=>d.online&&d.role==="LEADER"&&d.readProtocol===1))return c.json(error("OFFICE_NOT_READY"),409);
    const job=await queueOfficeArchiveJob(c.env.DB,tenant,String(body?.queryId||""));return c.json({ok:true,data:{mainCompanySlug:tenant,job}},202);
   }catch(e){const code=(e as Error).message;const messages:Record<string,string>={READ_MANIFEST_REQUIRED:"Önce güncel ve tamamlanmış belge sorgusu yapın.",NO_MISSING_DOCUMENTS:"Yeni aktarılacak ETTN bulunamadı.",ARCHIVE_JOB_LIMIT:"Bir aktarımda en fazla 500 belge. Daha kısa tarih aralığı seçin.",DRIVE_BINDING_REQUIRED:"Tek aktif Google Drive e-Belge arşivi seçilmelidir.",DRIVE_WRITE_REQUIRED:"Mevcut e-Belge klasörüne yazma izni gerekli. Bağlantıyı yeniden kurmayın; bölüm atamasını kontrol edin.",DRIVE_INDEX_NOT_READY:"Mevcut Drive arşivi ve bekleyen XML kayıtları tamamlanmadan mükerrer riski nedeniyle aktarım başlatılmadı.",DRIVE_COMPANY_FOLDER_AMBIGUOUS:"Arşivde birden fazla firma alt klasörü bulundu; önce eşleştirme gerekli.",ARCHIVE_JOB_ALREADY_RUNNING:"Aktarım devam ediyor veya önceki aktarımın sonucu belirsiz."};return c.json({ok:false,error:{code:messages[code]?code:"ARCHIVE_NOT_READY",message:messages[code]||"Aktarım koşulları doğrulanamadı."}},409)}
  });
@@ -97,7 +97,7 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
   try{
    const enabled=await selections(c,tenant);if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
    const status=await officeStatus(c.env.DB,tenant,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON));
-   if(!status.configured||!status.online)return c.json({ok:false,error:{code:"OFFICE_NOT_READY",message:"Yetkili ofis cihazı bağlı değil; sorgu başlatılmadı."}},409);
+   if(!status.configured||!status.devices.some(d=>d.online&&d.role==="LEADER"&&d.readProtocol===1))return c.json({ok:false,error:{code:"OFFICE_NOT_READY",message:"Yeni belge protokolünü destekleyen yetkili ofis cihazı bağlı değil; sorgu başlatılmadı."}},409);
    const job=await queueOfficeReadJob(c.env.DB,tenant,{from:body?.from,to:body?.to,sources:body?.sources});return c.json({ok:true,data:{mainCompanySlug:tenant,job}},202);
   }catch(e){const code=(e as Error).message;const messages:Record<string,string>={DATE_INVALID:"Tarih geçersiz.",DATE_RANGE_MAX_31_DAYS:"En fazla 31 gün seçin.",SOURCE_INVALID:"Belge türü geçersiz.",COMPANY_TAX_REQUIRED:"Ana firma vergi kimliği eksik.",READ_JOB_ALREADY_RUNNING:"Bu firma için devam eden bir sorgu var."};return c.json({ok:false,error:{code:messages[code]?code:"OFFICE_READ_UNAVAILABLE",message:messages[code]||"Sorgu başlatılamadı."}},messages[code]?409:503)}
  });
@@ -107,6 +107,6 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
   const user=await getAuthenticatedUser(c);
   if(candidates.length!==1||!user||!accountingTenantReadAllowed(user,candidates[0]!)||!accountingAccess(user,"GET",c.req.path))return c.json(error("FORBIDDEN"),403);
   // Intentionally no IP restriction for users: mobile internet and external networks work.
-  try{return c.json({ok:true,data:{...await officeStatus(c.env.DB,candidates[0]!,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON)),mainCompanySlug:candidates[0],liveEndpoints:LIVE_ENDPOINTS,liveNotBefore:new Date(LIVE_NOT_BEFORE).toISOString()}})}catch{return c.json(error("OFFICE_STATUS_UNAVAILABLE"),503)}
+  try{const job=await getOfficeReadJob(c.env.DB,candidates[0]!);return c.json({ok:true,data:{...await officeStatus(c.env.DB,candidates[0]!,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON)),readCompanyVerified:Boolean(job?.companyVerified&&Date.now()-job.updatedAt<30*60*1000),mainCompanySlug:candidates[0],liveEndpoints:LIVE_ENDPOINTS,liveNotBefore:new Date(LIVE_NOT_BEFORE).toISOString()}})}catch{return c.json(error("OFFICE_STATUS_UNAVAILABLE"),503)}
  });
 }

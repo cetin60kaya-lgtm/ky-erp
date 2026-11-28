@@ -1637,10 +1637,12 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
 // Office-agent originals are written only to the caller's validated existing Drive
 // binding; no R2 duplicate. Exact names and bytes are checked, never overwritten.
 // Only server-owned caller paths, not an exposed generic upload endpoint.
-export async function archiveVerifiedIsnetGoogleOriginal(c:Context<AppEnv>,slug:string,connectionId:string,relativePath:string,mimeType:string,bytes:ArrayBuffer){
+export async function archiveVerifiedIsnetGoogleOriginal(c:Context<AppEnv>,slug:string,connectionId:string,boundRoot:string,relativePath:string,mimeType:string,bytes:ArrayBuffer){
   if(!["application/xml","application/pdf"].includes(mimeType)||bytes.byteLength<20||bytes.byteLength>8*1024*1024)throw Error("ARCHIVE_FILE_INVALID");
   const {link,accessToken}=await connectionAccount(c,slug,connectionId);
   if(Number(link.is_active)!==1||upper(link.provider_type)!=="GOOGLE_DRIVE"||upper(link.sync_mode)!=="CLOUD_API")throw Error("DRIVE_CONNECTION_INVALID");
+  const binding=(await c.env.DB.prepare("SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code IN ('E_BELGE','EBELGE') AND purpose_code='E_DOCUMENT' AND read_enabled=1 AND write_enabled=1 AND sync_enabled=1 LIMIT 2").bind(slug,connectionId).all<Row>()).results;
+  if(binding.length!==1||text(binding[0]?.root_path).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"")!==boundRoot||boundRoot&&!relativePath.startsWith(boundRoot+"/"))throw Error("DRIVE_BINDING_CHANGED");
   const parts=archiveParts(relativePath,""),all=[...parts.folders,parts.fileName];if(all.some(p=>!p||p==="."||p===".."||/[\x00-\x1f/\\]/.test(p)))throw Error("ARCHIVE_PATH_INVALID");
   const unique=async(parent:string,name:string,folder:boolean)=>{
     const q="'"+googleQueryValue(parent)+"' in parents and name='"+googleQueryValue(name)+"' and trashed=false";
@@ -1650,8 +1652,9 @@ export async function archiveVerifiedIsnetGoogleOriginal(c:Context<AppEnv>,slug:
     return found[0]||null;
   };
   let parent=text(link.remote_root_id)||"root";
-  for(const p of parts.folders){
+  for(const [i,p] of parts.folders.entries()){
     let found=await unique(parent,p,true);
+    if(!found&&i<(boundRoot?boundRoot.split('/').length:0))throw Error("DRIVE_ROOT_MISSING");
     if(!found){await providerJson("https://www.googleapis.com/drive/v3/files?fields=id,name",accessToken,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:p,mimeType:"application/vnd.google-apps.folder",parents:[parent]})});found=await unique(parent,p,true)}
     if(!found?.id)throw Error("ARCHIVE_FOLDER_UNVERIFIED");parent=text(found.id);
   }

@@ -5,14 +5,13 @@ import {officeFenceCondition,type OfficeFence} from "./isnet-office-coordinator.
 import {completedOfficeReadManifest,officeReadCompanyTax,type Source} from "./isnet-office-read-jobs.ts";
 import {archiveVerifiedIsnetGoogleOriginal} from "./file-hub-cloud-oauth.ts";
 import {ingestIndexedFileHubEBelge} from "./e-belge-center-cloud.ts";
-import {parseSoapXml} from "./isnet-soap-read.ts";
+import {validateOfficeArchiveXml,OFFICE_ARCHIVE_MAX_BYTES} from "./isnet-office-archive-identity.ts";
+export {OFFICE_ARCHIVE_MAX_BYTES} from "./isnet-office-archive-identity.ts";
 import {verifyIsnetDownloadedFile} from "./isnet-file-validation.ts";
 type Env={Bindings:Cloudflare.Env;Variables:{requestId:string}};
 type DB=Cloudflare.Env["DB"];
 const SCOPE="ISNET_OFFICE_ARCHIVE_V1",MAX_DOCS=500,TTL=3*60*60*1000,CLAIM_TIMEOUT=5*60*1000;
-export const OFFICE_ARCHIVE_MAX_BYTES=8*1024*1024;
 const UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
-const U="urn:oasis:names:specification:ubl:schema:xsd:",B=U+"CommonBasicComponents-2",A=U+"CommonAggregateComponents-2";
 const folders:Record<Source,string>={INVOICE_IN:"GELEN-FATURA",INVOICE_OUT:"GIDEN-FATURA",ARCHIVE_OUT:"GIDEN-EARSIV",DISPATCH_IN:"GELEN-IRSALIYE",DISPATCH_OUT:"GIDEN-IRSALIYE"};
 type Entry={source:Source;ettn:string};
 type Binding={connectionId:string;root:string;companyFolder:string};
@@ -34,16 +33,20 @@ async function bindingOf(db:DB,tenant:string,requireIndex:boolean):Promise<Bindi
  const root=parts.join("/"),prefix=root?root+"/":"",connectionId=txt(row.storage_connection_id);
  if(!connectionId)throw Error("DRIVE_BINDING_REQUIRED");
  // Existing structure: one company folder under each direction. No parallel archive root.
- const paths=(await db.prepare("SELECT DISTINCT relative_path FROM file_hub_locations WHERE main_company_slug=? AND storage_connection_id=? AND is_available=1 AND substr(relative_path,1,?)=? AND LOWER(relative_path) LIKE '%.xml' LIMIT 5001").bind(tenant,connectionId,prefix.length,prefix).all<{relative_path:string}>()).results;
- if(paths.length>5000)throw Error("DRIVE_INDEX_LIMIT");
- const names=new Set<string>();
- for(const p of paths){const rel=txt(p.relative_path).slice(prefix.length).split("/");if(Object.values(folders).includes(rel[0]!)&&rel.length>=6&&/^\d{4}$/.test(rel[2]||"")&&/^\d{2}$/.test(rel[3]||"")&&safePart(rel[1]||""))names.add(rel[1]!)}
- if(names.size>1)throw Error("DRIVE_COMPANY_FOLDER_AMBIGUOUS");
- const companyFolder=names.values().next().value||tenant;
+ const names=(await db.prepare("WITH p AS (SELECT substr(relative_path,?) rel FROM file_hub_locations WHERE main_company_slug=? AND storage_connection_id=? AND is_available=1 AND substr(relative_path,1,?)=? AND LOWER(relative_path) LIKE '%.xml'), f AS (SELECT substr(rel,1,instr(rel,'/')-1) folder,substr(rel,instr(rel,'/')+1) rest FROM p WHERE instr(rel,'/')>0), n AS (SELECT substr(rest,1,instr(rest,'/')-1) company,substr(rest,instr(rest,'/')+1) tail FROM f WHERE folder IN ('GELEN-FATURA','GIDEN-FATURA','GELEN-IRSALIYE','GIDEN-IRSALIYE','GIDEN-EARSIV') AND instr(rest,'/')>0) SELECT DISTINCT company FROM n WHERE tail GLOB '[0-9][0-9][0-9][0-9]/[0-9][0-9]/*' LIMIT 2").bind(prefix.length+1,tenant,connectionId,prefix.length,prefix).all<{company:string}>()).results;
+ if(names.length>1)throw Error("DRIVE_COMPANY_FOLDER_AMBIGUOUS");
+ const companyFolder=names[0]?.company||tenant;
  if(!safePart(companyFolder))throw Error("DRIVE_ROOT_INVALID");
  if(requireIndex){
   let meta:Record<string,any>={};try{meta=JSON.parse(txt(row.metadata)||"{}")}catch{throw Error("DRIVE_INDEX_NOT_READY")}
-  if(!row.last_sync_at||meta.cloudSyncCursor||txt(row.connection_status)!=="CONNECTED")throw Error("DRIVE_INDEX_NOT_READY");
+  if(txt(row.connection_status)!=="CONNECTED"||meta.cloudNeedsFullRescan)throw Error("DRIVE_INDEX_NOT_READY");
+  const cursor=meta.cloudSyncCursor;
+  if(cursor){
+   if(!Array.isArray(cursor.queue)||!cursor.queue.length||!root||!names.length)throw Error("DRIVE_INDEX_NOT_READY");
+   const normalize=(x:unknown)=>txt(x).replace(/\\/g,"/").replace(/^\/+|\/+$/g,"").toLocaleLowerCase("en-US"),bound=normalize(root);
+   // A pending unrelated design subtree must not hold up an already walked e-Belge root.
+   if(cursor.queue.some((x:any)=>{if(typeof x?.path!=="string")return true;const p=normalize(x.path);return !p||p===bound||p.startsWith(bound+"/")||bound.startsWith(p+"/")}))throw Error("DRIVE_INDEX_NOT_READY");
+  }else if(!row.last_sync_at)throw Error("DRIVE_INDEX_NOT_READY");
   // Any unlinked official-looking original under this archive must be reconciled first.
   const pending=await db.prepare("SELECT COUNT(*) n FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1 AND a.status='AVAILABLE' AND UPPER(a.extension)='XML' AND substr(l.relative_path,1,?)=? AND (substr(l.relative_path,?,12)='GELEN-FATURA' OR substr(l.relative_path,?,12)='GIDEN-FATURA' OR substr(l.relative_path,?,14)='GELEN-IRSALIYE' OR substr(l.relative_path,?,14)='GIDEN-IRSALIYE' OR substr(l.relative_path,?,12)='GIDEN-EARSIV') AND instr(lower(l.relative_path),'/_inceleme/')=0 AND instr(lower(l.relative_path),'/_durum/')=0 AND instr(lower(l.relative_path),'/_uygulama/')=0 AND NOT EXISTS(SELECT 1 FROM file_hub_relations x JOIN accounting_documents d ON d.id=x.entity_id AND d.main_company_slug=x.main_company_slug AND d.deleted_at IS NULL WHERE x.main_company_slug=l.main_company_slug AND x.file_asset_id=l.file_asset_id AND x.entity_type='DOCUMENT' AND x.relation_type='XML')").bind(tenant,connectionId,prefix.length,prefix,prefix.length+1,prefix.length+1,prefix.length+1,prefix.length+1,prefix.length+1).first<{n:number}>();
   if(Number(pending?.n||0)>0)throw Error("DRIVE_INDEX_NOT_READY");
@@ -77,22 +80,6 @@ export async function officeArchiveTick(db:DB,lease:OfficeFence,now=Date.now()){
   return {busy:true,task:{jobId:j.id,...entry,from:j.from,to:j.to,taxCode:tax,fence:lease.fence}};
  }catch{j.state="REVIEW_REQUIRED";j.error="ARCHIVE_CONFIGURATION_CHANGED";await save(db,lease,s,now);return{busy:true,task:null}}
 }
-type N={local:string;uri:string;text:string;attrs:Record<string,string>;children:N[]};
-const one=(n:N,uri:string,local:string)=>{const a=n.children.filter(x=>x.uri===uri&&x.local===local);if(a.length!==1)throw Error("UBL_IDENTITY_INVALID");return a[0]!};
-const scalar=(n:N)=>{if(n.children.length)throw Error("UBL_IDENTITY_INVALID");return n.text.trim()};
-export function validateOfficeArchiveXml(bytes:ArrayBuffer,entry:Entry,tax:string,from:string,to:string){
- if(bytes.byteLength<20||bytes.byteLength>OFFICE_ARCHIVE_MAX_BYTES||!UUID.test(entry.ettn)||!/^\d{10,11}$/.test(tax))throw Error("UBL_IDENTITY_INVALID");
- verifyIsnetDownloadedFile("xml",bytes,"application/xml");
- const root:N=parseSoapXml(new TextDecoder("utf-8",{fatal:true}).decode(bytes)),dispatch=entry.source.startsWith("DISPATCH"),name=dispatch?"DespatchAdvice":"Invoice";
- if(root.local!==name||root.uri!==U+name+"-2")throw Error("UBL_KIND_MISMATCH");
- const ettn=scalar(one(root,B,"UUID")).toLowerCase(),no=scalar(one(root,B,"ID")),date=scalar(one(root,B,"IssueDate"));
- if(ettn!==entry.ettn||!/^[A-Z0-9]{3}[0-9]{13}$/.test(no)||!/^\d{4}-\d{2}-\d{2}$/.test(date)||date<from||date>to||new Date(date+"T00:00:00Z").toISOString().slice(0,10)!==date)throw Error("UBL_IDENTITY_INVALID");
- const incoming=entry.source.endsWith("_IN"),partyName=dispatch?(incoming?"DeliveryCustomerParty":"DespatchSupplierParty"):(incoming?"AccountingCustomerParty":"AccountingSupplierParty");
- const p=one(one(root,A,partyName),A,"Party");
- const ids=p.children.filter(x=>x.uri===A&&x.local==="PartyIdentification").flatMap(x=>x.children.filter(y=>y.uri===B&&y.local==="ID"&&["VKN","TCKN"].includes(y.attrs.schemeID)));
- if(ids.length!==1||scalar(ids[0]!)!==tax)throw Error("UBL_TENANT_MISMATCH");
- return {no,date,ettn,direction:incoming?"INCOMING":"OUTGOING"};
-}
 function advance(j:Job){j.cursor++;delete j.claim;if(j.cursor>=j.entries.length)j.state=j.failed||j.pdfPending?"REVIEW_REQUIRED":"COMPLETE";else j.state="RUNNING"}
 export async function acceptOfficeArchiveDocument(c:Context<Env>,lease:OfficeFence,form:FormData){
  const db=c.env.DB,tenant=lease.tenant,s=await stored(db,tenant),now=Date.now();if(!s||!active(s.job,now)||s.job.claim)throw Error("ARCHIVE_CLAIM_UNAVAILABLE");
@@ -114,12 +101,12 @@ export async function acceptOfficeArchiveDocument(c:Context<Env>,lease:OfficeFen
  j.claim={id:crypto.randomUUID(),fence:lease.fence,at:now};if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");
  const claimRaw=JSON.stringify(j),base=[binding.root,folders[entry.source],binding.companyFolder,identity.date.slice(0,4),identity.date.slice(5,7),identity.no+"_"+entry.ettn].filter(Boolean).join("/");
  try{
-  const xa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,base+"/"+identity.no+".xml","application/xml",xb);
+  const xa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,binding.root,base+"/"+identity.no+".xml","application/xml",xb);
   const record=await ingestIndexedFileHubEBelge(c.env,tenant,xa);
-  if(record.sourceConflict||!record.documentId)throw Error("ARCHIVE_CANONICAL_CONFLICT");
+  if(("sourceConflict" in record&&record.sourceConflict)||!record.documentId)throw Error("ARCHIVE_CANONICAL_CONFLICT");
   j.xml++;
   if(pb){
-   const pa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,base+"/"+identity.no+".pdf","application/pdf",pb);
+   const pa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,binding.root,base+"/"+identity.no+".pdf","application/pdf",pb);
    await ingestIndexedFileHubEBelge(c.env,tenant,pa);
   }
   const actual=await db.prepare("SELECT uuid,direction,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND id=? AND deleted_at IS NULL").bind(tenant,record.documentId).first<Record<string,any>>();

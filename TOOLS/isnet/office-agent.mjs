@@ -15,7 +15,7 @@ while(!stop){
  let state="OFFLINE";
  try{
   if(authorized&&Date.now()>=LIVE_NOT_BEFORE&&Date.now()-lastProbe>=10*60*1000){probe=await probeLiveWsdl();lastProbe=Date.now()}
-  const r=await fetch(url,{method:"POST",body:JSON.stringify({liveProbe:probe&&Date.now()-probe.checkedAt<14*60*1000?probe:null,readReport}),headers:{"Content-Type":"application/json","X-KYERP-Tenant-Slug":tenant,"X-KYERP-Agent-Id":deviceId,"X-KYERP-Office-Instance":instanceId,"X-KYERP-Agent-Token":key},redirect:"error",signal:AbortSignal.timeout(10000)});
+  const r=await fetch(url,{method:"POST",body:JSON.stringify({liveProbe:probe&&Date.now()-probe.checkedAt<14*60*1000?probe:null,readProtocol:1,readReport}),headers:{"Content-Type":"application/json","X-KYERP-Tenant-Slug":tenant,"X-KYERP-Agent-Id":deviceId,"X-KYERP-Office-Instance":instanceId,"X-KYERP-Agent-Token":key},redirect:"error",signal:AbortSignal.timeout(10000)});
   if(r.ok){
    const v=await r.json();
    if(v?.ok===true&&["LEADER","STANDBY"].includes(v.data?.role)&&v.data.sendEnabled===false&&v.data.providerAuthorized===false){state=v.data.role;delay=30000;authorized=true;readReport=null;if(state==="LEADER"&&v.data.archiveTask){const form=await readOfficeArchiveTask(v.data.archiveTask);try{await fetch("https://api.kyerp.net/api/isnet/office/archive-document",{method:"POST",body:form,headers:{"X-KYERP-Tenant-Slug":tenant,"X-KYERP-Agent-Id":deviceId,"X-KYERP-Office-Instance":instanceId,"X-KYERP-Agent-Token":key},redirect:"error",signal:AbortSignal.timeout(75000)})}catch{/* Never infer success. Server claim resolves or requires review. */}delay=1000}else if(state==="LEADER"&&v.data.readTask){readReport=await readOfficeTask(v.data.readTask);delay=1000}}
