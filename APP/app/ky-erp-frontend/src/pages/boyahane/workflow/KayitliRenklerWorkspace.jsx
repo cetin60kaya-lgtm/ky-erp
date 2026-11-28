@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   createColorRecipeVersion,
+  createRegisteredColor,
   getRegisteredColor,
   listBoyahaneProducts,
   listRegisteredColors,
@@ -18,6 +19,7 @@ import {
   statusTone,
 } from "./boyahaneFormat";
 import ModelThumbnail from "./ModelThumbnail";
+import ColorFormulationWorkspace from "./ColorFormulationWorkspace";
 
 const SOURCE_LABELS = {
   PANTONE: "Pantoneye göre",
@@ -149,6 +151,7 @@ export default function KayitliRenklerWorkspace({
   moduleActionContext,
 }) {
   const [rows, setRows] = useState([]);
+  const [formulationOpen, setFormulationOpen] = useState(false);
   const [selected, setSelected] = useState(null);
   const [query, setQuery] = useState("");
   const [paintType, setPaintType] = useState("");
@@ -446,6 +449,66 @@ export default function KayitliRenklerWorkspace({
     }
   }
 
+  async function acceptFormulation(data) {
+    const code = String(data.pantone || "").trim();
+    const modelRef = [data.model, data.reference].map(value => String(value || "").trim()).filter(Boolean).join(" / ");
+    const sourceType = modelRef ? "REFERENCE" : code ? "PANTONE" : "VISUAL";
+    const colorName = data.colorName || code || modelRef || data.colorHex;
+    const normCode = value => String(value || "").trim().toUpperCase().replace(/\s+(TPG|TCX)$/,"");
+    const matches = safeArray(await listRegisteredColors(activeMainCompany)).filter(row => {
+      if (sourceTypeOf(row) !== sourceType) return false;
+      const dye = normalizeText(row.dyeType || row.paintType || "SUBAZLI");
+      if (dye !== "SUBAZLI") return false;
+      if (sourceType === "REFERENCE") return normCode(row.basePantone || row.pantone) === normCode(code) && normalizeText(row.referenceCode || row.referenceName) === normalizeText(modelRef);
+      if (sourceType === "VISUAL") return String(row.colorHex || "").toUpperCase() === data.colorHex.toUpperCase() && normalizeText(row.colorName) === normalizeText(colorName);
+      return normCode(row.pantone) === normCode(code);
+    });
+    if (matches.length > 1) throw new Error("Birden fazla eşleşen renk kartı var; mevcut kayıtları kontrol edin.");
+    let row = matches[0];
+    if (!row) {
+      if (!window.confirm("Yeni renk kartı açılsın mı? Hesaplanan formül yalnız düzenlenebilir taslak olacak; stok sarfı veya reçete onayı yapılmayacak.")) return;
+      row = await createRegisteredColor(activeMainCompany, {
+        formulationExplicit: true,
+        pantone: code,
+        basePantone: sourceType === "REFERENCE" ? code : "",
+        sourceType,
+        colorName,
+        colorHex: data.colorHex,
+        referenceCode: modelRef,
+        referenceName: modelRef,
+        referenceNote: data.note,
+        paintType: "SUBAZLI",
+        dyeType: "SUBAZLI",
+      });
+      if (!row?.id) throw new Error("Yeni renk kartı doğrulanamadı.");
+    }
+    const detail = await getRegisteredColor(activeMainCompany, row.id);
+    if (!detail?.id || sourceTypeOf(detail) !== sourceType ||
+      (sourceType === "PANTONE" && normCode(detail.pantone) !== normCode(code)) ||
+      (sourceType === "REFERENCE" && (normCode(detail.basePantone || detail.pantone) !== normCode(code) || normalizeText(detail.referenceCode || detail.referenceName) !== normalizeText(modelRef))) ||
+      (sourceType === "VISUAL" && String(detail.colorHex || "").toUpperCase() !== data.colorHex.toUpperCase())) {
+      throw new Error("Renk kimliği beklenen hedefle eşleşmedi. Taslak aktarılmadı; renk kartını kontrol edin.");
+    }
+    if (detail.colorHex && String(detail.colorHex).toUpperCase() !== data.colorHex.toUpperCase() && sourceType !== "REFERENCE") {
+      throw new Error("Hedef HEX mevcut ana renk kartından farklı. Model veya müşteri referansı girerek ayrı referans oluşturun.");
+    }
+    setProducts(data.products);
+    setProductsLoaded(true);
+    setSelected(detail);
+    setDraft(editDraft(detail));
+    setEditing(false);
+    setFormulaDraft({
+      paintType: "SUBAZLI",
+      note: data.note,
+      lines: data.lines.map((line,index) => ({...line,id:lineId(index)})),
+    });
+    setDetailTab("formula");
+    setFormulaEditing(true);
+    setFormulationOpen(false);
+    setError("");
+    setMessage("Hesaplanan reçete taslağa aktarıldı. Arşiv formülünü kaydetmeden önce kontrol edin. Henüz onay veya stok sarfı yapılmadı.");
+  }
+
   const recipes = safeArray(selected?.recipes).sort((a, b) => String(b.createdAt || "").localeCompare(String(a.createdAt || "")));
   const productions = safeArray(selected?.productions);
   const activeRecipe = recipes.find((row) => row.status === "ACTIVE") || recipes[0];
@@ -454,6 +517,8 @@ export default function KayitliRenklerWorkspace({
   const selectedSource = sourceTypeOf(selected);
   const formulaStats = formulaTotals(formulaDraft);
   const canCreateApprovedRecipe = formulaStats.lineCount > 0 && formulaStats.mappedCount === formulaStats.lineCount && safeArray(formulaDraft?.lines).every((line) => Number(line.referenceGram || 0) > 0);
+
+  if (formulationOpen) return <ColorFormulationWorkspace key={activeMainCompany?.slug || activeMainCompany?.id} activeMainCompany={activeMainCompany} rows={rows} onClose={() => setFormulationOpen(false)} onDraft={acceptFormulation} />;
 
   return (
     <div className="bh-colors-hub bh-color-memory-v3">
@@ -465,7 +530,8 @@ export default function KayitliRenklerWorkspace({
         </div>
         <div className="bh-color-intro-actions">
           <span><strong>{filtered.length}</strong> görünür kayıt</span>
-          <button type="button" className="bh-btn primary" onClick={() => openModule?.("boyahane", { tabKey: "receteler" })}>+ Numuneden Yeni Renk</button>
+          <button type="button" className="bh-btn primary" onClick={() => setFormulationOpen(true)}>Sıfırdan Renk Oluştur</button>
+          <button type="button" className="bh-btn" onClick={() => openModule?.("boyahane", { tabKey: "receteler" })}>+ Numuneden Yeni Renk</button>
         </div>
       </section>
 
