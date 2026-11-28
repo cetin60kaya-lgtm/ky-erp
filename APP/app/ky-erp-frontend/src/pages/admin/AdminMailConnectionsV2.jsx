@@ -16,6 +16,7 @@ import { useAuth } from "../../context/AuthContext";
 import IntegrationFlowSteps from "../modules/common/IntegrationFlowSteps";
 import { accountMatchesFilter, mailAccountReadiness, mailProviderReady } from "./mailAccountRules";
 import { gmailOAuthFeedback } from "./mailGoogleOAuthFeedback";
+import { microsoftMailOAuthFeedback } from "./mailMicrosoftOAuthFeedback";
 import { runGmailSyncBatch } from "./mailGmailSyncBatch";
 import "./AdminMailConnections.css";
 
@@ -56,7 +57,7 @@ function StateMark({ ok, children, warning = false }) {
   </span>;
 }
 
-export default function AdminMailConnectionsV2({ activeMainCompany, openModule }) {
+export default function AdminMailConnectionsV2({ activeMainCompany, openModule, embedded=false }) {
   const { user } = useAuth();
   const slug = String(activeMainCompany?.slug || "").trim();
   const companyName = activeMainCompany?.name || activeMainCompany?.title || slug || "Firma seçilmedi";
@@ -84,9 +85,9 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const feedback = gmailOAuthFeedback(params);
+    const feedback = gmailOAuthFeedback(params)||microsoftMailOAuthFeedback(params);
     if (!feedback) return;
-    setOauthFeedback(feedback);
+    setOauthFeedback({...feedback,provider:params.get("mailProvider")==="MICROSOFT_365"?"Outlook":"Gmail"});
     const target = new URL(window.location.href);
     for (const key of ["mailProvider","mailConnected","mailError","accountId"]) target.searchParams.delete(key);
     window.history.replaceState({}, "", target.pathname + target.search + target.hash);
@@ -283,20 +284,20 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   }
 
   return <div className="mail-admin-page">
-    <section className="mail-admin-hero">
-      <div className="mail-admin-hero-copy">
+    <section className={embedded?"mail-admin-embedded-actions":"mail-admin-hero"}>
+      {!embedded?<div className="mail-admin-hero-copy">
         <small>AYARLAR & SİSTEM / BAĞLANTILAR / E-POSTA HESAPLARI</small>
         <h2>E-posta Servisleri</h2>
         <p><strong>{companyName}</strong> için hesap ekleme, bölüm atama, onay, OAuth ve klasör senkronizasyonu tek ekrandan yönetilir. Her firmanın hesapları birbirinden ayrıdır.</p>
         <div className="mail-admin-company"><span aria-hidden="true">▣</span> Aktif firma: <strong>{companyName}</strong><span className="mail-admin-company-hint">Firma değişimini KY ERP firma seçiminden yapın.</span></div>
-      </div>
+      </div>:<div><strong>Firma posta kutuları</strong><p>Gmail ve Outlook / Hotmail hesaplarını ayrı ayrı bağlayın.</p></div>}
       <div className="mail-admin-hero-actions">
         <button className="secondary" type="button" onClick={load} disabled={loading || !slug}>Yenile</button>
         <button type="button" onClick={() => openModule?.("iletisim", { tabKey: "mail-gelen" })}>Mail Merkezini Aç</button>
       </div>
     </section>
-    <IntegrationFlowSteps kind="MAIL" stage={loadedSlug===slug&&loadHealth.accounts&&loadHealth.providers&&counts.ready > 0 ? 3 : loadedSlug===slug&&loadHealth.accounts&&counts.connected > 0 ? 2 : 1} />
-    {oauthFeedback && <div role="status" className={"mail-admin-notice " + (oauthFeedback.ok ? "ok" : "bad")}>Gmail OAuth — {oauthFeedback.code}: {oauthFeedback.text}</div>}
+    {tab==="add"?<IntegrationFlowSteps kind="MAIL" stage={loadedSlug===slug&&loadHealth.accounts&&loadHealth.providers&&counts.ready > 0 ? 3 : loadedSlug===slug&&loadHealth.accounts&&counts.connected > 0 ? 2 : 1} />:null}
+    {oauthFeedback && <div role="status" className={"mail-admin-notice " + (oauthFeedback.ok ? "ok" : "bad")}>{oauthFeedback.provider} OAuth — {oauthFeedback.code}: {oauthFeedback.text}</div>}
     {notice && <div role="status" className={"mail-admin-notice " + (notice.startsWith("Hata:") ? "bad" : "ok")}>{notice}</div>}
     {syncBatchRunning && <button type="button" className="secondary" onClick={() => { syncStopRequested.current = true; setNotice("Durdurma istendi. Mevcut küçük senkronizasyon adımı bittikten sonra yeni istek yapılmayacak."); }}>Senkronizasyonu Durdur</button>}
     <div className="mail-admin-stats">
@@ -390,7 +391,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
         <div className="mail-admin-form-help">
           <StateMark ok={newProviderReady} warning={!newProviderReady}>{newProviderReady ? "Sağlayıcı kurulu ve hazır" : "Sağlayıcı henüz hazır değil"}</StateMark>
           {!newProviderReady && <p>{availableForNew?.reason || "Sağlayıcı bilgisi alınamadı. Yeni bağlantı kurulmaz."}</p>}
-          <p>Önce hesap talebi ve firma onayı; sonra sağlayıcının kendi OAuth ekranı; en son klasör senkronizasyonu. Şifre/token girilmez.</p>
+          <p>Önce hesap talebi ve firma onayı; sonra sağlayıcının kendi OAuth ekranı; en son klasör senkronizasyonu. Şifre/token girilmez.</p>{form.providerType==="MICROSOFT_365"?<p><strong>Outlook.com / Hotmail:</strong> kendi adresiniz için Kişisel hesap seçin. Ortak ve bölüm posta kutusu türleri Microsoft 365 kurumsal yetkileri içindir. OneDrive dosya bağlantısı Dosya Servisleri üzerinden ayrıca yapılır.</p>:null}
         </div>
         <div className="mail-admin-form-actions"><button type="submit" disabled={loading || !slug || !newProviderReady}>Hesap Talebini Oluştur</button><button type="button" className="secondary" disabled={loading} onClick={() => setTab("accounts")}>İptal</button></div>
       </form>

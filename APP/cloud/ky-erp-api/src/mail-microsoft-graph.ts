@@ -14,7 +14,7 @@ const GRAPH = "https://graph.microsoft.com/v1.0";
 const AUTHORIZE = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize";
 const TOKEN = "https://login.microsoftonline.com/common/oauth2/v2.0/token";
 const CALLBACK = "https://api.kyerp.net/api/auth/mail/oauth/microsoft/callback";
-const APP_RETURN = "https://kyerp.net/iletisim/mail-gelen";
+const APP_RETURN = "https://kyerp.net/depolama/depolama-mail";
 const SCOPES = [
   "openid","profile","email","offline_access","User.Read",
   "Mail.ReadWrite","Mail.Send"
@@ -472,7 +472,7 @@ export function registerMicrosoftMailRoutes(app:any){
 
   app.get("/api/auth/mail/oauth/microsoft/callback",async(c:any)=>{
     const state=text(c.req.query("state")),code=text(c.req.query("code")),providerError=text(c.req.query("error")),providerDescription=text(c.req.query("error_description"));
-    const fail=(message:string,codeValue="MICROSOFT_OAUTH_FAILED")=>c.redirect(APP_RETURN+"?mailError="+encodeURIComponent(codeValue+":"+message),302);
+    const fail=(_message:string,codeValue="MICROSOFT_OAUTH_FAILED")=>{const allowed=["MICROSOFT_OAUTH_DENIED","MICROSOFT_OAUTH_STATE_INVALID","MICROSOFT_ACCOUNT_MISMATCH","MICROSOFT_MAIL_CONFIG_MISSING","MICROSOFT_OAUTH_FAILED"];return c.redirect(APP_RETURN+"?mailProvider=MICROSOFT_365&mailError="+encodeURIComponent(allowed.includes(codeValue)?codeValue:"MICROSOFT_OAUTH_FAILED"),302);};
     if(providerError)return fail(providerDescription||providerError,"MICROSOFT_OAUTH_DENIED");
     if(!state||!code)return fail("OAuth state veya code eksik.");
     const stateHash=await sha256Hex(state),row=await c.env.DB.prepare("SELECT s.*,a.email_address,a.account_type,a.approval_status,a.provider_type FROM mail_oauth_states s JOIN mail_accounts a ON a.id=s.account_id AND a.main_company_slug=s.main_company_slug WHERE s.state_hash=? LIMIT 1").bind(stateHash).first<AnyRow>();
@@ -490,7 +490,7 @@ export function registerMicrosoftMailRoutes(app:any){
       await saveCredential(c,text(row.main_company_slug),text(row.account_id),cred,{provider:"MICROSOFT_365",connectedEmail,mailboxAddress:mailbox});
       const ts=nowIso(),active=upper(row.approval_status)==="APPROVED";
       await c.env.DB.prepare("UPDATE mail_accounts SET provider_connected=1,provider_account_id=?,status=?,updated_at=? WHERE id=? AND main_company_slug=?").bind(upper(row.account_type)==="PERSONAL"?text(profile.id):mailbox,active?"ACTIVE":"PENDING",ts,row.account_id,row.main_company_slug).run();
-      return c.redirect(APP_RETURN+"?mailConnected=1&accountId="+encodeURIComponent(text(row.account_id)),302);
+      return c.redirect(APP_RETURN+"?mailProvider=MICROSOFT_365&mailConnected=1&accountId="+encodeURIComponent(text(row.account_id)),302);
     }catch(error:any){
       return fail(text(error?.message)||"Microsoft hesabı bağlanamadı.",text(error?.code)||"MICROSOFT_OAUTH_FAILED");
     }
