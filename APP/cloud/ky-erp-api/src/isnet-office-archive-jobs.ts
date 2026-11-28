@@ -15,7 +15,7 @@ const UUID=/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i;
 const folders:Record<Source,string>={INVOICE_IN:"GELEN-FATURA",INVOICE_OUT:"GIDEN-FATURA",ARCHIVE_OUT:"GIDEN-EARSIV",DISPATCH_IN:"GELEN-IRSALIYE",DISPATCH_OUT:"GIDEN-IRSALIYE"};
 type Entry={source:Source;ettn:string};
 type Binding={connectionId:string;root:string;companyFolder:string};
-type Job={id:string;queryId:string;from:string;to:string;taxHash:string;binding:Binding;entries:Entry[];cursor:number;state:"QUEUED"|"RUNNING"|"COMPLETE"|"REVIEW_REQUIRED";xml:number;pdf:number;pdfPending:number;existing:number;failed:number;claim?:{id:string;fence:string;at:number};expiresAt:number;updatedAt:number;error?:string};
+type Job={id:string;queryId:string;from:string;to:string;taxHash:string;binding:Binding;entries:Entry[];cursor:number;state:"QUEUED"|"RUNNING"|"COMPLETE"|"REVIEW_REQUIRED";xml:number;pdf:number;pdfPending:number;existing:number;failed:number;claim?:{id:string;fence:string;at:number};expiresAt:number;updatedAt:number;error?:string;failureCodes?:Record<string,number>};
 type Stored={raw:string;job:Job};
 const key=(tenant:string)=>SCOPE+":"+tenant;
 const active=(j:Job,now:number)=>["QUEUED","RUNNING"].includes(j.state)&&j.expiresAt>now;
@@ -23,7 +23,7 @@ const txt=(v:unknown)=>String(v??"").trim();
 const rootParts=(s:string)=>s.replace(/\\/g,"/").replace(/^\/+|\/+$/g,"").split("/").filter(Boolean);
 const safePart=(s:string)=>s.length>0&&s.length<=250&&!/[\x00-\x1f/\\]/.test(s)&&s!=="."&&s!=="..";
 async function stored(db:DB,tenant:string):Promise<Stored|null>{const r=await db.prepare("SELECT data FROM json_store WHERE id=? AND scope=? AND main_company_slug=?").bind(key(tenant),SCOPE,tenant).first<{data:string}>();return r?{raw:r.data,job:JSON.parse(r.data) as Job}:null}
-function view(j:Job|null,now=Date.now()){return j?{id:j.id,queryId:j.queryId,from:j.from,to:j.to,state:["QUEUED","RUNNING"].includes(j.state)&&j.expiresAt<=now?"EXPIRED":j.state,total:j.entries.length,processed:j.cursor,xml:j.xml,pdf:j.pdf,pdfPending:j.pdfPending,existing:j.existing,failed:j.failed,error:j.error||null,updatedAt:j.updatedAt}:null}
+function view(j:Job|null,now=Date.now()){return j?{id:j.id,queryId:j.queryId,from:j.from,to:j.to,state:["QUEUED","RUNNING"].includes(j.state)&&j.expiresAt<=now?"EXPIRED":j.state,total:j.entries.length,processed:j.cursor,xml:j.xml,pdf:j.pdf,pdfPending:j.pdfPending,existing:j.existing,failed:j.failed,failureCodes:j.failureCodes||{},error:j.error||null,updatedAt:j.updatedAt}:null}
 export async function getOfficeArchiveJob(db:DB,tenant:string){return view((await stored(db,tenant))?.job||null)}
 async function bindingOf(db:DB,tenant:string,requireIndex:boolean):Promise<Binding>{
  const rows=(await db.prepare("SELECT b.storage_connection_id,b.root_path,b.read_enabled,b.write_enabled,b.sync_enabled,c.last_sync_at,c.connection_status,c.metadata FROM file_hub_bindings b JOIN file_hub_connections c ON c.id=b.storage_connection_id AND c.main_company_slug=b.main_company_slug WHERE b.main_company_slug=? AND b.module_code IN ('E_BELGE','EBELGE') AND b.purpose_code='E_DOCUMENT' AND c.is_active=1 AND c.provider_type='GOOGLE_DRIVE' AND c.sync_mode='CLOUD_API' LIMIT 2").bind(tenant).all<Record<string,any>>()).results;
@@ -80,6 +80,7 @@ export async function officeArchiveTick(db:DB,lease:OfficeFence,now=Date.now()){
   return {busy:true,task:{jobId:j.id,...entry,from:j.from,to:j.to,taxCode:tax,fence:lease.fence}};
  }catch{j.state="REVIEW_REQUIRED";j.error="ARCHIVE_CONFIGURATION_CHANGED";await save(db,lease,s,now);return{busy:true,task:null}}
 }
+function noteFailure(j:Job,code:unknown){const raw=String(code||"");const safe=/^(?:PROVIDER|SOAP|WSDL|PAGING|XML|UBL|DATE|COMPANY|DOCUMENT|NETWORK|SIZE|SOURCE|IDENTITY|RESPONSE|ARCHIVE|FILE|PDF)_[A-Z0-9_]{1,60}$/.test(raw)?raw:"DOCUMENT_REVIEW_REQUIRED";j.failureCodes??={};j.failureCodes[safe]=(j.failureCodes[safe]||0)+1;}
 function advance(j:Job){j.cursor++;delete j.claim;if(j.cursor>=j.entries.length)j.state=j.failed||j.pdfPending?"REVIEW_REQUIRED":"COMPLETE";else j.state="RUNNING"}
 export async function acceptOfficeArchiveDocument(c:Context<Env>,lease:OfficeFence,form:FormData){
  const db=c.env.DB,tenant=lease.tenant,s=await stored(db,tenant),now=Date.now();if(!s||!active(s.job,now)||s.job.claim)throw Error("ARCHIVE_CLAIM_UNAVAILABLE");
@@ -88,32 +89,44 @@ export async function acceptOfficeArchiveDocument(c:Context<Env>,lease:OfficeFen
  // First check again for an already imported identity, including duplicate/conflict.
  const existing=(await db.prepare("SELECT id,uuid,direction,document_type,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND LOWER(uuid)=? AND deleted_at IS NULL LIMIT 2").bind(tenant,entry.ettn).all<Record<string,any>>()).results;
  const expectedDirection=entry.source.endsWith("_IN")?"INCOMING":"OUTGOING",kind=entry.source.startsWith("DISPATCH")?"IRSALIYE":"FATURA";
- if(existing.length){if(existing.length!==1||existing[0]!.direction!==expectedDirection||!txt(existing[0]!.document_type).includes(kind)||!existing[0]!.xml_file_asset_id){j.state="REVIEW_REQUIRED";j.error="ARCHIVE_EXISTING_CONFLICT"}else{j.existing++;if(!existing[0]!.pdf_file_asset_id)j.pdfPending++;advance(j)}if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
- if(form.get("result")==="FAILED"){j.failed++;advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+ const prior=existing[0];
+ if(existing.length&&(existing.length!==1||prior!.direction!==expectedDirection||!txt(prior!.document_type).includes(kind)||!prior!.xml_file_asset_id)){j.state="REVIEW_REQUIRED";j.error="ARCHIVE_EXISTING_CONFLICT";if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+ if(prior?.pdf_file_asset_id){j.existing++;advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+ if(form.get("result")==="FAILED"){noteFailure(j,form.get("errorCode"));j.failed++;advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
  const xml=form.get("xml"),pdf=form.get("pdf");let xb:ArrayBuffer,pb:ArrayBuffer|null=null,identity:ReturnType<typeof validateOfficeArchiveXml>;
  try{
   if(!(xml instanceof File)||xml.size>OFFICE_ARCHIVE_MAX_BYTES||form.get("result")!=="OK")throw Error("UBL_FILE_REQUIRED");
   if(pdf!==null&&(!(pdf instanceof File)||xml.size+pdf.size>OFFICE_ARCHIVE_MAX_BYTES))throw Error("FILE_SIZE_INVALID");
   xb=await xml.arrayBuffer();identity=validateOfficeArchiveXml(xb,entry,tax,j.from,j.to);
   if(pdf instanceof File&&pdf.size){pb=await pdf.arrayBuffer();verifyIsnetDownloadedFile("pdf",pb,"application/pdf")}
- }catch{j.failed++;advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+ }catch(e){noteFailure(j,(e as Error).message);j.failed++;advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+ // For an existing XML, only attach its unique sibling PDF in the same bound Drive. Never create a second invoice or guess an archive path.
+ let existingXmlPath="";
+ if(prior){
+  if(!pb){j.pdfPending++;noteFailure(j,"PDF_PROVIDER_MISSING");advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+  const locations=(await db.prepare("SELECT l.relative_path FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug JOIN file_hub_relations r ON r.file_asset_id=a.id AND r.main_company_slug=a.main_company_slug AND r.entity_type='DOCUMENT' AND r.relation_type='XML' WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.file_asset_id=? AND r.entity_id=? AND l.is_available=1 AND a.status='AVAILABLE' AND UPPER(a.extension)='XML' LIMIT 2").bind(tenant,binding.connectionId,prior.xml_file_asset_id,prior.id).all<{relative_path:string}>()).results;
+  existingXmlPath=txt(locations[0]?.relative_path);
+  if(locations.length!==1||!existingXmlPath.toLowerCase().endsWith(".xml")||(binding.root&&!existingXmlPath.startsWith(binding.root+"/"))){j.pdfPending++;noteFailure(j,"PDF_XML_LOCATION_REVIEW");advance(j);if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");return view(j)}
+ }
  // Claim before any external side effect. No automatic replay after uncertain response.
  j.claim={id:crypto.randomUUID(),fence:lease.fence,at:now};if(!await save(db,lease,s,now))throw Error("ARCHIVE_CLAIM_UNAVAILABLE");
  const claimRaw=JSON.stringify(j),base=[binding.root,folders[entry.source],binding.companyFolder,identity.date.slice(0,4),identity.date.slice(5,7),identity.no+"_"+entry.ettn].filter(Boolean).join("/");
  try{
-  const xa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,binding.root,base+"/"+identity.no+".xml","application/xml",xb);
-  const record=await ingestIndexedFileHubEBelge(c.env,tenant,xa);
+  const xa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,binding.root,existingXmlPath||base+"/"+identity.no+".xml","application/xml",xb);
+  if(prior&&xa!==prior.xml_file_asset_id)throw Error("ARCHIVE_ORIGINAL_CONFLICT");
+  const record=prior?{documentId:txt(prior.id),sourceConflict:false}:await ingestIndexedFileHubEBelge(c.env,tenant,xa);
   if(("sourceConflict" in record&&record.sourceConflict)||!record.documentId)throw Error("ARCHIVE_CANONICAL_CONFLICT");
-  j.xml++;
+  if(prior)j.existing++;else j.xml++;
   if(pb){
-   const pa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,binding.root,base+"/"+identity.no+".pdf","application/pdf",pb);
-   await ingestIndexedFileHubEBelge(c.env,tenant,pa);
+   const pa=await archiveVerifiedIsnetGoogleOriginal(c,tenant,binding.connectionId,binding.root,(existingXmlPath?existingXmlPath.replace(/\.xml$/i,".pdf"):base+"/"+identity.no+".pdf"),"application/pdf",pb);
+   const linked=await ingestIndexedFileHubEBelge(c.env,tenant,pa);
+   if(linked.documentId!==record.documentId)throw Error("ARCHIVE_CANONICAL_CONFLICT");
   }
   const actual=await db.prepare("SELECT uuid,direction,xml_file_asset_id,pdf_file_asset_id FROM accounting_documents WHERE main_company_slug=? AND id=? AND deleted_at IS NULL").bind(tenant,record.documentId).first<Record<string,any>>();
   if(!actual||txt(actual.uuid).toLowerCase()!==entry.ettn||actual.direction!==identity.direction||!actual.xml_file_asset_id)throw Error("ARCHIVE_CANONICAL_UNVERIFIED");
-  if(actual.pdf_file_asset_id)j.pdf++;else j.pdfPending++;
+  if(actual.pdf_file_asset_id)j.pdf++;else {j.pdfPending++;noteFailure(j,"PDF_PROVIDER_MISSING")}
   advance(j);
- }catch{j.state="REVIEW_REQUIRED";j.error="ARCHIVE_RESULT_UNCERTAIN";delete j.claim}
+ }catch(e){noteFailure(j,(e as Error).message);j.state="REVIEW_REQUIRED";j.error="ARCHIVE_RESULT_UNCERTAIN";delete j.claim}
  // If the leader expired, do not report success or retry; next leader exposes review.
  if(!await save(db,lease,{raw:claimRaw,job:j},Date.now()))throw Error("ARCHIVE_RESULT_UNCERTAIN");
  return view(j);
