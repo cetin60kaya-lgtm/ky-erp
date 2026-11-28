@@ -16,6 +16,7 @@ import AdminBackupLogs from "./AdminBackupLogs";
 import AdminBuildCenter from "./AdminBuildCenter";
 import AdminReleaseHistory from "./AdminReleaseHistory";
 import "./AdminPlatformHub.css";
+import ManagementWorkspaceHeader from "./ManagementWorkspaceHeader";
 
 const ICONS={dashboard:LayoutDashboard,users:Users,building:Building2,"user-cog":UserRoundCog,"credit-card":CreditCard,shield:ShieldCheck,key:KeyRound,settings:Settings2,database:Database,git:GitCompareArrows,archive:Archive,package:Package,history:History};
 function PanelContent({route,company,owner,openModule}){
@@ -30,7 +31,7 @@ function PanelContent({route,company,owner,openModule}){
     case "uygulama-sahibi":return <AdminOwnerSecurity/>;
     case "admin-sistem":return <AdminApplicationSettings/>;
     case "dosya-klasor-yonetimi":return <section className="aph-link-card"><h3>Bağlantılar · Dosya Servisleri</h3><p>Firma dosya servisleri ve bölüm atamaları tek merkezden yönetilir.</p><button type="button" onClick={()=>openModule?.("depolama",{tabKey:"depolama-kaynaklar"})}>Dosya Servislerini Aç</button></section>;
-    case "depolama-klasor-duzeni":return <AdminStorageCenter key={company?.slug||"no-company"} activeMainCompany={company} activeTab="depolama-klasor-duzeni"/>;
+    case "depolama-klasor-duzeni":return <AdminStorageCenter key={company?.slug||"no-company"} activeMainCompany={company} activeTab="depolama-klasor-duzeni" showToolbar={false} openModule={openModule}/>;
     case "eslestirmeler":return <AdminMappings activeMainCompany={company}/>;
     case "yedekleme-loglar":return <AdminBackupLogs activeMainCompany={company}/>;
     case "surum-merkezi":return <AdminBuildCenter/>;
@@ -45,16 +46,13 @@ export default function AdminPlatformHub({activeTab,activeMainCompany,openModule
   const companyName=activeMainCompany?.name||activeMainCompany?.slug||user?.mainCompanySlug||"Firma seçilmedi";
   const navigate=(route)=>openModule?.("admin",{tabKey:route});
   return <div className="aph-page">
-    <header className="aph-header">
-      <div><span>YÖNETİM & SİSTEM</span><h1>Platform Yönetimi</h1><p>Bir işlem seçin; ilgili kayıt veya düzenleme ekranı açılır.</p></div>
-      <div className="aph-company"><small>AKTİF FİRMA</small><strong>{companyName}</strong></div>
-    </header>
-    <nav className="aph-main-tabs" aria-label="Yönetim bölümleri">
+    <ManagementWorkspaceHeader area="Platform Yönetimi" title={owner?panel.label:"Firma Yönetimi"} description={owner?panel.description:"Firma bilgileri ve yetkili yönetim işlemleri"} company={companyName} openModule={openModule}/>
+    {owner?<><nav className="aph-main-tabs" aria-label="Yönetim bölümleri">
       {ADMIN_SECTIONS.map((entry)=><button type="button" key={entry.key} aria-pressed={section.key===entry.key} className={section.key===entry.key?"active":""}
-        onClick={()=>navigate(entry.panels[0].route)}><strong>{entry.label}</strong><span>{entry.description}</span></button>)}
+        onClick={()=>navigate(entry.panels[0].route)}><strong>{entry.label}</strong></button>)}
     </nav>
     <section className="aph-workspace">
-      <div className="aph-workspace-head"><div><span>{section.label.toLocaleUpperCase("tr-TR")}</span><h2>İşlem Seçimi</h2><p>{section.description}</p></div><small>{section.panels.length} işlem</small></div>
+      <div className="aph-workspace-head"><div><span>{section.label.toLocaleUpperCase("tr-TR")}</span><h2>{section.label} işlemleri</h2></div><small>{section.panels.length} işlem</small></div>
       <nav className="aph-panel-menu" aria-label={section.label+" işlemleri"}>
         {section.panels.map(item=>{
           const Icon=ICONS[item.icon]||LayoutDashboard;
@@ -64,7 +62,7 @@ export default function AdminPlatformHub({activeTab,activeMainCompany,openModule
           </button>;
         })}
       </nav>
-    </section>
-    <main className="aph-content" key={panel.route}><PanelContent route={panel.route} company={activeMainCompany} owner={owner} openModule={openModule}/></main>
+    </section></>:null}
+    <main className="aph-content" key={`${panel.route}:${activeMainCompany?.slug||activeMainCompany?.id||""}`}><PanelContent route={panel.route} company={activeMainCompany} owner={owner} openModule={openModule}/></main>
   </div>;
 }
