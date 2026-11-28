@@ -22,12 +22,15 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
   const url=new URL(c.req.url);
   if(url.hostname!=="api.kyerp.net"||url.protocol!=="https:"||!c.req.raw.cf||c.req.header("Origin"))return c.json(error("OFFICE_DEVICE_DENIED"),403);
   if(!c.env.ISNET_OFFICE_REGISTRY_JSON)return c.json(error("OFFICE_NOT_CONFIGURED"),503);
+  let d:Awaited<ReturnType<typeof authorizeOfficeDevice>>;
   try{
-   const d=await authorizeOfficeDevice(officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON),{
+   d=await authorizeOfficeDevice(officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON),{
     tenant:c.req.header("X-KYERP-Tenant-Slug")||"",deviceId:c.req.header("X-KYERP-Agent-Id")||"",
     instanceId:c.req.header("X-KYERP-Office-Instance")||"",presentedSecret:c.req.header("X-KYERP-Agent-Token")||"",
     trustedEdgeIp:c.req.header("CF-Connecting-IP")||"",
    });
+  }catch{return c.json(error("OFFICE_DEVICE_DENIED"),403)}
+  try{
    const enabled=await selections(c,d.tenant);
    if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
    // Optional bounded metadata only; old heartbeat agents without body remain compatible.
@@ -41,7 +44,7 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
    let readTask=null,archiveTask=null,archiveBusy=false;if(result.lease&&readProtocol===1){try{const a=await officeArchiveTick(c.env.DB,result.lease);archiveTask=a.task;archiveBusy=a.busy;if(!archiveBusy)readTask=await officeReadTick(c.env.DB,result.lease,readReport)}catch{/* Heartbeat remains independent of job storage. */}}
    // A heartbeat or lease is never proof that the live provider is authorized.
    return c.json({ok:true,data:{...result,readTask,archiveTask,providerAuthorized:false,sendEnabled:false,pollAfterMs:readTask||archiveTask?1000:30000}});
-  }catch{return c.json(error("OFFICE_DEVICE_OR_STORAGE_DENIED"),403)}
+  }catch{return c.json({ok:false,error:{code:"OFFICE_STORAGE_UNAVAILABLE",message:"Ofis cihazı doğrulandı ancak KYERP bağlantı kaydı geçici olarak okunamadı veya güncellenemedi. Cihaz yetkisini değiştirmeyin."}},503)}
  });
  app.get("/api/isnet/office/archive-job",async c=>{
   c.header("Cache-Control","no-store");
@@ -59,7 +62,7 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
    const enabled=await selections(c,tenant);if(enabled.selected.ISNET!==true||enabled.enabled.ISNET!==true)return c.json(error("ISNET_ADAPTER_INACTIVE"),409);
    const status=await officeStatus(c.env.DB,tenant,officeRegistry(c.env.ISNET_OFFICE_REGISTRY_JSON));if(!status.configured||!status.devices.some(d=>d.online&&d.role==="LEADER"&&d.readProtocol===1))return c.json(error("OFFICE_NOT_READY"),409);
    const job=await queueOfficeArchiveJob(c.env.DB,tenant,String(body?.queryId||""));return c.json({ok:true,data:{mainCompanySlug:tenant,job}},202);
-  }catch(e){const code=(e as Error).message;const messages:Record<string,string>={READ_MANIFEST_REQUIRED:"Önce güncel ve tamamlanmış belge sorgusu yapın.",NO_MISSING_DOCUMENTS:"Yeni aktarılacak ETTN bulunamadı.",ARCHIVE_JOB_LIMIT:"Bir aktarımda en fazla 500 belge. Daha kısa tarih aralığı seçin.",DRIVE_BINDING_REQUIRED:"Tek aktif Google Drive e-Belge arşivi seçilmelidir.",DRIVE_WRITE_REQUIRED:"Mevcut e-Belge klasörüne yazma izni gerekli. Bağlantıyı yeniden kurmayın; bölüm atamasını kontrol edin.",DRIVE_INDEX_NOT_READY:"Mevcut Drive arşivi ve bekleyen XML kayıtları tamamlanmadan mükerrer riski nedeniyle aktarım başlatılmadı.",DRIVE_COMPANY_FOLDER_AMBIGUOUS:"Arşivde birden fazla firma alt klasörü bulundu; önce eşleştirme gerekli.",ARCHIVE_JOB_ALREADY_RUNNING:"Aktarım devam ediyor veya önceki aktarımın sonucu belirsiz."};return c.json({ok:false,error:{code:messages[code]?code:"ARCHIVE_NOT_READY",message:messages[code]||"Aktarım koşulları doğrulanamadı."}},409)}
+  }catch(e){const code=(e as Error).message;const messages:Record<string,string>={READ_MANIFEST_REQUIRED:"Önce güncel ve tamamlanmış belge sorgusu yapın.",NO_MISSING_DOCUMENTS:"Yeni aktarılacak ETTN bulunamadı.",ARCHIVE_JOB_LIMIT:"Bir aktarımda en fazla 500 belge. Daha kısa tarih aralığı seçin.",DRIVE_BINDING_REQUIRED:"Tek aktif Google Drive e-Belge arşivi seçilmelidir.",DRIVE_WRITE_REQUIRED:"Mevcut e-Belge klasörüne yazma izni gerekli. Bağlantıyı yeniden kurmayın; bölüm atamasını kontrol edin.",DRIVE_INDEX_NOT_READY:"Mevcut Drive arşivi ve bekleyen XML kayıtları tamamlanmadan mükerrer riski nedeniyle aktarım başlatılmadı.",DRIVE_COMPANY_FOLDER_AMBIGUOUS:"Arşivde birden fazla firma alt klasörü bulundu; önce eşleştirme gerekli.",DRIVE_ROOT_INVALID:"Mevcut e-Belge arşiv klasör yolu doğrulanamadı; bölüm atamasını kontrol edin.",ARCHIVE_JOB_ALREADY_RUNNING:"Aktarım devam ediyor veya önceki aktarımın sonucu belirsiz."};const known=Object.hasOwn(messages,code);return c.json({ok:false,error:{code:known?code:"ARCHIVE_STORAGE_UNAVAILABLE",message:known?messages[code]:"Arşiv koşulları sunucuda geçici olarak doğrulanamadı. Aktarım sonucu kontrol edilmeden yeniden başlatmayın."}},known?409:503)}
  });
  app.post(OFFICE_ARCHIVE_PATH,async c=>{
   c.header("Cache-Control","no-store");const url=new URL(c.req.url);
