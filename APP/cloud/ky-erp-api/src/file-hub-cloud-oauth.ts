@@ -106,7 +106,7 @@ function providerConfig(c: Context<AppEnv>, providerType: unknown) {
       clientId: text(c.env.MICROSOFT_GRAPH_CLIENT_ID),
       clientSecret: text(c.env.MICROSOFT_GRAPH_CLIENT_SECRET),
       redirectUri: `${apiBaseUrl}/api/auth/file-hub/oauth/microsoft/callback`,
-      scope: "openid profile email offline_access User.Read Files.ReadWrite.All Sites.ReadWrite.All",
+      scope: "openid profile email offline_access User.Read Files.ReadWrite.All"+(provider==="SHAREPOINT"?" Sites.ReadWrite.All":""),
     };
   }
   if (provider === "DROPBOX") return {provider,family:"DROPBOX",clientId:text(c.env.DROPBOX_CLIENT_ID),clientSecret:text(c.env.DROPBOX_CLIENT_SECRET),redirectUri:`${apiBaseUrl}/api/auth/file-hub/oauth/dropbox/callback`,scope:"account_info.read files.metadata.read files.content.read files.content.write"};
@@ -1389,6 +1389,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       LIMIT 4`,
   ).all<Row>();
 
+  let extraSlices=2; // Global cap across tenants; no new cron or parallel writer.
   for (const row of result.results || []) {
     const slug=text(row.main_company_slug), connectionId=text(row.id);
     if(!slug || !connectionId) continue;
@@ -1398,7 +1399,14 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         // Central metadata index ALWAYS gets the first turn. Even a very
         // large design image archive must not block fresh e-Belge metadata.
-        const central = await runGoogleSyncBatch(c, slug, connectionId, 1, true);
+        let central = await runGoogleSyncBatch(c, slug, connectionId, 1, true);
+        // Continue only a known partial checkpoint. A successful, bounded slice
+        // is not a retry of an uncertain write. Existing CAS prevents a second writer.
+        while(extraSlices>0 && "inProgress" in central && central.inProgress && !("busy" in central && central.busy)){
+          extraSlices--;
+          await new Promise<void>(resolve=>setTimeout(resolve,10000));
+          central=await runGoogleSyncBatch(c,slug,connectionId,1,true,true);
+        }
         if (provider === "GOOGLE_DRIVE" && !("inProgress" in central && central.inProgress) && !("busy" in central && central.busy)) {
           // Existing model image workflow remains an independent small page.
           // Its failure never rolls back the shared File Hub index cursor.

@@ -94,9 +94,10 @@ function ServiceCard({row,loading,onSync,onDisconnect,scanSession,onStop}){
       <div className="storage-scan-metrics">{[["İşlenen dosya",sync.files,"Tarama boyunca işlenen"],["Bulunan klasör",sync.folders,"Tespit edilen"],["Bitirilen sayfa",sync.pages,"Sağlayıcı sayfası"],["Bekleyen konum",sync.pendingFolders??meta.cloudSyncCursor?.queue?.length,"Klasör / sayfa kuyruğu"]].map(([label,value,detail])=><div key={label}><small>{label}</small><strong>{Number.isFinite(value)?value.toLocaleString("tr-TR"):"—"}</strong><small>{detail}</small></div>)}</div>
       {Number(sync.pageSize)>0?<div className="storage-scan-page"><div><span>Mevcut sağlayıcı sayfası</span><strong>{sync.pageOffset??0} / {sync.pageSize}</strong></div><progress max={sync.pageSize} value={Math.min(sync.pageSize,Math.max(0,Number(sync.pageOffset)||0))}/><small>Bu oran yalnız geçerli sayfaya aittir; toplam dosya sayısı bilinmiyor.</small></div>:null}
       <h4 className="ky-scan-subtitle">Son adım özeti</h4><dl className="storage-scan-details"><div><dt>Son ilerleme</dt><dd>{formatDate(sync.updatedAt)}</dd></div><div><dt>Son kaydedilen adım</dt><dd>{sync.stepFiles==null?"—":`${sync.stepFiles} dosya / ${sync.stepFolders??0} klasör`}</dd></div><div><dt>Adım süresi</dt><dd>{sync.stepDurationMs==null?"—":`${(sync.stepDurationMs/1000).toFixed(1)} sn`}</dd></div><div><dt>Sonraki adım sınırı</dt><dd>{sync.chunkLimit??"—"}</dd></div></dl>
-      {scanSession?.id===row.id?<div className="storage-scan-session" role="status">{scanSession.steps} tamamlanan istek · {scanSession.files} dosya · {scanSession.folders} klasör · {scanSession.state}<button type="button" onClick={onStop}>Hızlı Tarama Oturumunu Durdur</button></div>:null}
+      {!session&&meta.cloudSyncCursor?<div className="ky-scan-auto" role="status">Otomatik devam açık · ekran kapalı olsa da sunucu kaldığı yerden ilerler.</div>:null}
+      {scanSession?.id===row.id?<div className="storage-scan-session" role="status">{scanSession.steps} tamamlanan istek · {scanSession.files} dosya · {scanSession.folders} klasör · {scanSession.state}<button type="button" onClick={onStop}>Ekrandaki Hızlı Taramayı Durdur</button></div>:null}
       {meta.cloudDeltaCheckedAt?<small>Son değişiklik kontrolü: {formatDate(meta.cloudDeltaCheckedAt)} · Yeni/değişen: {Number(meta.cloudDeltaChanges||0)} · Erişimi kalkmış: {Number(meta.cloudDeltaUnavailable||0)}</small>:null}
-      <details className="ky-management-details"><summary>Teknik ayrıntılar ve tarama modeli</summary><p>İlk indeks: dosya kimliği, yolu ve ilişkisi kaydedilir. Orijinaller taşınmaz; muhasebeleştirme yapılmaz. Otomatik kontrol 5 dakikada bir; hızlı devam açık sekmede ardışık adımlar çalıştırır. Durum ekranı dakikada bir yenilenir.</p><p>Toplam kaynak dosya adedi bilinmediği için genel yüzde gösterilmez. Klasör ve aşama bilgileri son kayıt noktasına aittir.</p></details>
+      <details className="ky-management-details"><summary>Teknik ayrıntılar ve tarama modeli</summary><p>İlk indeks: dosya kimliği, yolu ve ilişkisi kaydedilir. Orijinaller taşınmaz; muhasebeleştirme yapılmaz. Sunucu 5 dakikada bir kalan kuyruğu otomatik işler. Hızlı devam açık sekmede bitene kadar kontrollü ardışık adımlar çalıştırır; ekran kapanırsa sunucu kuyruğu korunur. Durum ekranı dakikada bir yenilenir.</p><p>Toplam kaynak dosya adedi bilinmediği için genel yüzde gösterilmez. Klasör ve aşama bilgileri son kayıt noktasına aittir.</p></details>
     </section>:null}
    {row.last_error?<div className="storage-notice bad" role="alert">{/overload|too many resources|CPU time limit|D1_RESOURCE_LIMIT/i.test(row.last_error)?`Veritabanı kaynak sınırı aşıldı. Mevcut indeks ve devam konumu korunuyor.${String(row.last_error).match(/\[(PREFLIGHT|PAGE_FETCH|PAGE_CHECKPOINT|FILE_INDEX|MODEL_RELATION|MODEL_RECOVERY|FINAL_CHECKPOINT)\]/)?.[1]? " Aşama: "+String(row.last_error).match(/\[(PREFLIGHT|PAGE_FETCH|PAGE_CHECKPOINT|FILE_INDEX|MODEL_RELATION|MODEL_RECOVERY|FINAL_CHECKPOINT)\]/)[1]:""}`:"Dosya servisi işlemi başarısız. Senkronizasyon sağlığı doğrulanmalı."}</div>:null}
    <div className="storage-service-actions">{cloud?<><button disabled={loading||!row.isActive} type="button" onClick={()=>{if(sync.state==="COMPLETED"&&!meta.cloudNeedsFullRescan&&!window.confirm("Tüm Drive klasörlerini yeniden taramak büyük bir işlemdir. Normalde KY ERP yalnız değişiklikleri kontrol eder ve bütün bilgisayarlar ortak indeksi kullanır. Tam taramayı yine de başlatmak istiyor musunuz?"))return;onSync(row)}}>{["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(row.provider_type)?(meta.cloudSyncCursor?"Hızlı Taramaya Devam Et":meta.cloudSyncProgress?.state==="COMPLETED"?"↻ Tam Yeniden Tara":"↻ Taramayı Başlat"):"↻ Şimdi Senkronize Et"}</button><details className="ky-management-details ky-management-danger"><summary>Bağlantı işlemleri</summary><button disabled={loading} type="button" onClick={()=>onDisconnect(row)}>Bağlantıyı Kes</button></details></>:<span className="storage-muted">Agent bağlantısı · yerel cihazdan izlenir</span>}</div>
@@ -203,29 +204,30 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
   const valid=()=>scanRun.current===run&&activeSlugRef.current===slug;
   const delay=ms=>new Promise(resolve=>window.setTimeout(resolve,ms));
   const central=["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(row.provider_type);
-  let steps=0,files=0,folders=0,done=false,busyCount=0,totalFiles=null,resumeOnly=!!row.metadata?.cloudSyncCursor;
+  let steps=0,files=0,folders=0,done=false,totalFiles=null,resumeOnly=!!row.metadata?.cloudSyncCursor;
   const update=state=>{if(valid())setScanSession({id:row.id,steps,files,folders,state})};
   try{
    update("İlk adım başlatılıyor");
    // One request at a time, with a D1 resource-window cooldown. Never retry an uncertain write.
-   while(!run.stop&&valid()&&document.visibilityState!=="hidden"&&steps<60){
+   while(!run.stop&&valid()&&document.visibilityState!=="hidden"){
     update("Tarama adımı çalışıyor");
     const r=await apiPost(`/file-hub/cloud/connections/${row.id}/sync`,{mainCompanySlug:slug,resumeOnly}),d=r?.data||{};
     if(!valid()||run.stop)break;
     if(Number.isFinite(d.totalFiles))totalFiles=d.totalFiles;
-    if(d.busy){busyCount++;if(busyCount>=3){update("Diğer tarama çalışıyor");break;}}
-    else{busyCount=0;steps++;files+=Number(d.files||0);folders+=Number(d.folders||0);}
+    if(d.busy){update("Ortak tarama kilidi bekleniyor");}
+    else{steps++;files+=Number(d.files||0);folders+=Number(d.folders||0);}
     if(central){
       const status=await apiGet(`/file-hub/cloud/connections/${row.id}/status`,{mainCompanySlug:slug},{forceFresh:true});const v=status?.data;
       if(!valid()||run.stop)break;
       if(!v?.sync)throw Error("Canlı adım sonucu doğrulanamadı.");
       setConnections(old=>old.map(x=>x.id!==row.id?x:{...x,connection_status:v.connectionStatus,last_error:v.lastError,last_sync_at:v.lastSyncAt,metadata:{...x.metadata,cloudSyncProgress:v.sync,cloudSyncCursor:v.sync.inProgress?(x.metadata?.cloudSyncCursor||{queue:[]}):null}}));
       if(v.connectionStatus==="ERROR")throw Error("Tarama hatası kaydedildi. Devam konumu korunuyor.");
+      if(v.sync.state==="COMPLETED"&&!v.sync.inProgress){done=true;break;}
     }
     if(!central||d.completed===true||(!d.inProgress&&!d.busy)){done=d.completed===true;break;}
     resumeOnly=true;update("D1 yük penceresi bekleniyor (10 sn)");await delay(10000);
    }
-   if(valid())setMessage(`${row.name}: bu oturumda ${files} dosya / ${folders} klasör.${totalFiles==null?"":` Toplam indeks: ${totalFiles.toLocaleString("tr-TR")} dosya.`} ${done?"Tam tarama doğrulandı.":"Devam konumu korunuyor; otomatik tarama devam edebilir."}`);
+   if(valid())setMessage(`${row.name}: bu oturumda ${files} dosya / ${folders} klasör.${totalFiles==null?"":` Toplam indeks: ${totalFiles.toLocaleString("tr-TR")} dosya.`} ${done?"Tam tarama doğrulandı.":"Devam konumu korundu. Sunucu, kalan ilk indeks kuyruğunu otomatik sürdürecek."}`);
   }catch(e){if(valid())setError(e?.message||"Tarama adımı doğrulanamadı; tekrar başlatılmadı.")}
   finally{if(scanRun.current===run){scanRun.current=null;if(activeSlugRef.current===slug){setScanSession(null);setLoading(false);await refresh()}}}
  }
@@ -381,7 +383,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
   <div className="storage-notice storage-hint">Alternatif servisler: <strong>Dropbox</strong> (API altyapısı hazır; OAuth ayarları tanımlanana kadar kullanılamaz), <strong>SharePoint</strong>, <strong>Yerel Klasör</strong> ve <strong>NAS</strong>. + Başka Servis Ekle ile mevcut API bağlantısı üzerinden eklenir.</div>
 </div></details>
  </section>:null}
- {tab==="mail"?<AdminMailConnectionsV2 activeMainCompany={activeMainCompany} openModule={(module,options={})=>window.location.assign(`/${module}/${options.tabKey||"mail-gelen"}`)}/>:null}
+ {tab==="mail"?<AdminMailConnectionsV2 activeMainCompany={activeMainCompany} embedded openModule={(module,options={})=>window.location.assign(`/${module}/${options.tabKey||"mail-gelen"}`)}/>:null}
  {tab==="bindings"?<div className="storage-binding-layout">
   <section className="storage-card-v2">
    <h3>Bölüm → Dosya Türü → Depolama</h3><p>Önce bölüm ve dosya türünü seçin. Mevcut atamayı değiştirmek için sağdaki kayda tıklayın.</p>

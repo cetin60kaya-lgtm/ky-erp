@@ -10,7 +10,7 @@ export default function DepolamaPage({ activeTab, activeMainCompany, openModule 
   }
 
   if (activeTab === "depolama-mail") {
-    return <div className="ky-management-page"><ManagementWorkspaceHeader area="Bağlantılar" title="E-posta Hesapları" description="Firma posta kutuları, sağlayıcılar ve onaylar" company={company} openModule={openModule}/><AdminMailConnections key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} activeMainCompany={activeMainCompany} openModule={openModule}/></div>;
+    return <div className="ky-management-page"><ManagementWorkspaceHeader area="Bağlantılar" title="E-posta Hesapları" description="Firma posta kutuları, sağlayıcılar ve onaylar" company={company} openModule={openModule}/><AdminMailConnections key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} activeMainCompany={activeMainCompany} embedded openModule={openModule}/></div>;
   }
 
   return (
