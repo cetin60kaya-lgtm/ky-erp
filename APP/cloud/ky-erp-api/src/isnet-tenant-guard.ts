@@ -1,7 +1,7 @@
 import type { Context, Next } from "hono";
 import { getAuthenticatedUser } from "./auth-cloud";
 import { accountingAccess } from "./accounting-access-policy";
-import {isOfficeHeartbeatRequest} from "./isnet-office-routes";
+import {isOfficeNativeRequest} from "./isnet-office-routes";
 type AppEnv = { Bindings: Cloudflare.Env; Variables: { requestId: string } };
 type Row = Record<string, any>;
 const text = (value: unknown) => value == null ? "" : String(value).trim();
@@ -37,7 +37,7 @@ async function requestedTenant(c: Context<AppEnv>) {
  return exactIsnetTenant(values);
 }
 export async function enforceIsnetTenant(c: Context<AppEnv>, next: Next) {
- if(c.req.method==="OPTIONS"||isOfficeHeartbeatRequest(c.req.path,c.req.method))return next();
+ if(c.req.method==="OPTIONS"||isOfficeNativeRequest(c.req.path,c.req.method))return next();
  const current=await getAuthenticatedUser(c);
  if(!current)return c.json({ok:false,error:{code:"UNAUTHORIZED",message:"İşNet işlemi için geçerli oturum zorunludur."}},401);
  if(!accountingAccess(current,c.req.method,c.req.path))return c.json({ok:false,error:{code:"ACCOUNTING_FORBIDDEN",message:"İşNet işlemi için muhasebe yetkisi gerekli."}},403);

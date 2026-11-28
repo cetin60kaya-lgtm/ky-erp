@@ -2,6 +2,7 @@ import {useEffect,useState} from "react";
 import {canonicalCompanySlug} from "../../../utils/companyIdentity";
 import {getCompanyEBelgeAdapters} from "../../../services/eBelgeAdapterApi";
 import EBelgeIsnetPortalSync from "./EBelgeIsnetPortalSync";
+import IsnetOfficeReadWorkspace from "./IsnetOfficeReadWorkspace";
 import IsnetOfficeStatus from "./IsnetOfficeStatus";
 import "./eBelgeOperator.css";
 export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
@@ -22,11 +23,10 @@ export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
    <button type="button" onClick={()=>{setData(null);setError("");setShow(false);setRetry(v=>v+1)}}>Yenile</button>
   </div>
   {error?<p role="alert">{error}</p>:!scoped?<p role="status">Firma bağlantıları okunuyor…</p>:<div>
-   {(scoped.companyAdapters||[]).filter(x=>x.selected).map(x=><p key={x.key}><strong>{scoped.systemCatalog?.find(a=>a.key===x.key)?.label||x.key}</strong> · {x.enabled!==true?"Pasif":x.key==="ISNET"?"Yerel servis kontrolü gerekli":x.key==="MANUAL"?"Dosya yükleme":"Belge aktarım servisi henüz doğrulanmadı"}</p>)}
-   {isnet&&<><p>Yerel İşNet oturumu KYERP firma seçiminden bağımsızdır. Aktarım öncesinde aynı firmanın yetkili portal hesabını ve arşivini doğrulayın.</p>
-   <button type="button" onClick={()=>setShow(v=>!v)}>{show?"İşNet Aktarım Panelini Kapat":"İşNet Aktarım Panelini Aç"}</button></>}
+   {(scoped.companyAdapters||[]).filter(x=>x.selected).map(x=><p key={x.key}><strong>{scoped.systemCatalog?.find(a=>a.key===x.key)?.label||x.key}</strong> · {x.enabled!==true?"Pasif":x.key==="ISNET"?"Canlı ofis bağlantısı":x.key==="MANUAL"?"Dosya yükleme":"Belge aktarım servisi henüz doğrulanmadı"}</p>)}
+   {isnet&&<details open={show} onToggle={e=>setShow(e.currentTarget.open)}><summary>Eski portal aktarımı (alternatif)</summary><p>Bu yol ayrı portal oturumu gerektirir. Günlük canlı sorguyu aşağıdan başlatın.</p></details>}
   </div>}
-  {isnet&&<IsnetOfficeStatus key={slug} slug={slug} compact/>}
+  {isnet&&<><IsnetOfficeStatus key={slug} slug={slug} compact/><IsnetOfficeReadWorkspace key={"read:"+slug} slug={slug}/></>}
   {isnet&&show&&<EBelgeIsnetPortalSync key={slug} activeMainCompany={activeMainCompany} openModule={openModule} enabled={true}/>}
  </section>;
 }

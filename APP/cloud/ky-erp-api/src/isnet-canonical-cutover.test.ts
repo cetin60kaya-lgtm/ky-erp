@@ -14,12 +14,15 @@ test("old invoice and despatch writes blocked; historical reads and intake prese
  for(const path of ["/api/isnet/local/intake","/api/isnet/settings/test","/api/isnet/full-sync","/api/isnet/office/heartbeat","/api/isnet/read-only-xml-download","/api/e-belge/operator-drafts"])assert.equal(retiredIsnetMutation(path,"POST"),false,path);
  assert.match(main,/retiredIsnetMutation\(c.req.path,c.req.method\)\?c.json\(retiredIsnetResponse,410\)/);
 });
-test("native office heartbeat is exempt only at its exact route; independent machine auth",()=>{
- assert.match(main,/isOfficeHeartbeatRequest\(path, c.req.method\)/);
- assert.match(guard,/isOfficeHeartbeatRequest\(c.req.path,c.req.method\)/);
- assert.match(activation,/isOfficeHeartbeatRequest\(path,method\)/);
+test("native office heartbeat and original intake are exempt only at their exact routes; independent machine auth",()=>{
+ assert.match(main,/isOfficeNativeRequest\(path, c.req.method\)/);
+ assert.match(guard,/isOfficeNativeRequest\(c.req.path,c.req.method\)/);
+ assert.match(activation,/isOfficeNativeRequest\(path,method\)/);
  const routes=readFileSync(new URL("./isnet-office-routes.ts",import.meta.url),"utf8");
  assert.match(routes,/path===OFFICE_HEARTBEAT_PATH&&method==="POST"/);
+ assert.match(routes,/path===OFFICE_ARCHIVE_PATH&&method==="POST"/);
+ assert.match(routes,/lease\.instanceId!==d\.instanceId/);
+ assert.match(routes,/authorizeOfficeDevice\(officeRegistry/);
  assert.match(routes,/enabled.selected.ISNET!==true\|\|enabled.enabled.ISNET!==true/);
  assert.match(routes,/providerAuthorized:false,sendEnabled:false/);
 });
