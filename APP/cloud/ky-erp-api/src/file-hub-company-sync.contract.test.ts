@@ -41,5 +41,7 @@ test("Bulut hesap islemleri ve tarama gosterimi secili ana firma bazinda",()=>{
   assert.match(ui,/Hesabı Kaldır/);
   assert.match(ui,/dakikada bir yenilenir/);
   assert.match(ui,/setInterval\(poll,60000\)/);
-  assert.match(ui,/Yönetilen ana firma/);
+  assert.match(ui,/ManagementWorkspaceHeader area="Bağlantılar"/);
+  assert.match(ui,/company=\{companyName\}/);
+  assert.match(ui,/verifiedScope!==slug\|\|!slug/);
 });

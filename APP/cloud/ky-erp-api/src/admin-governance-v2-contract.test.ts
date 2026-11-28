@@ -25,7 +25,7 @@ test("management console contains the compact decision center", () => {
   const overview = read("../../../app/ky-erp-frontend/src/pages/admin/AdminSystemOverview.jsx");
   const page = read("../../../app/ky-erp-frontend/src/pages/modules/AdminPage.jsx");
   assert.match(overview, /<AdminLoginApprovals compact \/>/);
-  assert.match(overview, /KY ERP Süper Yönetim Konsolu/);
+  assert.match(overview, /Platform sağlık ve karar merkezi/);
   assert.doesNotMatch(page, /<AdminLoginApprovals \/>/);
 });
 
