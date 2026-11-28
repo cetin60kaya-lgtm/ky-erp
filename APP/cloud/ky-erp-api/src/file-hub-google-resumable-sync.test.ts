@@ -29,7 +29,7 @@ test("Senkronizasyon kilidi tenant kapsamında ve tek bağlantıya özeldir", ()
   assert.match(cloud, /main_company_slug=\? AND COALESCE\(metadata/);
   assert.match(cloud, /json_extract\(metadata,'\$\.cloudSyncLeaseId'\)/);
   assert.match(cloud, /last_sync_at=CASE WHEN \?=1/);
-  assert.match(cloud, /runGoogleSyncBatch\(c, slug, connectionId, 3, true\)/);
+  assert.match(cloud, /runGoogleSyncBatch\(c, slug, connectionId, 1, true\)/);
   assert.match(cloud, /runGoogleSyncBatch\(c, gate\.slug, connectionId, 1, false\)/);
 });
 
