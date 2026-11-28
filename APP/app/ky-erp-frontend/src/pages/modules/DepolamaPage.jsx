@@ -8,7 +8,7 @@ export default function DepolamaPage({ activeTab, activeMainCompany, openModule 
   }
 
   if (activeTab === "depolama-mail") {
-    return <AdminMailConnections activeMainCompany={activeMainCompany} openModule={openModule} />;
+    return <AdminMailConnections key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} activeMainCompany={activeMainCompany} openModule={openModule} />;
   }
 
   return (

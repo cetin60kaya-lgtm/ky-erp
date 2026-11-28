@@ -18,7 +18,7 @@ import AdminReleaseHistory from "./AdminReleaseHistory";
 import "./AdminPlatformHub.css";
 
 const ICONS={dashboard:LayoutDashboard,users:Users,building:Building2,"user-cog":UserRoundCog,"credit-card":CreditCard,shield:ShieldCheck,key:KeyRound,settings:Settings2,database:Database,git:GitCompareArrows,archive:Archive,package:Package,history:History};
-function PanelContent({route,company,owner}){
+function PanelContent({route,company,owner,openModule}){
   if(!owner)return <AdminCompanyOverview activeMainCompany={company}/>;
   switch(route){
     case "admin-yonetim-ozeti":return <AdminSystemOverview activeMainCompany={company}/>;
@@ -29,7 +29,8 @@ function PanelContent({route,company,owner}){
     case "admin-guvenlik":return <SecurityCenterPanel/>;
     case "uygulama-sahibi":return <AdminOwnerSecurity/>;
     case "admin-sistem":return <AdminApplicationSettings/>;
-    case "dosya-klasor-yonetimi":return <AdminStorageCenter activeMainCompany={company}/>;
+    case "dosya-klasor-yonetimi":return <section className="aph-link-card"><h3>Bağlantılar · Dosya Servisleri</h3><p>Firma dosya servisleri ve bölüm atamaları tek merkezden yönetilir.</p><button type="button" onClick={()=>openModule?.("depolama",{tabKey:"depolama-kaynaklar"})}>Dosya Servislerini Aç</button></section>;
+    case "depolama-klasor-duzeni":return <AdminStorageCenter key={company?.slug||"no-company"} activeMainCompany={company} activeTab="depolama-klasor-duzeni"/>;
     case "eslestirmeler":return <AdminMappings activeMainCompany={company}/>;
     case "yedekleme-loglar":return <AdminBackupLogs activeMainCompany={company}/>;
     case "surum-merkezi":return <AdminBuildCenter/>;
@@ -64,6 +65,6 @@ export default function AdminPlatformHub({activeTab,activeMainCompany,openModule
         })}
       </nav>
     </section>
-    <main className="aph-content" key={panel.route}><PanelContent route={panel.route} company={activeMainCompany} owner={owner}/></main>
+    <main className="aph-content" key={panel.route}><PanelContent route={panel.route} company={activeMainCompany} owner={owner} openModule={openModule}/></main>
   </div>;
 }

@@ -64,6 +64,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
   const canInspectRecords = ["SUPER_ADMIN", "ADMIN"].includes(upper(user?.role));
   const [accounts, setAccounts] = useState([]);
   const [loadedSlug, setLoadedSlug] = useState("");
+  const [loadHealth,setLoadHealth]=useState({});
   const loadSequence = useRef(0);
   const [approvals, setApprovals] = useState([]);
   const [providers, setProviders] = useState([]);
@@ -98,7 +99,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
       setNotice("Hata: E-posta hesaplarını görmek için aktif firma seçin.");
       return;
     }
-    setLoading(true);
+    setLoading(true);setLoadHealth({});
     const result = await Promise.allSettled([
       listMailAccounts(slug), listMailApprovals(slug), getMailProviders(),
     ]);
@@ -108,6 +109,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     setApprovals(result[1].status === "fulfilled" && Array.isArray(result[1].value) ? result[1].value : []);
     setProviders(result[2].status === "fulfilled" && Array.isArray(result[2].value?.providers) ? result[2].value.providers : []);
     setNotice(errors.length ? "Hata: Firma posta kutularının bazı bilgileri alınamadı. Eksik sonuçları tam bağlantı olarak kabul etmeyin." : "");
+    setLoadHealth({accounts:result[0].status==="fulfilled"&&Array.isArray(result[0].value),approvals:result[1].status==="fulfilled"&&Array.isArray(result[1].value),providers:result[2].status==="fulfilled"&&Array.isArray(result[2].value?.providers)});
     setLoadedSlug(slug);
     setLoading(false);
   }, [slug]);
@@ -284,7 +286,7 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     <section className="mail-admin-hero">
       <div className="mail-admin-hero-copy">
         <small>AYARLAR & SİSTEM / BAĞLANTILAR / E-POSTA HESAPLARI</small>
-        <h2>E-Posta Yönetim Merkezi</h2>
+        <h2>E-posta Servisleri</h2>
         <p><strong>{companyName}</strong> için hesap ekleme, bölüm atama, onay, OAuth ve klasör senkronizasyonu tek ekrandan yönetilir. Her firmanın hesapları birbirinden ayrıdır.</p>
         <div className="mail-admin-company"><span aria-hidden="true">▣</span> Aktif firma: <strong>{companyName}</strong><span className="mail-admin-company-hint">Firma değişimini KY ERP firma seçiminden yapın.</span></div>
       </div>
@@ -298,15 +300,15 @@ export default function AdminMailConnectionsV2({ activeMainCompany, openModule }
     {notice && <div role="status" className={"mail-admin-notice " + (notice.startsWith("Hata:") ? "bad" : "ok")}>{notice}</div>}
     {syncBatchRunning && <button type="button" className="secondary" onClick={() => { syncStopRequested.current = true; setNotice("Durdurma istendi. Mevcut küçük senkronizasyon adımı bittikten sonra yeni istek yapılmayacak."); }}>Senkronizasyonu Durdur</button>}
     <div className="mail-admin-stats">
-      <div><span>Bu firmanın hesapları</span><strong>{counts.total}</strong><small>Kişisel, ortak ve bölüm</small></div>
-      <div><span>OAuth doğrulanan</span><strong>{counts.connected}</strong><small>Bağlantı kanıtı bulunan</small></div>
-      <div><span>Tam kullanıma hazır</span><strong>{counts.ready}</strong><small>Onay + OAuth + tam senkron</small></div>
-      <div><span>Onay bekleyen</span><strong>{counts.pending}</strong><small>Firma yetkilisi kararı</small></div>
+      <div><span>Bu firmanın hesapları</span><strong>{loadedSlug===slug&&loadHealth.accounts?counts.total:"—"}</strong><small>Kişisel, ortak ve bölüm</small></div>
+      <div><span>OAuth doğrulanan</span><strong>{loadedSlug===slug&&loadHealth.accounts?counts.connected:"—"}</strong><small>Bağlantı kanıtı bulunan</small></div>
+      <div><span>Tam kullanıma hazır</span><strong>{loadedSlug===slug&&loadHealth.accounts&&loadHealth.providers?counts.ready:"—"}</strong><small>Onay + OAuth + tam senkron</small></div>
+      <div><span>Onay bekleyen</span><strong>{loadedSlug===slug&&loadHealth.approvals?counts.pending:"—"}</strong><small>Firma yetkilisi kararı</small></div>
     </div>
     <nav className="mail-admin-tabs" aria-label="E-posta hesap yönetimi">
-      <button type="button" className={tab === "accounts" ? "selected" : ""} onClick={() => setTab("accounts")}>Posta Kutuları <span>{counts.total}</span></button>
+      <button type="button" className={tab === "accounts" ? "selected" : ""} onClick={() => setTab("accounts")}>Posta Kutuları <span>{loadedSlug===slug&&loadHealth.accounts?counts.total:"—"}</span></button>
       {canManage && <button type="button" className={tab === "add" ? "selected" : ""} onClick={() => setTab("add")}>+ Hesap Ekle</button>}
-      <button type="button" className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Onaylar <span>{counts.pending}</span></button>
+      <button type="button" className={tab === "approvals" ? "selected" : ""} onClick={() => setTab("approvals")}>Onaylar <span>{loadedSlug===slug&&loadHealth.approvals?counts.pending:"—"}</span></button>
       <button type="button" className={tab === "providers" ? "selected" : ""} onClick={() => setTab("providers")}>Sağlayıcı Durumu</button>
     </nav>
     {tab === "accounts" && <section className="mail-admin-card">

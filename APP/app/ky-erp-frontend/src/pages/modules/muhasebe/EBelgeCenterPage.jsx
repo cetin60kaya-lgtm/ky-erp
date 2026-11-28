@@ -951,6 +951,7 @@ export default function EBelgeCenterPage({ activeMainCompany, initialView = "ove
           <button type="button" onClick={()=>openEBelgeTab("dosya-kutusu")}>Dosya Kutusu</button>
           <button type="button" onClick={()=>openEBelgeTab("ai-center")}>Akıllı İşlem Merkezi</button>
         </>:<>
+          {view==="archive"&&<button type="button" onClick={()=>openModule?.("depolama",{tabKey:"depolama-atamalar"})}>Arşiv Bağlantısı</button>}
           {showPool&&<button type="button" onClick={()=>openEBelgeTab("belgeleri-al")}><RefreshCw size={17}/> Belge Aktarımı</button>}
           {["outgoing-invoices","outgoing-dispatches"].includes(view)&&<button type="button" className="eb-primary" onClick={()=>openModule?.("e-belge",{tabKey:view==="outgoing-invoices"?"fatura-taslaklari":"irsaliye-taslaklari",actionContext:{createDraft:true}})}>{view==="outgoing-invoices"?"+ Yeni Fatura":"+ Yeni İrsaliye"}</button>}
           {!showPool&&["pool","issues"].includes(view)&&<button type="button" onClick={runVerifiedCompanyRecovery} disabled={companyBatchBusy||busy} title="Yalnız asıl XML ile doğrulanan carileri eşleştir; kesin muhasebeleştirme yapma">{companyBatchBusy?<LoaderCircle className="eb-spin" size={17}/>:<Link2 size={17}/>} XML'den Carileri Eşleştir</button>}
