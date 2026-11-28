@@ -19,7 +19,7 @@ test("Google Drive büyük klasör taraması sayfalı ve D1 checkpoint'li", () =
 
 test("Büyük klasör ağaçlarında konum kökte sıfırlanmaz, alt klasörlere öncelik verilir", () => {
   assert.match(cloud, /const resumed = meta\.cloudSyncCursor/);
-  assert.match(cloud, /const discoveredFolders: Row\[\] = \[\]/);
+  assert.match(cloud, /const discoveredFolders: Row\[\] = pending\.discoveredFolders/);
   assert.match(cloud, /cursor\.queue\.unshift\(\.\.\.discoveredFolders\)/);
   assert.match(cloud, /if \(page\.nextPageToken\) folder\.pageToken = page\.nextPageToken/);
 });
