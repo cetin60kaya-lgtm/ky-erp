@@ -288,7 +288,7 @@ test("Gmail historical and incremental mail sync are scheduled without new crede
   const entry=read("./main-entry-security.ts");
   const wrangler=read("../wrangler.jsonc");
   assert.match(entry,/runGmailMailScheduledSync\(env\)/);
-  assert.match(entry,/ctx\.waitUntil\(runGmailMailScheduledSync/);
+  assert.match(entry,/await runGmailMailScheduledSync\(env\)\.catch/);
   assert.match(wrangler,/"crons": \["\*\/5 \* \* \* \*"\]/);
   assert.match(gmail,/export async function runGmailMailScheduledSync/);
   assert.match(gmail,/syncGmailAccountStep\(c,tenant,account/);

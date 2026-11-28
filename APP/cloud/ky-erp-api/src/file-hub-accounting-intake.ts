@@ -6,6 +6,14 @@ import { ingestIndexedFileHubEBelge } from "./e-belge-center-cloud.ts";
 type Row=Record<string,any>;
 const txt=(v:unknown)=>v==null?"":String(v).trim();
 const SELECT=`
+WITH linked_xml_paths AS MATERIALIZED (
+ SELECT DISTINCT lx.main_company_slug,lx.storage_connection_id,
+ LOWER(REPLACE(lx.relative_path,char(92),'/')) normalized_path
+ FROM file_hub_relations rx
+ JOIN accounting_documents ad ON ad.id=rx.entity_id AND ad.main_company_slug=rx.main_company_slug AND ad.deleted_at IS NULL
+ JOIN file_hub_locations lx ON lx.file_asset_id=rx.file_asset_id AND lx.main_company_slug=rx.main_company_slug AND lx.is_available=1
+ WHERE rx.entity_type='DOCUMENT' AND rx.relation_type='XML'
+)
  SELECT DISTINCT a.id,a.main_company_slug,a.metadata
  FROM file_hub_assets a
  JOIN file_hub_locations l ON l.file_asset_id=a.id
@@ -28,17 +36,10 @@ const SELECT=`
    -- the XML of the same provider path is linked to an actual document.
    -- This prevents OCR from creating a duplicate if the PDF syncs first.
    AND (UPPER(a.extension)='XML' OR EXISTS (
-     SELECT 1 FROM file_hub_locations lx
-     JOIN file_hub_relations rx ON rx.file_asset_id=lx.file_asset_id
-       AND rx.main_company_slug=lx.main_company_slug AND rx.entity_type='DOCUMENT'
-       AND rx.relation_type='XML'
-     JOIN accounting_documents ad ON ad.id=rx.entity_id
-       AND ad.main_company_slug=rx.main_company_slug AND ad.deleted_at IS NULL
+     SELECT 1 FROM linked_xml_paths lx
      WHERE lx.main_company_slug=l.main_company_slug
        AND lx.storage_connection_id=l.storage_connection_id
-       AND lx.is_available=1
-       AND LOWER(REPLACE(lx.relative_path,'\\','/'))=
-         LOWER(SUBSTR(REPLACE(l.relative_path,'\\','/'),1,LENGTH(REPLACE(l.relative_path,'\\','/'))-4)||'.xml')
+       AND lx.normalized_path=LOWER(SUBSTR(REPLACE(l.relative_path,char(92),'/'),1,LENGTH(REPLACE(l.relative_path,char(92),'/'))-4)||'.xml')
    ))
    AND b.read_enabled=1 AND b.sync_enabled=1
    AND ((b.module_code IN ('E_BELGE','EBELGE') AND b.purpose_code='E_DOCUMENT')
