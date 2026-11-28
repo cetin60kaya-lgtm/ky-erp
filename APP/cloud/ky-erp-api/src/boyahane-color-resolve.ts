@@ -106,7 +106,9 @@ export function registerBoyahaneColorResolveRoutes(app: Hono<AppEnv>) {
     const pantoneKey = normalize(body.pantone);
     const nameKey = normalize(body.colorName);
     const paintKey = normalize(body.paintType || body.dyeType);
-    const jobColors = await storeList(c, JOB_COLOR_SCOPE, slug);
+    // Explicit formulation targets must never inherit a different job’s reference or HEX.
+    const explicitFormulation = body.formulationExplicit === true;
+    const jobColors = explicitFormulation ? [] : await storeList(c, JOB_COLOR_SCOPE, slug);
     const exactContext = jobColors.find((row) =>
       (!pantoneKey || normalize(row.pantone) === pantoneKey) &&
       (!nameKey || normalize(row.colorName) === nameKey) &&
@@ -122,6 +124,9 @@ export function registerBoyahaneColorResolveRoutes(app: Hono<AppEnv>) {
     const colorName = text(merged.colorName);
     const paintType = text(merged.paintType || merged.dyeType || "SUBAZLI");
     const colorHex = text(context?.colorHex || merged.colorHex);
+    if (explicitFormulation && !/^#[0-9a-f]{6}$/i.test(colorHex)) {
+      return c.json({ ok: false, success: false, error: { code: "COLOR_HEX_REQUIRED", message: "Formülasyon hedefi geçerli HEX olmalıdır." } }, 400);
+    }
     const realPantone = sourceType === "REFERENCE"
       ? text(context?.basePantone || context?.pantone || merged.basePantone || merged.pantone)
       : text(merged.pantone);
