@@ -37,6 +37,7 @@ export default function BoyahanePage({
   moduleActionContext,
 }) {
   const tab = normalizeTab(activeTab);
+  const tenantKey=String(activeMainCompany?.slug||activeMainCompany?.id||"");
 
   const page = tab === "receteler" ? (
     <BoyahaneWorkPageV5
@@ -69,7 +70,7 @@ export default function BoyahanePage({
 
   return (
     <div className="clean-workflow-page bh-page">
-      <section className="cw-screen bh-module-shell">{page}</section>
+      <section className="cw-screen bh-module-shell" key={tenantKey+":"+tab}>{page}</section>
     </div>
   );
 }

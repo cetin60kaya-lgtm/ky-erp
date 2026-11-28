@@ -16,3 +16,5 @@
 .admpro-decision-center .ala-page.is-compact .ala-head{display:none}
 @media(max-width:900px){.admpro-company-profile-stats,.admpro-company-people{grid-template-columns:1fr 1fr}}
 @media(max-width:620px){.admpro-company-profile-stats,.admpro-company-people{grid-template-columns:1fr}}
+
+.admpro-fiscal-head,.admpro-fiscal-status{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:12px;border:1px solid #dbe4ee;border-radius:8px;background:var(--surface,#fff)}.admpro-fiscal-head{display:grid;gap:4px}.admpro-fiscal-status>div{flex:1;display:grid;gap:4px}.admpro-fiscal-head small,.admpro-fiscal-status small{color:#536981;line-height:1.5}.admpro-fiscal-status button{min-height:40px}.admpro-form-grid input,.admpro-form-grid select{min-height:38px}.admpro-form-grid textarea{min-height:64px}.admpro-form-grid input[readonly]{background:#edf2f7;color:#536981}

@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   getBoyahaneReports,
   listBoyahaneJobs,
@@ -13,7 +13,7 @@ import ModelThumbnail from "./ModelThumbnail";
 
 function todayKey(value = new Date()) {
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? "" : date.toISOString().slice(0, 10);
+  return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("sv-SE",{timeZone:"Europe/Istanbul",year:"numeric",month:"2-digit",day:"2-digit"}).format(date);
 }
 
 function isSample(job) {
@@ -39,7 +39,7 @@ function timeText(value) {
 function groupToday(rows) {
   const map = new Map();
   rows.forEach((row) => {
-    const key = String(row.jobId || row.modelSnapshot || row.modelName || row.id);
+    const key = String(row.jobId || row.id);
     const current = map.get(key) || {
       id: key,
       jobId: row.jobId,
@@ -73,9 +73,13 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
   const [error, setError] = useState("");
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantAnswer, setAssistantAnswer] = useState("");
+  const [sourceStates,setSourceStates]=useState({});
+  const requestSeq=useRef(0);
+  const verified=key=>sourceStates[key]?.status==="success";
 
   const load = useCallback(async () => {
-    if (!activeMainCompany?.slug) return;
+    if (!activeMainCompany?.slug&&!activeMainCompany?.id){setLoading(false);setError("Ana firma seçin.");return;}
+    const seq=++requestSeq.current;
     setLoading(true);
     setError("");
     try {
@@ -90,6 +94,8 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
           report: { fallback: {}, load: () => getBoyahaneReports(activeMainCompany) },
         },
       });
+      if(seq!==requestSeq.current)return;
+      setSourceStates(result.states);
       if (result.states.jobs.status !== "error") setJobs(safeArray(result.data.jobs));
       if (result.states.productions.status !== "error") setProductions(safeArray(result.data.productions));
       if (result.states.colors.status !== "error") setColors(safeArray(result.data.colors));
@@ -101,13 +107,13 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
         "Bazı Boyahane yardımcı özetleri yenilenemedi; iş listesi kullanılabilir.",
       ));
     } catch (requestError) {
-      setError(requestError?.message || "Boyahane verileri alınamadı.");
+      if(seq===requestSeq.current){setSourceStates({});setError(requestError?.message || "Boyahane verileri alınamadı.");}
     } finally {
-      setLoading(false);
+      if(seq===requestSeq.current)setLoading(false);
     }
-  }, [activeMainCompany?.slug]);
+  }, [activeMainCompany?.slug,activeMainCompany?.id]);
 
-  useEffect(() => { load(); }, [activeMainCompany?.slug]);
+  useEffect(() => { load();return()=>{requestSeq.current+=1}; }, [load]);
   useEffect(() => {
     const timer = window.setInterval(() => setClock(new Date()), 1000);
     return () => window.clearInterval(timer);
@@ -117,16 +123,17 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
     () => jobs.filter((row) => !["COMPLETED", "CANCELLED"].includes(String(row.status).toUpperCase())),
     [jobs],
   );
+  const day=todayKey(clock);
   const todayRows = useMemo(
-    () => productions.filter((row) => todayKey(row.createdAt || row.updatedAt) === todayKey()),
-    [productions],
+    () => productions.filter((row) => todayKey(row.createdAt || row.updatedAt) === day),
+    [productions,day],
   );
   const todayModels = useMemo(() => groupToday(todayRows), [todayRows]);
   const preparedModels = useMemo(() => {
     const map = new Map();
     productions.forEach((row) => {
       if (String(row.jobType || "").toUpperCase() === "SAMPLE") return;
-      const key = row.jobId || row.modelSnapshot || row.modelName || row.id;
+      const key = row.jobId || row.id;
       const current = map.get(key) || {
         id: key,
         jobId: row.jobId,
@@ -147,6 +154,7 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
 
   const rates = summary.exchangeRates || summary.rates || {};
   function rateValue(key) {
+    if(!verified("report"))return "—";
     const raw = rates[key];
     const value = Number(raw?.rate || raw || 0);
     return value > 0
@@ -162,6 +170,8 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
   }
 
   function answerQuestion(type) {
+    const needed=type==="today"?"productions":type==="rf"?"report":"jobs";
+    if(!verified(needed)){setAssistantAnswer("Bu veri kaynağı güncel olarak doğrulanamadı. Önce Yenile ile kontrol edin.");return;}
     if (type === "waiting") {
       const waiting = jobs.filter((row) => {
         const activeColors = safeArray(row.colors).filter((color) => String(color.status).toUpperCase() !== "CANCELLED");
@@ -190,7 +200,7 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
   return (
     <div className="bh-dashboard-compact-page">
       <section className="bh-dashboard-compact-strip">
-        <div><strong>HAKAN EMPRİME BOYAHANE</strong><span>{clock.toLocaleDateString("tr-TR")} · {clock.toLocaleTimeString("tr-TR")}</span></div>
+        <div><strong>{activeMainCompany?.name||activeMainCompany?.title||activeMainCompany?.slug||"KYERP"} · Boyahane</strong><span>{clock.toLocaleDateString("tr-TR",{timeZone:"Europe/Istanbul"})} · {clock.toLocaleTimeString("tr-TR",{timeZone:"Europe/Istanbul"})}</span></div>
         <div className="bh-dashboard-rates">{["USD", "EUR", "GBP"].map((key) => <span key={key}><small>{key}</small><b>{rateValue(key)}</b></span>)}</div>
         <button type="button" className="bh-btn primary" onClick={() => setAssistantOpen(true)}>Boyahane Asistanı</button>
       </section>
@@ -199,17 +209,17 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
       {loading ? <div className="bh-empty compact">Boyahane ana ekranı yükleniyor…</div> : null}
 
       <div className="bh-dashboard-mini-kpis">
-        <article><span>Yapılacak</span><strong>{openJobs.length}</strong></article>
-        <article><span>Hazırlanacak renk</span><strong>{pendingColors}</strong></article>
-        <article><span>Bugün</span><strong>{formatKg(todayKg)}</strong></article>
-        <article><span>İmalat bekleyen</span><strong>{manufacturingWaiting}</strong></article>
-        <article><span>RF</span><strong>{formatKg(summary.rfKg || 0)}</strong></article>
+        <article><span>Yapılacak</span><strong>{verified("jobs")?openJobs.length:"—"}</strong></article>
+        <article><span>Hazırlanacak renk</span><strong>{verified("jobs")?pendingColors:"—"}</strong></article>
+        <article><span>Bugün</span><strong>{verified("productions")?formatKg(todayKg):"—"}</strong></article>
+        <article><span>İmalat bekleyen</span><strong>{verified("jobs")?manufacturingWaiting:"—"}</strong></article>
+        <article><span>RF</span><strong>{verified("report")?formatKg(summary.rfKg || 0):"—"}</strong></article>
       </div>
 
       <section className="bh-dashboard-work-panel">
         <header><div><small>ÖNCELİKLİ</small><h2>Yapılacak İşler</h2></div><button type="button" className="bh-btn mini" onClick={load}>Yenile</button></header>
         <div className="bh-dashboard-work-strip">
-          {openJobs.map((job) => {
+          {(verified("jobs")?openJobs:[]).map((job) => {
             const activeColors = safeArray(job.colors).filter((row) => String(row.status).toUpperCase() !== "CANCELLED");
             const preparedCount = activeColors.filter((row) => String(row.status).toUpperCase() === "COMPLETED").length;
             return (
@@ -219,15 +229,15 @@ export default function BoyahaneDashboardCompactPage({ activeMainCompany, openMo
               </article>
             );
           })}
-          {!openJobs.length && !loading ? <div className="bh-empty compact">Bekleyen iş yok.</div> : null}
+          {!loading&&!verified("jobs")?<div className="bh-empty compact" role="alert">İş listesi doğrulanamadı. Yenile ile tekrar deneyin.</div>:!openJobs.length && !loading ? <div className="bh-empty compact">Bekleyen iş yok.</div> : null}
         </div>
       </section>
 
       <div className="bh-dashboard-lower-grid">
-        <section className="bh-dashboard-small-panel"><header><h2>Bugün Yapılan İşler</h2><span>{todayModels.length}</span></header><div className="bh-dashboard-small-list">{todayModels.slice(0, 8).map((row) => <button type="button" key={row.id} onClick={() => openModule?.("boyahane", { tabKey: "raporlar" })}><ModelThumbnail src={row.imageUrl} alt={row.modelName} /><span><strong>{timeText(row.createdAt)} · {row.modelName}</strong><small>{row.colorCount} renk · {formatKg(row.totalKg)} · {row.actor}</small></span></button>)}{!todayModels.length ? <div className="bh-empty compact">Bugün kayıt yok.</div> : null}</div></section>
-        <section className="bh-dashboard-small-panel"><header><h2>İmalata Hazırlananlar</h2><span>{preparedModels.length}</span></header><div className="bh-dashboard-small-list">{preparedModels.slice(0, 8).map((row) => <button type="button" key={row.id} onClick={() => openModule?.("boyahane", { tabKey: "uretim-gecmisi", actionContext: { boyahaneJobId: row.jobId || row.id } })}><ModelThumbnail src={row.imageUrl} alt={row.modelName} /><span><strong>{row.modelName}</strong><small>{row.colors.size} renk · {formatKg(row.totalKg)} · {waitText(row.createdAt)}</small></span></button>)}{!preparedModels.length ? <div className="bh-empty compact">Hazırlanan model yok.</div> : null}</div></section>
-        <section className="bh-dashboard-small-panel"><header><h2>Son Kayıtlı Renkler</h2><button type="button" onClick={() => openModule?.("boyahane", { tabKey: "kayitli-renkler" })}>Tümü</button></header><div className="bh-dashboard-color-strip">{colors.slice(0, 10).map((row) => <button key={row.id} type="button" onClick={() => openModule?.("boyahane", { tabKey: "kayitli-renkler", actionContext: { registeredColorId: row.id } })}><i style={{ background: row.colorHex || "#cbd5e1" }} /><strong>{row.pantone || row.colorName || "Renk"}</strong><small>{safeArray(row.paintTypes).join(", ") || row.dyeType || "-"}</small></button>)}</div></section>
-        <section className="bh-dashboard-small-panel"><header><h2>Son İşlem Logları</h2><button type="button" onClick={() => openModule?.("boyahane", { tabKey: "raporlar" })}>Tümü</button></header><div className="bh-dashboard-log-list">{logs.slice(0, 8).map((row) => <article key={row.id}><time>{formatDate(row.createdAt)}</time><span><strong>{row.actor || "KY ERP"}</strong><small>{row.description || row.actionType || row.action}</small></span></article>)}</div></section>
+        <section className="bh-dashboard-small-panel"><header><h2>Bugün Yapılan İşler</h2><span>{verified("productions")?todayModels.length:"—"}</span></header><div className="bh-dashboard-small-list">{(verified("productions")?todayModels:[]).slice(0, 8).map((row) => <button type="button" key={row.id} onClick={() => openModule?.("boyahane", { tabKey: "raporlar" })}><ModelThumbnail src={row.imageUrl} alt={row.modelName} /><span><strong>{timeText(row.createdAt)} · {row.modelName}</strong><small>{row.colorCount} renk · {formatKg(row.totalKg)} · {row.actor}</small></span></button>)}{!verified("productions")?<div className="bh-empty compact">Üretim verisi doğrulanmadı.</div>:!todayModels.length ? <div className="bh-empty compact">Bugün kayıt yok.</div> : null}</div></section>
+        <section className="bh-dashboard-small-panel"><header><h2>İmalata Hazırlananlar</h2><span>{verified("productions")?preparedModels.length:"—"}</span></header><div className="bh-dashboard-small-list">{(verified("productions")?preparedModels:[]).slice(0, 8).map((row) => <button type="button" key={row.id} onClick={() => openModule?.("boyahane", { tabKey: "uretim-gecmisi", actionContext: { boyahaneJobId: row.jobId || row.id } })}><ModelThumbnail src={row.imageUrl} alt={row.modelName} /><span><strong>{row.modelName}</strong><small>{row.colors.size} renk · {formatKg(row.totalKg)} · {waitText(row.createdAt)}</small></span></button>)}{!verified("productions")?<div className="bh-empty compact">Üretim verisi doğrulanmadı.</div>:!preparedModels.length ? <div className="bh-empty compact">Hazırlanan model yok.</div> : null}</div></section>
+        <section className="bh-dashboard-small-panel"><header><h2>Son Kayıtlı Renkler</h2><button type="button" onClick={() => openModule?.("boyahane", { tabKey: "kayitli-renkler" })}>Tümü</button></header><div className="bh-dashboard-color-strip">{(verified("colors")?colors:[]).slice(0, 10).map((row) => <button key={row.id} type="button" onClick={() => openModule?.("boyahane", { tabKey: "kayitli-renkler", actionContext: { registeredColorId: row.id } })}><i style={{ background: row.colorHex || "#cbd5e1" }} /><strong>{row.pantone || row.colorName || "Renk"}</strong><small>{safeArray(row.paintTypes).join(", ") || row.dyeType || "-"}</small></button>)}</div></section>
+        <section className="bh-dashboard-small-panel"><header><h2>Son İşlem Logları</h2><button type="button" onClick={() => openModule?.("boyahane", { tabKey: "raporlar" })}>Tümü</button></header><div className="bh-dashboard-log-list">{(verified("logs")?logs:[]).slice(0, 8).map((row) => <article key={row.id}><time>{formatDate(row.createdAt)}</time><span><strong>{row.actor || "KY ERP"}</strong><small>{row.description || row.actionType || row.action}</small></span></article>)}</div></section>
       </div>
 
       {assistantOpen ? (

@@ -255,7 +255,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
   const [period, setPeriod] = useState("ALL");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
-  const [archiveYear, setArchiveYear] = useState("2026");
+  const [archiveYear, setArchiveYear] = useState(()=>String(new Date().getFullYear()));
   const [page, setPage] = useState(1);
   const [designOpen, setDesignOpen] = useState(false);
   const [smartOpen, setSmartOpen] = useState(false);
@@ -607,17 +607,17 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
             </div></details>
           </> : null}
           {pool === "IRSALIYE" ? <a className="pc2-link-action" href="/e-belge/eslestirmeler"><FileCheck2 size={16}/> İrsaliye Eşleştirme</a> : null}
-          {pool === "FATURA" ? <a className="pc2-link-action" href="/e-belge/giden-belgeler"><FileText size={16}/> Giden Faturalara Git</a> : null}
+          {pool === "FATURA" ? <a className="pc2-link-action" href="/e-belge/giden-faturalar"><FileText size={16}/> Giden Faturalara Git</a> : null}
           {pool === "TAMAMLANAN" ? <a className="pc2-link-action" href="/uretim/uretim-raporlari"><History size={16}/> Üretim Raporlarını Aç</a> : null}
           {pool === "ARSIV" ? <button type="button" onClick={() => setHistoryOpen(true)}><FileSpreadsheet size={16}/> Geçmiş CSV Aktar</button> : null}
         </div>
       </section>
 
-      <section className="pc2-workflow-guide" aria-label="Bu ekranın iş sırası">
+      <details className="pc2-workflow-help"><summary>Bu ekranda nasıl çalışılır?</summary><section className="pc2-workflow-guide" aria-label="Bu ekranın iş sırası">
         {WORKFLOW[pool]?.steps.map((step, index) => <div key={step} className="pc2-workflow-step">
           <span className="pc2-workflow-index">{index + 1}</span><span>{step}</span>
         </div>)}
-      </section>
+      </section></details>
       {message ? <div className="pc2-notice"><CircleAlert size={17} /> {message}</div> : null}
       {listError ? <div className="pc2-notice warning" role="alert"><CircleAlert size={17} /> {listError} <button type="button" onClick={load} disabled={loading}>Tekrar Yükle</button></div> : null}
 
@@ -636,7 +636,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
           <label>Başlangıç <input type="date" aria-label="Başlangıç tarihi" max={endDate || undefined} value={startDate} onChange={(e)=>{setStartDate(e.target.value);setPage(1);}} /></label>
           <label>Bitiş <input type="date" aria-label="Bitiş tarihi" min={startDate || undefined} value={endDate} onChange={(e)=>{setEndDate(e.target.value);setPage(1);}} /></label>
         </div> : null}
-        {pool === "ARSIV" ? <label>Arşiv yılı <select value={archiveYear} onChange={(e)=>{setArchiveYear(e.target.value);setPage(1);}}>{Array.from({length:9},(_,i)=>String(2026-i)).map(year=><option key={year} value={year}>{year}</option>)}</select></label> : null}
+        {pool === "ARSIV" ? <label>Arşiv yılı <select value={archiveYear} onChange={(e)=>{setArchiveYear(e.target.value);setPage(1);}}>{Array.from({length:9},(_,i)=>String(new Date().getFullYear()-i)).map(year=><option key={year} value={year}>{year}</option>)}</select></label> : null}
         {period !== "ALL" ? <button type="button" onClick={()=>{setPeriod("ALL");setStartDate("");setEndDate("");setPage(1);}}>Filtreyi sıfırla</button> : null}
         <span className="pc2-period-note">Tarih filtresi yalnız bu listedeki kayıtları etkiler.</span>
       </section>
@@ -716,7 +716,7 @@ export default function ProductionControlCenterPageV2({ activeMainCompany, pool 
                 <td><div className="pc2-row-actions">
                   {pool === "IMALATTA" ? <button className="primary" type="button" onClick={() => focusQuick(row)}><Layers3 size={14}/> Fiş Gir</button> : null}
                   {pool === "IRSALIYE" ? <a href="/e-belge/eslestirmeler" className="pc2-action-link"><FileCheck2 size={13}/> Eşleştir</a> : null}
-                  {pool === "FATURA" ? <a href="/e-belge/giden-belgeler" className="pc2-action-link"><FileText size={13}/> Faturalar</a> : null}
+                  {pool === "FATURA" ? <a href="/e-belge/giden-faturalar" className="pc2-action-link"><FileText size={13}/> Faturalar</a> : null}
                   <button type="button" onClick={() => openModel360Card({modelId:row.id,tab:"general",source:"imalat"})}>Model 360°</button><button type="button" onClick={() => openDetail(row)}>İmalat Detayı</button>
                 </div></td>
               </tr>)}

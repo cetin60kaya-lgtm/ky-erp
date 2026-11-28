@@ -105,3 +105,5 @@
  .storage-page-v2 .storage-tabs-v2{overflow-x:auto;flex-wrap:nowrap;scrollbar-width:thin}
  .storage-page-v2 .storage-tabs-v2 button{flex:0 0 auto}
 }
+
+.storage-page-v2 :is(button,select):focus-visible{outline:2px solid #245bc8;outline-offset:2px}.storage-page-v2 .storage-primary,.storage-page-v2 .storage-secondary{min-height:38px}.storage-page-v2 .storage-service-path{overflow-wrap:anywhere}.storage-archive-links button{min-height:44px;text-align:left}.storage-page-v2 .storage-company-banner h2{overflow-wrap:anywhere}

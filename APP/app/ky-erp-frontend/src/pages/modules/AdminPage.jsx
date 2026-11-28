@@ -77,7 +77,7 @@ export default function AdminPage({ activeTab, activeMainCompany, openModule }) 
     return owner ? <AdminCompanyBilling activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "dosya-klasor-yonetimi") {
-    return (owner || companyAdmin) ? <AdminStorageCenter activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
+    return (owner || companyAdmin) ? <AdminStorageCenter key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"} activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;
   }
   if (activeTab === "eslestirmeler") {
     return owner ? <AdminMappings activeMainCompany={activeMainCompany} /> : <AdminCompanyOverview activeMainCompany={activeMainCompany} />;

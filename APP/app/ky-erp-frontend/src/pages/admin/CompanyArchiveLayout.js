@@ -83,7 +83,7 @@ export function archiveAssignmentStatus(template,bindings,connections){
  const found=(bindings||[]).find(row=>row.module_code===template.moduleCode &&
    row.purpose_code===template.purposeCode && connectionIds.has(row.storage_connection_id));
  return found ? {
-  state:"CONNECTED",rootPath:String(found.root_path||""),
+  state:found.readEnabled===false?"READ_DISABLED":"CONNECTED",rootPath:String(found.root_path||""),
   connectionId:found.storage_connection_id,
   readEnabled:found.readEnabled!==false,
   writeEnabled:found.writeEnabled===true,

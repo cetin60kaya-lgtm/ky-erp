@@ -13,6 +13,7 @@ export default function DepolamaPage({ activeTab, activeMainCompany, openModule 
 
   return (
     <AdminStorageCenter
+      key={activeMainCompany?.slug||activeMainCompany?.id||"no-company"}
       activeMainCompany={activeMainCompany}
       activeTab={activeTab}
       showToolbar={false}

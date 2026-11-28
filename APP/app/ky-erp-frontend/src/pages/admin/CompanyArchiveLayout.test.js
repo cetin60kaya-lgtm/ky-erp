@@ -65,3 +65,5 @@ test("pasif sağlayıcı veya başka firma bağlantısı yanlışlıkla hazır s
  assert.equal(archiveAssignmentStatus(template,bindings,enabled).state,"CONNECTED");
  assert.equal(archiveAssignmentStatus(template,[],enabled).state,"NOT_CONNECTED");
 });
+
+test("okuması kapalı klasör kullanıma hazır sayılmaz",()=>{const t=archiveBindingFor("E_BELGE","E_DOCUMENT");assert.equal(archiveAssignmentStatus(t,[{module_code:"E_BELGE",purpose_code:"E_DOCUMENT",storage_connection_id:"c",root_path:"archive",readEnabled:false}],[{id:"c",isActive:true}]).state,"READ_DISABLED");});
