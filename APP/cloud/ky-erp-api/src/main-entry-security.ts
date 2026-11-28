@@ -113,33 +113,22 @@ security.onError((error, c) => {
 
 export default {
   async scheduled(_controller: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
-    // Bağımsız zamanlayıcı işleri: güvenlik/finans sorunu DESEN File Hub'ı
-    // Promise.all kısa devresi ile iptal edemez. Loglara token/tenant kimliği yazılmaz.
-    ctx.waitUntil(runSecurityWorkspaceReminderSweep(env).catch(() => {
-      console.error("SECURITY_REMINDER_CRON_FAILED");
-    }));
-    ctx.waitUntil(runFileHubCloudScheduledSync(env).catch(() => {
-      console.error("FILE_HUB_CLOUD_CRON_FAILED");
-    }));
-    ctx.waitUntil(runFileHubAccountingDocumentIntake(env).catch(() => {
-      console.error("ACCOUNTING_FILE_HUB_INTAKE_FAILED");
-    }));
-    // Bounded 1-account/2-folder/1-page continuation: no new OAuth, no sending.
-    ctx.waitUntil(runMicrosoftMailScheduledSync(env).catch(() => {
-      console.error("MICROSOFT_MAIL_SCHEDULED_SYNC_FAILED");
-    }));
-    // Gmail archive continuation uses the same existing five-minute cron;
-    // no scheduled mail send, no new cron plan and no access to other providers.
-    ctx.waitUntil(runGmailMailScheduledSync(env).catch(() => {
-      console.error("GMAIL_MAIL_SCHEDULED_SYNC_FAILED");
-    }));
-    ctx.waitUntil(retryPhysicalOperations(env).then((result)=>{
-      if(result.processed || result.status!=="OK")console.log(JSON.stringify({
-        code:"ACCOUNTING_PHYSICAL_RECOVERY",status:result.status,
-        processed:result.processed,recovered:result.recovered||0,
-        errors:result.errors||0,review:result.review||0,
-      }));
-    }).catch(()=>console.error("ACCOUNTING_PHYSICAL_RECOVERY_FAILED")));
+    // Single D1 resource window: never launch six competing maintenance jobs.
+    // Each task still runs every existing cron tick and catches its own error.
+    ctx.waitUntil((async()=>{
+      await runFileHubCloudScheduledSync(env).catch(()=>console.error("FILE_HUB_CLOUD_CRON_FAILED"));
+      await runFileHubAccountingDocumentIntake(env).catch(()=>console.error("ACCOUNTING_FILE_HUB_INTAKE_FAILED"));
+      await retryPhysicalOperations(env).then(result=>{
+        if(result.processed || result.status!=="OK")console.log(JSON.stringify({
+          code:"ACCOUNTING_PHYSICAL_RECOVERY",status:result.status,
+          processed:result.processed,recovered:result.recovered||0,
+          errors:result.errors||0,review:result.review||0,
+        }));
+      }).catch(()=>console.error("ACCOUNTING_PHYSICAL_RECOVERY_FAILED"));
+      await runSecurityWorkspaceReminderSweep(env).catch(()=>console.error("SECURITY_REMINDER_CRON_FAILED"));
+      await runMicrosoftMailScheduledSync(env).catch(()=>console.error("MICROSOFT_MAIL_SCHEDULED_SYNC_FAILED"));
+      await runGmailMailScheduledSync(env).catch(()=>console.error("GMAIL_MAIL_SCHEDULED_SYNC_FAILED"));
+    })());
   },
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext) {
     const path = new URL(request.url).pathname;

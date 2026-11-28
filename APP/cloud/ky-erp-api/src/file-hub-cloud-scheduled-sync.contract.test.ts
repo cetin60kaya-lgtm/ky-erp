@@ -30,9 +30,9 @@ test("existing five minute Worker cron also runs File Hub cloud sync", () => {
 
 test("DESEN File Hub cron başka görevin hatasından etkilenmez ve gizli veri loglamaz",()=>{
   assert.doesNotMatch(entry, /ctx\.waitUntil\(Promise\.all\(/);
-  assert.match(entry, /ctx\.waitUntil\(runSecurityWorkspaceReminderSweep\(env\)\.catch/);
-  assert.match(entry, /ctx\.waitUntil\(runFileHubCloudScheduledSync\(env\)\.catch/);
-  assert.match(entry, /ctx\.waitUntil\(retryPhysicalOperations\(env\)\.then/);
+  assert.match(entry, /await runSecurityWorkspaceReminderSweep\(env\)\.catch/);
+  assert.match(entry, /await runFileHubCloudScheduledSync\(env\)\.catch/);
+  assert.match(entry, /await retryPhysicalOperations\(env\)\.then/);
   assert.match(entry, /FILE_HUB_CLOUD_CRON_FAILED/);
   assert.match(entry, /SECURITY_REMINDER_CRON_FAILED/);
   // Hata metni serbest provider/OAuth yanıtı değil, sabit gizli-verisiz kod.
@@ -112,3 +112,5 @@ test("Worker code-only release skips unrelated personnel preflight but retains D
 });
 
 test("partial scan does not launch a second image scan in the same cron pass",()=>{assert.match(cloud,/provider === "GOOGLE_DRIVE" && !\("inProgress" in central && central\.inProgress\) && !\("busy" in central && central\.busy\)/);assert.match(cloud,/const fresh = await connectionAccount\(c,slug,connectionId\)/);});
+
+test("maintenance tasks use one sequential D1 queue and keep all six jobs",()=>{const cron=entry.slice(entry.indexOf("async scheduled("),entry.indexOf("async fetch(",entry.indexOf("async scheduled(")));assert.equal((cron.match(/ctx\.waitUntil\(/g)||[]).length,1);for(const fn of ["runFileHubCloudScheduledSync","runFileHubAccountingDocumentIntake","retryPhysicalOperations","runSecurityWorkspaceReminderSweep","runMicrosoftMailScheduledSync","runGmailMailScheduledSync"])assert.ok(cron.includes("await "+fn+"(env)"));assert.match(cloud,/D1_RESOURCE_LIMIT \[\$\{phase\}\]/);assert.match(cloud,/EXISTS\(SELECT 1 FROM file_hub_relations/);});

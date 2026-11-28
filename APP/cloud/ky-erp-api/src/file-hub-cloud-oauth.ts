@@ -318,8 +318,8 @@ async function connectionAccount(c: Context<AppEnv>, slug: string, connectionId:
 async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: string, provider: string, item: Row, relativePath: string, seenAt: string) {
   // Indexed tenant+connection+path lookup first; only reuse it when the
   // provider identity also matches. Rename/collision still uses provider ID.
-  const pathLocation = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
-  let location = pathLocation && text(pathLocation.provider_file_id)===text(item.id) ? pathLocation : await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,(SELECT COUNT(*) FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
+  const pathLocation = await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,EXISTS(SELECT 1 FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.relative_path=? LIMIT 1`).bind(slug, connectionId, relativePath).first<Row>();
+  let location = pathLocation && text(pathLocation.provider_file_id)===text(item.id) ? pathLocation : await c.env.DB.prepare(`SELECT l.*,a.id asset_id,a.file_name asset_file_name,a.mime_type asset_mime_type,a.size_bytes asset_size_bytes,a.status asset_status,a.metadata asset_metadata,EXISTS(SELECT 1 FROM file_hub_relations r JOIN model_records m ON m.id=r.entity_id AND m.main_company_slug=r.main_company_slug WHERE r.main_company_slug=a.main_company_slug AND r.file_asset_id=a.id AND r.entity_type='MODEL') model_relation_count FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.provider_file_id=? LIMIT 1`).bind(slug, connectionId, text(item.id)).first<Row>();
   if(!location)location=pathLocation;
   const fileName = text(item.name) || "dosya";
   const extension = fileName.includes(".") ? fileName.split(".").pop()!.toUpperCase() : "";
@@ -1224,6 +1224,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   if (!cursor.pendingPage) prioritizeGoogleScanQueue(cursor.queue, preferredPaths);
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
+  let phase="PAGE_FETCH";
   const persist = async (state: Row, complete = false, error = "", release = false) => {
     const stamp = now();
     const progress = { files: Number(state.files || 0), folders: Number(state.folders || 0),
@@ -1253,10 +1254,12 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       let pending=cursor.pendingPage;
       if(pending && (pending.folderId!==folder.id || pending.pageToken!==folder.pageToken || !Array.isArray(pending.children) || !Array.isArray(pending.discoveredFolders) || !Number.isInteger(pending.offset) || pending.offset<0 || pending.offset>pending.children.length))throw Error("SYNC_PAGE_CHECKPOINT_INVALID");
       if(!pending){
+        phase="PAGE_FETCH";
         const page = providerType==="GOOGLE_DRIVE"
           ? await googleChildrenPage(accessToken, folder.id, folder.pageToken)
           : await microsoftChildrenPage(accessToken, folder.id, text(link.provider_drive_id), folder.pageToken);
         pending=cursor.pendingPage={folderId:folder.id,pageToken:folder.pageToken,children:page.children,nextPageToken:page.nextPageToken,offset:0,discoveredFolders:[]};
+        phase="PAGE_CHECKPOINT";
         await persist(cursor);
         checkpoint=JSON.parse(JSON.stringify(cursor));
       }
@@ -1270,10 +1273,12 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           folders += 1; cursor.folders += 1;
           discoveredFolders.push({ id: child.id, path: relativePath, pageToken: "" });
         } else {
+          phase="FILE_INDEX";
           const indexed = await upsertCloudFile(c, slug, connectionId, providerType, child, relativePath, now());
           files += 1; cursor.files += 1;
           if (indexed.changed) cursor.changedFiles += 1;
           if (indexed.needsModelSync && isDesignCandidate(relativePath)) {
+            phase="MODEL_RELATION";
             const model = await syncCloudDesignBinding(c, slug, connectionId, indexed.assetId, child, relativePath, providerType);
             if (model?.modelId) { modelSyncs += 1; cursor.modelSyncs += 1; }
           }
@@ -1284,6 +1289,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
         if(Date.now()-chunkStart>=2500)break;
         pending.offset--; // loop increment advances exactly once
       }
+      phase="PAGE_CHECKPOINT";
       if(pending.offset<pending.children.length){
         await persist(cursor,false,"",true);
         return {files,folders,totalFiles:cursor.files,totalFolders:cursor.folders,modelSyncs,inProgress:true,completed:false,lastSyncAt:null};
@@ -1301,6 +1307,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       checkpoint = JSON.parse(JSON.stringify(cursor));
     }
     const complete = cursor.queue.length === 0;
+    phase="MODEL_RECOVERY";
     if(complete){
       const recoveredModelLinks = await backfillIndexedCloudModelImages(c, slug, connectionId, providerType);
       const priorDesignFiles = await backfillIndexedCloudDesignFiles(c, slug, connectionId, providerType, text(cursor.designBackfillPath || meta.designBackfillPath));
@@ -1338,6 +1345,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       linkedImages = Number(result?.linked_images || 0);
       linkedModels = Number(result?.linked_models || 0);
     }
+    phase="FINAL_CHECKPOINT";
     await persist(cursor, complete, "", true); // Kilidi bırak; tamamlanmamış kuyruk saklanır.
     const design = await c.env.DB.prepare("SELECT root_path FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code='DESEN' AND purpose_code='MODEL_IMAGE' AND sync_enabled=1 LIMIT 1")
       .bind(slug, connectionId).first<Row>();
@@ -1347,7 +1355,11 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       designImageRootPath: text(design?.root_path) };
   } catch (error: any) {
     // Checkpoint sonrası yarım sayfa yeniden okunabilir; eski kayıtlar silinmez.
-    await persist(checkpoint, false, text(error?.message).slice(0, 300)).catch(() => {});
+    const message=text(error?.message);
+    const cpu=/D1.*(?:CPU time limit|overload|too many resources)/i.test(message);
+    const safe=cpu?`D1_RESOURCE_LIMIT [${phase}]`:message.slice(0,300);
+    await persist(checkpoint, false, safe).catch(() => {});
+    if(cpu)throw Object.assign(new Error(safe),{code:"D1_RESOURCE_LIMIT",status:503});
     throw error;
   }
 }
@@ -1433,7 +1445,7 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       await env.DB.prepare(`UPDATE file_hub_connections
         SET connection_status='ERROR',last_error=?,updated_at=?
         WHERE id=? AND main_company_slug=?`)
-        .bind(text(error?.message)||"Bulut senkronizasyonu başarısız.",now(),connectionId,slug).run().catch(()=>{});
+        .bind(/D1.*(?:CPU time limit|overload|too many resources)/i.test(text(error?.message))?"D1_RESOURCE_LIMIT [PREFLIGHT]":text(error?.message)||"Bulut senkronizasyonu başarısız.",now(),connectionId,slug).run().catch(()=>{});
     }
   }
 }
