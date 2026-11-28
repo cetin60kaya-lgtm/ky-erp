@@ -112,7 +112,7 @@ export default function AdminStorageCenter({activeMainCompany,activeTab,showTool
     setConnections(c.data);setBindings(b.data);setVerifiedScope(slug);
     // Only request data needed on the visible workspace, avoiding repeated 9-way bursts.
     const wantOverview=["overview","logs","sync"].includes(tab),wantAccounts=tab==="connections",wantMail=tab==="overview",wantAgent=tab==="sync";
-    let health={};let failed=false;
+    let health={...(wantOverview?{overview:false}:{}),...(wantAccounts?{providers:false,accounts:false}:{}),...(wantMail?{mail:false}:{}),...(wantAgent?{agent:false}:{}),...(tab==="files"?{files:false}:{}),...(tab==="overview"?{diagnostics:false}:{})};let failed=false;
     const load=async(fn,apply)=>{try{const r=await fn();if(current())apply(r)}catch{failed=true}};
     if(wantOverview)await load(()=>apiGet("/file-hub/overview",tenantParams),o=>{setOverview(o?.data||{});health.overview=!!o?.data});
     if(!current())return;

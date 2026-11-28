@@ -39,7 +39,7 @@ test("Bulut hesap islemleri ve tarama gosterimi secili ana firma bazinda",()=>{
   assert.match(ui,/onRemoveAccount=\{removeAccount\}/);
   assert.match(ui,/mainCompanySlug:slug/);
   assert.match(ui,/Hesabı Kaldır/);
-  assert.match(ui,/15 saniyede yenilenir/);
-  assert.match(ui,/setInterval\(poll,15000\)/);
+  assert.match(ui,/dakikada bir yenilenir/);
+  assert.match(ui,/setInterval\(poll,60000\)/);
   assert.match(ui,/Yönetilen ana firma/);
 });
