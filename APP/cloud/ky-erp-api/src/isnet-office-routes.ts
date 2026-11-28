@@ -77,7 +77,7 @@ export function registerIsnetOfficeRoutes(app:Hono<Env>){
    try{while(true){const part=await reader.read();if(part.done)break;size+=part.value.byteLength;if(size>limit){await reader.cancel();return c.json(error("ARCHIVE_FILE_TOO_LARGE"),413)}chunks.push(part.value)}}finally{reader.releaseLock()}
    const bytes=new Uint8Array(size);let off=0;for(const p of chunks){bytes.set(p,off);off+=p.length}
    const form=await new Response(bytes,{headers:{"Content-Type":ct}}).formData();
-   for(const k of ["jobId","source","ettn","fence","result","xml","pdf"])if(form.getAll(k).length>1)return c.json(error("ARCHIVE_FORM_INVALID"),400);
+   for(const k of ["jobId","source","ettn","fence","result","xml","pdf","errorCode"])if(form.getAll(k).length>1)return c.json(error("ARCHIVE_FORM_INVALID"),400);
    const job=await acceptOfficeArchiveDocument(c,lease,form);
    return c.json({ok:true,data:{job}});
   }catch{return c.json(error("ARCHIVE_REVIEW_REQUIRED"),409)}

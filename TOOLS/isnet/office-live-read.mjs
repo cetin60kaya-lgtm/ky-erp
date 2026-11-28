@@ -106,6 +106,6 @@ export async function readOfficeArchiveTask(task,fetcher=fetch){
   let pb=null;try{pb=decodeFile(scalar(n,base+"Pdf",M))}catch{/* An absent/invalid PDF never becomes an original. */}
   if(pb&&pb.length+xb.length<=8*1024*1024&&/^%PDF-\d\.\d/.test(pb.subarray(0,8).toString("ascii")))form.set("pdf",new Blob([pb],{type:"application/pdf"}),"original.pdf");
   form.set("result","OK");
- }catch{form.delete("xml");form.delete("pdf");form.set("result","FAILED")}
+ }catch(e){form.delete("xml");form.delete("pdf");form.set("result","FAILED");const code=String(e?.code||e?.message||"");form.set("errorCode",/^(?:PROVIDER|SOAP|WSDL|PAGING|XML|DATE|COMPANY|DOCUMENT|NETWORK|SIZE|SOURCE|IDENTITY|RESPONSE)_[A-Z0-9_]{1,60}$/.test(code)?code:"DOCUMENT_READ_FAILED")}
  return form;
 }
