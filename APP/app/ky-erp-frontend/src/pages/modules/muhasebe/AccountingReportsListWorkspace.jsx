@@ -220,7 +220,7 @@ export default function AccountingReportsListWorkspace({ activeMainCompany }) {
             [
               ["Toplam gelir", money(data.summary?.totalIncome)],
               ["Toplam gider", money(data.summary?.totalExpense)],
-              ["Net sonuç", money(data.summary?.netResult)],
+              ["Kayıtlı tutar farkı (net kâr değil)", money(data.summary?.netResult)],
             ],
           );
         } else if (definition.key === "faturasi-kesilmeyen-modeller") {

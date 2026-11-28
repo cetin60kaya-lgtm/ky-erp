@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   applyCanonicalReportOverride,
   deriveCanonicalExpenseCategory,
+  readPendingInvoicePreview,
+  summarizePendingInvoicePreview,
 } from "./accounting-report-canonical.ts";
 
 test("e-Belge gider kalemi routing türünden kategori üretir", () => {
@@ -63,4 +65,40 @@ test("dahil-hariç override rapor durumunu ve tutar aliaslarını günceller", (
   assert.equal(result.reportStatus, "HARIC");
   assert.equal(result.reportAmount, 450);
   assert.equal(result.amount, 450);
+});
+
+test("bekleyen fatura ön kontrolü muhasebe sonucu değildir; iki yön ve hariç kayıt ayrı", () => {
+  const p = summarizePendingInvoicePreview([
+    {direction:"INCOMING", count:2, included_count:1, base:100, vat:20},
+    {direction:"OUTGOING", count:3, included_count:3, base:250, vat:50},
+  ]);
+  assert.equal(p.status,"PREVIEW_ONLY");
+  assert.equal(p.count,5);
+  assert.equal(p.excludedCount,1);
+  assert.equal(p.baseDifference,150);
+  assert.equal(p.vatDifference,30);
+  assert.equal(summarizePendingInvoicePreview([]).count,0);
+});
+
+test("bekleyen fatura sorgusu yalnız seçili firma, dönem ve fatura tipleri; geçersiz tarih DB okumaz", async () => {
+  let calls=0;
+  const c:any={env:{DB:{prepare(sql:string){
+    calls++;
+    assert.match(sql,/main_company_slug=\?/);
+    assert.match(sql,/status='REVIEW_REQUIRED'/);
+    assert.match(sql,/document_type='GELEN_FATURA'/);
+    assert.match(sql,/document_type='GIDEN_FATURA'/);
+    assert.match(sql,/duplicate_of_id IS NULL/);
+    assert.match(sql,/xml_file_asset_id IS NOT NULL/);
+    assert.match(sql,/invoiceAmountsPresent/);
+    assert.match(sql,/subtotal>0 AND tax_total>0/);
+    assert.doesNotMatch(sql,/\b(?:INSERT|UPDATE|DELETE)\b/i);
+    return {bind(...args:any[]){assert.deepEqual(args,["tenant-a","2026-11-01","2026-11-30","firm-a","firm-a"]);return {all:async()=>({results:[]})}}};
+  }}}};
+  assert.equal(await readPendingInvoicePreview(c,"","2026-11-01","2026-11-30"),null);
+  assert.equal(await readPendingInvoicePreview(c,"tenant-a","2026-02-30","2026-11-30"),null);
+  assert.equal(calls,0);
+  const p=await readPendingInvoicePreview(c,"tenant-a","2026-11-01","2026-11-30","firm-a");
+  assert.equal(p?.count,0);
+  assert.equal(calls,1);
 });

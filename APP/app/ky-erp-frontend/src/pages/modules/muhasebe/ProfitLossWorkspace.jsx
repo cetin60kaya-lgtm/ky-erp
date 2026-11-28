@@ -97,25 +97,32 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
     [activeMainCompany?.id, activeMainCompany?.slug, period],
   );
 
+  const requestKey = JSON.stringify(params);
+  const requestSequence = useRef(0);
   const load = useCallback(async () => {
+    const sequence = ++requestSequence.current;
     setState((current) => ({ ...current, loading: true, error: "" }));
     try {
       const response = await apiGet("/muhasebe/accounting/reports/records", {
         ...params,
         _ts: Date.now(),
       });
-      setState({ loading: false, error: "", data: unwrap(response) });
+      if (sequence !== requestSequence.current) return;
+      setState({ loading: false, error: "", data: unwrap(response), requestKey });
     } catch (error) {
+      if (sequence !== requestSequence.current) return;
       setState({
         loading: false,
         error: error?.message || "Gelir ve gider kayıtları alınamadı.",
         data: {},
+        requestKey,
       });
     }
-  }, [params]);
+  }, [params, requestKey]);
 
   useEffect(() => {
     load();
+    return () => { requestSequence.current += 1; };
   }, [load, refreshKey]);
 
   const records = useMemo(() => {
@@ -189,7 +196,7 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
     }
   };
 
-  if (state.loading) {
+  if (state.loading || state.requestKey !== requestKey) {
     return <div className="accounting-list-skeleton"><span /><span /><span /><span /><span /></div>;
   }
 
@@ -215,13 +222,26 @@ export default function ProfitLossWorkspace({ activeMainCompany, refreshKey }) {
       {notice ? <div className="plw-notice" role="status">{notice}</div> : null}
 
       <section className="plw-summary">
-        <div><span>Toplam gelir</span><strong>{money(summary.totalIncome)}</strong></div>
-        <div><span>Toplam gider</span><strong>{money(summary.totalExpense)}</strong></div>
-        <div><span>Brüt sonuç</span><strong>{money(summary.grossProfit)}</strong></div>
-        <div className={Number(summary.netResult || 0) >= 0 ? "success" : "danger"}>
-          <span>Net kâr / zarar</span><strong>{money(summary.netResult)}</strong>
-        </div>
+        <div><span>Kayıtlı gelir tutarı</span><strong>{money(summary.totalIncome)}</strong></div>
+        <div><span>Kayıtlı gider tutarı</span><strong>{money(summary.totalExpense)}</strong></div>
+        <div><span>Kayıtlı tutar farkı</span><strong>{money(summary.netResult)}</strong></div>
+        <div><span>Kesin net kâr / zarar</span><strong>—</strong></div>
       </section>
+      <div className="plw-notice">Kayıtlı tutarlar KDV içerebilir; stok tüketimi, personel ve diğer giderler doğrulanmadan kesin net kâr gösterilmez.</div>
+      {state.data?.pendingInvoicePreview?.count > 0 ? (
+        <>
+          <div className="plw-notice" role="status">
+            {state.data.pendingInvoicePreview.count} fatura kontrol bekliyor. Aşağıdaki TRY tutarları yalnız belge ön kontrolüdür; muhasebeleştirilmiş değildir.
+            {state.data.pendingInvoicePreview.excludedCount > 0 ? ` ${state.data.pendingInvoicePreview.excludedCount} kayıt para birimi, mükerrerlik veya eksik tutar nedeniyle toplama alınmadı.` : ""}
+          </div>
+          <section className="plw-summary">
+            <div><span>Bekleyen satış matrahı</span><strong>{money(state.data.pendingInvoicePreview.outgoing.base)}</strong></div>
+            <div><span>Bekleyen alış matrahı</span><strong>{money(state.data.pendingInvoicePreview.incoming.base)}</strong></div>
+            <div><span>Satış − alış farkı</span><strong>{money(state.data.pendingInvoicePreview.baseDifference)}</strong></div>
+            <div><span>Bekleyen KDV farkı</span><strong>{money(state.data.pendingInvoicePreview.vatDifference)}</strong></div>
+          </section>
+        </>
+      ) : !state.data?.pendingInvoicePreview ? <div className="plw-notice">Bekleyen fatura ön kontrolü alınamadı; kayıt yok anlamına gelmez.</div> : null}
 
       <section className="plw-filterbar">
         <label className="plw-search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Firma, belge veya kategori ara" /></label>

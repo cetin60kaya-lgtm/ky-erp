@@ -7,7 +7,7 @@ import { registerAccountingObligationsRoutes } from "./accounting-obligations";
 import { Context, Hono } from "hono";
 import { cors } from "hono/cors";
 import { getAuthenticatedUser, registerAuthManagementRoutes } from "./auth-cloud";
-import { buildCanonicalAccountingReport, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
+import { buildCanonicalAccountingReport, readPendingInvoicePreview, registerCanonicalAccountingReportRoutes } from "./accounting-report-canonical";
 import { canonicalAccountingDocumentDetail, listCanonicalAccountingDocuments, mergeCanonicalLegacyAccounting } from "./accounting-canonical-read";
 import { ensureAccountingCanonicalReportControls0046 } from "./runtime-migration-0046";
 import { ensureMailCommunicationCore0050 } from "./runtime-migration-0050";
@@ -927,7 +927,11 @@ async function buildVatSummary(c: Context<AppEnv>, forcedFirmId = "") {
     if (forcedFirmId && databaseText(doc.companyId) !== forcedFirmId) return false;
     return true;
   });
+  const pendingInvoicePreview = !forcedFirmId && Number.isInteger(year) && year >= 1900 && year <= 9998 && Number.isInteger(month) && month >= 1 && month <= 12
+    ? await authorizedPendingInvoicePreview(c, `${year}-${String(month).padStart(2,"0")}-01`, new Date(Date.UTC(year,month,0)).toISOString().slice(0,10))
+    : null;
   return {
+    pendingInvoicePreview,
     recordCount: selected.length,
     year: year || null,
     month: month || null,
@@ -956,8 +960,17 @@ function documentDateInRange(row: DatabaseRow, startDate: string, endDate: strin
   return true;
 }
 
+async function authorizedPendingInvoicePreview(c: Context<AppEnv>, startDate: string, endDate: string, firmId = "") {
+  const user = await getAuthenticatedUser(c);
+  const slug = slugOf(c);
+  if (!user || !slug || !accountingAccess(user, "GET", c.req.path) || !accountingTenantReadAllowed(user, slug)) return null;
+  return readPendingInvoicePreview(c, slug, startDate, endDate, firmId).catch(() => null);
+}
+
 async function buildProfitLoss(c: Context<AppEnv>) {
-  return buildCanonicalAccountingReport(c);
+  const report = await buildCanonicalAccountingReport(c);
+  const pendingInvoicePreview = await authorizedPendingInvoicePreview(c, report.period.startDate, report.period.endDate, databaseText(c.req.query("firmId") || c.req.query("firmaId")));
+  return { ...report, pendingInvoicePreview };
 }
 
 async function buildChequeDashboard(c: Context<AppEnv>) {
