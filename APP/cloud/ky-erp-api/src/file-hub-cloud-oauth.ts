@@ -876,6 +876,34 @@ async function backfillIndexedCloudDesignFiles(c:Context<AppEnv>,slug:string,con
   return {matched,lastPath:rows.length?text(rows[rows.length-1].relative_path):""};
 }
 
+// The index and model recovery use the same connection lease, but recovery
+// has its own resumable path after the provider index moves to delta mode.
+// A failed recovery never changes the canonical index's health or cursor.
+async function runCloudDesignRecoveryBatch(c:Context<AppEnv>,slug:string,connectionId:string,provider:string){
+  const assigned=await c.env.DB.prepare("SELECT 1 n FROM file_hub_bindings WHERE main_company_slug=? AND storage_connection_id=? AND module_code IN ('DESEN','DTF','IMALAT') AND sync_enabled=1 LIMIT 1").bind(slug,connectionId).first<Row>();
+  if(!assigned)return;
+  const row=await c.env.DB.prepare("SELECT metadata FROM file_hub_connections WHERE id=? AND main_company_slug=? AND is_active=1").bind(connectionId,slug).first<Row>();
+  if(!row)return;
+  const raw=text(row.metadata),meta=json(raw);
+  if(meta.cloudSyncCursor || (Date.parse(text(meta.cloudSyncLeaseUntil))||0)>Date.now())return;
+  const leaseId=crypto.randomUUID(),stamp=now();
+  const claim=await c.env.DB.prepare("UPDATE file_hub_connections SET metadata=? WHERE id=? AND main_company_slug=? AND COALESCE(metadata,'')=? AND is_active=1")
+    .bind(JSON.stringify({...meta,cloudSyncLeaseId:leaseId,cloudSyncLeaseUntil:new Date(Date.now()+180000).toISOString()}),connectionId,slug,raw).run();
+  if(Number(claim.meta?.changes||0)!==1)return;
+  let path=text(meta.designBackfillPath),problem=false;
+  try{
+    const recovery=await backfillIndexedCloudDesignFiles(c,slug,connectionId,provider,path);
+    path=recovery.lastPath;
+    // The source-file cursor has priority; the independent image scan handles RGB too.
+    if(Date.now()-Date.parse(stamp)<1500)await backfillIndexedCloudModelImages(c,slug,connectionId,provider);
+  }catch{problem=true;}
+  finally{
+    await c.env.DB.prepare("UPDATE file_hub_connections SET metadata=json_set(COALESCE(NULLIF(metadata,''),'{}'),'$.cloudSyncLeaseId',NULL,'$.cloudSyncLeaseUntil',NULL,'$.designBackfillPath',?,'$.designBackfillLastAt',?,'$.designBackfillError',?),updated_at=? WHERE id=? AND main_company_slug=? AND json_extract(metadata,'$.cloudSyncLeaseId')=?")
+      .bind(path,problem?text(meta.designBackfillLastAt):now(),problem?"MODEL_RECOVERY_RETRY":null,now(),connectionId,slug,leaseId).run();
+  }
+  if(problem)throw Error("MODEL_RECOVERY_RETRY");
+}
+
 /** One company/one D1 index: after the initial tree walk, Google changes are
  * queried once centrally. Desktop clients never walk the Drive provider tree.
  * Changes only update D1 metadata; original provider files are never moved. */
@@ -1251,7 +1279,10 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
           }
         }
         // A slow model operation must not trigger the next expensive file in the same slice.
-        if(Date.now()-chunkStart>=2500){pending.offset++;break;}
+        pending.offset++;
+        checkpoint=JSON.parse(JSON.stringify(cursor));
+        if(Date.now()-chunkStart>=2500)break;
+        pending.offset--; // loop increment advances exactly once
       }
       if(pending.offset<pending.children.length){
         await persist(cursor,false,"",true);
@@ -1352,10 +1383,18 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
           // Its failure never rolls back the shared File Hub index cursor.
           try {
             // The central scan may have changed metadata. Re-read before the secondary lease CAS.
-            const fresh = await connectionAccount(c,slug,connectionId);
-            await syncRecentBoundGoogleImages(c,slug,connectionId,fresh.link,fresh.accessToken);
+            // Alternate optional recovery work rather than stack both workloads.
+            if(Math.floor(Date.now()/300000)%2===0){
+              await runCloudDesignRecoveryBatch(c,slug,connectionId,provider);
+            }else{
+              const fresh = await connectionAccount(c,slug,connectionId);
+              await syncRecentBoundGoogleImages(c,slug,connectionId,fresh.link,fresh.accessToken);
+            }
           }
           catch { console.warn("FILE_HUB_MODEL_FAST_SCAN_WARNING"); }
+        }else if(provider!=="GOOGLE_DRIVE" && !("inProgress" in central && central.inProgress) && !("busy" in central && central.busy)){
+          try{await runCloudDesignRecoveryBatch(c,slug,connectionId,provider)}
+          catch{console.warn("FILE_HUB_MODEL_RECOVERY_WARNING")}
         }
         continue;
       }
