@@ -1,0 +1,5 @@
+import test from "node:test";import assert from "node:assert/strict";import {readFileSync} from "node:fs";
+// Runtime validation is covered by the shared strict XML parser and live agent fixtures.
+// This contract test avoids loading Worker cloud OAuth bindings in Node.
+const s=readFileSync(new URL("./isnet-office-archive-jobs.ts",import.meta.url),"utf8"),r=readFileSync(new URL("./isnet-office-routes.ts",import.meta.url),"utf8"),f=readFileSync(new URL("./file-hub-cloud-oauth.ts",import.meta.url),"utf8");
+test("archive requires completed manifest, unique write-enabled binding, no financial posting",()=>{assert.match(s,/completedOfficeReadManifest/);assert.match(s,/write_enabled/);assert.match(s,/DRIVE_INDEX_NOT_READY/);assert.match(s,/j\.claim=\{id:crypto\.randomUUID/);assert.match(s,/ingestIndexedFileHubEBelge/);assert.doesNotMatch(s,/ingestProviderEBelgeXml|FILES\.put|finalizeDocument|SendInvoice/);assert.match(r,/OFFICE_ARCHIVE_MAX_BYTES\+65536/);assert.match(f,/if\(await h\(actual\.buffer\)!==await h\(bytes\)\)/);});

@@ -310,7 +310,7 @@ async function listMicrosoftChildren(token: string, parentId: string, driveId = 
 }
 
 async function connectionAccount(c: Context<AppEnv>, slug: string, connectionId: string) {
-  const link = await c.env.DB.prepare(`SELECT x.*,c.provider_type,c.remote_root_id,c.remote_root_name,c.name connection_name,c.is_active,c.metadata connection_metadata,a.account_email,a.display_name,a.provider_type account_provider,a.access_token_cipher,a.refresh_token_cipher,a.token_expires_at,a.scopes FROM file_hub_cloud_connection_accounts x JOIN file_hub_connections c ON c.id=x.connection_id AND c.main_company_slug=x.main_company_slug JOIN file_hub_oauth_accounts a ON a.id=x.oauth_account_id AND a.main_company_slug=x.main_company_slug WHERE x.connection_id=? AND x.main_company_slug=? LIMIT 1`).bind(connectionId, slug).first<Row>();
+  const link = await c.env.DB.prepare(`SELECT x.*,c.provider_type,c.remote_root_id,c.remote_root_name,c.name connection_name,c.is_active,c.sync_mode,c.metadata connection_metadata,a.account_email,a.display_name,a.provider_type account_provider,a.access_token_cipher,a.refresh_token_cipher,a.token_expires_at,a.scopes FROM file_hub_cloud_connection_accounts x JOIN file_hub_connections c ON c.id=x.connection_id AND c.main_company_slug=x.main_company_slug JOIN file_hub_oauth_accounts a ON a.id=x.oauth_account_id AND a.main_company_slug=x.main_company_slug WHERE x.connection_id=? AND x.main_company_slug=? LIMIT 1`).bind(connectionId, slug).first<Row>();
   if (!link) throw Object.assign(new Error("Bulut depolama bağlantısı bulunamadı."), { code: "CLOUD_CONNECTION_NOT_FOUND" });
   const { account, accessToken } = await usableAccount(c, slug, text(link.oauth_account_id));
   return { link: { ...link, ...account }, accessToken };
@@ -1632,4 +1632,42 @@ export function registerFileHubCloudOauthRoutes(app: Hono<AppEnv>) {
       return new Response(response.body, { status: 200, headers });
     } catch (error: any) { return c.json(err(text(error?.code) || "DOWNLOAD_FAILED", text(error?.message) || "Bulut dosyası indirilemedi."), 502); }
   });
+}
+
+// Office-agent originals are written only to the caller's validated existing Drive
+// binding; no R2 duplicate. Exact names and bytes are checked, never overwritten.
+// Only server-owned caller paths, not an exposed generic upload endpoint.
+export async function archiveVerifiedIsnetGoogleOriginal(c:Context<AppEnv>,slug:string,connectionId:string,relativePath:string,mimeType:string,bytes:ArrayBuffer){
+  if(!["application/xml","application/pdf"].includes(mimeType)||bytes.byteLength<20||bytes.byteLength>8*1024*1024)throw Error("ARCHIVE_FILE_INVALID");
+  const {link,accessToken}=await connectionAccount(c,slug,connectionId);
+  if(Number(link.is_active)!==1||upper(link.provider_type)!=="GOOGLE_DRIVE"||upper(link.sync_mode)!=="CLOUD_API")throw Error("DRIVE_CONNECTION_INVALID");
+  const parts=archiveParts(relativePath,""),all=[...parts.folders,parts.fileName];if(all.some(p=>!p||p==="."||p===".."||/[\x00-\x1f/\\]/.test(p)))throw Error("ARCHIVE_PATH_INVALID");
+  const unique=async(parent:string,name:string,folder:boolean)=>{
+    const q="'"+googleQueryValue(parent)+"' in parents and name='"+googleQueryValue(name)+"' and trashed=false";
+    const raw=await providerJson("https://www.googleapis.com/drive/v3/files?"+new URLSearchParams({q,fields:"nextPageToken,files(id,name,mimeType,webViewLink,size,modifiedTime,md5Checksum)",pageSize:"100",spaces:"drive"}),accessToken);
+    const found=Array.isArray(raw.files)?raw.files.filter((x:Row)=>text(x.name)===name):[];
+    if(raw.nextPageToken||found.length>1||found.some((x:Row)=>(x.mimeType==="application/vnd.google-apps.folder")!==folder))throw Error("ARCHIVE_NAME_COLLISION");
+    return found[0]||null;
+  };
+  let parent=text(link.remote_root_id)||"root";
+  for(const p of parts.folders){
+    let found=await unique(parent,p,true);
+    if(!found){await providerJson("https://www.googleapis.com/drive/v3/files?fields=id,name",accessToken,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:p,mimeType:"application/vnd.google-apps.folder",parents:[parent]})});found=await unique(parent,p,true)}
+    if(!found?.id)throw Error("ARCHIVE_FOLDER_UNVERIFIED");parent=text(found.id);
+  }
+  let found=await unique(parent,parts.fileName,false);
+  if(!found){await googleUpload(accessToken,parent,parts.fileName,mimeType,bytes,true);found=await unique(parent,parts.fileName,false)}
+  const id=text(found?.id);if(!id||Number(found?.size)!==bytes.byteLength||text(found?.mimeType)!==mimeType)throw Error("ARCHIVE_ORIGINAL_CONFLICT");
+  const response=await fetch("https://www.googleapis.com/drive/v3/files/"+encodeURIComponent(id)+"?alt=media",{headers:{Authorization:"Bearer "+accessToken},redirect:"error",signal:AbortSignal.timeout(20000)});
+  if(!response.ok||!response.body)throw Error("ARCHIVE_READBACK_FAILED");
+  const reader=response.body.getReader(),chunks:Uint8Array[]=[];let size=0;
+  try{while(true){const r=await reader.read();if(r.done)break;size+=r.value.byteLength;if(size>bytes.byteLength){await reader.cancel();throw Error("ARCHIVE_ORIGINAL_CONFLICT")}chunks.push(r.value)}}finally{reader.releaseLock()}
+  if(size!==bytes.byteLength)throw Error("ARCHIVE_ORIGINAL_CONFLICT");
+  const actual=new Uint8Array(size);let offset=0;for(const chunk of chunks){actual.set(chunk,offset);offset+=chunk.length}
+  const h=async(v:ArrayBuffer)=>Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256",v)),n=>n.toString(16).padStart(2,"0")).join("");
+  if(await h(actual.buffer)!==await h(bytes))throw Error("ARCHIVE_ORIGINAL_CONFLICT");
+  const indexed=(await c.env.DB.prepare("SELECT provider_file_id FROM file_hub_locations WHERE main_company_slug=? AND storage_connection_id=? AND relative_path=? AND is_available=1 LIMIT 2").bind(slug,connectionId,relativePath).all<Row>()).results;
+  if(indexed.some(x=>text(x.provider_file_id)!==id)||indexed.length>1)throw Error("ARCHIVE_INDEX_CONFLICT");
+  const asset=await upsertCloudFile(c,slug,connectionId,"GOOGLE_DRIVE",{id,name:parts.fileName,mimeType,size,modifiedAt:text(found.modifiedTime),webUrl:text(found.webViewLink),checksum:text(found.md5Checksum)},relativePath,now());
+  if(!asset.assetId)throw Error("ARCHIVE_INDEX_UNVERIFIED");return asset.assetId;
 }

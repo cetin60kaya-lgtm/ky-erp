@@ -52,7 +52,7 @@ function verifyOperation(root,op,fields){
 }
 function envelope(op,body){return '<s:Envelope xmlns:s="'+S+'"><s:Body><'+op+' xmlns="'+T+'"><request xmlns:a="'+M+'">'+body+'</request></'+op+'></s:Body></s:Envelope>'}
 const el=(k,v)=>"<a:"+k+">"+esc(v)+"</a:"+k+">";
-async function soap(fetcher,op,body){const r=await fetcher(LIVE_ENDPOINTS.InvoiceService,{method:"POST",redirect:"error",signal:AbortSignal.timeout(20000),headers:{"Content-Type":"text/xml; charset=utf-8",SOAPAction:'"'+T+'IInvoiceService/'+op+'"'},body:envelope(op,body)});const root=parseSoapXml(await responseText(r,4000000));if(root.local!=="Envelope"||root.uri!==S)fail("SOAP_ENVELOPE_INVALID");const bodyNode=one(root,"Body",S);if(bodyNode.children.length!==1)fail("SOAP_BODY_INVALID");const result=one(one(bodyNode,op+"Response",T),op+"Result",T);if(scalar(result,"Result",M)!=="Success")fail("PROVIDER_READ_FAILED");return result}
+async function soap(fetcher,op,body,limit=4000000){const r=await fetcher(LIVE_ENDPOINTS.InvoiceService,{method:"POST",redirect:"error",signal:AbortSignal.timeout(20000),headers:{"Content-Type":"text/xml; charset=utf-8",SOAPAction:'"'+T+'IInvoiceService/'+op+'"'},body:envelope(op,body)});const root=parseSoapXml(await responseText(r,limit));if(root.local!=="Envelope"||root.uri!==S)fail("SOAP_ENVELOPE_INVALID");const bodyNode=one(root,"Body",S);if(bodyNode.children.length!==1)fail("SOAP_BODY_INVALID");const result=one(one(bodyNode,op+"Response",T),op+"Result",T);if(scalar(result,"Result",M)!=="Success")fail("PROVIDER_READ_FAILED");return result}
 export async function readOfficeTask(task,fetcher=fetch){
  const {jobId,source,page,from,to,taxCode,fence}=task||{};
  const out={jobId,source,page,fence,ok:false};
@@ -83,4 +83,29 @@ export async function readOfficeTask(task,fetcher=fetch){
   if(new Set(ids).size!==ids.length)fail("PAGING_DUPLICATE");
   return {...out,ok:true,total,ids};
  }catch(e){const code=String(e?.code||e?.message||"");return {...out,error:/^(?:PROVIDER|SOAP|WSDL|PAGING|XML|DATE|COMPANY|DOCUMENT|NETWORK|SIZE|SOURCE|IDENTITY|RESPONSE)_[A-Z0-9_]{1,60}$/.test(code)?code:"PROVIDER_READ_FAILED"}}
+}
+
+function decodeFile(value){if(typeof value!=="string"||!value.length)return null;const s=value.replace(/\s/g,"");if(s.length>11000000||!(/^[A-Za-z0-9+/]*={0,2}$/.test(s))||s.length%4!==0)fail("DOCUMENT_ENCODING_INVALID");const b=Buffer.from(s,"base64");if(b.toString("base64")!==s)fail("DOCUMENT_ENCODING_INVALID");return b}
+export async function readOfficeArchiveTask(task,fetcher=fetch){
+ const form=new FormData();for(const k of ["jobId","source","ettn","fence"])form.set(k,String(task?.[k]||""));
+ try{
+  const {source,ettn,from,to,taxCode,jobId,fence}=task||{},d=defs[source];
+  if(!d||!UUID.test(ettn||"")||!UUID.test(jobId||"")||!UUID.test(fence||"")||!/^\d{10,11}$/.test(taxCode||"")||boundedDate(to)-boundedDate(from)<0||boundedDate(to)-boundedDate(from)>30*86400000)fail("SOURCE_INVALID");
+  const [op,base,direction,listName,dateName]=d,dir=base+"Direction",max="Max"+base+"Date",min="Min"+base+"Date",wsdl=await contract(fetcher);
+  verifyOperation(wsdl,op,["CompanyTaxCode","Ettn",...(direction?[dir]:[]),max,min,"PagingRequest","ResultSet"]);
+  const body=el("CompanyTaxCode",taxCode)+el("Ettn",ettn)+(direction?el(dir,direction):"")+el(max,to+"T23:59:59.999+03:00")+el(min,from+"T00:00:00+03:00")+"<a:PagingRequest>"+el("PageNumber",1)+el("RecordsPerPage",1)+"</a:PagingRequest><a:ResultSet>"+el("IsPDFIncluded","true")+el("IsXMLIncluded","true")+"</a:ResultSet>";
+  const r=await soap(fetcher,op,body,12000000);
+  const lists=r.children.filter(c=>c.uri===M&&[listName,...(source==="ARCHIVE_OUT"?["Invoices"]:[])].includes(c.local));
+  if(lists.length!==1||lists[0].children.length!==1)fail("DOCUMENT_IDENTITY_INVALID");
+  const n=lists[0].children[0],date=scalar(n,dateName,M).slice(0,10);
+  if(scalar(n,"ETTN",M).toLowerCase()!==ettn||date<from||date>to)fail("DOCUMENT_IDENTITY_INVALID");
+  const xb=decodeFile(scalar(n,base+"Xml",M));if(!xb||xb.length>8*1024*1024)fail("DOCUMENT_XML_MISSING");
+  const root=parseSoapXml(new TextDecoder("utf-8",{fatal:true}).decode(xb)),ubl="urn:oasis:names:specification:ubl:schema:xsd:",type=source.startsWith("DISPATCH")?"DespatchAdvice":"Invoice";
+  if(root.local!==type||root.uri!==ubl+type+"-2"||scalar(root,"UUID",ubl+"CommonBasicComponents-2").toLowerCase()!==ettn)fail("DOCUMENT_IDENTITY_INVALID");
+  form.set("xml",new Blob([xb],{type:"application/xml"}),"original.xml");
+  let pb=null;try{pb=decodeFile(scalar(n,base+"Pdf",M))}catch{/* An absent/invalid PDF never becomes an original. */}
+  if(pb&&pb.length+xb.length<=8*1024*1024&&/^%PDF-\d\.\d/.test(pb.subarray(0,8).toString("ascii")))form.set("pdf",new Blob([pb],{type:"application/pdf"}),"original.pdf");
+  form.set("result","OK");
+ }catch{form.delete("xml");form.delete("pdf");form.set("result","FAILED")}
+ return form;
 }
