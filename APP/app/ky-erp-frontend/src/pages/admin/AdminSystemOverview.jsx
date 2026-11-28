@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiGet } from "../../utils/api";
 import {
   getOwnerRecoveryConfig,
@@ -35,7 +35,9 @@ export default function AdminSystemOverview({ activeMainCompany }) {
   const [sourceReady, setSourceReady] = useState({ system: false, users: false, sessions: false, approvals: false, recovery: false, storage: false, delivery: false });
   const [message, setMessage] = useState("Yönetim merkezi hazırlanıyor...");
 
+  const loadSeq=useRef(0);
   const load = useCallback(async () => {
+    const seq=++loadSeq.current;
     setBusy(true);
     setSourceReady({ system: false, users: false, sessions: false, approvals: false, recovery: false, storage: false, delivery: false });
     const companyParams = { mainCompanyId: activeMainCompany?.id || "", mainCompanySlug: activeMainCompany?.slug || "" };
@@ -49,6 +51,7 @@ export default function AdminSystemOverview({ activeMainCompany }) {
       apiGet("/admin/file-storage/status", companyParams),
       apiGet("/admin/security/delivery-capabilities", { _ts: Date.now() }),
     ]);
+    if(seq!==loadSeq.current)return;
     setState((current) => ({
       ...current,
       system: jobs[0].status === "fulfilled" ? jobs[0].value : current.system,
@@ -66,7 +69,7 @@ export default function AdminSystemOverview({ activeMainCompany }) {
     setBusy(false);
   }, [activeMainCompany?.id, activeMainCompany?.slug]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); return()=>{loadSeq.current+=1}; }, [load]);
 
   const metrics = useMemo(() => {
     const activeUsers = state.users.filter((row) => row.isActive !== false).length;
@@ -97,20 +100,20 @@ export default function AdminSystemOverview({ activeMainCompany }) {
 
   return (
     <div className="admpro-page">
-      <header className="admpro-head"><div><span className="admpro-kicker">PLATFORM YÖNETİMİ / SÜPER YÖNETİCİ</span><h2>KY ERP Süper Yönetim Konsolu</h2><p>Firmalar, kullanıcılar, karar kuyrukları, güvenlik ve platform sağlığı tek kurumsal merkezde.</p></div><div className="admpro-actions"><button type="button" className="primary" onClick={load} disabled={busy}>{busy ? "Kontrol Ediliyor..." : "Tümünü Kontrol Et"}</button></div></header>
+      <header className="admpro-head"><div><span className="admpro-kicker">PLATFORM YÖNETİMİ / SÜPER YÖNETİCİ</span><h2>Platform sağlık ve karar merkezi</h2><p>Firmalar, kullanıcılar, karar kuyrukları, güvenlik ve platform sağlığı tek kurumsal merkezde.</p></div><div className="admpro-actions"><button type="button" className="primary" onClick={load} disabled={busy}>{busy ? "Kontrol Ediliyor..." : "Tümünü Kontrol Et"}</button></div></header>
       <div className={`admpro-notice ${message.includes("yanıt vermedi") ? "warn" : "success"}`}>{message}</div>
       <section className="admpro-stats"><div className="admpro-stat"><span>Aktif Normal Kullanıcı</span><strong>{sourceReady.users ? metrics.activeUsers : "—"}</strong><small>{sourceReady.users ? `${state.users.length} toplam kullanıcı` : "Kullanıcı verisi doğrulanamadı"}</small></div><div className="admpro-stat"><span>Aktif Oturum</span><strong>{sourceReady.sessions ? state.sessions.length : "—"}</strong><small>{!sourceReady.sessions ? "Oturum verisi doğrulanamadı" : metrics.duplicateBrowserSessions ? `${metrics.duplicateBrowserSessions} tekrar kontrolü gerekli` : "Tekrarlı browser görünmüyor"}</small></div><div className="admpro-stat"><span>Bekleyen Giriş Onayı</span><strong>{sourceReady.approvals ? state.approvals.length : "—"}</strong><small>{sourceReady.approvals ? "Güvenlik karar kuyruğu" : "Onay verisi doğrulanamadı"}</small></div><div className="admpro-stat"><span>Doğrulanmamış E-posta</span><strong>{sourceReady.users ? metrics.unverified : "—"}</strong><small>{sourceReady.users ? "Adres var, doğrulama eksik" : "Kullanıcı verisi doğrulanamadı"}</small></div></section>
       <section className="admpro-grid-2">
         <div className="admpro-card admpro-smart"><div className="admpro-card-head"><div><div className="admpro-smart-title"><b>KY</b><h3>Kurallı Yönetim Kontrolü</h3></div><p>Kurallı sağlık analizi; kritik işlemleri otomatik uygulamaz, güvenli aksiyon önerir.</p></div></div><div className="admpro-health-list">{recommendations.map((item,index)=><div key={`${item.title}-${index}`} className={`admpro-health-item ${item.severity}`}><span className="dot"/><div><strong>{item.title}</strong><small>{item.detail}</small></div>{item.href?<button type="button" className={`admpro-badge ${item.severity==="ok"?"ok":item.severity==="critical"?"bad":"warn"}`} style={{border:0,cursor:"pointer"}} onClick={()=>window.location.assign(item.href)}>{item.action}</button>:<span className={`admpro-badge ${item.severity==="ok"?"ok":item.severity==="critical"?"bad":"warn"}`}>{item.action}</span>}</div>)}</div></div>
         <div className="admpro-card"><div className="admpro-card-head"><div><h3>Sistem Sağlığı</h3><p>D1, R2, e-posta ve kurtarma hazır olma durumu.</p></div></div><div className="admpro-health-list">
-          <div className={`admpro-health-item ${system.tables?"ok":"warn"}`}><span className="dot"/><div><strong>Cloud D1</strong><small>{system.tables?`${system.tables} tablo · ${system.documents||0} belge · ${system.personnel||0} personel`:"Sistem durum verisi alınamadı"}</small></div><span className={`admpro-badge ${system.tables?"ok":"warn"}`}>{system.tables?"Hazır":"Kontrol"}</span></div>
-          <div className={`admpro-health-item ${storage.accessible?"ok":"warn"}`}><span className="dot"/><div><strong>Cloudflare R2</strong><small>{storage.storageRoot||"Depolama kökü raporlanmadı"}</small></div><span className={`admpro-badge ${storage.accessible?"ok":"warn"}`}>{storage.accessible?"Erişilebilir":"Kontrol"}</span></div>
-          <div className={`admpro-health-item ${delivery.email?"ok":"warn"}`}><span className="dot"/><div><strong>E-posta Doğrulama</strong><small>{delivery.email?`${delivery.emailProvider||"Gönderim servisi"} bağlı`:"Gönderim servisi bağlı değil"}</small></div><span className={`admpro-badge ${delivery.email?"ok":"warn"}`}>{delivery.email?"Hazır":"Eksik"}</span></div>
-          <div className={`admpro-health-item ${recovery.recoveryEnabled?"ok":"warn"}`}><span className="dot"/><div><strong>Süper Yönetici Kurtarma</strong><small>{recovery.recoveryEnabled?"Kurtarma kanalları aktif":"Kurtarma kurulumu tamamlanmamış"}</small></div><span className={`admpro-badge ${recovery.recoveryEnabled?"ok":"warn"}`}>{recovery.recoveryEnabled?"Hazır":"Kurulum"}</span></div>
+          <div className={`admpro-health-item ${sourceReady.system&&system.tables?"ok":"warn"}`}><span className="dot"/><div><strong>Cloud D1</strong><small>{sourceReady.system&&system.tables?`${system.tables} tablo · ${system.documents??"—"} belge · ${system.personnel??"—"} personel`:"Sistem durum verisi alınamadı"}</small></div><span className={`admpro-badge ${sourceReady.system&&system.tables?"ok":"warn"}`}>{sourceReady.system&&system.tables?"Hazır":"Doğrulanmadı"}</span></div>
+          <div className={`admpro-health-item ${sourceReady.storage&&storage.accessible?"ok":"warn"}`}><span className="dot"/><div><strong>Cloudflare R2</strong><small>{storage.storageRoot||"Depolama kökü raporlanmadı"}</small></div><span className={`admpro-badge ${sourceReady.storage&&storage.accessible?"ok":"warn"}`}>{!sourceReady.storage?"Doğrulanmadı":storage.accessible?"Erişilebilir":"Kontrol"}</span></div>
+          <div className={`admpro-health-item ${sourceReady.delivery&&delivery.email?"ok":"warn"}`}><span className="dot"/><div><strong>E-posta Doğrulama</strong><small>{delivery.email?`${delivery.emailProvider||"Gönderim servisi"} bağlı`:"Gönderim servisi bağlı değil"}</small></div><span className={`admpro-badge ${sourceReady.delivery&&delivery.email?"ok":"warn"}`}>{!sourceReady.delivery?"Doğrulanmadı":delivery.email?"Hazır":"Eksik"}</span></div>
+          <div className={`admpro-health-item ${sourceReady.recovery&&recovery.recoveryEnabled?"ok":"warn"}`}><span className="dot"/><div><strong>Süper Yönetici Kurtarma</strong><small>{recovery.recoveryEnabled?"Kurtarma kanalları aktif":"Kurtarma kurulumu tamamlanmamış"}</small></div><span className={`admpro-badge ${sourceReady.recovery&&recovery.recoveryEnabled?"ok":"warn"}`}>{!sourceReady.recovery?"Doğrulanmadı":recovery.recoveryEnabled?"Hazır":"Kurulum"}</span></div>
         </div></div>
       </section>
       <section className="admpro-card admpro-decision-center">
-        <div className="admpro-card-head"><div><h3>Karar Merkezi</h3><p>Giriş ve mail hesabı talepleri aynı karar merkezinde görünür; yetkili firma sahibi / işveren veya Süper Yönetici doğrudan karar verebilir.</p></div></div>
+        <div className="admpro-card-head"><div><h3>Karar Merkezi</h3><p>Giriş ve mail hesabı talepleri aynı karar merkezinde görünür; İlgili işlemdeki mevcut yetki ve firma onayı kuralları geçerlidir.</p></div></div>
         <AdminLoginApprovals compact />
         <div style={{ height: 16 }} />
         <AdminMailApprovals compact />

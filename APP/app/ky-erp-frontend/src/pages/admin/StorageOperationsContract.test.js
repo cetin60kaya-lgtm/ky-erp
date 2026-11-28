@@ -48,7 +48,7 @@ test("Google Drive ve OneDrive iki bağımsız aktif bağlantı olarak görüleb
 test("akıllı kontrol D1 salt okunur diagnostik verisine bağlanır ve ilgili işleme götürür",()=>{
  assert.match(page,/apiGet\("\/file-hub\/diagnostics"/);
  assert.match(page,/Akıllı Bağlantı Denetimi/);
- assert.match(page,/setTab\(row\.actionTab\)/);
+ assert.match(page,/navigateTab\(row\.actionTab\)/);
  assert.match(css,/storage-insight-critical/);
 });
 

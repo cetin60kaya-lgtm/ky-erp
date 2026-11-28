@@ -1226,6 +1226,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   let checkpoint = JSON.parse(JSON.stringify(cursor));
   let files = 0, folders = 0, modelSyncs = 0, linkedImages: number | null = null, linkedModels: number | null = null;
   let phase="PAGE_FETCH";
+  let stepFolderPath:string|null=null;
   const stepStarted=Date.now(),baseFiles=Number(cursor.files||0),baseFolders=Number(cursor.folders||0);
   const priorLimit=Number(meta.cloudSyncProgress?.chunkLimit||3);
   const chunkLimit=[3,6,12].includes(priorLimit)?priorLimit:3;
@@ -1236,7 +1237,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
       startedAt: state.startedAt, updatedAt: stamp, completedAt: complete ? stamp : null,
       pages: Number(state.pages || 0), pendingFolders: Array.isArray(state.queue) ? state.queue.length : 0,
       state: error ? "ERROR" : complete ? "COMPLETED" : release ? "WAITING" : "RUNNING",
-      phase, stepFiles:Math.max(0,Number(state.files||0)-baseFiles),stepFolders:Math.max(0,Number(state.folders||0)-baseFolders),stepDurationMs:Date.now()-stepStarted,
+      phase, stepFolderPath, nextFolderPath:state.queue?.length?(text(state.queue[0]?.path).slice(0,500)||"Ana klasör"):null, stepFiles:Math.max(0,Number(state.files||0)-baseFiles),stepFolders:Math.max(0,Number(state.folders||0)-baseFolders),stepDurationMs:Date.now()-stepStarted,
       pageOffset:Number(state.pendingPage?.offset||0),pageSize:Array.isArray(state.pendingPage?.children)?state.pendingPage.children.length:0,
       chunkLimit:error?3:release&&Date.now()-stepStarted<1800&&Number(state.files||0)-baseFiles+Number(state.folders||0)-baseFolders>=chunkLimit?Math.min(12,chunkLimit*2):chunkLimit };
     const data = { ...meta, cloudDirect: true, cloudSyncCursor: complete ? null : state,
@@ -1256,6 +1257,7 @@ async function runGoogleSyncBatch(c: Context<AppEnv>, slug: string, connectionId
   try {
     for (let p = 0; p < Math.min(4, Math.max(1, Number(pageLimit) || 1)) && cursor.queue.length; p++) {
       const folder = cursor.queue[0];
+      stepFolderPath=text(folder.path).slice(0,500)||"Ana klasör";
       // Persist a provider page snapshot before consuming it in bounded chunks.
       // Keep the provider token and queue head unchanged until ALL its entries are indexed.
       let pending=cursor.pendingPage;
