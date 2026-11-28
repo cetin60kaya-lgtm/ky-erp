@@ -3,13 +3,13 @@ import { listBoyahaneProducts } from "../../../services/boyahaneWorkflowApi";
 import { linkedPigmentPct, recipeBudget, solveColor, weighRecipe, makeModel, linearHex, colorLab, hexLinear } from "../../../boyahane/colorFormulation";
 
 const START = [
-  ["LİMON KLC","#FAF520",0.285],["GOLD KFT","#FFD500",1.067],["KIRMIZI KGC","#BA2C3D",2.416],
-  ["ORANJ KG","#FF6900",3.790],["KARMEN KBD","#A90045",1.736],["FUŞYA KB","#AA3569",1.629],
-  ["MAVİ KBT","#164482",2.109],["YEŞİL KB","#1E6C58",1.877],["SİYAH KNG","#414143",13.714],
-  ["LACİVERT KRL-E","#202E5F",1.509],["MOR KRL","#523D77",5.977],
+  ["LİMON KLC","#FAF520",0.99784],["GOLD KFT","#FFD500",0.0367],["KIRMIZI KGC","#B02B36",2.58425],
+  ["ORANJ KG","#FF6900",18.79266],["KARMEN KBD","#A90045",0.03598],["FUŞYA KB","#AA3569",2.15766],
+  ["MAVİ KBT","#194C8C",2.6786],["YEŞİL KB","#236F5B",2.49252],["SİYAH KNG","#494647",17.22225],
+  ["LACİVERT KRL-E","#1E2D5E",1.60487],["MOR KRL","#5A3F6E",8.45822],["GOLD PG 2805","#DB710D",0.52382],
 ];
 const norm = value => String(value || "").toLocaleUpperCase("tr-TR").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^A-Z0-9]+/g," ").trim();
-const nameOf = p => p.productName || p.tradeName || p.name || p.code || "";
+const nameOf = p => p?.productName || p?.tradeName || p?.name || p?.code || "";
 const valid = h => /^#[0-9a-f]{6}$/i.test(h || "");
 const fmt = x => Number(x).toLocaleString("tr-TR",{maximumFractionDigits:4});
 const codeOf = x => String(x || "").trim().toUpperCase().replace(/\s+(TPG|TCX)$/,"");
@@ -41,6 +41,7 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
   const [link,setLink]=useState(false);
   const [ground,setGround]=useState("");
   const [model,setModel]=useState("");
+  const [colorName,setColorName]=useState("");
   const [reference,setReference]=useState("");
   const [clearId,setClearId]=useState("");
   const [whiteId,setWhiteId]=useState("");
@@ -128,7 +129,7 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
     const option=dilutionOptions(result.active[i]).find(d=>String(d.p.id)===id);
     setResult({...result,dilutionIds:result.dilutionIds.map((v,j)=>i===j?id:v),dilutions:result.dilutions.map((v,j)=>i===j?(option?.ratio||100):v)});
   }
-  function draft(){
+  async function draft(){
     if(!weighing||!result)return;
     if((weighing.clear>0&&!clearId)||(weighing.white>0&&!whiteId)){setError("S10 ve S20 stok ürünlerini eşleştirin.");return;}
     const lines=[];
@@ -139,15 +140,16 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
       if(!product)throw Error("Stok ürünü eşleşmedi.");
       lines.push({productId:id,inventoryId:id,productName:nameOf(product),referenceGram:result.grams[i]*100/result.dilutions[i]});
     });
-    onDraft({pantone:codeOf(pantone),colorHex:target,model,reference,ground,lines,products,note:"Deneysel formülasyon / model: "+model+" / referans: "+reference+" / zemin: "+ground+" / hedef: "+target+" / tahmin: "+result.hex+" / ΔE76: "+fmt(result.delta)});
+    await onDraft({pantone:codeOf(pantone),colorName:colorName.trim(),colorHex:target,model,reference,ground,lines,products,note:"Deneysel formülasyon / model: "+model+" / referans: "+reference+" / zemin: "+ground+" / hedef: "+target+" / tahmin: "+result.hex+" / ΔE76: "+fmt(result.delta)});
   }
-  const tintPig=palette.find(p=>p.id===tint&&valid(p.hex)&&p.strength>0);
+  const tintPig=palette.find(p=>p.id===tint&&valid(p.hex)&&Number.isFinite(p.strength)&&p.strength>0);
   return <section className="bh-operation-intro" style={{display:"grid",gap:16}}>
     <div><small>RENK & REÇETE / FORMÜLASYON</small><h2>Sıfırdan Renk Oluştur</h2><p>Arşiv reçetesi kopyalanmaz. Sabit baz ve pigment bütçesiyle yeni dağılım hesaplanır.</p><button className="bh-btn" type="button" onClick={onClose}>Kayıtlı renklere dön</button></div>
     <div className="bh-notice">Deneysel RGB/Kubelka–Munk yaklaşımı. Kumaş zemini kayıt amaçlıdır; optik etkisi, beyaz örtücülüğü, floresan ve fikse henüz kalibre değil. Numune onayı olmadan üretime kullanmayın.</div>
     <div style={gridStyle}>
       <label style={fieldStyle}>Pantone<input style={inputStyle} value={pantone} onChange={e=>{setPantone(e.target.value);invalidate();lookup(e.target.value);}} placeholder="13-0858" /></label>
       <label style={fieldStyle}>Hedef HEX<input style={inputStyle} value={target} onChange={e=>{setTarget(e.target.value);invalidate();}} placeholder="#RRGGBB"/></label>
+      <label style={fieldStyle}>Renk adı<input style={inputStyle} value={colorName} onChange={e=>setColorName(e.target.value)} placeholder="Sarı, yeşil..."/></label>
       <label style={fieldStyle}>Model / iş referansı<input style={inputStyle} value={model} onChange={e=>setModel(e.target.value)}/></label>
       <label style={fieldStyle}>Müşteri renk referansı<input style={inputStyle} value={reference} onChange={e=>setReference(e.target.value)}/></label>
       <label style={fieldStyle}>Kumaş zemini<input style={inputStyle} value={ground} onChange={e=>{setGround(e.target.value);invalidate();}} placeholder="Beyaz, ekru, siyah..."/></label>
@@ -167,8 +169,8 @@ export default function ColorFormulationWorkspace({activeMainCompany,rows,onClos
       <div style={{overflowX:"auto"}}><table style={{width:"100%"}}><thead><tr><th>Pigment</th><th>Gerçek pigment g</th><th>Stok ürünü</th><th>Tartım g</th></tr></thead><tbody>{result.active.map((p,i)=><tr key={p.id}><td>{p.name}</td><td><input type="number" min="0" max={result.budget.pigment} step=".0001" value={Number(result.grams[i].toFixed(4))} onChange={e=>editGram(i,e.target.valueAsNumber)}/></td><td><select value={result.dilutionIds[i]} onChange={e=>chooseDilution(i,e.target.value)}><option value="">Saf</option>{dilutionOptions(p).map(d=><option key={d.p.id} value={String(d.p.id)}>{nameOf(d.p)}</option>)}</select></td><td>{fmt(result.grams[i]*100/result.dilutions[i])}</td></tr>)}</tbody></table></div>
       <div style={gridStyle}>{[["clear",clearId,setClearId,"S10 doğrudan",weighing?.clear],["white",whiteId,setWhiteId,"S20 beyaz",weighing?.white]].map(([type,id,set,label,g])=><label key={type} style={fieldStyle}>{label} — {g==null?"—":fmt(g)+" g"}<select value={id} onChange={e=>set(e.target.value)}><option value="">Seçin</option>{products.filter(p=>typeOf(p)===type).map(p=><option key={p.id} value={String(p.id)}>{nameOf(p)}</option>)}</select></label>)}</div>
       {weighError&&<div className="bh-notice danger">{weighError}</div>}
-      <button type="button" className="bh-btn primary" disabled={!weighing} onClick={()=>{try{draft();}catch(e){setError(e.message);}}}>Mevcut renk kartına düzenlenebilir taslak aktar</button>
-      <small>Yeni kartlar ve model referansları numune akışında onaylanır. Bu işlem stok tüketmez, otomatik onay vermez.</small>
+      <button type="button" className="bh-btn primary" disabled={!weighing||busy} onClick={async()=>{setBusy(true);try{await draft();}catch(e){setError(e.message);}finally{setBusy(false);}}}>Renk kartına düzenlenebilir taslak aktar</button>
+      <small>Yeni kart veya model referansı için açık teyit alınır. Reçete numune akışında onaylanır. Bu işlem stok tüketmez, otomatik onay vermez.</small>
     </div>}
     <details open><summary>Ana pigmentler ve kalibrasyon</summary><p>Beş operatör referansı ve diğer başlangıç tahminleri kesin fiziksel ölçüm değildir. Diğer onaylı ürünlere ölçülmüş HEX/kuvvet girerek açın. Floresan ve efektler bu modelde kapalıdır.</p><div style={{overflowX:"auto"}}><table style={{width:"100%"}}><thead><tr><th>Ürün</th><th>HEX</th><th>Kuvvet</th><th>Hesaba kat</th><th>Durum</th></tr></thead><tbody>{palette.map(p=><tr key={p.id}><td>{p.name}</td><td><input value={p.hex} onChange={e=>editPigment(p.id,{hex:e.target.value})} placeholder="#RRGGBB" style={{borderLeft:"12px solid "+(valid(p.hex)?p.hex:"#ddd")}}/></td><td><input type="number" min=".001" step=".01" value={p.strength} onChange={e=>editPigment(p.id,{strength:e.target.valueAsNumber})}/></td><td><input type="checkbox" checked={p.enabled} disabled={p.special} onChange={e=>editPigment(p.id,{enabled:e.target.checked})}/></td><td>{p.special?"Özel model gerekli":p.source}</td></tr>)}</tbody></table></div></details>
     <details><summary>S20 beyaz açma deneyi · 10 g pigment</summary><select value={tint} onChange={e=>setTint(e.target.value)}><option value="">Pigment seçin</option>{palette.filter(p=>valid(p.hex)&&!p.special).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select>{tintPig&&Number.isFinite(power)&&power>0&&<div style={gridStyle}>{[0,5,10,20,40].map(w=>{const h=linearHex(makeModel([tintPig],power)([10],w));return <div key={w}><div style={{height:55,background:h,borderRadius:5}}/>{w} g beyaz · {h}</div>;})}</div>}</details>
