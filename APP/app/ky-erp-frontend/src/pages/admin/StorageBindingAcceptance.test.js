@@ -1,0 +1,4 @@
+import test from "node:test";import assert from "node:assert/strict";import {readFileSync} from "node:fs";
+const page=readFileSync(new URL("./AdminStorageCenter.jsx",import.meta.url),"utf8");
+test("uncertain binding write reads back without a second PUT and refreshes displayed record",()=>{const save=page.slice(page.indexOf("async function saveBinding"),page.indexOf("async function rotateCredential"));assert.equal((save.match(/method:"PUT"/g)||[]).length,1);assert.match(save,/clearApiGetCache\(\)/);assert.match(save,/forceFresh:true/);assert.match(save,/setBindings\(reread\.data\)/);assert.match(save,/writeError\?"/);});
+test("cloud and local agent status are distinct; unread credential cannot be rotated",()=>{assert.match(page,/Yerel senkron klasörü · File Agent/);assert.match(page,/disabled=\{loading\|\|!sectionHealth\.agent\}/);assert.match(page,/setServiceWarning\("Ana bağlantılar/);});
