@@ -1,6 +1,6 @@
 import test from "node:test";import assert from "node:assert/strict";import {DatabaseSync} from "node:sqlite";import {readFileSync} from "node:fs";
 const source=readFileSync(new URL("./file-hub-accounting-intake.ts",import.meta.url),"utf8");
-const sql=source.match(/export const FILE_HUB_ACCOUNTING_INTAKE_SELECT=`([\s\S]*?)`;/)![1]!.replaceAll("\\\\","\\");
+const sql=source.match(/const SELECT=`([\s\S]*?)`;/)![1]!.replaceAll("\\\\","\\");
 test("PDF intake reuses linked XML paths without crossing company or connection and retains case normalization",()=>{
  const db=new DatabaseSync(":memory:");
  try{

@@ -5,7 +5,7 @@ import { ingestIndexedFileHubEBelge } from "./e-belge-center-cloud.ts";
 
 type Row=Record<string,any>;
 const txt=(v:unknown)=>v==null?"":String(v).trim();
-export const FILE_HUB_ACCOUNTING_INTAKE_SELECT=`
+const SELECT=`
 WITH linked_xml_paths AS MATERIALIZED (
  SELECT DISTINCT lx.main_company_slug,lx.storage_connection_id,
  LOWER(REPLACE(lx.relative_path,char(92),'/')) normalized_path
@@ -75,7 +75,7 @@ async function update(db:any,slug:string,id:string,state:string,attempts:number,
 /** Periodic background indexing; never calls finalize/ledger/official submission. */
 export async function runFileHubAccountingDocumentIntake(env:Cloudflare.Env){
   const now=stamp(),stale=new Date(Date.now()-25*60*1000).toISOString();
-  const rows=(await env.DB.prepare(FILE_HUB_ACCOUNTING_INTAKE_SELECT).bind(now,stale).all<Row>()).results||[];
+  const rows=(await env.DB.prepare(SELECT).bind(now,stale).all<Row>()).results||[];
   const result={scanned:rows.length,staged:0,review:0,retry:0};
   for(const row of rows){
     const slug=txt(row.main_company_slug),id=txt(row.id);
