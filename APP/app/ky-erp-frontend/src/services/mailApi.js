@@ -86,8 +86,8 @@ export const createMailDraft = (payload = {}) =>
 export const listCommunicationFiles = (params = {}) =>
   apiGet("/mail/files", { take: 150, ...params }).then(unwrap);
 
-export const getCommunicationFileBlob = (assetId) =>
-  apiFetch(`/mail/files/${encodeURIComponent(assetId)}/content`, { method: "GET", responseType: "blob", timeoutMs: 60_000 });
+export const getCommunicationFileBlob = (assetId, mainCompanySlug = "") =>
+  apiFetch(`/mail/files/${encodeURIComponent(assetId)}/content`, { method: "GET", params:mainCompanySlug?{mainCompanySlug}:undefined, responseType: "blob", timeoutMs: 60_000 });
 
 export const searchCommunicationFiles = (q = "") =>
   q.trim()

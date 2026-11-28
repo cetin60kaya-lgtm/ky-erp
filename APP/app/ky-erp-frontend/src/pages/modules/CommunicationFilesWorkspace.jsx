@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { getCommunicationFileBlob, listCommunicationFiles } from "../../services/mailApi";
 import {
@@ -33,6 +33,10 @@ export default function CommunicationFilesWorkspace({
   const [recentIds, setRecentIds] = useState(() => typeof window === "undefined" ? [] : recentFileIds(window.localStorage, storageKey));
   const [preview, setPreview] = useState(null);
   const scope = picker ? "all" : fileScope(activeTab);
+  const requestSeq=useRef(0), currentTenant=useRef(tenant),currentView=useRef(scope);
+  currentTenant.current=tenant;currentView.current=scope;
+  const [verifiedTenant,setVerifiedTenant]=useState("");
+  const [verifiedView,setVerifiedView]=useState("");
 
   useEffect(() => {
     setRecentIds(typeof window === "undefined" ? [] : recentFileIds(window.localStorage, storageKey));
@@ -40,36 +44,29 @@ export default function CommunicationFilesWorkspace({
   }, [storageKey]);
 
   const refresh = useCallback(async (term = "") => {
-    setBusy(true);
+    const seq=++requestSeq.current;
+    if(!tenant){setFiles([]);setVerifiedTenant("");setNotice("Aktif firma seçin.");return;}
+    setBusy(true);setNotice("");setVerifiedTenant("");
     try {
-      const rows = await listCommunicationFiles({ q: term.trim() || undefined, scope, take: 200 });
-      setFiles(Array.isArray(rows) ? rows : []);
-      setNotice("");
+      const rows = await listCommunicationFiles({ mainCompanySlug:tenant, q: term.trim() || undefined, scope, take: 200 });
+      if(seq!==requestSeq.current||currentTenant.current!==tenant)return;
+      if(!Array.isArray(rows))throw Error("Dosya listesi doğrulanamadı.");
+      setFiles(rows);setVerifiedTenant(tenant);setVerifiedView(scope);
     } catch (error) {
-      setNotice("Hata: " + (error?.message || "Dosya listesi alınamadı."));
-      setFiles([]);
-    } finally { setBusy(false); }
-  }, [scope]);
+      if(seq!==requestSeq.current||currentTenant.current!==tenant)return;
+      setNotice("Hata: " + (error?.message || "Dosya listesi alınamadı."));setFiles([]);
+    } finally { if(seq===requestSeq.current&&currentTenant.current===tenant)setBusy(false); }
+  }, [scope,tenant]);
 
   useEffect(() => {
-    let cancelled = false;
-    // The server resolves permissions and tenant scope. Never enumerate the raw Drive.
-    async function load() {
-      setBusy(true);
-      try {
-        const rows = await listCommunicationFiles({ scope, take: 200 });
-        if (!cancelled) { setFiles(Array.isArray(rows) ? rows : []); setNotice(""); }
-      } catch (error) {
-        if (!cancelled) { setFiles([]); setNotice("Hata: " + (error?.message || "Dosyalar alınamadı.")); }
-      } finally { if (!cancelled) setBusy(false); }
-    }
-    load();
-    return () => { cancelled = true; };
-  }, [scope, tenant]);
+    setPreview(null);
+    void refresh();
+    return () => {requestSeq.current+=1;};
+  }, [refresh]);
 
   useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview?.url]);
 
-  const rows = useMemo(() => visibleCommunicationFiles(files, activeTab, recentIds), [files, activeTab, recentIds]);
+  const rows = useMemo(() => visibleCommunicationFiles(verifiedTenant===tenant&&verifiedView===scope?files:[], activeTab, recentIds), [files, activeTab, recentIds,verifiedTenant,tenant,verifiedView,scope]);
   const selectedSet = useMemo(() => new Set(selectedIds.map(String)), [selectedIds]);
 
   function remember(file) {
@@ -77,10 +74,12 @@ export default function CommunicationFilesWorkspace({
   }
 
   async function openFile(file, downloadOnly = false) {
+    if((verifiedTenant!==tenant||verifiedView!==scope))return;
     if (!isAvailable(file)) return setNotice("Hata: Bu dosya kaynakta bulunamıyor.");
     setBusy(true);
     try {
-      const blob = await getCommunicationFileBlob(file.id);
+      const blob = await getCommunicationFileBlob(file.id,tenant);
+      if(currentTenant.current!==tenant||currentView.current!==scope)return;
       remember(file);
       const kind = filePreviewType(file);
       const url = URL.createObjectURL(blob);
@@ -124,7 +123,7 @@ export default function CommunicationFilesWorkspace({
         {query ? <button type="button" className="secondary" onClick={() => { setQuery(""); refresh(""); }}>Temizle</button> : null}
       </div>
       {notice ? <p className="commf-notice" role="alert">{notice}</p> : null}
-      <div className="commf-summary">{busy ? "Dosyalar yükleniyor..." : rows.length + " dosya gösteriliyor"} · Kaynak: KY File Hub · Dosyalar fiziksel kaynaklarında kalır</div>
+      <div className="commf-summary">{busy ? "Dosyalar yükleniyor..." : (verifiedTenant!==tenant||verifiedView!==scope)?"Dosya listesi doğrulanamadı":rows.length + " dosya gösteriliyor · en fazla 200 sonuç"} · Kaynak: KY File Hub · Dosyalar fiziksel kaynaklarında kalır</div>
       <div className="commf-list">
         {rows.map((file) => {
           const id = String(file.id);
@@ -150,10 +149,10 @@ export default function CommunicationFilesWorkspace({
             </div>
           </article>;
         })}
-        {!busy && rows.length === 0 ? <div className="commf-empty">{activeTab === "drive-son-kullanilanlar" ? "Bu cihazda henüz açılmış bir dosya bulunmuyor veya kayıt listede değil." : "Bu filtreye uygun erişilebilir dosya bulunamadı."}</div> : null}
+        {!busy && verifiedTenant===tenant && verifiedView===scope && rows.length === 0 ? <div className="commf-empty">{activeTab === "drive-son-kullanilanlar" ? "Bu cihazda henüz açılmış bir dosya bulunmuyor veya kayıt listede değil." : "Bu filtreye uygun erişilebilir dosya bulunamadı."}</div> : null}
       </div>
       <footer className="commf-footer">Bağlantı kurma, OAuth, klasör atama ve Agent ayarları burada yapılmaz. Bunlar Bağlantılar & Depolama bölümünün görevleridir.</footer>
-      {preview ? <div className="commf-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}>
+      {preview && verifiedTenant===tenant && verifiedView===scope ? <div className="commf-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPreview(null); }}>
         <section className="commf-preview" role="dialog" aria-modal="true" aria-label={preview.name}>
           <header><strong>{preview.name}</strong><button type="button" className="secondary" onClick={() => setPreview(null)}>Kapat</button></header>
           {preview.kind === "image" ? <img src={preview.url} alt={preview.name}/> : preview.kind === "pdf" ? <iframe title={preview.name} src={preview.url} referrerPolicy="no-referrer"/> : <iframe title={preview.name} src={preview.url} sandbox="" referrerPolicy="no-referrer"/>}

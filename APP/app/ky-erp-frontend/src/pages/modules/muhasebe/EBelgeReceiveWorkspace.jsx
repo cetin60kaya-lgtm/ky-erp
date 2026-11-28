@@ -24,9 +24,9 @@ export default function EBelgeReceiveWorkspace({activeMainCompany,openModule}){
   </div>
   {error?<p role="alert">{error}</p>:!scoped?<p role="status">Firma bağlantıları okunuyor…</p>:<div>
    {(scoped.companyAdapters||[]).filter(x=>x.selected).map(x=><p key={x.key}><strong>{scoped.systemCatalog?.find(a=>a.key===x.key)?.label||x.key}</strong> · {x.enabled!==true?"Pasif":x.key==="ISNET"?"Canlı ofis bağlantısı":x.key==="MANUAL"?"Dosya yükleme":"Belge aktarım servisi henüz doğrulanmadı"}</p>)}
-   {isnet&&<details open={show} onToggle={e=>setShow(e.currentTarget.open)}><summary>Eski portal aktarımı (alternatif)</summary><p>Bu yol ayrı portal oturumu gerektirir. Günlük canlı sorguyu aşağıdan başlatın.</p></details>}
+
   </div>}
-  {isnet&&<><IsnetOfficeStatus key={slug} slug={slug} compact/><IsnetOfficeReadWorkspace key={"read:"+slug} slug={slug}/></>}
-  {isnet&&show&&<EBelgeIsnetPortalSync key={slug} activeMainCompany={activeMainCompany} openModule={openModule} enabled={true}/>}
+  {isnet&&<><IsnetOfficeStatus key={slug} slug={slug} compact/><IsnetOfficeReadWorkspace key={"read:"+slug} slug={slug} openModule={openModule}/></>}
+  {isnet&&<details className="ebo-recovery" open={show} onToggle={e=>setShow(e.currentTarget.open)}><summary>Teknik kurtarma · Eski portal yöntemi</summary><p>Yalnız canlı ofis bağlantısı kullanılamadığında. Normal aktarım yukarıdaki tek İşNet sorgusudur.</p>{show&&<EBelgeIsnetPortalSync key={slug} activeMainCompany={activeMainCompany} openModule={openModule} enabled={true}/>}</details>}
  </section>;
 }

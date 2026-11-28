@@ -175,8 +175,9 @@ export default function VisualProfileStudio({standalone=false}){
   finally{setBusy(false)}
  };
  return <details className="eb-visual-studio" open={standalone}>
-  <summary><strong>Firma Bazlı Belge Görünümü</strong><span>Bir kere XML + orijinal PDF/JPEG/PNG tanıt, düzenle, kaydet · sonra aynı firmanın XML'ini dönüştür</span></summary>
+  <summary><strong>Firma Bazlı Belge Şablonları</strong><span>Referans seç · Önizle ve karşılaştır · Onayla</span></summary>
   <div className="eb-visual-content">
+   <div className="eb-visual-steps" aria-label="Şablon çalışma sırası"><span>1. Orijinal XML ve referans</span><span>2. Görsel karşılaştırma</span><span>3. Firma / belge türü onayı</span></div>
    <div className="eb-visual-intro">
     <strong>Tek kaynak XML.</strong> Firma ve belge türüne göre görsel şablon kaydedilir. Referans eski belgeye ait olduğu için eski QR, fatura numarası ve tutar yeni belgeye kopyalanmaz. Çıktı yalnız seçili XML'den hazırlanır.
    </div>
