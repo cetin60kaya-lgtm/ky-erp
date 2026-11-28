@@ -335,24 +335,25 @@ async function upsertCloudFile(c: Context<AppEnv>, slug: string, connectionId: s
       // JPEG değiştiyse eski küçük önizlemeyi bir sonraki görüntülemede yeniden üret.
       const previewChanged = text(location.provider_modified_at) !== text(item.modifiedAt) ||
         text(oldMeta.checksum) !== text(item.checksum);
-      await c.env.DB.prepare(`UPDATE file_hub_assets
+      await c.env.DB.batch([c.env.DB.prepare(`UPDATE file_hub_assets
           SET file_name=?,extension=?,mime_type=?,size_bytes=?,status='AVAILABLE',source_type='CLOUD_API',
               last_seen_at=?,updated_at=?,metadata=?,
               preview_status=CASE WHEN ?=1 THEN 'NONE' ELSE preview_status END,
               preview_storage_key=CASE WHEN ?=1 THEN NULL ELSE preview_storage_key END
           WHERE id=? AND main_company_slug=?`)
-        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), previewChanged ? 1 : 0, previewChanged ? 1 : 0, location.asset_id, slug).run();
-      await c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
+        .bind(fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), seenAt, seenAt, JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), previewChanged ? 1 : 0, previewChanged ? 1 : 0, location.asset_id, slug),
+      c.env.DB.prepare(`UPDATE file_hub_locations SET provider_file_id=?,relative_path=?,is_available=1,provider_modified_at=?,last_seen_at=?,updated_at=? WHERE id=?`)
         // Six SQL placeholders: provider id, path, modification time, last seen, updated, location id.
-        .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id).run();
+        .bind(text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, location.id)]);
     }
     return { assetId:text(location.asset_id), changed, needsModelSync:changed || Number(location.model_relation_count||0)===0 };
   }
   const assetId = crypto.randomUUID(), locationId = crypto.randomUUID();
-  await c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','CLOUD_API','NONE',?,?,?,?,?)`)
-    .bind(assetId, slug, `${provider}:${connectionId}:${text(item.id)}`, fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), seenAt, seenAt, seenAt, seenAt).run();
-  await c.env.DB.prepare(`INSERT INTO file_hub_locations(id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)`)
-    .bind(locationId, slug, assetId, connectionId, text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt).run();
+  // Asset and provider location are one atomic D1 batch. A failed insert cannot strand a new asset without its location.
+  await c.env.DB.batch([c.env.DB.prepare(`INSERT INTO file_hub_assets(id,main_company_slug,logical_key,file_name,extension,mime_type,size_bytes,status,source_type,preview_status,metadata,first_seen_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,?,'AVAILABLE','CLOUD_API','NONE',?,?,?,?,?)`)
+    .bind(assetId, slug, `${provider}:${connectionId}:${text(item.id)}`, fileName, extension || null, text(item.mimeType) || null, Number(item.size || 0), JSON.stringify({ provider, providerFileId: item.id, webUrl: item.webUrl || null, checksum: item.checksum || null }), seenAt, seenAt, seenAt, seenAt),
+  c.env.DB.prepare(`INSERT INTO file_hub_locations(id,main_company_slug,file_asset_id,storage_connection_id,provider_file_id,relative_path,location_role,is_available,provider_modified_at,last_seen_at,created_at,updated_at) VALUES(?,?,?,?,?,?,'PRIMARY',1,?,?,?,?)`)
+    .bind(locationId, slug, assetId, connectionId, text(item.id), relativePath, text(item.modifiedAt) || null, seenAt, seenAt, seenAt)]);
   return { assetId, changed:true, needsModelSync:true };
 }
 
@@ -840,7 +841,7 @@ async function backfillIndexedCloudModelImages(c: Context<AppEnv>, slug: string,
     "AND l.provider_file_id IS NOT NULL AND lower(a.extension) IN ('jpg','jpeg','png','webp') " +
     "AND NOT EXISTS(SELECT 1 FROM file_hub_relations r WHERE r.main_company_slug=l.main_company_slug " +
     "AND r.file_asset_id=l.file_asset_id AND r.entity_type='MODEL' AND r.relation_type='MODEL_IMAGE') " +
-    "ORDER BY l.relative_path LIMIT 25",
+    "ORDER BY l.relative_path LIMIT 5",
   ).bind(slug, connectionId, root, root, root).all<Row>();
   let linked = 0;
   for (const row of candidates.results || []) {
@@ -859,7 +860,7 @@ async function backfillIndexedCloudDesignFiles(c:Context<AppEnv>,slug:string,con
     "FROM file_hub_locations l JOIN file_hub_assets a ON a.id=l.file_asset_id AND a.main_company_slug=l.main_company_slug " +
     "WHERE l.main_company_slug=? AND l.storage_connection_id=? AND l.is_available=1 " +
     "AND l.relative_path>? AND lower(a.extension) IN ('jpg','jpeg','png','webp','pdf','psd','psb','ai','tif','tiff','svg','eps') " +
-    "ORDER BY l.relative_path LIMIT 8"
+    "ORDER BY l.relative_path LIMIT 3"
   ).bind(slug,connectionId,after).all<Row>();
   let rows=(await query(afterPath)).results||[];
   if(!rows.length && afterPath)rows=(await query("")).results||[];
@@ -1320,11 +1321,15 @@ export async function runFileHubCloudScheduledSync(env: Cloudflare.Env) {
       if (["GOOGLE_DRIVE","ONEDRIVE","SHAREPOINT"].includes(provider)) {
         // Central metadata index ALWAYS gets the first turn. Even a very
         // large design image archive must not block fresh e-Belge metadata.
-        await runGoogleSyncBatch(c, slug, connectionId, 3, true);
-        if (provider === "GOOGLE_DRIVE") {
+        const central = await runGoogleSyncBatch(c, slug, connectionId, 1, true);
+        if (provider === "GOOGLE_DRIVE" && !central.inProgress && !central.busy) {
           // Existing model image workflow remains an independent small page.
           // Its failure never rolls back the shared File Hub index cursor.
-          try { await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken); }
+          try {
+            // The central scan may have changed metadata. Re-read before the secondary lease CAS.
+            const fresh = await connectionAccount(c,slug,connectionId);
+            await syncRecentBoundGoogleImages(c,slug,connectionId,fresh.link,fresh.accessToken);
+          }
           catch { console.warn("FILE_HUB_MODEL_FAST_SCAN_WARNING"); }
         }
         continue;

@@ -93,8 +93,8 @@ test("manual scan advances the shared checkpoint before any DESEN image-only sca
   const cronStart = cloud.indexOf("export async function runFileHubCloudScheduledSync");
   const cronEnd = cloud.indexOf("export function registerFileHubCloudOauthRoutes", cronStart);
   const cron = cloud.slice(cronStart, cronEnd);
-  const indexAt = cron.indexOf("await runGoogleSyncBatch(c, slug, connectionId, 3, true)");
-  const imageAt = cron.indexOf("await syncRecentBoundGoogleImages(c,slug,connectionId,link,accessToken)");
+  const indexAt = cron.indexOf("await runGoogleSyncBatch(c, slug, connectionId, 1, true)");
+  const imageAt = cron.indexOf("await syncRecentBoundGoogleImages(c,slug,connectionId,fresh.link,fresh.accessToken)");
   assert.ok(indexAt >= 0 && imageAt > indexAt);
 });
 
@@ -110,3 +110,5 @@ test("Worker code-only release skips unrelated personnel preflight but retains D
   assert.match(workflow, /- name: Cloudflare D1 Time Travel geri donus noktasini dogrula/);
   assert.match(workflow, /- name: Worker'i api\.kyerp\.net adresine dagit/);
 });
+
+test("partial scan does not launch a second image scan in the same cron pass",()=>{assert.match(cloud,/provider === "GOOGLE_DRIVE" && !central\.inProgress && !central\.busy/);assert.match(cloud,/const fresh = await connectionAccount\(c,slug,connectionId\)/);});
